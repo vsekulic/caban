@@ -1,0 +1,55 @@
+PF Stability — Pooled Per-Neuron Analysis
+=========================================
+
+Overview
+--------
+For every cross-registered place-cell that retains a place field (PF) in BOTH
+TFC_cond and the test session, the per-neuron Pearson correlation between its
+two 2D occupancy-normalised rate maps is computed. All such per-neuron r
+values are pooled across mice within each experimental group (mCherry control,
+hM3D-Gq excitatory DREADD, hM4D-Gi inhibitory DREADD).
+
+A neuron must:
+  • be present in the cross-registration mapping for the TFC_cond ↔ Test pair,
+  • have ≥ 1 detected place field in BOTH sessions
+    (or ≤ max_pf_count fields when running the npf1 variant),
+  • have ≥ 3 jointly-finite spatial bins with non-zero rate in both maps.
+
+Files in this directory (per test_label)
+----------------------------------------
+  PF_stability_pooled_<test_label>.png
+        Box-and-whisker (paper boxplot) of pooled per-neuron r values by group,
+        with ANOVA + Holm-corrected pairwise t-tests as significance brackets.
+
+  PF_stability_pooled_hist_<test_label>.png
+        Density-normalised histogram of per-neuron r values for each group on
+        the same axes — for visual comparison of the full distribution shape.
+
+  PF_stability_pooled<pf_tag>_<test_label>_neurons.csv
+        Long-format per-neuron table with columns (group, mouse, r). One row
+        per neuron contributing to the pooled analysis.
+
+LMM panels (see pooled_lmm_methods.txt)
+---------------------------------------
+  PF_stability_pooled<pf_tag>_<test_label>_lmm_violin.{png,pdf}
+        Violin plot of per-neuron r with significance brackets driven by
+        LMM contrasts (Exc vs Ctl, Inh vs Ctl, Exc vs Inh).
+  PF_stability_pooled<pf_tag>_<test_label>_lmm_forest.{png,pdf}
+        Forest plot of LMM fixed-effect coefficients vs Ctl with 95% CIs.
+  PF_stability_pooled<pf_tag>_<test_label>_lmm_coefs.csv
+  PF_stability_pooled<pf_tag>_<test_label>_lmm_pairwise.csv
+  PF_stability_pooled<pf_tag>_<test_label>_lmm_stats.txt
+        Tidy LMM coefficient and pairwise-contrast tables, plus a sidecar
+        text file with the full β/SE/CI/p stats for every panel.
+
+Variants
+--------
+  PF tag ""       — all PF-bearing neurons.
+  PF tag "_npf1"  — restricted to neurons with exactly one detected PF in
+                    each session (cleaner stability estimate).
+
+Figure style
+------------
+300 DPI; PNG (and PDF for LMM panels). Single-column Nature width (~88 mm).
+Arial 7-8 pt axes, 6 pt ticks. Group colour key:
+  Ctl (mCherry) = dark grey, Exc (hM3D) = muted red, Inh (hM4D) = muted blue.

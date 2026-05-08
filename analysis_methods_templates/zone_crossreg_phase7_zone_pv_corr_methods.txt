@@ -1,0 +1,59 @@
+METHODS — Phase 7: Zone-Resolved Population Vector Correlation Comparison
+=========================================================================
+
+Purpose
+-------
+Test whether triple-set cells (cross-registered across LT1 + LT2 + TFC_cond)
+produce higher LT1→LT2 population-vector (PV) correlation at the track junction
+compared with excluded (pair-only) cells, and whether this difference is
+group-dependent.
+
+Cell identification
+-------------------
+For each mouse, all LT1+LT2 pair-registered cells are split into:
+  • Triple-set: cells also registered in TFC_cond (via mappings_crossreg_1.csv)
+  • Excluded: pair-only cells (LT1+LT2 but NOT in TFC_cond mapping)
+
+Tuning matrix construction
+--------------------------
+For each cell subset (triple, excluded) independently:
+  1. Extract S (deconvolved activity) rows for the subset from LT1 and LT2.
+  2. Compute spatial tuning curves: mean S per spatial bin (120 linearly spaced
+     bins spanning the shared LT1+LT2 track range).
+  3. Smooth with a 3-bin boxcar kernel.
+  4. Pairwise per-cell normalization: for each cell, compute the 95th percentile
+     across both LT1 and LT2 tuning vectors; divide both by the maximum of the
+     two (shared scale factor per cell).
+
+PV correlation matrix
+---------------------
+For each subset, compute an n_bins × n_bins matrix where entry [i, j] is the
+Pearson correlation between the population vector at bin i in LT1 and bin j in
+LT2. A population vector at bin k is the vector of all cell tuning values at
+that bin (one element per cell in the subset).
+
+Zone splitting
+--------------
+Using the average of LT1 and LT2 turn points (arm-detection percentile method):
+  • arm_A: bins with centre < turn1
+  • joint: bins with turn1 ≤ centre ≤ turn2
+  • arm_B: bins with centre > turn2
+For each zone, the corresponding square sub-matrix is extracted and diagonal
+metrics computed (diag_mean, diagonal_excess, specificity_idx, decode_acc,
+band_conc_k2).
+
+Statistical tests
+-----------------
+A) Paired comparison (within-group):
+   For each group, Wilcoxon signed-rank on the mouse-level paired difference
+   (triple − excluded) of junction diag_mean.
+
+B) Between-group comparison:
+   Kruskal–Wallis H test on the Δ (triple − excluded) junction diag_mean
+   across three groups.
+
+Output
+------
+  • zone_pv_corr_comparison.csv — per (mouse, subset, zone) metrics
+  • pv_corr_paired_{zone}.png/pdf — paired boxplots per group
+  • pv_corr_delta_{zone}.png/pdf — between-group Δ boxplot

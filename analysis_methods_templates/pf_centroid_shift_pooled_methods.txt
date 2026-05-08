@@ -1,0 +1,93 @@
+PF Centroid Shift — Pooled Per-Neuron Analysis
+==============================================
+
+Overview
+--------
+For every cross-registered place-cell that retains a place field (PF) in BOTH
+TFC_cond and the test session, place fields are matched between the two
+sessions (greedy nearest-centroid matching with a maximum allowed distance),
+and the centroid displacement of every matched PF pair is recorded. All
+matched-PF shifts are pooled across mice within each experimental group
+(mCherry, hM3D-Gq, hM4D-Gi).
+
+In addition to centroid shifts, two complementary turnover quantities are
+recorded for every neuron:
+  • per_neuron_acquired = number of Test-session PFs that have NO match in
+                          TFC_cond (newly emerged fields).
+  • per_neuron_dropped  = number of TFC_cond PFs that have NO match in Test
+                          (fields lost between sessions).
+
+Files in this directory (per test_label)
+----------------------------------------
+  PF_shift_pooled_<test_label>.png
+        Box-and-whisker plot of pooled per-PF centroid shifts (in occupancy
+        bins) by group, with ANOVA + Holm-corrected pairwise t-tests as
+        significance brackets.
+
+  PF_shift_pooled_hist_<test_label>.png
+        Density-normalised histogram of pooled per-PF centroid shifts per
+        group on shared axes.
+
+  PF_shift_pooled<pf_tag>_<test_label>_neurons.csv
+        Long-format per-PF table (group, mouse, shift in bins). One row per
+        matched PF pair.
+
+  PF_acquired_pooled_<test_label>.png
+        Pooled per-neuron count of acquired PFs (boxplot by group). Each
+        observation is one neuron with at least one acquired or dropped PF.
+
+  PF_dropped_pooled_<test_label>.png
+        Pooled per-neuron count of dropped PFs (boxplot by group), same
+        construction as PF_acquired_pooled.
+
+  PF_gainloss_DI_<test_label>.png
+        Group-level gain/loss Discrimination Index:
+
+            DI = (N_gainers − N_losers) / (N_gainers + N_losers),
+
+        where a "gainer" is any neuron with ≥ 1 acquired PF and a "loser"
+        is any neuron with ≥ 1 dropped PF. DI ∈ [−1, +1]:
+          DI > 0 → group acquires more PFs than it loses
+                   (representational expansion across the delay).
+          DI < 0 → group loses more than it gains
+                   (representational contraction / instability).
+          DI ≈ 0 → balanced turnover.
+        Error bars: 95 % non-parametric bootstrap CI (2000 resamples within
+        group). Pairwise permutation tests (5000 perms) on |DI_a − DI_b| are
+        Holm-corrected across the three group pairs; stars show adjusted p
+        (* < 0.05, ** < 0.01, *** < 0.001).
+        n=… annotation under each bar = number of neurons contributing to
+        that group's DI.
+
+LMM panels for centroid shift (see pooled_lmm_methods.txt)
+----------------------------------------------------------
+  PF_shift_pooled<pf_tag>_<test_label>_lmm_violin.{png,pdf}
+  PF_shift_pooled<pf_tag>_<test_label>_lmm_forest.{png,pdf}
+  PF_shift_pooled<pf_tag>_<test_label>_lmm_coefs.csv
+  PF_shift_pooled<pf_tag>_<test_label>_lmm_pairwise.csv
+  PF_shift_pooled<pf_tag>_<test_label>_lmm_stats.txt
+        Per-PF LMM with random intercept for mouse:
+            shift ~ C(group, Treatment('mCherry')) + (1 | mouse)
+        Fixed-effect coefficients give the average centroid-shift difference
+        of Exc and Inh relative to Ctl after partialling out between-mouse
+        variability. Pairwise contrasts (Exc-Ctl, Inh-Ctl, Exc-Inh) are
+        derived from the model's joint covariance with a normal-approximation
+        z-test (no multiple-comparison correction across the three pairs).
+
+Variants
+--------
+  PF tag ""       — all PF-bearing neurons (default for shift plots).
+  PF tag "_npf1"  — neurons with exactly one detected PF per session
+                    (cleaner shift estimates; default for the gain/loss DI
+                    analysis).
+
+Figure style
+------------
+300 DPI; PNG (and PDF for LMM panels). Single-column Nature width (~88 mm).
+Arial 7-8 pt axes, 6 pt ticks. Group colour key:
+  Ctl (mCherry) = dark grey, Exc (hM3D) = muted red, Inh (hM4D) = muted blue.
+
+References
+----------
+Holm S (1979). A simple sequentially rejective multiple test procedure.
+  Scand J Stat. 6:65-70.

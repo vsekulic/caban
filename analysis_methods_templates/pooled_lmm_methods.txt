@@ -1,0 +1,69 @@
+Pooled Per-Neuron Linear Mixed-Effects Model (LMM) — Forest Plot
+================================================================
+
+Overview
+--------
+For each pooled neuron-level metric (Skaggs spatial information, place-field
+stability r, place-field centroid shift), a linear mixed-effects model is fit
+across all neurons from all mice in the three experimental groups (mCherry
+control, hM3D-Gq excitatory DREADD, hM4D-Gi inhibitory DREADD). Every neuron
+contributes one observation; non-finite values are dropped.
+
+Model
+-----
+Formula: metric ~ C(group, Treatment('mCherry'))
+Random effect: random intercept per mouse (1 | mouse)
+Estimation: Restricted Maximum Likelihood (REML), L-BFGS optimiser
+Implementation: statsmodels.formula.api.mixedlm
+Reference level: mCherry (control)
+
+The mouse random intercept absorbs between-mouse baseline differences and
+accounts for the non-independence of neurons recorded from the same animal.
+Fixed-effect coefficients estimate the average condition-level shift in the
+metric (Exc vs Ctl, Inh vs Ctl) after this within-mouse correlation has been
+partialled out.
+
+Forest plot
+-----------
+Each non-reference fixed-effect coefficient is plotted as a point with 95%
+confidence interval (β ± 1.96·SE), coloured by experimental group, with a
+vertical reference line at β = 0 (no difference vs Ctl). Significance stars
+follow the standard convention:
+  ***  p < 0.001
+  **   p < 0.01
+  *    p < 0.05
+  p=…  (italic)  0.05 ≤ p ≤ 0.08 (trend)
+The mouse and residual variance components (σ²_mouse, σ²_resid) are annotated
+in the panel corner so the reader can gauge the relative magnitudes of
+between-mouse and within-mouse residual variability.
+
+Outputs (in the same pooled directory as the violin plot)
+---------------------------------------------------------
+  <panel_label>_lmm_forest.png / .pdf   — forest plot of fixed effects
+  <panel_label>_lmm_coefs.csv           — tidy coefficient table:
+        term, group, beta, se, ci_low, ci_high, z, p
+  <panel_label>_lmm_violin.png / .pdf   — violin plot with significance
+        brackets driven by LMM contrasts (Exc vs Ctl, Inh vs Ctl, Exc vs Inh).
+  <panel_label>_lmm_pairwise.csv        — pairwise contrasts table:
+        group_a, group_b, beta_diff, se_diff, ci_low, ci_high, p
+
+The Exc-vs-Ctl and Inh-vs-Ctl contrasts use the fixed-effect coefficients
+directly (Ctl = mCherry is the reference level). The Exc-vs-Inh contrast is
+computed from the joint covariance of the two non-reference fixed effects:
+  β_diff = β(hM3D) − β(hM4D)
+  Var(β_diff) = Var(β_hM3D) + Var(β_hM4D) − 2·Cov(β_hM3D, β_hM4D)
+A two-sided normal-approximation z-test is used to obtain the contrast
+p-value. No multiple-comparison correction is applied across the three
+pairwise contrasts; readers should interpret them with that in mind.
+
+Figure style
+------------
+300 DPI, PNG + PDF, Arial 7 pt axes / 6 pt ticks / 8–9 pt title. Single-column
+Nature width (~88 mm) by ~70 mm tall.
+
+References
+----------
+Holm S (1979). A simple sequentially rejective multiple test procedure.
+  Scand J Stat. 6:65–70.
+Bates D et al. (2015). Fitting linear mixed-effects models using lme4.
+  J Stat Softw. 67(1):1–48.

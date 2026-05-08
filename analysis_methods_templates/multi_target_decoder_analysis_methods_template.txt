@@ -1,0 +1,40 @@
+Multi-target Decoder Analysis Methods Template
+============================================
+
+Purpose
+This template documents the statistical procedures used for multi-target decoder performance analyses.
+
+Data structure
+- Analysis unit: mouse-by-condition summary row.
+- Typical outcome: median or mean Euclidean decoding error.
+- Group factor: mCherry / hM3D / hM4D.
+- Condition factor: within-session and cross-session decoder conditions.
+
+Analysis families
+1) Mixed-effects model
+   Formula: outcome ~ group * condition + (1 | mouse)
+   Why: models repeated observations per mouse and estimates between-mouse variance.
+
+2) Fixed-effects (non-mixed) model
+   Formula: outcome ~ group * condition + C(mouse)
+   Why: adjusts for subject-level baseline differences using subject indicators.
+
+3) Repeated-measures style summary plot
+   Content: per-mouse trajectories across conditions and group means with standard errors.
+   Why: visualizes within-subject structure and group-level trends.
+
+4) ANOVA + post hoc contrasts (from fixed-effects OLS)
+   ANOVA: term-level decomposition (group, condition, interaction).
+   Post hoc: pairwise group contrasts within condition from model-based linear contrasts.
+   Multiplicity: Holm (FWER) and Benjamini-Hochberg FDR.
+
+Interpretation notes
+- Omnibus tests (ANOVA/mixed model terms) indicate whether effects exist globally.
+- Post hoc contrasts localize specific group differences.
+- Report adjusted p-values and confidence intervals for primary contrasts.
+
+Reporting checklist
+- Outcome definition and filtering criteria (e.g., Ksum threshold).
+- Exact model formula and software implementation details.
+- Multiple-comparison correction method used.
+- Whether inference is subject-specific (mixed model) or adjusted fixed-effects.

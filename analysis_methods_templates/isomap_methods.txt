@@ -1,0 +1,103 @@
+Isomap manifold analysis (TFC_Isomap/) — methods
+================================================
+
+Pipeline implemented in `SSTCa2_isomap.py`. Replicates the Isomap
+recipe from Han et al. (Wilson lab), "Latent learning drives
+sleep-dependent plasticity in distinct CA1 subpopulations".
+
+Per-neuron normalization
+------------------------
+Each neuron's deconvolved activity trace S (rows = neurons, cols =
+frames) is min–max scaled to [0, 1] within each session
+independently. Cells with zero dynamic range raise an error
+(no silent skip).
+
+NN sweep + plateau stopping
+---------------------------
+For each session, fit `sklearn.manifold.Isomap` over
+`NN ∈ range(NN_RANGE[0], NN_RANGE[1]+1, NN_STEPS)` (default 5 → 100
+in steps of 5). At each NN we record the model's
+`reconstruction_error()`. Stop the sweep when the relative
+improvement `(err_prev − err_curr) / err_prev` is less than
+`NN_CUTOFF` (default 10%) for **two consecutive** NN values, then
+choose the NN at which the plateau started.
+
+Phase 1 — independent per-session manifolds
+-------------------------------------------
+TFC_cond, Test_B, and Test_B_1wk are each fit independently using
+the full S matrix (no cross-registration). Each fit produces a
+`recon_error_<session>.png` and a `manifold_<session>.png` per
+mouse. Manifold plots colour each frame by phase (see colour map
+below).
+
+Phase 2 — crossreg overlay
+--------------------------
+For mice in `mice_per_group_Test_B_B_1wk`, the cross-registered
+cells from `mapping_TFC_cond_Test_B_Test_B_1wk` are used to fit
+Isomap on TFC_cond, then `iso.transform()` projects Test_B and
+Test_B_1wk through the same embedding. All three trajectories are
+overlaid in `manifold_overlay.png` (sessions distinguished by
+marker shape).
+
+Phase 3 — cross-manifold similarity score
+-----------------------------------------
+Per-frame manifolds are too long to correlate directly. Instead we
+build a **trial-averaged event-phase trajectory** in 2D, restricted
+to the phases common to all sessions (`pre_tone`, `tone`,
+`post_tone`; Test_B/_1wk lack shock/post_shock).
+
+* The reference is built from TFC_cond's even-trial subset, projected
+  through TFC_cond's own (independent) Isomap fit.
+* For TFC_cond self-similarity (split-half), the comparison
+  trajectory is built from TFC_cond's odd-trial subset.
+* For Test_B and Test_B_1wk, the trajectory is built from all
+  trials in that session and projected through the *session's own*
+  Isomap fit.
+
+For each pair, similarity = max over rotation angles
+(0, 5, 10, …, 355 deg) of `(corr(rot_x, ref_x) + corr(rot_y, ref_y)) / 2`,
+matching the paper's recipe with rotation step `SS_ROTATE` (default
+5°). Reflection is **not** applied; Isomap embeddings are
+sign-ambiguous so reflection symmetry can be added as a follow-up if
+needed.
+
+Group plot
+----------
+`similarity_score_by_group.png` plots similarity vs session
+(TFC_cond → Test_B → Test_B_1wk) for the three groups
+(`Ctl=mCherry`, `Exc=hM3D`, `Inh=hM4D`) coloured black/red/blue.
+Individual mouse traces appear as light-grey background; group
+means with SEM error bars are overlaid in colour.
+
+Phase colour map
+----------------
+* `pre_tone` → light green (initial pre-tone tail)
+* `tone` → blue
+* `post_tone` → light blue (between tone offset and shock onset, or
+  to next tone if no shock)
+* `shock` → red
+* `post_shock` → light red (POST_SHOCK_SEC = 20 s after shock offset)
+* `isi` → light grey (everything else)
+
+Top-level parameters (defaults)
+-------------------------------
+* `NN_STEPS = 5`
+* `NN_RANGE = (5, 100)`
+* `NN_CUTOFF = 0.10` (10 % plateau)
+* `SS_ROTATE = 5` (degrees)
+* `ISOMAP_DIMS = 2`
+* `POST_SHOCK_SEC = 20`
+* `DOWNSAMPLE_HZ = MINISCOPE_FPS` (no downsampling). Set to `10` to
+  reproduce the paper's 30 Hz → 10 Hz step (block-mean by factor
+  `MINISCOPE_FPS // DOWNSAMPLE_HZ`). Must evenly divide
+  `MINISCOPE_FPS`. When downsampling, event indices and PERIOD_FRAMES
+  windows are scaled accordingly so all phases (1, 2, 3) consume the
+  same temporal grid.
+
+Outputs
+-------
+* `<mouse>/recon_error_<session>.png` — error vs NN
+* `<mouse>/manifold_<session>.png` — independent 2D manifold
+* `<mouse>/manifold_overlay.png` — crossreg overlay (TFC_cond ref)
+* `similarity_score.csv` — long-form per-mouse-per-session similarity
+* `similarity_score_by_group.png` — group summary plot

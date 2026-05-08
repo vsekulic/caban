@@ -1,0 +1,86 @@
+Zone Cross-Registration Analysis — Phase 2: Cell Characterization
+=================================================================
+
+Purpose
+-------
+Phase 2 compares spatial and functional properties of cells that are
+triple-registered (LT1+LT2+TFC; "included") versus cells that are only
+pair-registered (LT1+LT2 but not TFC; "excluded"). The goal is to determine
+whether the inclusion/exclusion of a cell from the TFC mapping introduces a
+systematic bias in the quality or spatial coding properties of the cells that
+drive the zone decoder.
+
+Cell Sets
+---------
+- Included: cells present in LT1, LT2, and TFC_cond (triple set).
+- Excluded: cells present in LT1 and LT2 but NOT in TFC_cond (pair only).
+- Cell identity is determined from the LT1 cross-registration object.
+
+Per-Cell Metrics (computed in LT1)
+----------------------------------
+1. **Spatial Information** (bits/spike):
+   Skaggs spatial information computed from a 50-bin 1D occupancy-corrected
+   rate histogram. Only frames with position data and speed ≥ 2.0 cm/s are
+   included.
+
+2. **Mean Firing Rate**:
+   Average number of spikes per time bin during tracked frames.
+
+3. **Fraction Active**:
+   Proportion of tracked frames with at least one inferred spike.
+
+4. **Place Field Count**:
+   Number of distinct merged place fields detected (from LT1.fm.pf.merged_means).
+
+5. **Has Place Field** (binary):
+   Whether the cell has at least one detected place field.
+
+6. **Rate-Map Correlation (LT1→LT2)**:
+   Pearson correlation of 50-bin rate maps between LT1 and LT2. Computed
+   using only position bins with valid (finite) values in both sessions.
+
+Statistical Analysis
+--------------------
+Phase 2 is primarily descriptive. Included vs excluded distributions are
+compared visually using violin plots (spatial info, firing rate, fraction
+active, rate-map correlation) and bar charts (place-field presence and count).
+No formal statistical tests are applied within Phase 2 itself — the purpose
+is qualitative characterization, with formal interaction testing deferred to
+Phase 3 and stability analysis to Phase 4.
+
+Output Files
+------------
+- cell_characterization_summary.csv:
+  Per-cell table with columns: mouse, group, status (included/excluded),
+  spatial_info, mean_rate, frac_active, has_place_field, n_place_fields,
+  ratemap_corr.
+
+Plots Generated
+---------------
+1. Violin plots (per group, included vs excluded):
+   - spatial_info_included_vs_excluded.{png,pdf}
+   - firing_rate_included_vs_excluded.{png,pdf}
+   - frac_active_included_vs_excluded.{png,pdf}
+   - ratemap_corr_included_vs_excluded.{png,pdf}
+
+2. Place-field distribution:
+   - pf_count_included_vs_excluded.{png,pdf}: stacked bar of 0/1/2+ PF cells.
+   - pf_presence_included_vs_excluded.{png,pdf}: grouped bar of cells with ≥1 PF.
+
+3. Cell counts:
+   - cell_counts_included_excluded.{png,pdf}: stacked bar per mouse,
+     showing included (full color) and excluded (faded) counts, annotated
+     with fraction included.
+   - cell_counts_per_group_boxplot.{png,pdf}: box-and-strip chart of
+     included vs excluded counts per group, with per-mouse jittered dots.
+   - cell_counts_included_excluded.txt: tabular summary (mouse, group,
+     included, excluded, total, frac_inc).
+
+Interpretation
+--------------
+- If included and excluded cells have similar distributions across all
+  metrics, the TFC cross-registration criterion does not introduce selection
+  bias — the triple set is a representative subsample of the pair set.
+- Systematic differences (e.g., included cells have higher spatial info)
+  would suggest that registrability to TFC is correlated with spatial quality,
+  which could confound cross-session decoding comparisons.

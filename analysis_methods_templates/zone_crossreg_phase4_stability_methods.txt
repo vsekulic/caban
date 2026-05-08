@@ -1,0 +1,69 @@
+Zone Cross-Registration Analysis — Phase 4: Place-Field Stability by Cross-Reg Status
+=====================================================================================
+
+Purpose
+-------
+Phase 4 tests whether cells included in the triple mapping (LT1+LT2+TFC)
+have more stable place fields across LT sessions than cells that are only
+pair-registered (LT1+LT2). Two complementary stability metrics are computed:
+rate-map correlation and place-field overlap (Jaccard index).
+
+Cell Sets
+---------
+- Included: cells in LT1+LT2+TFC triple set (same cells as Phases 1-3).
+- Excluded: cells in LT1+LT2 pair set but not in TFC.
+- Cell IDs derived from LT1 cross-registration object.
+
+Stability Metrics
+-----------------
+
+1. Rate-Map Correlation (ratemap_corr):
+   - Compute 50-bin 1D rate map for each cell in LT1 and LT2.
+   - Smooth each rate map with a Gaussian kernel (σ = 2.0 bins).
+   - Only include frames with running speed ≥ 2.0 cm/s.
+   - Pearson correlation of the two rate maps, using only position bins
+     with valid (finite) values in both sessions.
+   - Minimum 5 valid bins required; otherwise NaN.
+
+2. Place-Field Overlap (Jaccard index):
+   - For each session (LT1, LT2), identify "significant bins" as those
+     with rate exceeding the mean rate across all valid bins.
+   - Jaccard index = |intersection| / |union| of significant bins.
+   - Minimum 5 valid bins required in both maps; otherwise NaN.
+
+Data Output
+-----------
+- pf_stability_summary.csv:
+  Per-cell table with columns: mouse, group, uid_LT1, status
+  (included/excluded), ratemap_corr, pf_overlap_jaccard.
+
+Plots Generated
+---------------
+Two multi-panel figures, each with one subplot per group (mCherry, hM3D, hM4D):
+
+1. ratemap_corr_by_status_group.{png,pdf}:
+   Violin plots of rate-map correlation, split by included vs excluded.
+   Shared y-axis across groups.
+
+2. pf_overlap_by_status_group.{png,pdf}:
+   Violin plots of Jaccard overlap, split by included vs excluded.
+   Shared y-axis across groups.
+
+Statistical Analysis
+--------------------
+Phase 4 is primarily descriptive with visual comparison of included vs
+excluded distributions per group. The expected null is that included and
+excluded cells have indistinguishable place-field stability — i.e., that
+TFC registrability is orthogonal to LT spatial stability.
+
+Interpretation
+--------------
+- If included cells have higher ratemap_corr or Jaccard overlap, the TFC
+  criterion selects for spatially stable cells. This would not invalidate
+  the main zone analysis but should be reported as a potential confound.
+- If distributions overlap substantially, the triple-set criterion is
+  stability-neutral, strengthening the interpretation that the decoder
+  comparison in Phases 1 and 3 is unbiased.
+- Group-dependent differences (e.g., hM4D included cells more stable than
+  hM4D excluded cells but not mCherry) would suggest a DREADD-dependent
+  interaction with the stability selection criterion.

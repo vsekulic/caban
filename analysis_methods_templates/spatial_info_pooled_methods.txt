@@ -1,0 +1,62 @@
+Spatial Information — Pooled Neuron Analysis
+=============================================
+
+Overview
+--------
+Skaggs spatial information (bits/spike) is computed per neuron from 2D
+occupancy-normalised rate maps, then pooled across all neurons (rather than
+first averaging per mouse) to maximise statistical power.
+
+Neuron-level SI (bits/spike) for each spatial bin configuration is collected
+across all mice in each experimental group (mCherry control, hM3D-Gq, hM4D-Gi).
+Every neuron contributes exactly one observation.
+
+Primary statistical model: Linear Mixed-Effects Model (MixedLM)
+---------------------------------------------------------------
+Formula: SI ~ C(group, Treatment('mCherry'))
+Random effect: random intercept per mouse (1 | mouse)
+Estimation: Restricted Maximum Likelihood (REML)
+Implementation: statsmodels.formula.api.mixedlm
+Reference level: mCherry (control)
+
+This model accounts for the non-independence of neurons within a mouse (mice are
+pseudo-replicated subjects). Fixed-effect p-values test whether group membership
+predicts SI above and beyond within-mouse variance.
+
+Sensitivity analysis: Pooled non-parametric tests
+-------------------------------------------------
+Kruskal-Wallis H-test across all groups (pooled neurons, no mouse correction).
+Post-hoc: pairwise two-sided Mann-Whitney U tests on all group pairs.
+Multiple-comparison correction: Holm-Sidak procedure (Holm, 1979).
+
+Note: these pooled tests treat every neuron as an independent observation and
+should be interpreted as a sensitivity check only; the MixedLM is the primary
+confirmatory analysis.
+
+Outputs
+-------
+  <panel_label>_neurons.csv        — neuron-level data (group, mouse, si)
+  <panel_label>_stats.txt          — full MixedLM summary + KW results
+  <panel_label>_stats_mw.csv       — pairwise Mann-Whitney results (Holm-corrected)
+  <panel_label>.png / .pdf         — violin + individual-neuron scatter figure
+  <panel_label>_lmm_forest.png/.pdf — forest plot of LMM fixed-effect
+                                       coefficients (Exc, Inh vs Ctl) with 95% CI
+  <panel_label>_lmm_coefs.csv      — tidy LMM coefficient table (β, SE, CI, z, p)
+
+Figures
+-------
+Violin plots display the full neuron-level distribution per group.
+Individual neuron values are overlaid as jittered scatter points.
+Medians are shown as lines inside each violin.
+Significance brackets reflect Holm-corrected pairwise Mann-Whitney U results.
+Panel-level annotations show LMM and KW omnibus p-values.
+All figures exported at 300 DPI in PNG and PDF formats.
+Font: Arial 7 pt (axes labels), 8 pt (title), 6 pt (tick labels).
+Figure width: 88 mm (single Nature column).
+
+References
+----------
+Skaggs WE et al. (1993). An information-theoretic approach to deciphering the
+  hippocampal code. NIPS 1993.
+Holm S (1979). A simple sequentially rejective multiple test procedure.
+  Scand J Stat. 6:65-70.

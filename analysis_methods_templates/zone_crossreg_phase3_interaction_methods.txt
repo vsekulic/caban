@@ -1,0 +1,95 @@
+Zone Cross-Registration Analysis — Phase 3: Group × Crossreg Type × Zone Interaction
+=====================================================================================
+
+Purpose
+-------
+Phase 3 tests whether the benefit of adding TFC-mapped cells (triple vs pair
+registration) on zone decoding accuracy depends on experimental group (mCherry,
+hM3D, hM4D) and/or decoded zone (Arms, Junction). This is the central
+factorial analysis of the zone cross-registration suite.
+
+Data Inputs
+-----------
+Two pre-computed zone pct_correct CSV files from the main decoder pipeline:
+- zone_csv_LT1LT2: Zone accuracy from the LT1+LT2 (pair) decoder.
+- zone_csv_LT1LT2TFC: Zone accuracy from the LT1+LT2+TFC (triple) decoder.
+
+Each CSV contains per-mouse rows with columns for zone-level pct_correct,
+group assignment, and decoding condition.
+
+Data Processing
+---------------
+1. CSV Merging: Both CSVs are read and tagged with a crossreg_type column
+   ("LT1+LT2" or "LT1+LT2+TFC"), then concatenated.
+
+2. Zone Collapsing: The five original zone labels are collapsed to two
+   categories — "Arms" and "Junction" — via the standard _ZONE_COLLAPSE
+   mapping.
+
+3. Delta Computation: For each (mouse, condition, zone), the delta in
+   pct_correct is calculated as:
+       delta_pct_correct = pct_correct_triple − pct_correct_pair
+   This quantifies the per-mouse gain (or loss) from including TFC-
+   registered cells.
+
+Statistical Model
+-----------------
+Per decoding condition (within_LT1, within_LT2, LT1_to_LT2), a linear
+mixed-effects model is fitted in R using lme4::lmer:
+
+    pct_correct ~ group * crossreg_type * zone + (1|mouse)
+
+Fixed Effects:
+- group (reference = mCherry): tests main effect of DREADD manipulation.
+- crossreg_type (pair vs triple): tests main effect of adding TFC cells.
+- zone (Arms vs Junction): tests main effect of spatial zone.
+- group × crossreg_type: tests whether the triple-set benefit differs by group.
+- group × zone: tests whether group effects differ by zone.
+- crossreg_type × zone: tests whether the triple-set benefit differs by zone.
+- group × crossreg_type × zone: three-way interaction.
+
+Random Effect:
+- (1|mouse): random intercept per mouse to account for repeated measures.
+
+Estimation: REML via lmerTest::lmer.
+Inference: Type III ANOVA with Satterthwaite degrees of freedom.
+Post-hoc: Estimated marginal means (emmeans) for group × crossreg_type × zone
+           cells, with Holm-corrected pairwise contrasts.
+
+R Script Execution
+------------------
+The R model is run via subprocess (Rscript). The R script:
+1. Reads the merged CSV.
+2. Sets factor contrasts (treatment coding, mCherry reference).
+3. Fits the lmer model.
+4. Runs anova(model, type=3, ddf="Satterthwaite").
+5. Extracts emmeans and pairwise contrasts.
+6. Writes outputs to per-condition subdirectories.
+
+Output Files
+------------
+- interaction_merged.csv: Full merged dataset with crossreg_type column.
+- delta_pct_correct.csv: Per-mouse delta values (mouse, group, condition,
+  zone, delta_pct_correct).
+- {condition}/interaction_model_summary.txt: Full lmer summary.
+- {condition}/interaction_anova.csv: Type III ANOVA table.
+- {condition}/interaction_emmeans.csv: Estimated marginal means.
+- {condition}/interaction_contrasts.csv: Pairwise contrasts (Holm-corrected).
+
+Plots Generated
+---------------
+- delta_pct_correct_by_group_zone.{png,pdf}:
+  Multi-panel figure with one subplot per condition. Within each subplot:
+  X-axis = zone (Arms, Junction); grouped bars = group (mCherry, hM3D, hM4D).
+  Bars show group mean delta ± SEM; per-mouse dots jittered. Horizontal
+  dashed line at zero (no gain from TFC cells).
+
+Interpretation
+--------------
+- A significant group × crossreg_type interaction indicates that the benefit
+  of TFC cross-registration is modulated by the DREADD manipulation.
+- Positive delta_pct_correct means the triple set outperforms the pair set.
+- A significant three-way interaction indicates that this group-dependent
+  benefit further varies by zone.
+- If delta is near zero across groups and zones, adding TFC-registered cells
+  neither helps nor harms decoding, suggesting the TFC criterion is neutral.

@@ -1,0 +1,60 @@
+METHODS — Phase 8: PF-Filtered Zone-Resolved PV Correlation Comparison
+=======================================================================
+
+Purpose
+-------
+Same as Phase 7, but restricted to place cells.  Test whether the triple-vs-
+excluded PV correlation difference at the track junction persists (or changes)
+when the population is limited to neurons with detected place fields in BOTH
+LT1 and LT2.  Two sub-analyses are run:
+  (a) All place cells (any number of PFs)
+  (b) Single-PF cells only (exactly 1 place field)
+
+Cell identification
+-------------------
+For each mouse, all LT1+LT2 pair-registered cells are split into:
+  • Triple-set: cells also registered in TFC_cond (via mappings_crossreg_1.csv)
+  • Excluded: pair-only cells (LT1+LT2 but NOT in TFC_cond mapping)
+
+Place-field filter: starting from each subset, retain only cells that have
+detected place fields in BOTH sessions (LT1 and LT2).  Place-field detection
+uses SSTCa2_spatial._get_pf_cells(), which identifies neurons via the FM
+place-field model (Bayesian GMM fit to significant spatial responses, with
+component merging).
+  • max_pf_count = None → keep all cells with ≥1 place field
+  • max_pf_count = 1   → keep only cells with exactly 1 place field
+
+Tuning matrix construction
+--------------------------
+Identical to Phase 7: for each PF-filtered cell subset independently:
+  1. Extract S (deconvolved activity) rows for the subset from LT1 and LT2.
+  2. Spatial tuning curves: mean S per bin (120 bins, shared LT1+LT2 range).
+  3. 3-bin boxcar smoothing.
+  4. Pairwise per-cell normalization (95th percentile, max-of-two sessions).
+
+PV correlation matrix
+---------------------
+Same as Phase 7: n_bins × n_bins Pearson correlation between LT1 and LT2
+population vectors, computed per subset.
+
+Zone splitting
+--------------
+Same as Phase 7: arm_A / joint / arm_B zones from averaged LT1+LT2 turn
+points.  Diagonal metrics extracted per zone.
+
+Statistical tests
+-----------------
+A) Paired comparison (within-group):
+   Wilcoxon signed-rank on the mouse-level paired difference (triple − excluded)
+   of junction diag_mean, within each group.
+
+B) Between-group comparison:
+   Kruskal–Wallis H test on Δ (triple − excluded) junction diag_mean across
+   three groups.
+
+Output
+------
+  • zone_pv_corr_comparison.csv — per (mouse, subset, zone) metrics
+  • pv_corr_paired_{zone}.png/pdf — paired boxplots per group
+  • pv_corr_delta_{zone}.png/pdf — between-group Δ boxplot
+  Separate output directories for pfALL (all place cells) and pf1 (single-PF).

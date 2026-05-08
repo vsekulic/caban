@@ -1,0 +1,7 @@
+Metric,Natural_Title,N_observations,Coefficient,SE,Z_value,P_value,P_corrected,Effect_Size_d,CI_lower,CI_upper,KS_statistic,KS_p_value,Significant
+B_num_total,Total Bursts,233,,,,,,,,,,,err
+B_num_per_min,Bursts per Minute,233,,,,,,,,,,,err
+B_ibi_sec,Inter-Burst Interval (s),232,,,,,,,,,,,err
+B_dur_msec,Burst Duration (ms),233,,,,,,,,,,,err
+Nspk_B_Nspk_train_ratio,Burst Spike Ratio,233,,,,,,,,,,,err
+Spk_per_burst,Spikes per Burst,233,,,,,,,,,0.0254,0.0,err

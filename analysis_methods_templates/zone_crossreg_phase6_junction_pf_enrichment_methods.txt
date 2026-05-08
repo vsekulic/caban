@@ -1,0 +1,59 @@
+Phase 6: Junction place-field enrichment & coverage
+====================================================
+
+Rationale
+---------
+Phase 1 showed that the improvement in LT1→LT2 cross-session decoding
+at the junction when using triple cross-registration (LT1+LT2+TFC)
+is not attributable to cell count (N-matched random subsamples do not
+reproduce the effect).  Per-cell rate-map stability (tested previously)
+did not distinguish triple-set from pair-only cells.
+
+Phase 6 instead tests a *population-level* hypothesis: does the
+triple intersection selectively enrich for cells that have place
+fields at the junction?  If so, the decoder would have more
+informative neurons covering the junction, improving accuracy
+specifically in that zone.
+
+Method
+------
+For each mouse, all cells mapped across LT1+LT2 (pair set) are
+identified.  Each cell is labelled "included" (present also in
+TFC_cond, i.e. the triple set) or "excluded" (pair-only).
+
+1D occupancy-corrected rate maps are computed for LT1 and LT2
+(50 bins, Gaussian smooth σ = 2.0 bins, speed ≥ 2 cm/s).
+
+Five-zone boundaries are detected from the track geometry
+(_compute_5_zone_boundaries); the junction zone spans turn1 to turn2.
+
+Part A — Junction place-field enrichment (per-cell)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+A cell is classified as having a "junction place field" if the peak
+bin of its 1D rate map (in either LT1 or LT2) falls within the
+junction zone.
+
+For each group, a 2×2 contingency table is constructed:
+  (triple vs pair-only) × (junction PF vs no junction PF)
+and tested with Fisher's exact test (two-sided).  The odds ratio
+quantifies how much more likely a junction-coding cell is to survive
+triple cross-registration.
+
+Part B — Population junction coverage (bin-level, N-matched)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+For each cell, "significant bins" are those where the 1D rate exceeds
+the cell's mean rate.  For each mouse, the fraction of junction bins
+covered by ≥1 cell is computed separately for triple-set and pair-only
+subsets.
+
+To control for unequal N, the larger subset is randomly subsampled
+to match the smaller (200 repeats, mean taken).  Per-mouse paired
+coverage fractions are compared with a Wilcoxon signed-rank test
+(per group).
+
+Output
+------
+- zone_stability_enrichment.csv: per-cell zone-specific correlations
+- zone_stability_enrichment_boxplot.{png,pdf}: grouped boxplots
+- zone_stability_enrichment_delta.{png,pdf}: enrichment-delta bars
+- zone_stability_interaction_anova.txt: ANOVA table (if run)

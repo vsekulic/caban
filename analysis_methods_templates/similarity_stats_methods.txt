@@ -1,0 +1,74 @@
+Statistics on cross-manifold similarity scores
+================================================
+
+Each CSV in a similarity directory (similarity/, similarity_adjacent/,
+similarity_anchor_TFC/, similarity_anchor_TestB/) is analyzed
+independently. For anchor-mode CSVs that contain a `comparison` column,
+only the canonical 3-session subset is used so the within-subjects
+factor matches the Wilson Fig 1M form. The canonical subset is
+`comparison == "vs_TFC"` for similarity_anchor_TFC/ and
+`comparison == "vs_TestB"` for similarity_anchor_TestB/.
+
+Dependent variable
+------------------
+similarity scores are Pearson/cosine correlation values bounded in
+[-1, 1]. To stabilise variance and additivity near the bounds the
+default DV is the Fisher z-transform: z = arctanh(clip(r, -0.9999, 0.9999)).
+Set fisher_z=False to fit on raw r.
+
+Mice with missing sessions are dropped (RM-ANOVA requires complete cases).
+
+Mixed-design ANOVA  (group × session)
+-------------------------------------
+Two-way ANOVA with one between-subjects factor (group: hM3D / hM4D /
+mCherry) and one within-subjects factor (session: TFC_cond / Test_B /
+Test_B_1wk). Fitted via pingouin.mixed_anova on each mouse's per-session
+mean. Output mixed_anova.csv reports F, df1, df2, p-unc and
+Greenhouse–Geisser–corrected p (p-GG-corr) for the within and
+interaction rows, plus partial eta-squared (np2).
+
+Three F-tests are produced in one fit:
+  * group main effect       — does similarity differ between DREADD groups?
+  * session main effect     — Wilson-style: does similarity drift across
+                              sessions, pooled across groups?
+  * group × session         — does the trajectory across sessions differ
+                              between groups?
+
+Per-group RM-ANOVA (Wilson-style)
+---------------------------------
+For each group separately, a one-way repeated-measures ANOVA on session
+is fitted with pingouin.rm_anova (detailed=True, correction='auto').
+Output rm_anova_per_group.csv mirrors the analysis used in
+Wilson et al. ("F4 = 5.54, p = 0.002, repeated measures ANOVA").
+
+Per-group pairwise paired t-tests
+---------------------------------
+Within each group, all pairs of sessions are compared with paired
+t-tests; p-values are Holm-corrected within group. Output
+pairwise_session_per_group.csv.
+
+Linear mixed-effects model (LMM)
+--------------------------------
+similarity ~ C(group) * C(session) + (1 | mouse)
+Fitted via statsmodels.formula.api.mixedlm (REML=False, L-BFGS).
+Full coefficient summary in lmm_summary.txt. A type-II ANOVA on the
+fixed effects is produced via an OLS surrogate that includes mouse as a
+fixed effect (statsmodels has no anova_lm for MixedLM); written to
+lmm_anova_typeII.csv. The LMM handles mild imbalance between group sizes
+(n=5/4/6) more gracefully than classical RM-ANOVA.
+
+Outputs (per CSV, under <sim_dir>/stats/<csv_stem>/)
+---------------------------------------------------
+  mixed_anova.csv                 — pingouin mixed ANOVA table
+  rm_anova_per_group.csv          — Wilson-style per-group RM-ANOVA
+  pairwise_session_per_group.csv  — paired t-tests, Holm-corrected
+  per_session_group_means.csv     — mean ± SEM per (session, group),
+                                    back-transformed to r-scale
+  between_group_per_session.csv   — Welch t-tests between every group
+                                    pair at each session, Holm within
+                                    session (tests Exc / Ctl / Inh
+                                    differences directly)
+  lmm_summary.txt                 — full MixedLM coefficient table
+                                    (or note that RE collapsed)
+  lmm_anova_typeII.csv            — fixed-effects type-II ANOVA
+  summary.txt                     — key F/p lines from all of the above

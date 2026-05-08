@@ -1,0 +1,49 @@
+cat > .gitignore << 'EOF'
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Conda
+.env
+.conda
+conda-meta/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# macOS
+.DS_Store
+
+# VSCode
+.vscode/
+
+# Data
+data/
+results/
+output/
+cache/
+
+# Figures
+*.png
+*.pdf
+*.svg
+
+# Logs
+*.log
+
+# Environment
+.envrc
+
+# Pytest
+.pytest_cache/
+
+# Mypy
+.mypy_cache/
+
+# Ruff
+.ruff_cache/
+EOF
+
+freeze_data

@@ -1,0 +1,245 @@
+PCA Joint State-Space Metrics — Euclidean (raw PCA)
+====================================================
+
+Overview
+--------
+All metrics are computed in the joint cross-registered PCA subspace
+fit by CrossregFullPCA(method=2, event_window='toneshock'), using the
+3D scores already shown on the trajectory plots. No covariance
+whitening, no LDA, no shuffles. Pure Euclidean.
+
+Sessions
+--------
+TFC_cond, Test_B, Test_B_1wk. Tone events exist in all three;
+shock events exist only in TFC_cond. The shock cloud used in any
+"to-shock" comparison is therefore always the TFC_cond shock cloud.
+
+Frame masks
+-----------
+For a given session with onsets/offsets in the PC frame axis:
+  baseline = ¬(any tone window) ∧ ¬(any shock window)
+  tone     = union of [tone_onset[i], tone_offset[i])
+  shock    = union of [shock_onset[i], shock_offset[i])
+  first_tone  = [tone_onset[0],  tone_offset[0])
+  last_tone   = [tone_onset[-1], tone_offset[-1])
+  first_shock = [shock_onset[0], shock_offset[0])
+  last_shock  = [shock_onset[-1],shock_offset[-1])
+
+Section 1 — Excursion (TFC_cond)
+--------------------------------
+Q1a: Excursion from baseline.
+  excursion_from_baseline =
+      || mean(PCs[shock_TFC]) - mean(PCs[baseline_TFC]) ||
+  Single Euclidean distance between the centroids of TFC_cond shock
+  and baseline clouds.
+
+Q1b: Excursion from origin.
+  excursion_from_origin = mean over TFC_cond shock frames of ||x||
+  Distance from the joint-PCA origin (the joint mean was subtracted
+  in the PCA fit, so the "origin" is the global concatenated mean).
+  This is independent of the baseline cloud — only the magnitude
+  of the shock excursion in PC-space matters.
+
+Section 2 — Tone-to-Shock distance
+----------------------------------
+For each session sess in {TFC_cond, Test_B, Test_B_1wk}, five
+sub-comparisons against TFC_cond shock states. Each metric is
+||centroid(A) - centroid(B)||, a single Euclidean distance:
+
+  dist_allTones_to_allShocks_<sess>
+      A = all tone frames in <sess>
+      B = all shock frames in TFC_cond
+
+  dist_allTones_to_firstShock_<sess>
+      A = all tone frames in <sess>
+      B = first shock window in TFC_cond
+
+  dist_allTones_to_lastShock_<sess>
+      A = all tone frames in <sess>
+      B = last shock window in TFC_cond
+
+  dist_firstTone_to_allShocks_<sess>
+      A = first tone window in <sess>
+      B = all shock frames in TFC_cond
+
+  dist_lastTone_to_allShocks_<sess>
+      A = last tone window in <sess>
+      B = all shock frames in TFC_cond
+
+Total: 5 sub-comparisons × 3 sessions = 15 distance metrics.
+
+Group-level statistics
+----------------------
+Each mouse contributes ONE scalar per metric. We do NOT use a mixed
+model (no within-mouse replication).
+
+For every metric we run:
+  • One-way ANOVA across {mCherry, hM3D, hM4D} (scipy.stats.f_oneway).
+  • Pairwise Welch two-sided t-tests (scipy.stats.ttest_ind,
+    equal_var=False), with Welch–Satterthwaite df reported.
+  • Multiple-comparison correction across the 3 pairwise contrasts
+    by the Holm method (statsmodels.multipletests, method='holm').
+
+Output layout
+-------------
+<PLOTS_DIR>/PCA_state_metrics/
+  per_mouse.csv                                 wide table, one row per mouse
+  pca_state_metrics_methods.txt                 (this file)
+  Excursion_(TFC_cond)__<metric>.png            box+dot plot per metric
+  Excursion_(TFC_cond)__<metric>__stats.txt     per-metric ANOVA + pairs
+  Tone-to-Shock_distance__<metric>.png
+  Tone-to-Shock_distance__<metric>__stats.txt
+
+Plots are Nature-style: box (25/50/75 percentiles), whiskers to non-
+outlier extremes, jittered per-mouse dots colored by group. Significance
+stars from Holm-corrected pairwise p-values are drawn as brackets above
+the boxes; raw statistical numbers go in the sibling __stats.txt files,
+not on the plots.
+
+
+ANOVA + Tukey HSD pass (parallel output, "_ANOVA" suffix)
+---------------------------------------------------------
+Each metric is also rendered with a parallel statistical pass:
+  - Same one-way ANOVA omnibus.
+  - Pairwise post hoc by Tukey's Honestly Significant Difference
+    (statsmodels.stats.multicomp.pairwise_tukeyhsd, alpha=0.05).
+    Tukey HSD controls the family-wise error rate across all pairwise
+    comparisons within each metric, so no separate Holm correction is
+    applied to its p-adj values.
+
+Output filenames:
+  <section>__<metric>_ANOVA.png         (Tukey-stars on the brackets)
+  <section>__<metric>_ANOVA__stats.txt  (mean diff + Tukey p_adj per pair)
+
+The original Welch-t + Holm plots and stats files (no suffix) are
+unchanged. Both passes use exactly the same per-mouse data.
+
+Per-event pipeline ("perEvent" suffix, separate sub-directories)
+-----------------------------------------------------------------
+The per-mouse-mean panel collapses each session to a single scalar per
+mouse, which throws away substantial within-mouse variance. A parallel
+"per-event" pipeline operates on individual events (per trial, per
+tone, per shock-frame) and is written to two sub-directories of the
+main output folder:
+
+  PCA_state_metrics/per_event_indexpaired/
+  PCA_state_metrics/per_event_allpairs/
+
+The two sub-directories differ ONLY in how TFC_cond tone/shock events
+are paired:
+  indexpaired -- one row per trial: distance between centroid(tone_i)
+                 and centroid(shock_i). N_trials rows per mouse.
+  allpairs    -- every (tone_i, shock_j) pair: N_tones x N_shocks rows
+                 per mouse. Test_B / Test_B_1wk metrics are identical
+                 in both sub-directories (each is a self-contained
+                 report).
+
+Per-event metrics
+.................
+Excursion (TFC_cond):
+  excursion_perShock_from_baseline_TFC_cond
+      Per-shock-trial centroid distance to the TFC_cond baseline
+      centroid. One row per shock trial.
+  excursion_perFrame_from_origin_TFC_cond
+      Per-shock-frame Euclidean norm ||x|| (distance to PCA origin).
+      One row per shock frame.
+
+Tone-to-Shock distance (TFC_cond, scheme-dependent):
+  dist_paired_toneShock_TFC_cond     (indexpaired)
+      ||centroid(tone_i) - centroid(shock_i)||, one row per trial.
+  dist_allPairs_toneShock_TFC_cond   (allpairs)
+      ||centroid(tone_i) - centroid(shock_j)||, one row per (i, j).
+
+Tone-to-Shock distance (Test_B and Test_B_1wk):
+  Test sessions have no shocks; references always come from TFC_cond.
+  The "all shocks" variant is scheme-aware:
+    indexpaired:
+      dist_perTone_to_allShocks_<sess>     (one row per tone)
+        ||centroid(tone_j) - centroid(all TFC_cond shocks)||.
+    allpairs:
+      dist_allPairs_tone_shock_<sess>      (N_tones x N_TFC_shocks rows)
+        ||centroid(tone_j) - centroid(TFC_cond shock_k)||,
+        one row per (j, k).
+  The first/last-shock variants reference a single TFC shock cloud and
+  are identical in both schemes:
+    dist_perTone_to_firstShock_<sess>    (one row per tone)
+    dist_perTone_to_lastShock_<sess>     (one row per tone)
+      Each tone centroid in the test session vs. the corresponding
+      reference centroid built from the first / last TFC_cond shock.
+
+Inferential models (two parallel passes per metric)
+...................................................
+For every metric, two stats engines are run side-by-side, producing
+two PNGs and two stats.txt files (suffix "_LMM" vs. "_ANOVA"):
+
+(1) LMM with mouse random intercept ("_LMM"):
+      mixedlm("value ~ C(group)", groups=mouse), REML, lbfgs.
+      Omnibus: joint Wald F-test that all non-reference group dummies
+      = 0. Pairwise contrasts: Wald t-tests on the relevant linear
+      restriction, Holm-corrected across the 3 pairs. If MixedLM fails
+      to converge or yields a singular random-effect variance, the
+      same formula is refit with OLS using cluster-robust standard
+      errors on `mouse` (statsmodels cov_type="cluster"). The model
+      actually used is recorded per contrast as `model="MixedLM"` or
+      `model="OLS+cluster_se"` in the stats file.
+
+(2) Per-event one-way ANOVA + Tukey HSD ("_ANOVA"):
+      Same as the per-mouse Tukey pass but on per-event values,
+      treating every event as an independent observation. This
+      DELIBERATELY ignores within-mouse clustering and is intended
+      only as a visual comparator (Igarashi-style). Reported p_adj
+      values are anti-conservative when events within a mouse are
+      correlated and should not be used for inference; the LMM pass
+      is the inferential reference.
+
+Output files per metric
+.......................
+  <section>__<metric>_perEvent_LMM.png
+  <section>__<metric>_perEvent_LMM__stats.txt
+  <section>__<metric>_perEvent_ANOVA.png
+  <section>__<metric>_perEvent_ANOVA__stats.txt
+  per_event_long.csv   (full long-form rows for the sub-directory)
+
+Plot conventions
+................
+The boxplot summarizes the inferential unit (per-event values).
+Every event is drawn as an equal-weight jittered dot, grouped only
+by treatment condition (Ctl / Exc / Inh) -- no per-mouse aggregate
+overlay. Stars on brackets come from p_holm (LMM) or Tukey-adjusted
+p_raw (ANOVA).
+
+In stats files, n_a / n_b denote the number of MICE in each group,
+while n_events_a / n_events_b denote the number of events contributed
+to the metric by that group.
+
+
+Permutation + percentile-bootstrap pass (parallel output, "_BOOT" suffix)
+------------------------------------------------------------------
+Per-mouse-mean panel only. A non-parametric alternative to the
+Welch-t / Tukey-HSD passes that does NOT assume normality or equal
+variance, recommended at small n (n_mice � 5/group).
+
+  - Omnibus: one-way F statistic; p estimated by permuting group
+    labels n_perm = 10000 times. Reported as
+    p = (n_extreme + 1) / (n_perm + 1), so the smallest reportable
+    p is 1 / (n_perm + 1) � 1.0e-4.
+  - Pairwise: for each unordered pair (a, b), the observed mean
+    difference is reported with a percentile 95% confidence interval
+    (scipy.stats.bootstrap, method='percentile', n_boot = 10000). The
+    pairwise p is a two-sided permutation p on |mean_a - mean_b|
+    using the same n_perm = 10000 shuffles, then Holm-corrected
+    across the 3 pairs. Stars on the bracket use p_holm.
+
+Output filenames:
+  <section>__<metric>_BOOT.png
+  <section>__<metric>_BOOT__stats.txt   (mean_diff, 95%CI, p_perm_raw,
+                                          p_holm, n_boot, n_perm)
+
+Reporting note:
+  The "_BOOT" panel is the recommended alternative-to-ANOVA option
+  for figures: it makes no normality assumption and yields confidence
+  intervals on the actual quantity of interest (the mean difference)
+  rather than only a p-value. The Welch+Holm and Tukey passes are
+  retained alongside for direct comparison with prior literature
+  conventions.
+

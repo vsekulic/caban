@@ -1,0 +1,182 @@
+================================================================================
+SST+ BURST ANALYSIS - DETAILED STATISTICAL REPORT
+================================================================================
+
+DATA SUMMARY
+--------------------------------------------------------------------------------
+Input file: C:\Users\vlads\GDrive\code\sstca2\data\VS_SST_IN_HPc_8tt_slp_v2.csv
+Cell types included: PYR, PYR_nWf
+Groups compared: SST_hM3D (Exc) vs SST_hM4D (Inh)
+Statistical method: Linear Mixed-Effects Models (LMM)
+Random effect: (1 | Mouse)
+Post-hoc test: Wald z-test (two-tailed)
+Effect size: Cohen's d (pooled SD)
+Multiple testing correction: Bonferroni (6 comparisons)
+Spike count distribution test: Kolmogorov-Smirnov test
+
+================================================================================
+LINEAR MIXED-EFFECTS MODEL RESULTS
+================================================================================
+
+Metric: Total Bursts (B_num_total)
+------------------------------------------------------------
+  Number of observations: 233
+  [Insufficient data or model convergence error]
+
+Metric: Bursts per Minute (B_num_per_min)
+------------------------------------------------------------
+  Number of observations: 233
+  [Insufficient data or model convergence error]
+
+Metric: Inter-Burst Interval (s) (B_ibi_sec)
+------------------------------------------------------------
+  Number of observations: 232
+  [Insufficient data or model convergence error]
+
+Metric: Burst Duration (ms) (B_dur_msec)
+------------------------------------------------------------
+  Number of observations: 233
+  [Insufficient data or model convergence error]
+
+Metric: Burst Spike Ratio (Nspk_B_Nspk_train_ratio)
+------------------------------------------------------------
+  Number of observations: 233
+  [Insufficient data or model convergence error]
+
+Metric: Spikes per Burst (Spk_per_burst)
+------------------------------------------------------------
+  Number of observations: 233
+  [Insufficient data or model convergence error]
+
+================================================================================
+DESCRIPTIVE STATISTICS BY GROUP
+================================================================================
+
+Metric: Total Bursts (B_num_total)
+------------------------------------------------------------
+  Exc (SST_hM3D):
+    N = 180
+    Mean = 580.2056
+    Median = 276.0000
+    SD = 758.3705
+    Min = 1.0000
+    Max = 4733.0000
+  Inh (SST_hM4D):
+    N = 53
+    Mean = 386.2264
+    Median = 230.0000
+    SD = 414.3805
+    Min = 4.0000
+    Max = 2166.0000
+
+Metric: Bursts per Minute (B_num_per_min)
+------------------------------------------------------------
+  Exc (SST_hM3D):
+    N = 180
+    Mean = 13.1328
+    Median = 6.2408
+    SD = 16.3218
+    Min = 0.0217
+    Max = 86.9391
+  Inh (SST_hM4D):
+    N = 53
+    Mean = 12.1741
+    Median = 7.0851
+    SD = 13.1816
+    Min = 0.1254
+    Max = 67.9043
+
+Metric: Inter-Burst Interval (s) (B_ibi_sec)
+------------------------------------------------------------
+  Exc (SST_hM3D):
+    N = 179
+    Mean = 21.4987
+    Median = 8.6585
+    SD = 37.2136
+    Min = 0.6846
+    Max = 302.8483
+  Inh (SST_hM4D):
+    N = 53
+    Mean = 21.3986
+    Median = 7.7332
+    SD = 60.8686
+    Min = 0.8815
+    Max = 440.5124
+
+Metric: Burst Duration (ms) (B_dur_msec)
+------------------------------------------------------------
+  Exc (SST_hM3D):
+    N = 180
+    Mean = 7.7517
+    Median = 7.6208
+    SD = 1.2279
+    Min = 5.5826
+    Max = 18.4668
+  Inh (SST_hM4D):
+    N = 53
+    Mean = 7.8258
+    Median = 7.8722
+    SD = 1.1952
+    Min = 4.8410
+    Max = 11.8684
+
+Metric: Burst Spike Ratio (Nspk_B_Nspk_train_ratio)
+------------------------------------------------------------
+  Exc (SST_hM3D):
+    N = 180
+    Mean = 0.3582
+    Median = 0.3483
+    SD = 0.1424
+    Min = 0.0370
+    Max = 0.7842
+  Inh (SST_hM4D):
+    N = 53
+    Mean = 0.3292
+    Median = 0.3469
+    SD = 0.1086
+    Min = 0.0703
+    Max = 0.5632
+
+Metric: Spikes per Burst (Spk_per_burst)
+------------------------------------------------------------
+  Exc (SST_hM3D):
+    N = 180
+    Mean = 2.2563
+    Median = 2.2353
+    SD = 0.1326
+    Min = 2.0000
+    Max = 2.7778
+  Inh (SST_hM4D):
+    N = 53
+    Mean = 2.2984
+    Median = 2.2915
+    SD = 0.1267
+    Min = 2.0081
+    Max = 2.5545
+
+================================================================================
+SPIKE COUNT PER BURST DISTRIBUTION
+================================================================================
+
+  Exc observations: 104437
+  Inh observations: 20470
+  KS statistic: 0.0254
+  KS p-value: 0.000000
+  Significance: *** p < 0.001 (highly significant)
+
+================================================================================
+SUMMARY TABLE
+================================================================================
+
+Metric                         Coeff      SE         Z          P-corr       d          Sig   
+----------------------------------------------------------------------------------------
+Total Bursts                   N/A        N/A        N/A        N/A          N/A        err   
+Bursts per Minute              N/A        N/A        N/A        N/A          N/A        err   
+Inter-Burst Interval (s)       N/A        N/A        N/A        N/A          N/A        err   
+Burst Duration (ms)            N/A        N/A        N/A        N/A          N/A        err   
+Burst Spike Ratio              N/A        N/A        N/A        N/A          N/A        err   
+Spikes per Burst               N/A        N/A        N/A        N/A          N/A        err   
+
+================================================================================
+END OF REPORT
+================================================================================

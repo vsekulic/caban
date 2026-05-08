@@ -1,0 +1,141 @@
+Population PCA Trajectory Analysis — METHODS
+==============================================
+
+Overview
+--------
+Population activity is projected into a low-dimensional principal-component (PC)
+space to visualise within-session and across-session trajectories of CA1
+ensemble dynamics during trace fear conditioning (TFC_cond) and Test_B /
+Test_B_1wk recall sessions. Four complementary PCA pipelines are run per mouse:
+
+  (1) PCA_avg            — single-session, trial-averaged PCA on TFC_cond
+  (2) PCA_crossreg_avg   — cross-registered, trial-averaged PCA across the
+                            three sessions (TFC_cond, Test_B, Test_B_1wk)
+  (3) PCA_crossreg_full_toneshock     — cross-registered, full-time-course PCA
+                                          highlighting tone and shock periods
+  (4) PCA_crossreg_full_posttoneshock — cross-registered, full-time-course PCA
+                                          highlighting post-tone and post-shock
+                                          windows (offset .. offset + 20 s)
+
+Pre-processing
+--------------
+Three mutually-aware controls govern the per-cell input to PCA. The actual
+values used by *this* run are recorded in the co-located RUN_CONFIG.txt.
+
+  - default (normalize=False, binarize=False): raw S → per-neuron z-score:
+        S_norm[i,t] = (S[i,t] − mean_t S[i,t]) / std_t S[i,t]
+    NaNs from zero-variance neurons are replaced with zero (np.nan_to_num).
+
+  - normalize=True: per-cell, per-session amplitude normalization. Each row
+    of S is divided by max(|S_peakval[i]|) within that session BEFORE the
+    z-score, compensating for session-level peakval inflation (e.g. CNO in
+    TFC_cond). Cells with empty peakval lists pass through unchanged.
+
+  - binarize=True: replaces each row with a binary spike-peak indicator: 1.0
+    at frames listed in session.S_spikes[cell] (i.e. find_spikes_ca_S peak
+    frames), 0.0 elsewhere. NOT a threshold on raw S. The subsequent z-score
+    step is SKIPPED on binarize=True (otherwise rare-spiker cells would be
+    rescaled by their per-cell SD and inflate disproportionately). After
+    time-binning, values are integer spike counts per bin.
+
+  - normalize and binarize are mutually exclusive (constructor raises
+    ValueError if both are True).
+
+Time binning (CrossregFullPCA only)
+-----------------------------------
+The continuous-trace cross-registered PCA accepts a frames_per_bin parameter
+(default PCA_FRAMES_PER_BIN = MINISCOPE_FPS × 1 = 20 frames = 1 s/bin at
+20 Hz, set at the top of SSTCa2_main.py). Binning is applied AFTER the
+binarize/normalize transform but BEFORE z-score and smoothing:
+
+  1. Build per-cell row matrix (raw / binarize / normalize) at frame grid.
+  2. Sum-reduce every frames_per_bin consecutive frames into 1 bin
+     (trailing partial bin is discarded).
+  3. Tone/shock onsets/offsets are remapped via integer division so all
+     downstream event-window logic (and SSTCa2_pca_state_metrics) operates
+     in bin-space coordinates.
+  4. z-score (skipped when binarize=True).
+  5. Optional Gaussian smoothing along time with σ = 1.5 frames is
+     AUTO-DISABLED whenever frames_per_bin > 1 (since 1.5 frames ≈ 75 ms is
+     ill-defined at 1 s/bin).
+
+Trial-averaged variants (TrialAveragedPCA, CrossregAvgPCA) are NOT binned —
+they preserve their existing per-frame PERIOD_FRAMES window structure (see
+"Trial averaging" section below). Their RUN_CONFIG.txt always reports
+frames_per_bin=1.
+
+Cache key conventions
+---------------------
+PCA outputs are pickled keyed by:
+  pca_avg-n{n_components}-norm{0|1}-bin{0|1}-{mouse}
+  crossreg_avg-engram{want_engram}-which{which_engram}-eng_n{N}
+              -norm{0|1}-bin{0|1}-n{n_components}-{mouse}
+  crossreg_full-{event_window}-engram{want_engram}-which{which_engram}
+              -eng_n{N}-smooth{T|F}_sigma{X.X}
+              -norm{0|1}-bin{0|1}-fpb{frames_per_bin}-n{n_components}-{mouse}
+
+Engram-cell selection (when want_engram = True): score = zscore(sum_t S_TFC_cond),
+cells with score > engram_thresh (default 0) are retained across all sessions.
+The TFC_cond session always serves as the reference for engram selection.
+
+Cross-registration
+------------------
+For all crossreg pipelines, neuron indices are aligned across the three
+sessions using SSTCa2_utilities.get_S_indeces_crossreg with the
+TFC_cond ↔ Test_B ↔ Test_B_1wk mapping. Mice G07 and G15 lack a complete
+crossreg mapping and are excluded from crossreg analyses (single-session
+PCA_avg is still computed for them). For mice G09 and G21, the location
+arrays (loc_X_miniscope_smooth, loc_Y_miniscope_smooth) are truncated to
+PCs.shape[0] frames because Miniscope chunk 19.avi was not recorded.
+
+Trial averaging (AVG pipelines)
+-------------------------------
+For each cross-registered cell and each of N trials in a session, activity is
+extracted in five fixed-length windows around tone/shock events:
+    pre_tone     : 20 frames before tone onset
+    tone         : 20 frames from tone onset
+    post_tone    : 20 frames after tone offset
+    shock        : 2 frames from shock onset (TFC_cond only)
+    post_shock   : 20 frames after shock offset (TFC_cond only)
+The five windows are averaged across trials and concatenated to form a per-cell
+trial-averaged trace of length 82 (TFC_cond) or 60 (Test_B / Test_B_1wk).
+
+PCA fitting
+-----------
+Two fitting strategies are evaluated (n_components = 3):
+
+  Method 1 (encoding-fit): PCA is fit on TFC_cond only (encoding session) and
+           the same projection is applied to Test_B and Test_B_1wk. This
+           assumes equal feature variance across sessions; in the FULL
+           pipelines, where this assumption is unlikely to hold, Method 1 is
+           retired and only Method 2 is reported.
+
+  Method 2 (joint-fit): The three z-normalised matrices are concatenated along
+           the time axis, S_tot = [S_TFC_cond | S_Test_B | S_Test_B_1wk], and
+           PCA is fit on S_tot.T. Each session is then projected into the
+           shared PC space.
+
+Plotting conventions
+--------------------
+- AVG plots colour the five trial-averaged periods: pre-tone (black), tone
+  (blue), post-tone (grey), shock (red), post-shock (green). Start and end
+  points of the trajectory are marked with filled and open black circles.
+- FULL tone/shock plots highlight the first (dark) and last (light) tone /
+  shock periods; the gray full trajectory is overlaid. When
+  only_tone_shock = True, axis limits are derived from the union of all tone
+  and shock window PCs across the three sessions.
+- FULL post-tone/post-shock plots use the window
+  [event_offset, event_offset + MINISCOPE_FPS × 20 frames] (i.e. 20 s after
+  the event end).
+- 2D-location + 3D-PCA combined plots are rendered for each session under the
+  toneshock pipeline, coloured either by frame (Time) or by spatial position
+  (Location). Per-mouse view angles (elev, azim) are taken from a hand-tuned
+  table to disambiguate visually overlapping projections.
+
+Implementation note
+-------------------
+This template documents the PCA refactor in SSTCa2_population.py, which
+supersedes the prototype code in SSTCa2_debug_snippets3.py. In the FULL
+pipelines, Method 2 was previously buggy in the prototype (PCA was fit on the
+TFC_cond matrix instead of the concatenated matrix); the refactored code fits
+on S_tot.T as the comment intended.

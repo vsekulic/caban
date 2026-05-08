@@ -1,0 +1,136 @@
+Zone Cross-Registration Analysis — Phase 5: Population Curve & Group Statistics
+===============================================================================
+
+Purpose
+-------
+Phase 5 measures how zone decoding accuracy scales with the number of cells
+included in the decoder. By randomly subsampling N cells from the LT1+LT2
+pair set and decoding zone identity, this phase constructs "population curves"
+(pct_correct vs N) and tests whether these curves differ between experimental
+groups. This reveals group-dependent differences in population-level coding
+efficiency and scaling behaviour.
+
+Cell Sampling
+-------------
+- Base cell set: all LT1+LT2 pair-registered cells per mouse.
+- N_max: the 25th percentile of per-mouse total pair cell counts (default
+  quantile_cap = 0.25), ensuring all mice contribute at all grid points.
+- N grid: [n_step, 2×n_step, ..., N_max] with default n_step = 20.
+- At each grid point N, n_repeats (default 50) random subsamples are drawn
+  without replacement from the pair set.
+
+Decoder Configuration
+---------------------
+- Same as Phase 1: PF_2D Bayesian decoder with full parameter threading
+  (continuity constraint, z_score, time_bin_frames, spatial binning, etc.).
+- Within-session: decode_within_LT_position_vs_time on LT1 and LT2.
+- Cross-session: _cross_session_decode_PF2D_raw (train LT1, test LT2).
+- Zone classification: 5-zone → 2-zone (Arms, Junction) collapse with
+  boundary exclusion threshold 15.0 cm.
+
+Per-Grid-Point Aggregation
+--------------------------
+For each (mouse, condition, zone, N), the n_repeats pct_correct values are
+summarised as: score_mean, score_std, score_q25, score_q75, score_n.
+
+Conditions
+----------
+1. within_LT1: train and test on LT1 (temporal cross-validation).
+2. within_LT2: train and test on LT2.
+3. LT1_to_LT2: train on LT1, test on LT2 (cross-session generalization).
+
+Population Curve Plots
+----------------------
+- One figure per (condition, zone): line plot of score_mean vs N, colour-coded
+  by group, with SEM shading.
+- Slope bar plots: per-mouse slopes of the best-fit line, grouped by group.
+
+Group-Level Statistical Tests (run_phase5_group_stats)
+------------------------------------------------------
+Four complementary approaches, each applied per (condition × zone):
+
+1. Linear Mixed-Effects Model (MixedLM):
+   Model: score_mean ~ C(group) * N + (1|mouse)
+   - Fixed effects: group (main effect on intercept), N (main slope),
+     group × N (slope heterogeneity across groups).
+   - Random intercept per mouse (REML via statsmodels MixedLM).
+   - Reports: fixed-effect coefficients, t-values, p-values per term.
+   - Interpretation: A significant group × N interaction indicates that
+     population curve slopes differ between groups.
+
+2. Per-Mouse Slope Comparison:
+   - For each mouse, fit a linear regression of score_mean on N.
+   - Extract the slope (rate of accuracy gain per additional cell).
+   - Kruskal-Wallis H-test across groups (non-parametric main effect).
+   - Pairwise Mann-Whitney U tests (two-sided, Holm-corrected).
+   - Plots: box-and-strip chart of slopes per group, one panel per
+     condition × zone.
+
+3. Per-Mouse AUC Comparison:
+   - For each mouse, compute the area under the population curve using
+     trapezoidal integration of score_mean over N.
+   - AUC captures the overall level of decoding across the full N range,
+     integrating both intercept and slope effects.
+   - Kruskal-Wallis H-test across groups.
+   - Pairwise Mann-Whitney U tests (Holm-corrected).
+   - Plots: box-and-strip chart of AUC per group.
+
+4. Snapshot at Common N:
+   - Identify the largest N at which all mice have data:
+     snapshot_N = min(per_mouse_max_N).
+   - Extract score_mean at snapshot_N for each mouse.
+   - Kruskal-Wallis H-test across groups.
+   - Pairwise Mann-Whitney U tests (Holm-corrected).
+   - Plots: box-and-strip chart of pct_correct at snapshot_N per group.
+   - Interpretation: This tests for group differences in absolute decoding
+     performance at a fixed, jointly achievable population size.
+
+Output Files
+------------
+Population Curve (main Phase 5):
+- zone_popcurve_summary.csv: full population-curve data (mouse, group,
+  condition, zone, N, score_mean, score_std, score_q25, score_q75, score_n).
+- zone_popcurve_slopes.csv: per-mouse slopes from linear fit.
+- Per-mouse cached files: phase5_{mouse}_popcurve.csv (if load_cached=True,
+  pre-computed results are reused).
+
+Group Statistics (run_phase5_group_stats):
+- phase5_group_stats_tests.csv: all test results with columns: condition,
+  zone, test, comparison, statistic, p_value.
+- phase5_group_stats_log.txt: full text log of all analyses.
+- phase5_group_stats_mixedlm_summary.txt: MixedLM summaries per cond×zone.
+- phase5_per_mouse_slopes.csv: per-mouse slopes used in test 2.
+- phase5_per_mouse_auc.csv: per-mouse AUC values used in test 3.
+
+Plots Generated
+---------------
+Population curves (per cond × zone):
+- popcurve_{condition}_{zone}.{png,pdf}: line plot with SEM bands.
+- popcurve_slopes_{condition}_{zone}.{png,pdf}: bar chart of per-mouse slopes.
+
+Group statistics (3 multi-panel figures, grid: rows=zones, cols=conditions):
+- phase5_group_stats_slopes.{png,pdf}: box-and-strip chart of per-mouse
+  slopes, with KW p-value in title.
+- phase5_group_stats_auc.{png,pdf}: box-and-strip chart of per-mouse AUC.
+- phase5_group_stats_snapshot.{png,pdf}: box-and-strip chart of pct_correct
+  at snapshot_N.
+
+Caching
+-------
+Per-mouse results are cached as NPY-backed CSV files. If a cached file exists
+and load_cached=True, the costly per-mouse decoder loop is skipped and results
+are loaded from disk.
+
+Interpretation
+--------------
+- Steeper slopes indicate that adding cells improves decoding more rapidly,
+  reflecting higher per-cell information or better ensemble complementarity.
+- Higher AUC reflects both better baseline decoding (intercept) and faster
+  scaling (slope) — a combined efficiency metric.
+- A plateau or decline at high N (as observed for Exc within LT1 Arms) may
+  indicate redundancy or interference among large neuronal populations.
+- Cross-session (LT1→LT2) curves are generally flatter and lower, reflecting
+  the difficulty of generalizing spatial codes across days.
+- If Inh (hM4D) selectively benefits at high N in cross-session decoding,
+  this would suggest that SST inhibition shapes population codes that are
+  more generalizable across sessions.

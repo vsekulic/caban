@@ -1,0 +1,70 @@
+Phase 9 — Place-field turnover (zone cross-registration suite)
+================================================================
+
+Overview
+--------
+Ziv et al. (2013)-style place-field turnover analysis applied to the
+zone cross-registration context.  For every pair of sessions in a
+cross-registration mapping, each cross-registered neuron is classified as:
+
+    Stable    — place cell in both sessions
+                (sub-types: same, reduced, expanded PF count)
+    Gained    — non-place-cell in session 1, place cell in session 2
+    Lost      — place cell in session 1, non-place-cell in session 2
+    Silent    — non-place-cell in either session
+
+Place-cell identity is determined by _get_pf_cells (any number of
+significant place fields detected in the fluorescence map).
+
+Per-mouse summary metrics:
+    recurrence_prob  = Stable / (Stable + Lost)
+    turnover_rate    = (Gained + Lost) / (Stable + Gained + Lost)
+    gain_rate        = Gained / N_crossreg
+    loss_rate        = Lost / N_crossreg
+
+The core classification is performed by _classify_pf_turnover
+(SSTCa2_spatial.py), shared with compute_pf_turnover.
+
+Sub-analyses
+------------
+A) LT1+LT2 pair crossreg
+   All neurons cross-registered between LT1 and LT2.
+   Turnover classified as LT1 → LT2.
+
+B) LT1+LT2+TFC_cond triple crossreg
+   Neurons cross-registered across all three sessions.
+   Three pair-wise comparisons:
+     - LT1 → LT2
+     - LT2 → TFC_cond
+     - LT1 → TFC_cond
+
+C) Stable-LT cells → TFC place-field fate  (triple crossreg only)
+   Among the triple-crossreg neurons that are place cells in BOTH
+   LT1 and LT2 ("stable LT place cells"), what fraction are also
+   place cells in TFC_cond?
+   Per-mouse metric: frac_also_tfc = n_stable_also_tfc_pf / n_stable_lt.
+   Plots: per-group boxplot (Kruskal–Wallis) and 2-category stacked
+   bar (Also PF in TFC vs Not PF in TFC).
+
+D) TFC place cells → LT1/LT2 place-field status  (triple crossreg only)
+   Among the triple-crossreg neurons that are place cells in TFC_cond,
+   classify each cell's LT place-field status into four categories:
+     - PF in both LT1 and LT2
+     - PF in LT1 only
+     - PF in LT2 only
+     - PF in neither LT session
+   Per-mouse metrics:
+     frac_both_lt = n_pf_both_lt / n_tfc_pf
+     frac_any_lt  = (n_pf_both_lt + n_pf_lt1_only + n_pf_lt2_only) / n_tfc_pf
+   Plots: per-group boxplots for frac_both_lt and frac_any_lt
+   (Kruskal–Wallis), and 4-category stacked bar.
+
+Plots
+-----
+For each comparison:
+  - Per-group boxplots of each metric (Kruskal–Wallis across groups).
+  - Stacked-bar chart of category proportions per group.
+
+Statistical tests
+-----------------
+Kruskal–Wallis H-test across groups for each turnover metric.

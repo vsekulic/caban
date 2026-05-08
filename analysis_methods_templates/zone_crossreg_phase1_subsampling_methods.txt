@@ -1,0 +1,95 @@
+Zone Cross-Registration Analysis — Phase 1: N-Matched Subsampling Control
+==========================================================================
+
+Purpose
+-------
+Phase 1 tests whether the specific subset of cells that are triple-registered
+(present in LT1, LT2, and TFC) produces systematically different zone
+decoding accuracy compared to random N-matched subsamples drawn from the
+larger LT1+LT2 cell pool. This is the primary selection-bias control for the
+zone cross-registration analysis.
+
+Cell Selection
+--------------
+- "Triple" set (observed): cells cross-registered across all three sessions
+  (LT1+LT2+TFC_cond), yielding N_triple cells per mouse.
+- "Pair" set (superset): all cells cross-registered between LT1 and LT2,
+  yielding N_pair ≥ N_triple cells per mouse.
+- Excluded cells: N_pair − N_triple cells present in LT1+LT2 but not in TFC.
+
+Null Distribution Construction
+------------------------------
+For each mouse, the decoder is run once with the actual triple set ("observed")
+and then n_repeats times (default 100) with a random subsample of N_triple
+cells drawn without replacement from the N_pair pair set. This produces a null
+distribution of zone pct_correct values for each condition × zone.
+
+Decoder Configuration
+---------------------
+- Decoder type: PF_2D (place-field Bayesian decoder using 2D place fields).
+- Within-session: decode_within_LT_position_vs_time on LT1 and LT2 separately.
+- Cross-session: _cross_session_decode_PF2D_raw (train on LT1, test on LT2).
+- Continuity constraint: Gaussian temporal smoothing with adaptive sigma (speed-
+  dependent). Parameters: sigma_k, speed_ref, exp, sigma_min, sigma_max,
+  sigma_default are threaded through from the caller.
+- Posterior decoding: posterior mean (default) or MAP.
+- Speed filter: minimum 2.0 cm/s (default).
+- Time binning: 15 frames per bin (default).
+- Spatial binning: 60 position bins (default).
+
+Zone Classification
+-------------------
+- Track divided into 5 zones using _compute_5_zone_boundaries.
+- Zones collapsed to two categories: Arms and Junction.
+- Per time bin, decoded position is compared to true position; if the
+  predicted zone matches the true zone, the bin is "correct."
+- Zone pct_correct = fraction of bins in each zone classified correctly.
+- Bins with true position within pct_threshold cm (default 15.0) of a zone
+  boundary are excluded from classification.
+
+Conditions
+----------
+1. within_LT1: train and test on LT1 (leave-one-out temporal cross-validation).
+2. within_LT2: train and test on LT2.
+3. LT1_to_LT2: train on LT1, test on LT2 (cross-session generalization).
+
+Summary Statistics
+------------------
+For each mouse × condition × zone:
+- Observed pct_correct from the triple set.
+- Null distribution: mean, std, percentile rank of observed within null.
+- p-value: two-sided (fraction of null values ≥ observed, doubled).
+
+Group-Level Statistical Tests (run_phase1_group_stats)
+------------------------------------------------------
+1. Per condition × zone: Kruskal-Wallis test of percentile ranks across groups,
+   followed by pairwise Mann-Whitney U tests.
+2. Per group: one-sample Wilcoxon signed-rank test of percentile ranks vs 50
+   (the expected value under no selection bias), overall and per zone.
+3. Per-mouse mean percentile rank: Kruskal-Wallis across groups, overall and
+   per zone, with pairwise Mann-Whitney U.
+4. Linear mixed-effects model: percentile_rank ~ C(group) * C(zone) + (1|mouse),
+   fitted with REML via statsmodels MixedLM. Also Arms-only and Junction-only
+   submodels: percentile_rank ~ C(group) + (1|mouse).
+5. Group × zone summary table: mean ± SEM of percentile ranks.
+
+Output Files
+------------
+- cell_counts_table.csv: per-mouse N_LT1_LT2, N_LT1_LT2_TFC, N_excluded, pct_retained.
+- subsampling_null.csv: per-repeat null zone pct_correct values.
+- subsampling_observed.csv: observed triple-set zone pct_correct values.
+- subsampling_summary.csv: per-mouse percentile rank and p-value summary.
+- phase1_null_vs_observed_{mouse}.png: per-mouse null distribution with observed line.
+- phase1_summary_heatmap.png: group × condition × zone mean percentile rank heatmap.
+- phase1_group_stats.png: multi-panel statistical summary figure.
+- phase1_group_stats_tests.csv: all statistical test results.
+- phase1_group_stats_log.txt: full text log of all analyses.
+
+Interpretation
+--------------
+- Percentile rank near 50 indicates the observed (triple) set performs identically
+  to random N-matched subsamples — no selection bias.
+- Percentile rank significantly above/below 50 would indicate the triple set
+  encodes position better/worse than expected by chance.
+- Group differences in percentile rank would suggest the DREADD manipulation
+  interacts with which cells are retained across sessions.

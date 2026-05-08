@@ -1,0 +1,19 @@
+# LT Decoder Mixed-Model Statistics — Methods
+
+## Analysis Context
+Prefix: {{FILE_PREFIX}}
+
+## 1) Mixed-Effects Model
+{{MODEL_PARAGRAPH}}
+
+## 2) Wald Contrast Tests
+{{WALD_PARAGRAPH}}
+
+## 3) Fixed-Effects F-Tests
+{{FTEST_PARAGRAPH}}
+
+## 4) Likelihood Ratio Tests (LRT)
+{{LRT_PARAGRAPH}}
+
+## 5) EMMeans-Style Post Hoc Tests
+{{EMMEANS_PARAGRAPH}}

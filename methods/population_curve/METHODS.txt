@@ -1,0 +1,198 @@
+# Population Curve Analysis — Methods
+# ====================================
+
+## 1. Bayesian Decoder
+
+Position was decoded from calcium-event spike counts using a memoryless
+Bayesian decoder with Poisson likelihood (BayesianDecoder2D /
+BayesianDecoder2D_PF).
+
+The log-posterior for position x given observed spike-count vector K in a
+single time bin is:
+
+    log P(x | K)  =  sum_i [ K_i * log(lambda_i(x))  -  lambda_i(x) * dt * w ]
+                      + log pi(x)  + const
+
+where:
+  - K_i       = event count for neuron i in the decoding chunk
+  - lambda_i  = estimated firing rate (events/sec) at position x
+  - dt        = frame duration (seconds)
+  - w         = time_bin_frames (number of frames averaged per decoding chunk;
+                default 15)
+  - pi(x)     = occupancy-based spatial prior  (occ(x) / sum occ)
+                or a uniform prior (1 / n_bins)
+
+The position in each spatial dimension was discretised into n_spatial_bins
+(default 20 per axis for 2D, giving a 20 x 20 grid).
+
+Firing-rate maps (lambda) were computed as:
+    lambda_i(x) = spike_count_i(x) / occupancy(x)
+with an occupancy floor of one frame's duration and a rate-map floor of 1e-6
+to prevent log(0).
+
+Position was estimated either as the maximum a posteriori (MAP) bin centre
+(argmax of the posterior) or as the posterior mean:
+    x_hat = sum_b  P(b | K) * bin_centre(b)
+using a numerically stable softmax of the log-posterior.
+
+
+## 2. Place-Field (PF) Decoder Variant
+
+The PF decoder (BayesianDecoder2D_PF) replaces the occupancy-corrected rate
+map with a smooth tuning curve derived from Bayesian Gaussian Mixture Model
+(GMM) place-field fits.  For each neuron with a fitted GMM model, the log
+density is evaluated on the spatial grid, exponentiated, and rescaled so that
+its peak matches the occupancy-corrected rate-map peak.  Neurons without a GMM
+model either fall back to the raw rate map (if use_occupancy_fallback=True) or
+are set to the rate floor (effectively silenced).
+
+The decoding likelihood and posterior computation are identical to the raw-S
+decoder.
+
+IMPORTANT: The PF decoder does NOT use z-scoring of spike counts.  Because
+the rate maps (lambda) are precomputed from original-scale data, z-scoring
+the spike counts K would produce negative values that are incompatible with
+the Poisson log-likelihood (K * log(lambda) is undefined for K < 0).
+
+
+## 3. Continuity Constraint
+
+When enabled, a Gaussian transition prior penalises large jumps between
+consecutive decoded positions:
+
+    log P'(x_t | x_{t-1})  ∝  - (x_t - x_{t-1})^2 / (2 * sigma_t^2)
+
+This term is added to the log-posterior before position estimation at each
+time step.
+
+The transition width sigma_t is speed-dependent:
+
+    sigma_t  =  sigma_k * (v_t / v_ref) ^ exp
+
+clamped to [sigma_min, sigma_max].  When the speed estimate is unavailable
+(e.g. NaN), sigma_default is used as a fallback.
+
+Default parameter values (BayesianDecoderParamset):
+  - sigma_k       = 35.0   (baseline transition std, spatial units)
+  - speed_ref     = 20.0   (reference speed, px/s or cm/s)
+  - exp           = 1.0    (exponent for speed dependence)
+  - sigma_min     = 10.0   (minimum allowed sigma)
+  - sigma_max     = 30.0   (maximum allowed sigma)
+  - sigma_default = 18.0   (fallback when speed is NaN)
+
+Speed per chunk was computed as the mean absolute velocity (Euclidean norm
+of frame-to-frame displacements divided by dt) over the frames in that chunk.
+
+
+## 4. Cross-Validation (Within-Session)
+
+Within-session decoding accuracy was assessed using 2-fold cross-validation
+with even/odd temporal block splitting:
+
+  1. All speed-masked frames were assigned to 10-second blocks (block_size =
+     ceil(10.0 / dt_sec)).
+  2. Even-numbered blocks were used as fold A, odd-numbered blocks as fold B.
+  3. Fold 1: train on fold A, test on fold B.
+     Fold 2: train on fold B, test on fold A.
+  4. Spatial bin edges from fold 1 were reused for fold 2 to ensure
+     consistent discretisation.
+  5. Euclidean errors from both folds were pooled for summary statistics.
+
+
+## 5. Decoding Error Metric
+
+Decoding accuracy was quantified as the Euclidean distance between the
+decoded and true positions:
+
+    err_t  =  sqrt( (x_hat_t - x_true_t)^2 + (y_hat_t - y_true_t)^2 )
+
+where x_true and y_true are the mean tracked positions over the frames in
+each decoding chunk.  Positions were converted from pixel to physical units
+(cm) using a calibration scale factor.
+
+
+## 6. Population Curve Computation
+
+To assess how decoding accuracy scales with the number of neurons, a
+population curve analysis was performed.  For each cross-session
+mouse-target pair:
+
+  1. All cross-registered neurons (via CellReg mapping) were identified.
+  2. A neuron-count grid was constructed in steps of n_step (default 10 or
+     20) from n_step up to a cap determined by the 25th percentile of
+     neuron availability across all mouse-target pairs (or the minimum
+     availability when using max-shared mode).
+  3. At each grid point N, a random subset of N neurons was drawn WITHOUT
+     replacement from the full pool.  This was repeated for
+     population_curve_repeats iterations (default 100), each with a
+     deterministic seed:
+       seed = base_seed + stable_hash(mouse|target) + N * 100003 + rep_index
+     ensuring reproducibility while avoiding correlated draws across
+     conditions.
+  4. For each random subset, a full cross-session Bayesian decode was
+     performed and the median (or mean) Euclidean error was recorded.
+  5. Per N, summary statistics were computed across repeats: mean, median,
+     std, and 25th/75th percentiles of the per-repeat error scores.
+
+A summary-level DataFrame was produced with columns: mouse, group, target,
+N, score_mean, score_median, score_std, score_q25, score_q75.
+
+
+## 7. Population Curve Plots
+
+Three group-overlay plots were generated per target:
+
+### 7a. Raw Overlay
+  - X-axis: neuron subset size N.
+  - Y-axis: decoding error (median Euclidean distance, cm).
+  - Lines: group mean ± SEM across mice, at every available N value.
+  - Uses all data; groups may contribute different mice or N ranges.
+
+### 7b. Common-N Overlay
+  - Restricted to N values where EVERY group has >= min_mice_common
+    (default 2) mice with data.
+  - Further restricted to mice that are present at ALL of those common N
+    values, ensuring balanced within-group sampling.
+  - Provides an apples-to-apples comparison across groups on a matched
+    N grid.
+
+### 7c. Baseline-Normalized Overlay
+  - Each mouse's error curve was divided by its own score at the first
+    (smallest) N grid point:
+        norm_score(N) = score_median(N) / score_median(N_min)
+  - Group mean ± SEM of normalized scores were plotted.
+  - A horizontal reference line at y = 1.0 indicates no change relative
+    to baseline.
+  - This removes between-mouse variance in absolute accuracy and isolates
+    the SHAPE of the scaling curve, i.e. how much each additional neuron
+    improves (or fails to improve) decoding relative to the starting
+    population.
+
+
+## 8. Statistical Analysis of Population Curves
+
+### 8a. Per-Mouse Linear Slope
+For each mouse, a linear regression (scipy.stats.linregress) of
+norm_score vs N was fitted, yielding one slope value per mouse.  A
+negative slope indicates that normalized decoding error decreases
+(improves) as more neurons are added.
+
+### 8b. Within-Group Test: Wilcoxon Signed-Rank
+For each DREADD group (hM3D, hM4D, mCherry), a one-sample Wilcoxon
+signed-rank test (scipy.stats.wilcoxon) was applied to the per-mouse
+slopes against H0: median slope = 0 (no improvement with additional
+neurons).
+
+The one-sided p-value for the directional hypothesis (slope < 0) was
+obtained by halving the two-sided p when the observed median slope was
+negative.  A minimum of 3 mice per group was required.
+
+### 8c. Between-Group Test: Kruskal-Wallis
+A Kruskal-Wallis H-test (scipy.stats.kruskal) was applied across the
+per-mouse slope arrays of all groups to test whether the RATE of error
+reduction differs between DREADD conditions.  This non-parametric
+rank-based test requires no distributional assumptions and is appropriate
+for the small per-group sample sizes (n = 4-5 mice).
+
+Results are annotated directly on the normalized population curve plot
+and printed to the console.
