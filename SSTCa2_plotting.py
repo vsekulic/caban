@@ -10,7 +10,7 @@ def set_rc_params(
     # Build default rcParams
     params = {
         'font.family': 'sans-serif',
-        'font.sans-serif': ['Arial'],
+        'font.sans-serif': ['Arial', 'Liberation Sans', 'DejaVu Sans'],
         'xtick.labelsize': fontsize,
         'ytick.labelsize': fontsize,
         'axes.labelsize': fontsize,

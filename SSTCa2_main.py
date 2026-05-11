@@ -66,7 +66,11 @@ ENGRAM_MODES = ('permouse', 'ctlthresh_z', 'ctlthresh_p50')
 NUM_ENGRAM_PLOT_CELLS = 7
 
 now = datetime.now()
-PLOTS_DIR = MAIN_DRIVE+'\\data\\vsekulic\\OF_test\\plots'
+# Host-aware plots directory: on cbp-db Linux server use POSIX path, else Windows D:.
+if MAIN_DRIVE == '' and os.path.isdir('/Users/vsekulic/data/vsekulic/OF_test'):
+    PLOTS_DIR = '/Users/vsekulic/data/vsekulic/OF_test/plots'
+else:
+    PLOTS_DIR = MAIN_DRIVE+'\\data\\vsekulic\\OF_test\\plots'
 PLOTS_DIR = os.path.join(PLOTS_DIR, now.strftime('%Y-%m-%d %H_%M_%S'))
 PAPER_DIR = os.path.join('C:\\','Users','vlads','Dropbox','1-McHugh postdoc','3-PAPER','paper_plots')
 
@@ -1079,7 +1083,6 @@ _load_errors = []  # Accumulate errors across mice so one failure doesn't crash 
 for mouse in mouse_list:
     msg_start('*** Processing mouse '+mouse+'\n')
     try:
-
         #########################
         # Define various crossreg
         #########################
@@ -1343,6 +1346,12 @@ if _load_errors:
 else:
     print("\n  All mice loaded successfully.\n")
 
+#
+# To stop running automatically when remotely debugging.
+#
+if DEVEL_SWITCH:
+    park()
+    # Remember to run: pull_main_globals() in debug session after attaching!
 
 # ----------------------------------------------------------------------------
 # Unified engram-cell identity (Phase A: SSTCa2_engram).

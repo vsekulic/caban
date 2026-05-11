@@ -1,4 +1,5 @@
 import os
+import socket
 import zarr
 import pandas as pd
 import numpy as np
@@ -18,8 +19,15 @@ VELOCITY_THRESHOLD = 2.0 # cm/s
 SMOOTH_SIGMA = 4 # for Gaussian smoothing of velocities in SSTCa2_sessions.py
 SMOOTH_LOC_SIGMA = 4 # for smoothing of spatial bins in plot_fluorescence_maps(). 4 bins is 8 cm as per Fournier et al 2020. (given 2cm bins)
 MINISCOPE_FRAME_MS = 1000 / MINISCOPE_FPS
-MAIN_DRIVE = 'D:'
-NPY_SAVE_PATH = MAIN_DRIVE+'\\data\\vsekulic\\OF_test\\npy_files'
+
+# Detect host: on the Riken Linux server (cbp-db.bnf.brain.riken.jp) the data
+# lives under /Users/vsekulic/data/...; otherwise default to the Windows D: drive.
+if socket.getfqdn().startswith('cbp-db') or socket.gethostname().startswith('cbp-db'):
+    MAIN_DRIVE = ''
+    NPY_SAVE_PATH = '/Users/vsekulic/data/vsekulic/OF_test/npy_files'
+else:
+    MAIN_DRIVE = 'D:'
+    NPY_SAVE_PATH = MAIN_DRIVE + '\\data\\vsekulic\\OF_test\\npy_files'
 
 my_colours = {
     'my_b' : (0, 0.2274, 0.8196),
@@ -960,3 +968,13 @@ def set_compact_plot_style():
         "legend.fontsize": 9,
         "figure.titlesize": 12,
     })
+
+def park(msg="PARKED"):
+    input(f"\n[{msg}] Attach/inspect with VS Code. Press Enter here in screen to continue...\n")
+
+def pull_main_globals():
+    """Debug helper: merge __main__'s globals into the caller's frame globals."""
+    import __main__, sys
+    caller_globals = sys._getframe(1).f_globals
+    caller_globals.update({k: v for k, v in vars(__main__).items()
+                           if not k.startswith('_')})

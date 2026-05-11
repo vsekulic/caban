@@ -5,6 +5,7 @@ from mpl_toolkits import mplot3d
 import numpy as np
 import scipy.stats as stats
 import os
+import logging
 import itertools
 import pandas as pd
 import seaborn as sns
@@ -36,7 +37,12 @@ group_colours = {
     'mCherry' : 'k'
 }
 plt.rcParams['font.family'] = 'sans-serif'
-plt.rcParams['font.sans-serif'] = ['Arial']
+# Arial preferred (paper style); fall back to metric-compatible Liberation Sans
+# and DejaVu Sans on Linux/headless servers where Arial is unavailable.
+plt.rcParams['font.sans-serif'] = ['Arial', 'Liberation Sans', 'DejaVu Sans']
+# Suppress "findfont: Generic family 'sans-serif' not found" spam when Arial
+# is missing (the fallback still renders correctly).
+logging.getLogger('matplotlib.font_manager').setLevel(logging.ERROR)
 
 PVALS = [0.05, 0.01, 0.001]
 
@@ -3322,7 +3328,11 @@ def plot_location_map(PLOTS_DIR, mice_per_group, session, session_str):
         plt.plot(loc_Y,lw=0.5)
         plt.subplot(4,2,(5,8))
         plt.plot(loc_X, loc_Y, lw=0.5)
-        plt.subplot_tool()
+        # subplot_tool() requires an interactive GUI backend (Tk/Qt). On a
+        # headless server matplotlib uses Agg and the call raises. Skip it
+        # there; it's only useful when interactively tweaking margins.
+        if mpl.get_backend().lower() not in ('agg', 'pdf', 'ps', 'svg', 'cairo', 'module://matplotlib_inline.backend_inline'):
+            plt.subplot_tool()
         plt.savefig(os.path.join(PLOTS_DIR, '{}_location_maps'.format(session_str), '{}_{}_location-map.png'.format(session_str, m)), format='png', dpi=300)
         plt.close()
 
@@ -11499,7 +11509,7 @@ class OccupancyAnalysis:
 # Nature-style rc params shared by all occupancy plots
 _NATURE_RC = {
     'font.family': 'sans-serif',
-    'font.sans-serif': ['Arial'],
+    'font.sans-serif': ['Arial', 'Liberation Sans', 'DejaVu Sans'],
     'font.size': 7,
     'axes.labelsize': 7,
     'axes.titlesize': 8,
