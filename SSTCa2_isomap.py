@@ -21,7 +21,10 @@ import os
 import sys
 import time
 import json
-import msvcrt
+try:
+    import msvcrt  # Windows-only; killswitch keyboard polling.
+except ImportError:
+    msvcrt = None  # no-op on POSIX (killswitch helpers below handle this).
 import hashlib
 import gc
 import glob
@@ -139,7 +142,7 @@ def _abort_countdown(seconds: int = ISOMAP_ABORT_SECONDS) -> None:
     if not sys.stdin.isatty():
         return
     # Drain any buffered keystrokes from the prior fit window.
-    while msvcrt.kbhit():
+    while msvcrt is not None and msvcrt.kbhit():
         msvcrt.getch()
     end_t = time.time() + seconds
     last_shown = -1
@@ -152,7 +155,7 @@ def _abort_countdown(seconds: int = ISOMAP_ABORT_SECONDS) -> None:
         if cur != last_shown:
             print(f"{cur}.. ", end="", flush=True)
             last_shown = cur
-        if msvcrt.kbhit():
+        if msvcrt is not None and msvcrt.kbhit():
             ch = msvcrt.getch()
             if ch in (b"\r", b"\n"):
                 print("ABORTED by user", flush=True)
