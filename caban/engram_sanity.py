@@ -1,4 +1,4 @@
-"""SSTCa2_engram_sanity — engram-cell sanity / inspection plots.
+"""caban.engram_sanity — engram-cell sanity / inspection plots.
 
 Produces a directory tree per engram type and per classification mode:
 
@@ -13,7 +13,7 @@ Where:
         score distribution corresponds to the cells that survive the
         crossreg filter (which is what downstream PCA actually sees).
     mode   in {'permouse', 'ctlthresh_z', 'ctlthresh_p50'}
-        Same modes used by SSTCa2_main / SSTCa2_population.
+        Same modes used by caban.main / caban.population.
 
 Per cell, one figure with traces (S red / C orange / YrA light-grey) on
 the left and the cell's ROI (A matrix slice) on the right.
@@ -26,11 +26,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
 
-from SSTCa2_engram import ENGRAM_REFERENCE
+from caban.engram import ENGRAM_REFERENCE
 
 
 # Spike-detection threshold (matches per-session ``thres = 2`` in
-# SSTCa2_sessions). Drawn on the cell-trace panel as the line above
+# caban.sessions). Drawn on the cell-trace panel as the line above
 # which deconvolved-S peaks are counted as transients.
 _SPIKE_THRES = 2.0
 
@@ -218,7 +218,7 @@ def plot_engram_sanity(
 ):
     """Histogram + cell-trace plots driven by the unified engram identity.
 
-    Consumes the outputs of ``SSTCa2_engram.build_engram_identity``:
+    Consumes the outputs of ``caban.engram.build_engram_identity``:
 
     * ``engram_id``    : per-mouse, per-etype, per-mode boolean mask over
                          FULL reference-session rows.
@@ -301,4 +301,4 @@ def plot_engram_sanity(
                   f"wrote {n_done} mice -> {etype_dir}", flush=True)
 
 
-print("SSTCa2_engram_sanity.py loaded.")
+print("caban.engram_sanity.py loaded.")

@@ -1,13 +1,13 @@
-"""SSTCa2_population — Population PCA trajectory analyses.
+"""caban.population — Population PCA trajectory analyses.
 
-OOP refactor of the PCA blocks from ``SSTCa2_debug_snippets3.py`` (sections
+OOP refactor of the PCA blocks from ``caban.debug_snippets3.py`` (sections
 "PCA", "Trial-averaged PCA", "Crossreg PCA - AVG", "Crossreg PCA - FULL"
 tone/shock + post-tone/shock).
 
 Entry point
 -----------
 ``run_population_pca_pipeline`` — full per-mouse pipeline; called from
-``SSTCa2_main.py`` after the cross-epoch decoder analyses.
+``caban.main.py`` after the cross-epoch decoder analyses.
 
 Design
 ------
@@ -33,11 +33,11 @@ from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401  (registers 3d projection)
 
-from SSTCa2_utilities import (
+from caban.utilities import (
     get_S_indeces_crossreg, MINISCOPE_FPS, Saver,
 )
 
-from SSTCa2_pca_state_metrics import run_pca_state_metrics_pipeline
+from caban.pca_state_metrics import run_pca_state_metrics_pipeline
 
 
 # ---------------------------------------------------------------------------
@@ -640,7 +640,7 @@ class CrossregPCA:
         engram_full_idx_in_ref : iterable[int]
             Row indices into the *reference session's full S* (TFC_cond
             for which_engram='encoding', Test_B for 'recall') that the
-            unified engram pipeline (``SSTCa2_engram``) classified as
+            unified engram pipeline (``caban.engram``) classified as
             engram for this mouse/mode. Cells in this list that are not
             cross-registered onto the current ``mapping`` are dropped.
         which_engram : {'encoding', 'recall'}
@@ -686,7 +686,7 @@ class CrossregPCA:
 
         ``self.sessions`` is replaced with lightweight stubs that
         preserve only the event-timing attributes consumed by
-        ``SSTCa2_pca_state_metrics`` (tone/shock onsets/offsets); the
+        ``caban.pca_state_metrics`` (tone/shock onsets/offsets); the
         original session objects (which hold full S/C/YrA matrices) are
         dropped.
         """
@@ -1340,7 +1340,7 @@ def run_population_pca_pipeline(
 
     Engram cells are supplied via ``engram_idx_by_mouse``: a dict
     ``{mouse: ndarray of full reference-session row indices}`` produced by
-    the unified ``SSTCa2_engram.build_engram_identity`` pipeline, already
+    the unified ``caban.engram.build_engram_identity`` pipeline, already
     resolved for the target mode and ``which_engram``. Pass ``None`` (or
     ``want_engram=False``) to disable engram filtering.
 
@@ -1553,4 +1553,4 @@ def run_pca_state_metrics_from_results(
     print(f"*** PCA state metrics: done. Output in {state_dir}", flush=True)
     return out
 
-print("SSTCa2_population.py loaded.")
+print("caban.population.py loaded.")

@@ -1,12 +1,12 @@
-"""SSTCa2 pipeline configuration.
+"""caban pipeline configuration.
 
 Single dataclass holding every user-tunable switch that used to live as a
-module-level constant in SSTCa2_main.py. Construct one in the notebook,
+module-level constant in caban/main.py. Construct one in the notebook,
 edit fields directly, and pass it into the pipeline / loader entry points.
 
-Defaults mirror the values set at the top of SSTCa2_main.py.
+Defaults mirror the values set at the top of caban/main.py.
 
-Note: a few "config" values in SSTCa2_main.py are actually computed at
+Note: a few "config" values in caban/main.py are actually computed at
 runtime from the loaded sessions (e.g. the data-driven continuity sigma
 parameters resolved from velocity stats). Those are NOT stored here as
 defaults — the dataclass only holds the *user-facing* knob
@@ -26,7 +26,7 @@ class PipelineConfig:
     # Top-level run-control switches
     # ------------------------------------------------------------------
     DEBUG: bool = False
-    DEVEL_SWITCH: bool = True  # When True, parks before plot blocks (legacy)
+    DEVEL_SWITCH: bool = True  # When True, dev-mode skip of bulky plot blocks
     LOCAL_DATA: bool = True
 
     # ------------------------------------------------------------------
@@ -55,7 +55,7 @@ class PipelineConfig:
     PCA_FRAMES_PER_BIN: int = 1
 
     # ------------------------------------------------------------------
-    # Coarse "section" plot switches (mirror SSTCa2_main.py)
+    # Coarse "section" plot switches (mirror caban/main.py)
     # ------------------------------------------------------------------
     plot_sample_cell: bool = False
     plot_sp_rates: bool = True
@@ -183,9 +183,9 @@ class PipelineConfig:
     def __post_init__(self) -> None:
         # Resolve bin_width_frames if not set explicitly.
         if self.bin_width_frames is None:
-            # Lazy import so importing SSTCa2_config doesn't drag in the
-            # whole pipeline. SSTCa2_utilities defines MINISCOPE_FPS.
-            from SSTCa2_utilities import MINISCOPE_FPS
+            # Lazy import so importing caban.config doesn't drag in the
+            # whole pipeline. caban.utilities defines MINISCOPE_FPS.
+            from caban.utilities import MINISCOPE_FPS
             self.bin_width_frames = int(MINISCOPE_FPS * self.bin_width_seconds)
 
         # Validate enumerated string fields up front so typos fail fast.
@@ -213,6 +213,21 @@ class PipelineConfig:
     # ------------------------------------------------------------------
     def to_dict(self) -> dict:
         return asdict(self)
+
+    def export_globals(self) -> dict:
+        """Return a dict suitable for ``globals().update(...)`` so that
+        script-style code (e.g. ``caban/analyses.py``) which references
+        bare names like ``plot_PSTH`` or ``DEVEL_SWITCH`` can find them.
+        Extras keys are promoted to the top level."""
+        out = {}
+        for k, v in asdict(self).items():
+            if k == "extras":
+                # Promote extras keys to top-level so the notebook can stash
+                # ad-hoc bare names there.
+                out.update(v)
+                continue
+            out[k] = v
+        return out
 
     def __repr__(self) -> str:  # compact repr that hides extras when empty
         parts = []

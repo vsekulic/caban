@@ -1,6 +1,6 @@
 # Remote JupyterLab + VS Code setup
 
-End-to-end instructions for running the SSTCa2 pipeline on a Linux server
+End-to-end instructions for running the caban pipeline on a Linux server
 through a persistent JupyterLab kernel, edited from your local machine via
 VS Code's Remote-SSH extension.
 
@@ -31,12 +31,12 @@ SSH into the server and run:
 
 ```bash
 ssh <user>@<server>
-mamba create -n sstca2 python=3.11 \
+mamba create -n caban python=3.11 \
     jupyterlab ipykernel ipywidgets \
     numpy pandas matplotlib scipy scikit-learn statsmodels \
     xarray scikit-image seaborn opencv \
     umap-learn networkx tqdm pyyaml optuna
-mamba activate sstca2
+mamba activate caban
 ```
 
 Cross-check that no imports are missing:
@@ -46,16 +46,16 @@ cd /Users/vsekulic/code/sstca2
 grep -hE "^(import|from) " *.py | sort -u
 ```
 
-Install any missing packages with `mamba install -n sstca2 <pkg>` (prefer
+Install any missing packages with `mamba install -n caban <pkg>` (prefer
 `mamba`/`conda-forge`; fall back to `pip` only if a package isn't on
 conda-forge).
 
 ### A2. Register the env as a Jupyter kernel
 
 ```bash
-mamba activate sstca2
-python -m ipykernel install --user --name sstca2 \
-    --display-name "SSTCa2 (sstca2 env)"
+mamba activate caban
+python -m ipykernel install --user --name caban \
+    --display-name "caban (caban env)"
 ```
 
 Verify:
@@ -64,7 +64,7 @@ Verify:
 jupyter kernelspec list
 ```
 
-You should see `sstca2` in the list.
+You should see `caban` in the list.
 
 ### A3. Generate a Jupyter config and a token
 
@@ -130,7 +130,7 @@ ssh <user>@<server>
 tmux new -s jupyter
 # inside the new tmux pane:
 ~/bin/start_jupyter.sh
-# (or: mamba activate sstca2 && cd /Users/vsekulic/code/sstca2 && jupyter lab)
+# (or: mamba activate caban && cd /Users/vsekulic/code/sstca2 && jupyter lab)
 ```
 
 Detach with `Ctrl-b d`. The Jupyter server keeps running.
@@ -201,7 +201,7 @@ local port `8889` now forwards to the server's loopback `8889`.
 Optionally make the tunnel automatic by adding to `~/.ssh/config`:
 
 ```
-Host sstca2-tunnel
+Host caban-tunnel
     HostName <server>
     User <user>
     LocalForward 8889 127.0.0.1:8889
@@ -209,7 +209,7 @@ Host sstca2-tunnel
     ServerAliveCountMax 3
 ```
 
-Then `ssh -N sstca2-tunnel` opens the tunnel.
+Then `ssh -N caban-tunnel` opens the tunnel.
 
 ### C2. Browser access (sanity check)
 
@@ -234,14 +234,14 @@ it touches (editor buffers, terminal, kernel) runs on the server.
    Remote-SSH, you'll be prompted to install them on the server side
    too — accept.
 3. `Cmd-Shift-P` (or `Ctrl-Shift-P`) → **Remote-SSH: Connect to Host...** →
-   pick `<user>@<server>` (or the `sstca2-tunnel` alias from your SSH
+   pick `<user>@<server>` (or the `caban-tunnel` alias from your SSH
    config).
 4. In the remote VS Code window: **File → Open Folder...** →
    `/Users/vsekulic/code/sstca2`.
 5. Open `run_pipeline.ipynb`.
 6. Top-right of the notebook editor: **Select Kernel** → **Existing Jupyter
    Server...** → paste `http://127.0.0.1:8889/?token=<your-token>` → pick
-   **SSTCa2 (sstca2 env)** from the kernel list.
+   **caban (caban env)** from the kernel list.
 
 VS Code now talks to the same kernel the browser does. The notebook reads
 the project layout *on the server*; edits to `.py` files in adjacent tabs
@@ -269,19 +269,19 @@ Once the one-time setup is done:
 2. **On your local machine**, open the SSH tunnel (or use VS Code
    Remote-SSH, which does this automatically):
    ```bash
-   ssh -N sstca2-tunnel
+   ssh -N caban-tunnel
    ```
 3. **Open VS Code** → Remote-SSH connect → open the workspace folder →
    open `run_pipeline.ipynb` → select the existing kernel.
 4. **Step through the notebook**:
    - Cell 1: `import` modules.
    - Cell 2: build `cfg = PipelineConfig(...)`.
-   - Cell 3 (heavy, ~10 min): `ds = SSTCa2_loader.load_all_mice(...)`.
+   - Cell 3 (heavy, ~10 min): `ds = caban.loader.load_all_mice(...)`.
    - Cell 4 (instant): `globals().update(vars(ds))` — exposes `TFC_cond`,
      `Test_B`, `engram_id`, etc. as top-level names.
    - Subsequent cells: call `pipe.run_*(ds, cfg)` for big pipelines, or
      write inline scaffolding code against the top-level names.
-5. **Iterate on a module** (e.g. edit `SSTCa2_population.py`): save the
+5. **Iterate on a module** (e.g. edit `caban.population.py`): save the
    file → `%autoreload 2` picks it up → re-run only the affected analysis
    cell. `ds` stays loaded.
 6. **Disconnect freely**: close VS Code, suspend the laptop, lose WiFi —
@@ -310,10 +310,10 @@ Once the one-time setup is done:
   autoreload. Run an explicit reload cell, bottom-up by dependency:
   ```python
   import importlib
-  for m in ['SSTCa2_utilities','SSTCa2_sessions','SSTCa2_engram',
-           'SSTCa2_analysis','SSTCa2_spatial','SSTCa2_decoder',
-           'SSTCa2_population','SSTCa2_isomap','SSTCa2_epoch_analysis',
-           'SSTCa2_pipeline','SSTCa2_loader','SSTCa2_config']:
+  for m in ['caban.utilities','caban.sessions','caban.engram',
+           'caban.analysis','caban.spatial','caban.decoder',
+           'caban.population','caban.isomap','caban.epoch_analysis',
+           'caban.pipeline','caban.loader','caban.config']:
       importlib.reload(__import__(m))
   ```
   Then re-run any cell whose imports came `from X import *`.

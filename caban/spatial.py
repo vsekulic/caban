@@ -1,6 +1,6 @@
 from random import shuffle
 import numpy as np
-from SSTCa2_utilities import *
+from caban.utilities import *
 from scipy.ndimage import gaussian_filter
 from scipy.stats import pearsonr
 from numpy.random import default_rng
@@ -1230,7 +1230,7 @@ def compute_2D_pv_correlation(
 
 
 # ---------------------------------------------------------------------------
-#  Paper-style constants (match SSTCa2_decoder.py paradigm plots)
+#  Paper-style constants (match caban.decoder.py paradigm plots)
 # ---------------------------------------------------------------------------
 _PV_GROUP_ORDER = ["mCherry", "hM3D", "hM4D"]
 _PV_GROUP_LABELS = {"mCherry": "Ctl", "hM3D": "Exc", "hM4D": "Inh"}

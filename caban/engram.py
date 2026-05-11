@@ -1,10 +1,10 @@
-"""SSTCa2_engram — unified engram-cell identity store.
+"""caban.engram — unified engram-cell identity store.
 
 Single source of truth for engram-cell classification. Computed ONCE
 after all sessions are loaded; consumed by:
-  * the per-session binned-rate engram panels (SSTCa2_main.py),
-  * the Population PCA pipeline (SSTCa2_population.py),
-  * the engram sanity plots (SSTCa2_engram_sanity.py).
+  * the per-session binned-rate engram panels (caban.main.py),
+  * the Population PCA pipeline (caban.population.py),
+  * the engram sanity plots (caban.engram_sanity.py).
 
 Conventions
 -----------
@@ -12,7 +12,7 @@ Conventions
   (etype='recall') are classified. Other panels project the reference
   ensemble through crossreg.
 * Per-cell statistic: average transient rate (Hz) on the FULL session
-  S matrix, using SSTCa2_utilities.find_spikes_ca_S with the per-session
+  S matrix, using caban.utilities.find_spikes_ca_S with the per-session
   ``thres`` (canonically 2). Mocle et al. 2024 / Frankland convention.
 * Three modes:
     - 'permouse'     : per-mouse z-score; engram iff z > 0.
@@ -35,7 +35,7 @@ Public API
 import numpy as np
 import scipy.stats
 
-from SSTCa2_utilities import (
+from caban.utilities import (
     MINISCOPE_FPS,
     get_actual_cells_from_df_session,
 )
@@ -320,4 +320,4 @@ def project_engram_to_session(ref_session, ref_engram_full_idx,
     return np.asarray(tgt_idx, dtype=int)
 
 
-print("SSTCa2_engram.py loaded.")
+print("caban.engram.py loaded.")

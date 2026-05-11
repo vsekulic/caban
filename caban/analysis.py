@@ -12,10 +12,10 @@ import seaborn as sns
 import random
 import statsmodels.stats.multicomp as mc
 from statsmodels.stats.multicomp import pairwise_tukeyhsd
-from SSTCa2_utilities import *
-from SSTCa2_sessions import *
-from SSTCa2_spatial import *
-from SSTCa2_plotting import *
+from caban.utilities import *
+from caban.sessions import *
+from caban.spatial import *
+from caban.plotting import *
 from numpy.random import default_rng
 from scipy.ndimage import gaussian_filter
 from scipy.signal import savgol_filter
@@ -29,7 +29,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from scipy.spatial.distance import jaccard
 import pickle
 from pathlib import Path
-from SSTCa2_decoder import _LT_1D_CM_PER_PX, _LT_1D_DISTANCE_UNIT
+from caban.decoder import _LT_1D_CM_PER_PX, _LT_1D_DISTANCE_UNIT
 
 group_colours = {
     'hM3D' : 'r',

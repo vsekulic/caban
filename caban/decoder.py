@@ -1,6 +1,6 @@
 from random import shuffle
 import numpy as np
-from SSTCa2_utilities import *
+from caban.utilities import *
 from scipy.ndimage import gaussian_filter
 from numpy.random import default_rng
 import time
@@ -667,14 +667,14 @@ _LT_1D_DISTANCE_UNIT = "cm"
 _LT_1D_CM_PER_PX = _LT_1D_TRUE_DISTANCE / _LT_1D_PX_DISTANCE
 
 # Deferred cross-module imports — placed after _LT_1D_CM_PER_PX is defined
-# to break the circular dependency with SSTCa2_analysis (which imports these
+# to break the circular dependency with caban.analysis (which imports these
 # constants back from this module).
-from SSTCa2_analysis import (
+from caban.analysis import (
     compute_pv_corr_by_zone,
     compute_pv_corr_metrics,
     project_points_to_polyline_continuous,
 )
-from SSTCa2_spatial import (
+from caban.spatial import (
     _classify_pf_turnover,
     _get_pf_cells,
     _PV_GROUP_ORDER,
@@ -20696,7 +20696,7 @@ def _compute_5_zone_boundaries(LT, cm_per_px=None):
     """Compute 5-zone boundaries on the U-shaped linear track.
 
     Uses Y-percentile arm detection (same logic as _compute_turn_lines_safe
-    in SSTCa2_analysis.py) to find the junction region, then splits each
+    in caban.analysis.py) to find the junction region, then splits each
     arm at its midpoint.
 
     Returns
@@ -24824,11 +24824,11 @@ def _plot_phase7_delta(df, save_dir, *, auto_close=True):
 def _collect_pf_turnover_labels(fm1, cells_1, fm2, cells_2):
     """Per-neuron turnover category labels for a cross-registered pair.
 
-    Local copy — shared with SSTCa2_spatial._collect_pf_turnover_labels.
+    Local copy — shared with caban.spatial._collect_pf_turnover_labels.
     Labels: 'stable-same', 'stable-reduced', 'stable-expanded',
             'gained', 'lost', 'silent'.
     """
-    _sp = sys.modules["SSTCa2_spatial"]
+    _sp = sys.modules["caban.spatial"]
     pf1_set = set(_get_pf_cells(fm1, max_pf_count=None))
     pf2_set = set(_get_pf_cells(fm2, max_pf_count=None))
     labels = []
@@ -24885,7 +24885,7 @@ def _plot_phase9_pooled(group_labels, save_dir, *, title_prefix="",
     for g in _PV_GROUP_ORDER:
         if g not in group_labels or not group_labels[g]:
             continue
-        from SSTCa2_spatial import _TURNOVER_CAT_ORDER
+        from caban.spatial import _TURNOVER_CAT_ORDER
         labs = group_labels[g]
         gc[g] = {cat: sum(1 for c in labs if c == cat)
                  for cat in _TURNOVER_CAT_ORDER}
@@ -24922,7 +24922,7 @@ def run_zone_pf_turnover_analysis(
        cells cross-registered across all three sessions, with three pair-wise
        comparisons: LT1→LT2, LT2→TFC_cond, LT1→TFC_cond.
 
-    Uses ``_classify_pf_turnover`` from SSTCa2_spatial (shared with
+    Uses ``_classify_pf_turnover`` from caban.spatial (shared with
     ``compute_pf_turnover``).
     """
     # (_classify_pf_turnover, _PV_GROUP_ORDER, _PV_GROUP_LABELS
@@ -25299,7 +25299,7 @@ def _plot_turnover_metrics(results, save_dir, *, title_prefix="",
     """Boxplots of turnover rates per group (Phase 9 style).
 
     Delegates to the shared ``plot_turnover_metric_boxplots`` in
-    SSTCa2_spatial so both TFC and LT pipelines use the same style.
+    caban.spatial so both TFC and LT pipelines use the same style.
     """
     plot_turnover_metric_boxplots(
         results, save_dir,
@@ -25311,7 +25311,7 @@ def _plot_turnover_stacked(results, save_dir, *, title_prefix="",
                            auto_close=True):
     """Stacked bar chart of PF turnover categories per group.
 
-    Delegates to the shared ``plot_turnover_stacked_bar`` in SSTCa2_spatial.
+    Delegates to the shared ``plot_turnover_stacked_bar`` in caban.spatial.
     """
     group_counts = _aggregate_turnover_counts(results)
     plot_turnover_stacked_bar(

@@ -1,4 +1,4 @@
-"""SSTCa2_pca_state_metrics — joint-PCA Euclidean state-space metrics.
+"""caban.pca_state_metrics — joint-PCA Euclidean state-space metrics.
 
 Brain-dead simple distances in the joint-PCA subspace of CrossregFullPCA
 (method 2, event_window='toneshock'). All metrics are raw Euclidean — no
@@ -26,7 +26,7 @@ See ``analysis_methods_templates/pca_state_metrics_methods.txt`` for the
 full description.
 
 Public entry point: ``run_pca_state_metrics_pipeline``, called from
-``SSTCa2_population.run_pca_state_metrics_from_results``.
+``caban.population.run_pca_state_metrics_from_results``.
 """
 
 import os
@@ -42,7 +42,7 @@ from statsmodels.stats.multitest import multipletests
 from statsmodels.stats.multicomp import pairwise_tukeyhsd
 from statsmodels.formula.api import mixedlm, ols
 
-from SSTCa2_spatial import (
+from caban.spatial import (
     _PV_GROUP_ORDER,
     _PV_GROUP_LABELS,
     _PV_BOX_COLORS,
@@ -606,7 +606,7 @@ def _state_metric_boxplot(ax, groups_data, ylabel, title,
 
     Significance stars are drawn above brackets for the pairwise contrasts
     using the p-values returned by *stats_fn* (re-using ``_pv_p_to_star``
-    and ``_pv_draw_bracket`` from SSTCa2_spatial). No ANOVA / contrast
+    and ``_pv_draw_bracket`` from caban.spatial). No ANOVA / contrast
     text is written on the figure — those go to the sibling stats file.
 
     Parameters
@@ -1584,4 +1584,4 @@ def _ylabel_for(metric):
     return metric
 
 
-print("SSTCa2_pca_state_metrics.py loaded.")
+print("caban.pca_state_metrics.py loaded.")

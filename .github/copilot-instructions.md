@@ -1,4 +1,4 @@
-# Copilot Instructions — sstca2
+# Copilot Instructions — caban
 
 ## Naming
 

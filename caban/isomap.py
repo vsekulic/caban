@@ -1,4 +1,4 @@
-"""Isomap manifold analysis (Wilson-lab style) for SSTCa2.
+"""Isomap manifold analysis (Wilson-lab style) for caban.
 
 Implements three phases:
 
@@ -40,9 +40,9 @@ import pingouin as pg
 import statsmodels.formula.api as smf
 from statsmodels.stats.anova import anova_lm
 
-from SSTCa2_utilities import get_S_indeces_crossreg, MINISCOPE_FPS
-from SSTCa2_population import PERIOD_FRAMES
-from SSTCa2_decoder import _copy_analysis_methods_template
+from caban.utilities import get_S_indeces_crossreg, MINISCOPE_FPS
+from caban.population import PERIOD_FRAMES
+from caban.decoder import _copy_analysis_methods_template
 
 
 # ---------------------------------------------------------------------------

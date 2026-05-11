@@ -18,7 +18,7 @@ For each mouse, all LT1+LT2 pair-registered cells are split into:
 
 Place-field filter: starting from each subset, retain only cells that have
 detected place fields in BOTH sessions (LT1 and LT2).  Place-field detection
-uses SSTCa2_spatial._get_pf_cells(), which identifies neurons via the FM
+uses caban.spatial._get_pf_cells(), which identifies neurons via the FM
 place-field model (Bayesian GMM fit to significant spatial responses, with
 component merging).
   • max_pf_count = None → keep all cells with ≥1 place field

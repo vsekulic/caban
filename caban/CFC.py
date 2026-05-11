@@ -1,5 +1,5 @@
 """
-SSTCa2_CFC.py — Contextual Fear Conditioning analysis.
+caban.CFC.py — Contextual Fear Conditioning analysis.
 Protocol: CFC (ctx A) -> +48hr Test A (ctx A) -> +24hr Test B (ctx B) -> +1wk Test A -> +1wk Test B
 Loads freeze score data from CSV files in a structured directory.
 Three analysis windows for test sessions: full 300s, first 180s, last 120s.

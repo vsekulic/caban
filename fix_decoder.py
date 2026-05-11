@@ -1,7 +1,7 @@
 """One-time script to fix the duplicated within-session CV block."""
 import re
 
-with open('SSTCa2_decoder.py', 'r', encoding='utf-8') as f:
+with open('caban.decoder.py', 'r', encoding='utf-8') as f:
     content = f.read()
 
 # -----------------------------------------------------------------------
@@ -71,7 +71,7 @@ if OLD_POOL in content:
 else:
     print('INFO: run_2D_pooled_target_all_mice block pattern not found (may already be correct)')
 
-with open('SSTCa2_decoder.py', 'w', encoding='utf-8') as f:
+with open('caban.decoder.py', 'w', encoding='utf-8') as f:
     f.write(content)
 
 print('Done.')

@@ -1,6 +1,6 @@
 ﻿import numpy as np
-import SSTCa2_utilities as U
-import SSTCa2_population as P
+import caban.utilities as U
+import caban.population as P
 
 rng = np.random.default_rng(0)
 

@@ -45,14 +45,14 @@ Time binning (CrossregFullPCA only)
 -----------------------------------
 The continuous-trace cross-registered PCA accepts a frames_per_bin parameter
 (default PCA_FRAMES_PER_BIN = MINISCOPE_FPS × 1 = 20 frames = 1 s/bin at
-20 Hz, set at the top of SSTCa2_main.py). Binning is applied AFTER the
+20 Hz, set at the top of caban.main.py). Binning is applied AFTER the
 binarize/normalize transform but BEFORE z-score and smoothing:
 
   1. Build per-cell row matrix (raw / binarize / normalize) at frame grid.
   2. Sum-reduce every frames_per_bin consecutive frames into 1 bin
      (trailing partial bin is discarded).
   3. Tone/shock onsets/offsets are remapped via integer division so all
-     downstream event-window logic (and SSTCa2_pca_state_metrics) operates
+     downstream event-window logic (and caban.pca_state_metrics) operates
      in bin-space coordinates.
   4. z-score (skipped when binarize=True).
   5. Optional Gaussian smoothing along time with σ = 1.5 frames is
@@ -81,7 +81,7 @@ The TFC_cond session always serves as the reference for engram selection.
 Cross-registration
 ------------------
 For all crossreg pipelines, neuron indices are aligned across the three
-sessions using SSTCa2_utilities.get_S_indeces_crossreg with the
+sessions using caban.utilities.get_S_indeces_crossreg with the
 TFC_cond ↔ Test_B ↔ Test_B_1wk mapping. Mice G07 and G15 lack a complete
 crossreg mapping and are excluded from crossreg analyses (single-session
 PCA_avg is still computed for them). For mice G09 and G21, the location
@@ -134,8 +134,8 @@ Plotting conventions
 
 Implementation note
 -------------------
-This template documents the PCA refactor in SSTCa2_population.py, which
-supersedes the prototype code in SSTCa2_debug_snippets3.py. In the FULL
+This template documents the PCA refactor in caban.population.py, which
+supersedes the prototype code in caban.debug_snippets3.py. In the FULL
 pipelines, Method 2 was previously buggy in the prototype (PCA was fit on the
 TFC_cond matrix instead of the concatenated matrix); the refactored code fits
 on S_tot.T as the comment intended.

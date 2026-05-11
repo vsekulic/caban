@@ -1,8 +1,8 @@
-"""SSTCa2 analysis pipeline wrappers.
+"""caban analysis pipeline wrappers.
 
 Thin wrappers that take ``(ds, cfg)`` and dispatch to the existing
-analysis modules (``SSTCa2_population``, ``SSTCa2_isomap``,
-``SSTCa2_epoch_analysis``, ``SSTCa2_spatial``, ``SSTCa2_decoder``...).
+analysis modules (``caban.population``, ``caban.isomap``,
+``caban.epoch_analysis``, ``caban.spatial``, ``caban.decoder``...).
 The goal is **not** to re-implement anything — only to consolidate the
 notebook-vs-loader boundary so the notebook can call clean entry points
 that thread ``cfg`` values through.
@@ -23,7 +23,7 @@ Decoder wrappers (``run_2D_decoder``, ``run_2D_PF_decoder``) plus their
 paramset builders (``build_raw_paramset``, ``build_pf_paramset``) live
 here too. They replace the global-leaning ``run_2D_decoder_all_mice``
 / ``run_2D_PF_decoder_all_mice`` wrappers that used to sit at the top
-of ``SSTCa2_main.py`` and read module-level switches. Inline decoder
+of ``caban/main.py`` and read module-level switches. Inline decoder
 paradigm A–F blocks in the notebook should call ``run_2D_decoder(cfg,
 raw_params, train_sessions, test_targets, **kwargs)`` instead of the
 bare ``run_2D_decoder_all_mice``.
@@ -38,15 +38,15 @@ from typing import Optional
 
 import numpy as np
 
-# Bootstrap decoder first to break the SSTCa2_analysis <-> SSTCa2_decoder
-# circular import (same trick SSTCa2_main.py uses at lines 7-8).
-import SSTCa2_decoder as _SSTCa2_decoder_bootstrap
-importlib.reload(_SSTCa2_decoder_bootstrap)
+# Bootstrap decoder first to break the caban.analysis <-> caban.decoder
+# circular import (same trick caban/main.py uses at lines 7-8).
+import caban.decoder as _caban_decoder_bootstrap
+importlib.reload(_caban_decoder_bootstrap)
 
-from SSTCa2_utilities import (  # noqa: F401
+from caban.utilities import (  # noqa: F401
     msg_start, msg_end, NPY_SAVE_PATH, Saver,
 )
-from SSTCa2_decoder import (
+from caban.decoder import (
     BayesianDecoderParamset,
     plot_velocity_histograms,
     collect_velocity_stats,
@@ -55,20 +55,20 @@ from SSTCa2_decoder import (
     run_2D_decoder_all_mice as _run_2D_decoder_all_mice_base,
     run_2D_PF_decoder_all_mice as _run_2D_PF_decoder_all_mice_base,
 )
-from SSTCa2_population import (
+from caban.population import (
     run_population_pca_pipeline,
     run_pca_state_metrics_from_results,
     EXCLUDE_MICE_CROSSREG as _PCA_EXCLUDE,
 )
-from SSTCa2_isomap import run_isomap_pipeline
-from SSTCa2_epoch_analysis import (
+from caban.isomap import run_isomap_pipeline
+from caban.epoch_analysis import (
     run_epoch_analysis_all_mice,
     run_cross_session_epoch_analysis_all_mice,
 )
-from SSTCa2_engram import ENGRAM_REFERENCE
-from SSTCa2_engram_sanity import plot_engram_sanity
+from caban.engram import ENGRAM_REFERENCE
+from caban.engram_sanity import plot_engram_sanity
 
-from SSTCa2_config import PipelineConfig
+from caban.config import PipelineConfig
 
 
 # ---------------------------------------------------------------------------
@@ -178,7 +178,7 @@ def engram_idx_by_mouse(ds: SimpleNamespace, cfg: PipelineConfig,
     """Build ``{mouse: ndarray of engram row indices}`` for a given mode.
 
     Mirrors the inline helper in main.py L5749. Honors the population-PCA
-    exclude list from ``SSTCa2_population.EXCLUDE_MICE_CROSSREG``.
+    exclude list from ``caban.population.EXCLUDE_MICE_CROSSREG``.
     """
     out = {}
     for m in ds.mouse_groups:
@@ -458,13 +458,13 @@ def run_cross_session_epoch_pv(ds: SimpleNamespace, cfg: PipelineConfig, *,
 # ===========================================================================
 #
 # These replace the global-state-leaking wrappers that used to sit at the top
-# of ``SSTCa2_main.py`` (lines ~3418/3477). Call signature change:
+# of ``caban/main.py`` (lines ~3418/3477). Call signature change:
 #
 #     # Old (main.py module-globals):
 #     run_2D_decoder_all_mice(train, test, train_label=..., session_str=...)
 #
 #     # New (explicit cfg + paramset):
-#     from SSTCa2_pipeline import build_raw_paramset, run_2D_decoder
+#     from caban.pipeline import build_raw_paramset, run_2D_decoder
 #     raw_params = build_raw_paramset(cfg, continuity)
 #     run_2D_decoder(cfg, raw_params, train, test,
 #                    train_label=..., session_str=..., PLOTS_DIR=ds.PLOTS_DIR)
@@ -509,7 +509,7 @@ def build_pf_paramset(cfg: PipelineConfig, continuity: dict
     )
 
 
-# --- Population-curve summary helpers (moved from SSTCa2_main.py) -----------
+# --- Population-curve summary helpers (moved from caban/main.py) -----------
 
 def _count_csv_rows(csv_path: str):
     """Count data rows (excluding header) in a CSV; return None if missing."""
@@ -631,7 +631,7 @@ def _inject_popcurve_and_shuffle_defaults(cfg: PipelineConfig, kwargs: dict,
 def run_2D_decoder(cfg: PipelineConfig,
                    raw_params: BayesianDecoderParamset,
                    train_sessions, test_targets, **kwargs):
-    """Raw-S 2D Bayesian decoder wrapper. Replaces ``SSTCa2_main.run_2D_decoder_all_mice``."""
+    """Raw-S 2D Bayesian decoder wrapper. Replaces ``caban.main.run_2D_decoder_all_mice``."""
     raw_keys = [k for k in raw_params.__slots__
                 if k not in ('place_cells_only', 'use_pf_num', 'use_occupancy_fallback')]
     raw_params.inject_into(kwargs, keys=raw_keys,
@@ -657,7 +657,7 @@ def run_2D_decoder(cfg: PipelineConfig,
 def run_2D_PF_decoder(cfg: PipelineConfig,
                       pf_params: BayesianDecoderParamset,
                       train_sessions, test_targets, **kwargs):
-    """PF 2D Bayesian decoder wrapper. Replaces ``SSTCa2_main.run_2D_PF_decoder_all_mice``."""
+    """PF 2D Bayesian decoder wrapper. Replaces ``caban.main.run_2D_PF_decoder_all_mice``."""
     # Exclude n_spatial_bins (PF decoder uses place-field grid) and use_z_score
     # (rate maps are on original scale; z-scoring would break the Poisson likelihood).
     pf_keys = [k for k in pf_params.__slots__

@@ -1,22 +1,22 @@
-"""SSTCa2 dataset loader.
+"""caban dataset loader.
 
 Reproduces the data-loading / engram / PF-backfill block of
-``SSTCa2_main.py`` (originally lines 1-1773) inside a single callable
+``caban/main.py`` (originally lines 1-1773) inside a single callable
 ``load_all_mice(cfg)`` that returns a ``SimpleNamespace`` exposing every
-top-level name the legacy script used to publish. The notebook is
-expected to do::
+top-level name the analysis blocks expect. The notebook is expected to
+do::
 
     cfg = PipelineConfig()
     ds  = load_all_mice(cfg)
     globals().update(vars(ds))         # bring TFC_cond, Test_B, ... into scope
 
-so that subsequent analysis cells continue to reference bare names
-(``TFC_cond``, ``Test_B``, ``engram_id``, ``mappings_all_TFC_cond``, ...)
-without any prefix.
+so that subsequent analysis cells reference bare names (``TFC_cond``,
+``Test_B``, ``engram_id``, ``mappings_all_TFC_cond``, ...) without any
+prefix.
 
-This module is intentionally thin: it preserves the legacy logic
-verbatim. Refactoring into smaller helpers / removing dead code is left
-for follow-up patches once output parity is verified.
+This module is intentionally thin: it preserves the load / engram
+build-up logic verbatim. Refactoring into smaller helpers / removing
+dead code is left for follow-up patches once output parity is verified.
 """
 
 from __future__ import annotations
@@ -29,29 +29,29 @@ from typing import Optional
 
 import numpy as np
 
-# Project imports — same star-imports used by SSTCa2_main.py so every
-# legacy name (CrossRegMapping, TraceFearCondSession, msg_start, ...) is
+# Project imports — same star-imports used by caban/main.py so every
+# top-level name (CrossRegMapping, TraceFearCondSession, msg_start, ...) is
 # in scope here.
-# Bootstrap SSTCa2_decoder first to break the SSTCa2_analysis <-> decoder
-# circular import (mirrors SSTCa2_main.py lines 7-8).
+# Bootstrap caban.decoder first to break the caban.analysis <-> decoder
+# circular import (mirrors caban/main.py lines 7-8).
 import importlib
-import SSTCa2_decoder as _SSTCa2_decoder_bootstrap
-importlib.reload(_SSTCa2_decoder_bootstrap)
-from SSTCa2_utilities import *  # noqa: F401,F403
-from SSTCa2_sessions import *   # noqa: F401,F403
-from SSTCa2_analysis import *   # noqa: F401,F403
+import caban.decoder as _caban_decoder_bootstrap
+importlib.reload(_caban_decoder_bootstrap)
+from caban.utilities import *  # noqa: F401,F403
+from caban.sessions import *   # noqa: F401,F403
+from caban.analysis import *   # noqa: F401,F403
 
-from SSTCa2_engram import (
+from caban.engram import (
     build_engram_identity,
     project_engram_to_session,
     ENGRAM_REFERENCE,
 )
 
-from SSTCa2_config import PipelineConfig
+from caban.config import PipelineConfig
 
 
 # ---------------------------------------------------------------------------
-# Module-level helpers that legacy analysis cells expect to be available as
+# Module-level helpers that analysis cells expect to be available as
 # bare top-level names. They are re-exposed via the returned Dataset.
 # ---------------------------------------------------------------------------
 def _extract_ts(dpath_val: str) -> str:
@@ -114,7 +114,7 @@ def add_significance_bars(ax, comparisons, p_values, y_max,
 
 # ---------------------------------------------------------------------------
 def _resolve_plots_dir(plots_dir: Optional[str]) -> str:
-    """Mirror SSTCa2_main.py's host-aware PLOTS_DIR choice."""
+    """Mirror caban/main.py's host-aware PLOTS_DIR choice."""
     if plots_dir is not None:
         return plots_dir
     if MAIN_DRIVE == '' and os.path.isdir('/Users/vsekulic/data/vsekulic/OF_test'):  # noqa: F405
@@ -138,7 +138,7 @@ def load_all_mice(
     plots_dir: Optional[str] = None,
     paper_dir: Optional[str] = None,
 ) -> SimpleNamespace:
-    """Build the legacy SSTCa2_main.py global state and return it.
+    """Build the loaded dataset state and return it.
 
     Parameters
     ----------
@@ -146,13 +146,13 @@ def load_all_mice(
         Pipeline configuration. If None, a default ``PipelineConfig()`` is used.
     plots_dir, paper_dir
         Optional overrides; default to the host-aware paths used by
-        ``SSTCa2_main.py``.
+        ``caban/main.py``.
 
     Returns
     -------
     SimpleNamespace
-        Namespace whose attributes are every top-level name the legacy
-        ``SSTCa2_main.py`` produced after the per-mouse load loop, the
+        Namespace whose attributes are every top-level name that
+        ``caban/main.py`` produced after the per-mouse load loop, the
         unified engram pass, and the PF-merged backfill. Pass through
         ``globals().update(vars(ds))`` to land them in the notebook.
     """
@@ -176,7 +176,7 @@ def load_all_mice(
     PAPER_DIR = _resolve_paper_dir(paper_dir)
 
     # -----------------------------------------------------------------------
-    # Mouse metadata (verbatim from SSTCa2_main.py L126-840)
+    # Mouse metadata (verbatim from caban/main.py L126-840)
     # -----------------------------------------------------------------------
     mouse_groups = {
         'G05': 'hM3D', 'G06': 'hM4D', 'G07': 'hM4D', 'G08': 'mCherry',

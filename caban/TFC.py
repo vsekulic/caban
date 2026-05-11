@@ -1,5 +1,5 @@
 """
-SSTCa2_TFC.py — Python conversion of TFC.m / TFC_load_data.m
+caban.TFC.py — Python conversion of TFC.m / TFC_load_data.m
 Tone Fear Conditioning analysis: freeze score data loading, assembly, plotting, and statistics.
 """
 

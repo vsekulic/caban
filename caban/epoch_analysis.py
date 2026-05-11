@@ -1,5 +1,5 @@
 """
-SSTCa2_epoch_analysis.py
+caban.epoch_analysis.py
 
 Population vector (PV) similarity and representational dissimilarity matrix (RDM)
 analysis for TFC epoch responses.
@@ -48,7 +48,7 @@ from scipy.spatial.distance import mahalanobis as scipy_mahalanobis
 from statsmodels.stats.multicomp import pairwise_tukeyhsd
 import scipy.stats
 
-from SSTCa2_utilities import MINISCOPE_FPS, get_spikes_in_period
+from caban.utilities import MINISCOPE_FPS, get_spikes_in_period
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Constants

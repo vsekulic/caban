@@ -1,6 +1,6 @@
 from tkinter.filedialog import SaveFileDialog
 import numpy as np
-from SSTCa2_utilities import *
+from caban.utilities import *
 import ast
 import glob
 from natsort import natsorted
@@ -628,7 +628,7 @@ for l in unit_id:
         mouse/session/mode). The mapping subset is then intersected with
         these full-session indices. No internal threshold/classification
         is performed here — all classification lives in
-        ``SSTCa2_engram.build_engram_identity``.
+        ``caban.engram.build_engram_identity``.
         '''
 
         # Get actual cells of self's session that are mapped to the desired mapping.

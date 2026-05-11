@@ -23,7 +23,7 @@ Per-mouse summary metrics:
     loss_rate        = Lost / N_crossreg
 
 The core classification is performed by _classify_pf_turnover
-(SSTCa2_spatial.py), shared with compute_pf_turnover.
+(caban.spatial.py), shared with compute_pf_turnover.
 
 Sub-analyses
 ------------

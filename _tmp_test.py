@@ -1,5 +1,5 @@
 ﻿import importlib, numpy as np
-import SSTCa2_pca_state_metrics as m
+import caban.pca_state_metrics as m
 importlib.reload(m)
 rng = np.random.default_rng(0)
 gd = {'mCherry': rng.normal(0,1,6), 'hM3D': rng.normal(0.5,1,5), 'hM4D': rng.normal(-1,1,4)}

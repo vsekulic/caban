@@ -2,7 +2,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib as mpl
-from SSTCa2_decoder import _LT_1D_CM_PER_PX, _LT_1D_DISTANCE_UNIT
+from caban.decoder import _LT_1D_CM_PER_PX, _LT_1D_DISTANCE_UNIT
 
 def plot_lt_spatial_responses(PLOTS_DIR, LT1_group, LT2_group, mouse_groups, session_str, mapping=None):
     '''

@@ -2,7 +2,7 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from SSTCa2_decoder import _LT_1D_CM_PER_PX, _LT_1D_DISTANCE_UNIT
+from caban.decoder import _LT_1D_CM_PER_PX, _LT_1D_DISTANCE_UNIT
 
 
 

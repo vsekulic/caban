@@ -16,7 +16,7 @@ import random
 MINISCOPE_FPS = 20
 BEHAVCAM_FPS = 15
 VELOCITY_THRESHOLD = 2.0 # cm/s
-SMOOTH_SIGMA = 4 # for Gaussian smoothing of velocities in SSTCa2_sessions.py
+SMOOTH_SIGMA = 4 # for Gaussian smoothing of velocities in caban.sessions.py
 SMOOTH_LOC_SIGMA = 4 # for smoothing of spatial bins in plot_fluorescence_maps(). 4 bins is 8 cm as per Fournier et al 2020. (given 2cm bins)
 MINISCOPE_FRAME_MS = 1000 / MINISCOPE_FPS
 

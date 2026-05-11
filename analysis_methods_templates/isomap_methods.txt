@@ -1,7 +1,7 @@
 Isomap manifold analysis (TFC_Isomap/) — methods
 ================================================
 
-Pipeline implemented in `SSTCa2_isomap.py`. Replicates the Isomap
+Pipeline implemented in `caban.isomap.py`. Replicates the Isomap
 recipe from Han et al. (Wilson lab), "Latent learning drives
 sleep-dependent plasticity in distinct CA1 subpopulations".
 

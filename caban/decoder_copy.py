@@ -19,7 +19,7 @@ import os
 from patsy import dmatrix
 from scipy.stats import norm
 from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
-from scipy.stats import norm
+from scipy.stats import chi2
 
 @dataclass
 class LapSegmentation:
@@ -1798,10 +1798,9 @@ def fit_mixedlm_models(df, use_median=False):
 
 def run_mixedlm_pipeline(dec_results, mouse_groups, PLOTS_DIR, session_str, mapping,
                          kmin_for_err=5, lowK_thresh=1, use_median=False):
-    save_path = os.path.join(PLOTS_DIR, f"mixedlm_{session_str}_mapping_{mapping}")
-    os.makedirs(save_path, exist_ok=True)
-
     stat_label = "median" if use_median else "mean"
+    save_path = os.path.join(PLOTS_DIR, f"mixedlm_{session_str}_mapping_{mapping}_{stat_label}")
+    os.makedirs(save_path, exist_ok=True)
 
     df = build_mixedlm_dataframe(dec_results, mouse_groups,
                                  kmin_for_err=kmin_for_err,
@@ -1846,15 +1845,17 @@ def plot_Ksum_fit_mixedlm(
     # ------------------------------------------------------------
     # Output directories
     # ------------------------------------------------------------
+    stat_label = "median" if use_median else "mean"
+
     SUMMARY_DIR = os.path.join(
         PLOTS_DIR,
-        f"summary_{session_str}_mapping_{mapping}",
+        f"summary_{session_str}_mapping_{mapping}_{stat_label}",
     )
     os.makedirs(SUMMARY_DIR, exist_ok=True)
 
     MIXEDLM_DIR = os.path.join(
         PLOTS_DIR,
-        f"mixedlm_{session_str}_mapping_{mapping}",
+        f"mixedlm_{session_str}_mapping_{mapping}_{stat_label}",
     )
     os.makedirs(MIXEDLM_DIR, exist_ok=True)
 
@@ -2339,6 +2340,274 @@ def plot_group_histograms(
 
     return fig, ax
 
+
+# ----------------------------
+# 3b) Aggregate decoded-vs-true 2D density panels across all mice per group
+# ----------------------------
+
+def _collect_decoded_true_per_group(
+    dec_results: dict,
+    mouse_groups: dict,
+    condition: str,
+    groups=("hM3D", "hM4D", "mCherry"),
+    kmin: float = 0.0,
+):
+    """
+    Collect concatenated (true_pos, decoded_pos) arrays per group.
+
+    condition: "within_LT1", "within_LT2", or "LT1_to_LT2"
+
+    For within-session conditions, both CV folds (train_to_test,
+    test_to_train) and both directions (leftward, rightward) are
+    concatenated.
+
+    kmin : float
+        If > 0, only keep decode bins whose Ksum >= kmin.
+
+    Returns
+    -------
+    group_pairs : dict[str -> (true_pos_1d, decoded_pos_1d)]
+    """
+    group_true = {g: [] for g in groups}
+    group_dec  = {g: [] for g in groups}
+
+    def _append_filtered(g, tp, dp, Ksum):
+        """Apply finite + optional Ksum filter, then append."""
+        n = min(tp.size, dp.size)
+        if n == 0:
+            return
+        tp, dp = tp[:n], dp[:n]
+        m = np.isfinite(tp) & np.isfinite(dp)
+        if Ksum is not None and kmin > 0:
+            K = np.asarray(Ksum, float)
+            K = K[:n]
+            m = m & np.isfinite(K) & (K >= kmin)
+        if m.sum() == 0:
+            return
+        group_true[g].append(tp[m])
+        group_dec[g].append(dp[m])
+
+    for mouse, res in dec_results.items():
+        g = mouse_groups.get(mouse, "NA")
+        if g not in group_true:
+            continue
+
+        if condition == "LT1_to_LT2":
+            blk = res.get("LT1_to_LT2", {})
+            if not blk.get("ok", False):
+                continue
+            out = blk.get("out", {})
+            tp = np.asarray(out.get("true_pos", []), float)
+            dp = np.asarray(out.get("decoded_pos", []), float)
+            Ksum = out.get("Ksum", None)
+            _append_filtered(g, tp, dp, Ksum)
+
+        else:
+            # within_LT1 or within_LT2
+            sess = "LT1" if "LT1" in condition else "LT2"
+            within = None
+            for kk in (f"within_{sess}_by_dir",
+                       f"within_{sess}_by_dir_full",
+                       f"within_{sess}_by_dir_mapped"):
+                d = res.get(kk)
+                if isinstance(d, dict) and len(d) > 0:
+                    within = d
+                    break
+            if within is None:
+                continue
+
+            for dir_label, dblk in within.items():
+                if not isinstance(dblk, dict) or not dblk.get("ok", False):
+                    continue
+                for fold_key in ("train_to_test", "test_to_train"):
+                    step = dblk.get(fold_key)
+                    if not isinstance(step, dict):
+                        continue
+                    out = step.get("out")
+                    if not isinstance(out, dict):
+                        continue
+                    tp = np.asarray(out.get("true_pos", []), float)
+                    dp = np.asarray(out.get("decoded_pos", []), float)
+                    Ksum = out.get("Ksum", None)
+                    _append_filtered(g, tp, dp, Ksum)
+
+    result = {}
+    for g in groups:
+        if group_true[g]:
+            result[g] = (np.concatenate(group_true[g]),
+                         np.concatenate(group_dec[g]))
+        else:
+            result[g] = (np.array([], float), np.array([], float))
+    return result
+
+
+def plot_aggregate_error_density(
+    dec_results: dict,
+    mouse_groups: dict,
+    *,
+    save_dir: str,
+    session_str: str = "",
+    bin_width_px: float = 10.0,
+    kmin: float = 0.0,
+    auto_close: bool = True,
+    groups=("mCherry", "hM3D", "hM4D"),
+    colors=None,
+    density: bool = True,       # kept for API compat – unused now
+):
+    """
+    3-row × 3-column figure of 2D decoded-vs-true heatmaps.
+
+    Rows   = DREADD groups  (mCherry, hM3D, hM4D)
+    Cols   = conditions     (Within LT1, Within LT2, LT1→LT2)
+
+    Each panel is a 2D histogram (bin_width_px × bin_width_px) with a
+    diagonal identity line.  Colormap intensity = number of decoded
+    time-bins falling in each (true, decoded) cell.
+
+    Parameters
+    ----------
+    kmin : float
+        Minimum Ksum to keep a decode bin (0 = no filter).
+    """
+    from matplotlib.colors import LogNorm
+
+    _set_compact_plot_style()
+
+    if colors is None:
+        colors = {"hM3D": "red", "hM4D": "blue", "mCherry": "black"}
+
+    cond_specs = [
+        ("within_LT1", "Within LT1"),
+        ("within_LT2", "Within LT2"),
+        ("LT1_to_LT2", "LT1 → LT2"),
+    ]
+    order = list(groups)
+
+    # -- collect decoded/true per group per condition ----------------
+    cond_data = {}
+    for cond_key, nice in cond_specs:
+        cond_data[cond_key] = _collect_decoded_true_per_group(
+            dec_results, mouse_groups, cond_key, groups=groups, kmin=kmin,
+        )
+
+    # -- determine global axis range ---------------------------------
+    all_vals = []
+    for cond_key, _ in cond_specs:
+        for g in order:
+            tp, dp = cond_data[cond_key][g]
+            if tp.size:
+                all_vals.extend([tp.min(), tp.max(), dp.min(), dp.max()])
+    if not all_vals:
+        print("[WARN] plot_aggregate_error_density: no data → skip")
+        return None, None, ""
+    global_lo = min(all_vals)
+    global_hi = max(all_vals)
+    bins = np.arange(global_lo, global_hi + bin_width_px, bin_width_px)
+
+    # -- figure layout -----------------------------------------------
+    # Nature single-column = 89 mm ≈ 3.5 in; double-column = 183 mm ≈ 7.2 in
+    # Use full page width (183 mm) with square panels
+    panel_size = 2.0   # inches per panel (square)
+    n_rows = len(order)
+    n_cols = len(cond_specs)
+    fig_w = panel_size * n_cols + 1.2   # +1.2 for labels + colorbar
+    fig_h = panel_size * n_rows + 0.8   # +0.8 for column titles + x-labels
+    fig, axes = plt.subplots(
+        n_rows, n_cols,
+        figsize=(fig_w, fig_h),
+        dpi=200,
+        sharex=True, sharey=True,
+    )
+    if n_rows == 1:
+        axes = axes[np.newaxis, :]  # ensure 2D
+
+    # -- pre-compute global vmax for shared colorbar -------------------
+    global_max = 1
+    for cond_key, _ in cond_specs:
+        for g in order:
+            tp, dp = cond_data[cond_key][g]
+            if tp.size == 0:
+                continue
+            H_pre, _, _ = np.histogram2d(tp, dp, bins=[bins, bins])
+            mx = int(H_pre.max())
+            if mx > global_max:
+                global_max = mx
+
+    log_norm = LogNorm(vmin=1, vmax=global_max)
+    last_mesh = None
+
+    _TITLE_FS = 10
+    _LABEL_FS = 9
+    _TICK_FS  = 8
+    _N_FS     = 7
+
+    for ri, g in enumerate(order):
+        for ci, (cond_key, nice) in enumerate(cond_specs):
+            ax = axes[ri, ci]
+
+            tp, dp = cond_data[cond_key][g]
+            if tp.size == 0:
+                ax.text(0.5, 0.5, "no data", transform=ax.transAxes,
+                        ha="center", va="center", fontsize=_LABEL_FS, color="0.5")
+            else:
+                # 2D histogram
+                H, xedges, yedges = np.histogram2d(tp, dp, bins=[bins, bins])
+                H_masked = np.ma.masked_where(H == 0, H)
+
+                last_mesh = ax.pcolormesh(
+                    xedges, yedges, H_masked.T,
+                    cmap="inferno",
+                    norm=log_norm,
+                    rasterized=True,
+                )
+
+            # identity line
+            ax.plot([global_lo, global_hi], [global_lo, global_hi],
+                    color="cyan", linewidth=0.8, alpha=0.7)
+
+            # labels / titles
+            if ri == 0:
+                ax.set_title(nice, fontsize=_TITLE_FS, pad=4)
+            if ci == 0:
+                ax.set_ylabel(f"{g}\nDecoded pos (px)", fontsize=_LABEL_FS)
+            if ri == n_rows - 1:
+                ax.set_xlabel("True position (px)", fontsize=_LABEL_FS)
+
+            ax.tick_params(labelsize=_TICK_FS, length=2, width=0.6)
+
+            # n count annotation
+            ax.text(0.03, 0.96, f"n={tp.size:,}", transform=ax.transAxes,
+                    fontsize=_N_FS, va="top", ha="left", color="white",
+                    fontweight="bold",
+                    bbox=dict(facecolor="black", alpha=0.45, pad=1.5, edgecolor="none"))
+
+            ax.set_aspect("equal", adjustable="box")
+            ax.grid(False)
+
+    fig.tight_layout(rect=[0, 0, 0.91, 1.0], h_pad=0.4, w_pad=0.4)
+
+    # -- shared colorbar on the right --------------------------------
+    if last_mesh is not None:
+        cbar_ax = fig.add_axes([0.92, 0.10, 0.015, 0.80])
+        cbar = fig.colorbar(last_mesh, cax=cbar_ax)
+        cbar.set_label("Count", fontsize=_LABEL_FS)
+        cbar.ax.tick_params(labelsize=_TICK_FS, length=2)
+
+    _ensure_dir(save_dir)
+    kmin_tag = f"_kmin{int(kmin)}" if kmin > 0 else ""
+    savefile = os.path.join(
+        save_dir,
+        f"aggregate_decoded_vs_true_{session_str}{kmin_tag}.png",
+    )
+    _savefig_tight(fig, savefile, dpi=300, pad_inches=0.3)
+    print(f"[SAVED] {savefile}")
+
+    if auto_close:
+        plt.close(fig)
+
+    return fig, axes, savefile
+
+
 # ----------------------------
 # 4) Error vs Ksum scatter (LT1→LT2)
 # ----------------------------
@@ -2433,7 +2702,7 @@ def run_group_summary_plots(
     err_col  = f"{stat_label}_err_filt"
     ksum_col = f"{stat_label}_Ksum"
 
-    save_path = os.path.join(PLOTS_DIR, f"summary_{session_str}_mapping_{mapping}")
+    save_path = os.path.join(PLOTS_DIR, f"summary_{session_str}_mapping_{mapping}_{stat_label}")
     _ensure_dir(save_path)
 
     # -----------------------
@@ -2540,7 +2809,7 @@ def run_group_summary_plots(
     # -----------------------
     # 4) Mouse-level plots for LT1->LT2 from mixedlm CSV (if present)
     # -----------------------
-    mixedlm_dir = os.path.join(PLOTS_DIR, f"mixedlm_{session_str}_mapping_{mapping}")
+    mixedlm_dir = os.path.join(PLOTS_DIR, f"mixedlm_{session_str}_mapping_{mapping}_{stat_label}")
     csv_path = os.path.join(mixedlm_dir, "mixedlm_mouse_level_summary.csv")
 
     if os.path.exists(csv_path):
@@ -2914,10 +3183,18 @@ def build_mouse_level_summary_from_dec_results(
             mouse=mouse,
             group=mouse_groups.get(mouse, None),
             condition=condition,
-            median_err_filt=float(np.nanmedian(err_used)) if err_used.size else np.nan,
-            median_Ksum=float(np.nanmedian(Ksum_used)) if Ksum_used.size else np.nan,
+
+            # unfiltered
+            median_err = float(np.nanmedian(abs_err)) if abs_err.size else np.nan,
+            mean_err   = float(np.nanmean(abs_err))   if abs_err.size else np.nan,
+
+            # filtered           
             mean_err_filt=float(np.nanmean(err_used)) if err_used.size else np.nan,
+            median_err_filt=float(np.nanmedian(err_used)) if err_used.size else np.nan,
+
+            median_Ksum=float(np.nanmedian(Ksum_used)) if Ksum_used.size else np.nan,
             mean_Ksum=float(np.nanmean(Ksum_used)) if Ksum_used.size else np.nan,
+
             n_err_used=int(err_used.size),
             n_Ksum_used=int(Ksum_used.size),
         )
@@ -2939,7 +3216,8 @@ def fit_mixedlm_from_outputs(
     tag: str,
     *,
     do_within_only: bool = True,
-    use_median=False
+    use_median=False,
+    use_filt=True
 ):
     """
     Fits:
@@ -2954,11 +3232,15 @@ def fit_mixedlm_from_outputs(
     Returns:
       df_all_clean, res_3level, df_within_only_or_None, res_within_or_None
     """
-    err_col = "median_err_filt" if use_median else "mean_err_filt"
     stat_label = "median" if use_median else "mean"
+    
+    if use_filt:
+        err_col = f"{stat_label}_err_filt"
+    else:
+        err_col = f"{stat_label}_err"
 
-    save_path = os.path.join(PLOTS_DIR, f"summary_{session_str}_mapping_{mapping}")
-    mixedlm_dir = os.path.join(PLOTS_DIR, f"mixedlm_{session_str}_mapping_{mapping}")
+    save_path = os.path.join(PLOTS_DIR, f"summary_{session_str}_mapping_{mapping}_{stat_label}")
+    mixedlm_dir = os.path.join(PLOTS_DIR, f"mixedlm_{session_str}_mapping_{mapping}_{stat_label}")
 
     # ---------- within LT1 ----------
     df_within1 = pd.read_csv(os.path.join(save_path, "mouse_level_summary_within_LT1_all.csv"))[
@@ -3176,7 +3458,8 @@ def plot_grouped_full_vs_shared(
       Row 2: Contrast bars (Within-LT2−Within-LT1, LT1→LT2−Within-LT1), same grouping,
              includes Wald stars (uncorrected) on each bar.
     """
-    out_dir = os.path.join(PLOTS_DIR, "mixedlm_prediction_plots")
+    stat_label = "median" if use_median else "mean"
+    out_dir = os.path.join(PLOTS_DIR, f"mixedlm_prediction_plots_{stat_label}")
     os.makedirs(out_dir, exist_ok=True)
     savefile = os.path.join(out_dir, fname)
 
@@ -3351,6 +3634,55 @@ def within_group_condition_contrasts(res):
     df = pd.DataFrame(rows)
     return df
 
+
+def correct_contrasts_pvalues(df_contrasts, methods=("holm", "fdr_bh")):
+    """
+    Apply multiple-comparisons corrections to Wald contrast p-values.
+
+    Two correction families are computed:
+      1) "all" — correcting across all contrasts in df_contrasts
+      2) per-contrast-type — correcting only across groups within each
+         contrast type (e.g. just the 3 "within_LT2 - within_LT1" tests).
+
+    Parameters
+    ----------
+    df_contrasts : DataFrame with columns 'label' and 'p'
+                   (from within_group_condition_contrasts)
+    methods : tuple of correction methods passed to statsmodels multipletests.
+              Default: Holm-Bonferroni and Benjamini-Hochberg FDR.
+
+    Returns
+    -------
+    df_contrasts : same DataFrame with added columns:
+        p_holm, p_fdr_bh, sig_holm, sig_fdr_bh           (all-contrasts family)
+        p_holm_pct, p_fdr_bh_pct, sig_holm_pct, sig_fdr_bh_pct  (per-contrast-type family)
+    """
+    from statsmodels.stats.multitest import multipletests
+
+    # --- 1) correct across ALL contrasts ---
+    for method in methods:
+        reject, pvals_corrected, _, _ = multipletests(df_contrasts["p"].values, method=method)
+        col = f"p_{method}"
+        df_contrasts[col] = pvals_corrected
+        df_contrasts[f"sig_{method}"] = reject
+
+    # --- 2) correct per contrast type (e.g. 3 groups within same contrast) ---
+    # Extract contrast type from label: everything after ": "
+    contrast_types = df_contrasts["label"].str.split(": ", n=1).str[1]
+    for ctype in contrast_types.unique():
+        mask = contrast_types == ctype
+        if mask.sum() < 2:
+            continue
+        for method in methods:
+            reject, pvals_corrected, _, _ = multipletests(
+                df_contrasts.loc[mask, "p"].values, method=method
+            )
+            df_contrasts.loc[mask, f"p_{method}_pct"] = pvals_corrected
+            df_contrasts.loc[mask, f"sig_{method}_pct"] = reject
+
+    return df_contrasts
+
+
 ##
 ## Within-group contrast tests END
 ##
@@ -3379,7 +3711,15 @@ def _star(p):
     if p < 0.001: return "***"
     if p < 0.01:  return "**"
     if p < 0.05:  return "*"
+    if p < 0.08:  return f"p={p:.2f}"
     return ""
+
+def _pad_axes_for_stars(ax, margin_frac=0.12):
+    """Expand y-limits so star annotations don't clip."""
+    y_lo, y_hi = ax.get_ylim()
+    rng = y_hi - y_lo if y_hi > y_lo else 1.0
+    pad = margin_frac * rng
+    ax.set_ylim(y_lo - pad, y_hi + pad)
 
 def _fe_design_vector(param_index, group, cond):
     """
@@ -3502,14 +3842,15 @@ def plot_2panel_full_vs_shared(
       - Group labels: Ctl / Exc / Inh
     """
 
-    out_dir = os.path.join(PLOTS_DIR, "mixedlm_prediction_plots")
+    stat_label = "median" if use_median else "mean"
+    out_dir = os.path.join(PLOTS_DIR, f"mixedlm_prediction_plots_{stat_label}")
     os.makedirs(out_dir, exist_ok=True)
     savefile = os.path.join(out_dir, out_name)
 
     # Figure layout: A (3 small axes) + B (2 stacked axes)
-    # Make panel B narrower (~half of A)
+    # Panel B narrower so bar widths match panel A
     fig = plt.figure(figsize=(14.5, 5.4), dpi=160)
-    outer = GridSpec(1, 2, figure=fig, width_ratios=[2.0, 1.0], wspace=0.22)
+    outer = GridSpec(1, 2, figure=fig, width_ratios=[2.0, 0.55], wspace=0.28)
 
     gsA = GridSpecFromSubplotSpec(1, 3, subplot_spec=outer[0], wspace=0.22)
     axA = [fig.add_subplot(gsA[0, i]) for i in range(3)]
@@ -3568,23 +3909,20 @@ def plot_2panel_full_vs_shared(
         bar_one_sided_sem_signaware(ax, x_full,   means_full, sem_full, color=col_full)
         bar_one_sided_sem_signaware(ax, x_shared, means_sh,   sem_sh,   color=col_shared, edgecolor=edge_shared)
 
-        ax.set_title(COND_LABELS_ABS[cond], fontsize=10)  # requested
+        ax.set_title(COND_LABELS_ABS[cond], fontsize=13)
         ax.set_xticks(x0)
-        ax.set_xticklabels([GROUP_LABELS[g] for g in GROUPS], fontsize=9)
+        ax.set_xticklabels([GROUP_LABELS[g] for g in GROUPS], fontsize=12)
         if use_median:
-            ax.set_ylabel("Predicted median decoding error" if ci == 0 else "")
+            ax.set_ylabel("Predicted median decoding error" if ci == 0 else "", fontsize=12)
         else:
-            ax.set_ylabel("Predicted mean decoding error" if ci == 0 else "")
+            ax.set_ylabel("Predicted mean decoding error" if ci == 0 else "", fontsize=12)
         ax.axhline(0, linewidth=0.8)
         ax.grid(True, axis="y", alpha=0.25)
+        ax.tick_params(axis='y', labelsize=11)
 
     # Panel labels
-    fig.text(0.01, 0.98, "A", fontsize=14, fontweight="bold", va="top")
-    fig.text(0.66, 0.98, "B", fontsize=14, fontweight="bold", va="top")
-
-    # ----------------------------
-    # Panel B: contrasts (SEM + stars from Wald p, uncorrected)
-    # ----------------------------
+    fig.text(0.01, 0.98, "A", fontsize=16, fontweight="bold", va="top")
+    fig.text(0.78, 0.98, "B", fontsize=16, fontweight="bold", va="top")
     def contrast_panel(ax, condA, condB, title):
         est_full, se_full, p_full = [], [], []
         est_sh,   se_sh,   p_sh   = [], [], []
@@ -3599,12 +3937,13 @@ def plot_2panel_full_vs_shared(
         bar_one_sided_sem_signaware(ax, x_full,   est_full, se_full, color=col_full)
         bar_one_sided_sem_signaware(ax, x_shared, est_sh,   se_sh,   color=col_shared, edgecolor=edge_shared)
 
-        ax.set_title(title, fontsize=10)
+        ax.set_title(title, fontsize=13)
         ax.set_xticks(x0)
-        ax.set_xticklabels([GROUP_LABELS[g] for g in GROUPS], fontsize=9)
-        ax.set_ylabel("Contrast vs Within LT1")
+        ax.set_xticklabels([GROUP_LABELS[g] for g in GROUPS], fontsize=12)
+        ax.set_ylabel("Contrast vs Within LT1", fontsize=12)
         ax.axhline(0, linewidth=0.8)
         ax.grid(True, axis="y", alpha=0.25)
+        ax.tick_params(axis='y', labelsize=11)
 
         # Stars: for positive bars place above; for negative bars place below
         if add_stars_on_contrasts:
@@ -3616,17 +3955,22 @@ def plot_2panel_full_vs_shared(
                 s = _star(p)
                 if not s:
                     return
+                is_pval = s.startswith("p=")
+                fs = 9 if is_pval else 14
                 if val >= 0:
                     y = val + se + bump
                     va = "bottom"
                 else:
                     y = val - se - bump
                     va = "top"
-                ax.text(x, y, s, ha="center", va=va, fontsize=11, color="black")
+                ax.text(x, y, s, ha="center", va=va, fontsize=fs, color="black")
 
             for i, g in enumerate(GROUPS):
                 place_star(x_full[i],   est_full[i], se_full[i], p_full[i])
                 place_star(x_shared[i], est_sh[i],   se_sh[i],   p_sh[i])
+
+            # Expand limits so stars don't clip
+            _pad_axes_for_stars(ax)
 
         return dict(full=dict(est=est_full, p=p_full), shared=dict(est=est_sh, p=p_sh))
 
@@ -3656,6 +4000,761 @@ def plot_2panel_full_vs_shared(
 
     print(f"[SAVED] {savefile}")
     return {"B1": outB1, "B2": outB2, "savefile": savefile}
+
+
+# ----------------------------
+# Plot:    within-only figure (LT1 vs LT2 only)
+# ----------------------------
+
+def plot_2panel_within_only(
+    *,
+    res_full_within,
+    res_shared_within,
+    PLOTS_DIR,
+    out_name="decoding_2panel_WITHIN_ONLY.png",
+    show_title=False,
+    add_stars_on_contrasts=True,
+    use_median=False
+):
+    """
+    Like plot_2panel_full_vs_shared but uses the WITHIN-ONLY models
+    (fitted on within_LT1 + within_LT2 only, no LT1→LT2).
+
+    Panel A: absolute predicted decoding errors for within_LT1 and within_LT2 (2 subplots)
+    Panel B: single contrast (Within LT2 − Within LT1)
+
+    Colors:
+      - All neurons: black
+      - Cross-registered neurons: dark grey fill + black outline
+    """
+
+    stat_label = "median" if use_median else "mean"
+    out_dir = os.path.join(PLOTS_DIR, f"mixedlm_prediction_plots_{stat_label}")
+    os.makedirs(out_dir, exist_ok=True)
+    savefile = os.path.join(out_dir, out_name)
+
+    WITHIN_CONDS = ["within_LT1", "within_LT2"]
+    WITHIN_COND_LABELS = {
+        "within_LT1": "Within LT1",
+        "within_LT2": "Within LT2",
+    }
+
+    stat_label = "median" if use_median else "mean"
+
+    # Figure layout: A (2 subplots) + B (1 contrast)
+    # Panel B narrower so bar widths match panel A
+    fig = plt.figure(figsize=(11.0, 5.4), dpi=160)
+    outer = GridSpec(1, 2, figure=fig, width_ratios=[2.0, 0.55], wspace=0.30)
+
+    gsA = GridSpecFromSubplotSpec(1, 2, subplot_spec=outer[0], wspace=0.22)
+    axA = [fig.add_subplot(gsA[0, i]) for i in range(2)]
+
+    axB = fig.add_subplot(outer[1])
+
+    # Bar geometry
+    width = 0.34
+    x0 = np.arange(len(GROUPS))
+    x_full   = x0 - width/2
+    x_shared = x0 + width/2
+
+    # Styling
+    col_full = "black"
+    col_shared = "#666666"
+    edge_shared = "black"
+
+    def bar_one_sided_sem_signaware(ax, xpos, means, sems, *, color, edgecolor=None):
+        means = np.asarray(means, float)
+        sems  = np.asarray(sems, float)
+        yerr = one_sided_yerr_by_sign(means, sems)
+        ax.bar(
+            xpos, means, width=width,
+            yerr=yerr, capsize=3,
+            color=color,
+            edgecolor=edgecolor,
+            linewidth=1.0 if edgecolor else 0.0,
+            error_kw=dict(lw=1.5, capthick=1.5)
+        )
+
+    # ----------------------------
+    # Panel A: absolute predicted means (within_LT1, within_LT2)
+    # ----------------------------
+    for ci, cond in enumerate(WITHIN_CONDS):
+        means_full, sem_full = [], []
+        means_sh,   sem_sh   = [], []
+
+        for g in GROUPS:
+            m, s = predicted_mean_sem(res_full_within, g, cond)
+            means_full.append(m); sem_full.append(s)
+
+            m, s = predicted_mean_sem(res_shared_within, g, cond)
+            means_sh.append(m); sem_sh.append(s)
+
+        ax = axA[ci]
+
+        bar_one_sided_sem_signaware(ax, x_full,   means_full, sem_full, color=col_full)
+        bar_one_sided_sem_signaware(ax, x_shared, means_sh,   sem_sh,   color=col_shared, edgecolor=edge_shared)
+
+        ax.set_title(WITHIN_COND_LABELS[cond], fontsize=13)
+        ax.set_xticks(x0)
+        ax.set_xticklabels([GROUP_LABELS[g] for g in GROUPS], fontsize=12)
+        ax.set_ylabel(f"Predicted {stat_label} decoding error" if ci == 0 else "", fontsize=12)
+        ax.axhline(0, linewidth=0.8)
+        ax.grid(True, axis="y", alpha=0.25)
+        ax.tick_params(axis='y', labelsize=11)
+
+    # Panel labels
+    fig.text(0.01, 0.98, "A", fontsize=16, fontweight="bold", va="top")
+    fig.text(0.78, 0.98, "B", fontsize=16, fontweight="bold", va="top")
+
+    # ----------------------------
+    # Panel B: single contrast (Within LT2 − Within LT1)
+    # ----------------------------
+    est_full, se_full, p_full = [], [], []
+    est_sh,   se_sh,   p_sh   = [], [], []
+
+    for g in GROUPS:
+        c = wald_contrast(res_full_within, g, "within_LT2", "within_LT1")
+        est_full.append(c["est"]); se_full.append(c["se"]); p_full.append(c["p"])
+
+        c = wald_contrast(res_shared_within, g, "within_LT2", "within_LT1")
+        est_sh.append(c["est"]); se_sh.append(c["se"]); p_sh.append(c["p"])
+
+    bar_one_sided_sem_signaware(axB, x_full,   est_full, se_full, color=col_full)
+    bar_one_sided_sem_signaware(axB, x_shared, est_sh,   se_sh,   color=col_shared, edgecolor=edge_shared)
+
+    axB.set_title("Within LT2 \u2212 Within LT1", fontsize=13)
+    axB.set_xticks(x0)
+    axB.set_xticklabels([GROUP_LABELS[g] for g in GROUPS], fontsize=12)
+    axB.set_ylabel("Contrast vs Within LT1", fontsize=12)
+    axB.axhline(0, linewidth=0.8)
+    axB.grid(True, axis="y", alpha=0.25)
+    axB.tick_params(axis='y', labelsize=11)
+
+    if add_stars_on_contrasts:
+        y_min, y_max = axB.get_ylim()
+        rng = (y_max - y_min) if (y_max > y_min) else 1.0
+        bump = 0.03 * rng
+
+        def place_star(x, val, se, p):
+            s = _star(p)
+            if not s:
+                return
+            is_pval = s.startswith("p=")
+            fs = 9 if is_pval else 14
+            if val >= 0:
+                y = val + se + bump
+                va = "bottom"
+            else:
+                y = val - se - bump
+                va = "top"
+            axB.text(x, y, s, ha="center", va=va, fontsize=fs, color="black")
+
+        for i, g in enumerate(GROUPS):
+            place_star(x_full[i],   est_full[i], se_full[i], p_full[i])
+            place_star(x_shared[i], est_sh[i],   se_sh[i],   p_sh[i])
+
+        # Expand limits so stars don't clip
+        _pad_axes_for_stars(axB)
+
+    if show_title:
+        fig.suptitle(
+            "Within-only model: LT1 vs LT2 decoding errors",
+            fontsize=12,
+            y=1.03
+        )
+
+    plt.tight_layout()
+    fig.savefig(savefile, bbox_inches="tight")
+    plt.close(fig)
+
+    print(f"[SAVED] {savefile}")
+    return {
+        "contrast": dict(full=dict(est=est_full, p=p_full), shared=dict(est=est_sh, p=p_sh)),
+        "savefile": savefile,
+    }
+
+
+
+# -------------------------------------------------------------------
+# Spatial decoding-error profile: mean |error| vs normalised track pos
+# -------------------------------------------------------------------
+
+def _collect_spatial_error_per_mouse(
+    dec_results: dict,
+    mouse_groups: dict,
+    *,
+    sess: str = "LT1",
+    n_pos_bins: int = 20,
+    kmin: float = 0.0,
+    groups=("mCherry", "hM3D", "hM4D"),
+):
+    """
+    For every mouse, collect per-direction (true_pos_norm, abs_err)
+    from both CV folds, normalise position to [0, 1], and bin.
+
+    sess can be "LT1", "LT2", or "LT1_to_LT2".
+    For "LT1_to_LT2" (cross-session), there is no direction split
+    so only a "combined" profile is produced per mouse.
+
+    Returns
+    -------
+    mouse_profiles : dict[mouse -> dict]
+        mouse_profiles[mouse]["leftward"]  = {"bin_centers": (B,), "mean_err": (B,), "n": (B,)}
+        mouse_profiles[mouse]["rightward"] = {"bin_centers": (B,), "mean_err": (B,), "n": (B,)}
+        mouse_profiles[mouse]["combined"]  = {"bin_centers": (B,), "mean_err": (B,), "n": (B,)}
+        mouse_profiles[mouse]["group"] = str
+    """
+    bin_edges = np.linspace(0.0, 1.0, n_pos_bins + 1)
+    bin_centers = 0.5 * (bin_edges[:-1] + bin_edges[1:])
+
+    mouse_profiles = {}
+
+    is_xfer = (sess == "LT1_to_LT2")
+
+    for mouse, res in dec_results.items():
+        g = mouse_groups.get(mouse, "NA")
+        if g not in groups:
+            continue
+
+        if is_xfer:
+            # ---- cross-session LT1→LT2 (flat, no direction split) ----
+            blk = res.get("LT1_to_LT2", {})
+            if not blk.get("ok", False):
+                continue
+            out = blk.get("out")
+            if not isinstance(out, dict):
+                continue
+            tp = np.asarray(out.get("true_pos", []), float)
+            dp = np.asarray(out.get("decoded_pos", []), float)
+            Ksum = np.asarray(out.get("Ksum", []), float)
+            ae = np.abs(dp - tp)
+
+            n = min(tp.size, dp.size, Ksum.size)
+            if n == 0:
+                continue
+            tp, dp, ae, Ksum = tp[:n], dp[:n], ae[:n], Ksum[:n]
+            m = np.isfinite(tp) & np.isfinite(dp)
+            if kmin > 0:
+                m = m & (Ksum >= kmin)
+            tp_f, ae_f = tp[m], ae[m]
+            if tp_f.size == 0:
+                continue
+
+            pmin, pmax = tp_f.min(), tp_f.max()
+            if pmax - pmin < 1e-6:
+                continue
+            tp_norm = (tp_f - pmin) / (pmax - pmin)
+            err_norm = ae_f / (pmax - pmin)
+
+            mean_err = np.full(n_pos_bins, np.nan)
+            counts   = np.zeros(n_pos_bins, int)
+            bin_idx  = np.clip(np.digitize(tp_norm, bin_edges) - 1, 0, n_pos_bins - 1)
+            for b in range(n_pos_bins):
+                sel = bin_idx == b
+                counts[b] = sel.sum()
+                if counts[b] > 0:
+                    mean_err[b] = np.nanmean(err_norm[sel])
+
+            mouse_profiles[mouse] = {
+                "group": g,
+                "combined": {"bin_centers": bin_centers.copy(), "mean_err": mean_err, "n": counts},
+            }
+            continue
+
+        # ---- within-session (LT1 / LT2) ----
+        # find the within-session dict
+        within = None
+        for kk in (f"within_{sess}_by_dir",
+                   f"within_{sess}_by_dir_full",
+                   f"within_{sess}_by_dir_mapped"):
+            d = res.get(kk)
+            if isinstance(d, dict) and len(d) > 0:
+                within = d
+                break
+        if within is None:
+            continue
+
+        dir_data = {}   # dir_label -> (true_norm, err)
+
+        for dir_label in ("leftward", "rightward"):
+            dblk = within.get(dir_label)
+            if not isinstance(dblk, dict) or not dblk.get("ok", False):
+                continue
+
+            tp_all, err_all = [], []
+            for fold_key in ("train_to_test", "test_to_train"):
+                step = dblk.get(fold_key)
+                if not isinstance(step, dict):
+                    continue
+                out = step.get("out")
+                if not isinstance(out, dict):
+                    continue
+                tp = np.asarray(out.get("true_pos", []), float)
+                dp = np.asarray(out.get("decoded_pos", []), float)
+                Ksum = np.asarray(out.get("Ksum", []), float)
+                ae = np.abs(dp - tp)
+
+                n = min(tp.size, dp.size, Ksum.size)
+                if n == 0:
+                    continue
+                tp, dp, ae, Ksum = tp[:n], dp[:n], ae[:n], Ksum[:n]
+                m = np.isfinite(tp) & np.isfinite(dp)
+                if kmin > 0:
+                    m = m & (Ksum >= kmin)
+                tp_all.append(tp[m])
+                err_all.append(ae[m])
+
+            if not tp_all:
+                continue
+
+            tp_cat = np.concatenate(tp_all)
+            err_cat = np.concatenate(err_all)
+
+            # normalise position to [0,1]
+            pmin, pmax = tp_cat.min(), tp_cat.max()
+            if pmax - pmin < 1e-6:
+                continue
+            tp_norm = (tp_cat - pmin) / (pmax - pmin)
+            # normalise error the same way (in fraction-of-track units)
+            err_norm = err_cat / (pmax - pmin)
+
+            dir_data[dir_label] = (tp_norm, err_norm)
+
+        if not dir_data:
+            continue
+
+        prof = {"group": g}
+        # per-direction binned profiles
+        for dl, (tp_norm, err_norm) in dir_data.items():
+            mean_err = np.full(n_pos_bins, np.nan)
+            counts   = np.zeros(n_pos_bins, int)
+            bin_idx  = np.digitize(tp_norm, bin_edges) - 1
+            bin_idx  = np.clip(bin_idx, 0, n_pos_bins - 1)
+            for b in range(n_pos_bins):
+                sel = bin_idx == b
+                counts[b] = sel.sum()
+                if counts[b] > 0:
+                    mean_err[b] = np.nanmean(err_norm[sel])
+            prof[dl] = {"bin_centers": bin_centers.copy(), "mean_err": mean_err, "n": counts}
+
+        # combined: merge both directions
+        all_tp = np.concatenate([d[0] for d in dir_data.values()])
+        all_err = np.concatenate([d[1] for d in dir_data.values()])
+        mean_err_c = np.full(n_pos_bins, np.nan)
+        counts_c   = np.zeros(n_pos_bins, int)
+        bin_idx_c  = np.clip(np.digitize(all_tp, bin_edges) - 1, 0, n_pos_bins - 1)
+        for b in range(n_pos_bins):
+            sel = bin_idx_c == b
+            counts_c[b] = sel.sum()
+            if counts_c[b] > 0:
+                mean_err_c[b] = np.nanmean(all_err[sel])
+        prof["combined"] = {"bin_centers": bin_centers.copy(), "mean_err": mean_err_c, "n": counts_c}
+
+        mouse_profiles[mouse] = prof
+
+    return mouse_profiles
+
+
+def plot_spatial_decoding_error(
+    dec_results: dict,
+    mouse_groups: dict,
+    *,
+    save_dir: str,
+    session_str: str = "",
+    n_pos_bins: int = 20,
+    kmin: float = 0.0,
+    auto_close: bool = True,
+    groups=("mCherry", "hM3D", "hM4D"),
+    colors=None,
+    sessions=("LT1", "LT2"),
+):
+    """
+    Plot mean decoding error vs normalised track position.
+
+    Produces:
+      1) Per-mouse plots: leftward & rightward (one figure per mouse per session)
+         For LT1_to_LT2: single combined bar chart per mouse (no direction split).
+      2) Group-average plots: leftward, rightward, and combined
+         (one figure per session, with one line per group)
+         For LT1_to_LT2: combined-only group plot.
+    """
+    _set_compact_plot_style()
+    _ensure_dir(save_dir)
+
+    if colors is None:
+        colors = {"hM3D": "red", "hM4D": "blue", "mCherry": "black"}
+
+    group_labels = {"hM3D": "hM3D (Gq)", "hM4D": "hM4D (Gi)", "mCherry": "mCherry"}
+
+    for sess in sessions:
+        mp = _collect_spatial_error_per_mouse(
+            dec_results, mouse_groups,
+            sess=sess, n_pos_bins=n_pos_bins, kmin=kmin, groups=groups,
+        )
+        if not mp:
+            print(f"[WARN] No spatial-error data for {sess}")
+            continue
+
+        is_xfer = (sess == "LT1_to_LT2")
+
+        # ============================================================
+        # 1) Per-mouse plots
+        # ============================================================
+        per_mouse_dir = os.path.join(save_dir, "per_mouse")
+        _ensure_dir(per_mouse_dir)
+
+        for mouse, prof in mp.items():
+            g = prof["group"]
+
+            if is_xfer:
+                # Cross-session: single combined bar chart
+                fig, ax = plt.subplots(figsize=(6, 3.5))
+                if "combined" in prof:
+                    bc = prof["combined"]["bin_centers"]
+                    me = prof["combined"]["mean_err"]
+                    ax.bar(bc, me, width=bc[1] - bc[0], color=colors.get(g, "gray"),
+                           alpha=0.7, edgecolor="k", linewidth=0.4)
+                ax.set_xlabel("Normalised track position")
+                ax.set_ylabel("Mean |error| (frac of track)")
+                ax.set_xlim(0, 1)
+                fig.suptitle(f"{mouse} ({g})  —  LT1\u2192LT2  {session_str}", fontsize=12)
+                plt.tight_layout()
+                fpath = os.path.join(per_mouse_dir, f"spatial_err_{mouse}_{sess}_{session_str}.png")
+                _savefig_tight(fig, fpath)
+                if auto_close:
+                    plt.close(fig)
+                print(f"[SAVED] {fpath}")
+            else:
+                # Within-session: leftward + rightward side-by-side
+                fig, axes = plt.subplots(1, 2, figsize=(10, 3.5), sharey=True)
+                for ax_i, dl in enumerate(("leftward", "rightward")):
+                    ax = axes[ax_i]
+                    if dl in prof:
+                        bc = prof[dl]["bin_centers"]
+                        me = prof[dl]["mean_err"]
+                        ax.bar(bc, me, width=bc[1] - bc[0], color=colors.get(g, "gray"),
+                               alpha=0.7, edgecolor="k", linewidth=0.4)
+                        ax.set_title(f"{dl.capitalize()}")
+                    else:
+                        ax.set_title(f"{dl.capitalize()} (no data)")
+                    ax.set_xlabel("Normalised track position")
+                    ax.set_xlim(0, 1)
+                axes[0].set_ylabel("Mean |error| (frac of track)")
+                fig.suptitle(f"{mouse} ({g})  —  {sess}  {session_str}", fontsize=12)
+                plt.tight_layout()
+                fpath = os.path.join(per_mouse_dir, f"spatial_err_{mouse}_{sess}_{session_str}.png")
+                _savefig_tight(fig, fpath)
+                if auto_close:
+                    plt.close(fig)
+                print(f"[SAVED] {fpath}")
+
+        # ============================================================
+        # 2) Group averages: leftward, rightward, combined
+        #    (LT1_to_LT2 → combined only)
+        # ============================================================
+        modes = ("combined",) if is_xfer else ("leftward", "rightward", "combined")
+        sess_display = "LT1\u2192LT2" if is_xfer else sess
+
+        for mode in modes:
+            fig, ax = plt.subplots(figsize=(6, 3.5))
+
+            for g in groups:
+                mice_in_group = [m for m, p in mp.items() if p["group"] == g and mode in p]
+                if not mice_in_group:
+                    continue
+                # stack profiles → (n_mice, n_pos_bins)
+                stacked = np.stack([mp[m][mode]["mean_err"] for m in mice_in_group])
+                group_mean = np.nanmean(stacked, axis=0)
+                group_sem  = np.nanstd(stacked, axis=0, ddof=1) / np.sqrt(len(mice_in_group))
+                bc = mp[mice_in_group[0]][mode]["bin_centers"]
+
+                ax.plot(bc, group_mean, color=colors.get(g, "gray"), linewidth=1.5,
+                        label=f"{group_labels.get(g, g)} (n={len(mice_in_group)})")
+                ax.fill_between(bc, group_mean - group_sem, group_mean + group_sem,
+                                color=colors.get(g, "gray"), alpha=0.2)
+
+            ax.set_xlabel("Normalised track position")
+            ax.set_ylabel("Mean |error| (frac of track)")
+            ax.set_xlim(0, 1)
+            ax.legend(fontsize=9)
+            kmin_str = f"_Kmin{kmin:.0f}" if kmin > 0 else ""
+            ax.set_title(f"Group avg decoding error — {mode} — {sess_display}  {session_str}{kmin_str}")
+            plt.tight_layout()
+            fpath = os.path.join(save_dir, f"group_spatial_err_{mode}_{sess}_{session_str}{kmin_str}.png")
+            _savefig_tight(fig, fpath)
+            if auto_close:
+                plt.close(fig)
+            print(f"[SAVED] {fpath}")
+
+
+def plot_spatial_decoding_error_heatmap(
+    dec_results: dict,
+    mouse_groups: dict,
+    *,
+    save_dir: str,
+    session_str: str = "",
+    n_pos_bins: int = 20,
+    kmin: float = 0.0,
+    auto_close: bool = True,
+    groups=("mCherry", "hM3D", "hM4D"),
+    cmap: str = "inferno",
+    sessions=("LT1", "LT2"),
+):
+    """
+    1-D heatmap-strip version of plot_spatial_decoding_error.
+
+    For each session × mode (leftward / rightward / combined):
+      - Per-mouse figure: one colour strip per mouse (rows grouped by group)
+      - Group-average figure: one strip per group (mean across mice)
+
+    Colour encodes group-average mean |error| (fraction of track).
+    """
+    _set_compact_plot_style()
+    _ensure_dir(save_dir)
+
+    group_labels = {"hM3D": "hM3D (Gq)", "hM4D": "hM4D (Gi)", "mCherry": "mCherry"}
+
+    for sess in sessions:
+        mp = _collect_spatial_error_per_mouse(
+            dec_results, mouse_groups,
+            sess=sess, n_pos_bins=n_pos_bins, kmin=kmin, groups=groups,
+        )
+        if not mp:
+            print(f"[WARN] No spatial-error heatmap data for {sess}")
+            continue
+
+        is_xfer = (sess == "LT1_to_LT2")
+        modes = ("combined",) if is_xfer else ("leftward", "rightward", "combined")
+        sess_display = "LT1\u2192LT2" if is_xfer else sess
+        kmin_str = f"_Kmin{kmin:.0f}" if kmin > 0 else ""
+
+        # ----- determine global vmin/vmax across all groups & modes -----
+        all_vals = []
+        for prof in mp.values():
+            for mode in modes:
+                if mode in prof:
+                    all_vals.append(prof[mode]["mean_err"])
+        if not all_vals:
+            continue
+        vmin = np.nanmin(np.concatenate(all_vals))
+        vmax = np.nanmax(np.concatenate(all_vals))
+
+        # =================================================================
+        # 1) Per-mouse heatmap strips (one figure per mode)
+        # =================================================================
+        per_mouse_dir = os.path.join(save_dir, "per_mouse")
+        _ensure_dir(per_mouse_dir)
+
+        for mode in modes:
+            # collect rows: list of (mouse_label, mean_err array)
+            rows = []
+            for g in groups:
+                mice_g = sorted([m for m, p in mp.items()
+                                 if p["group"] == g and mode in p])
+                for m in mice_g:
+                    rows.append((f"{m} ({g})", mp[m][mode]["mean_err"]))
+            if not rows:
+                continue
+
+            n_rows = len(rows)
+            fig_h = max(1.5, 0.45 * n_rows + 0.8)
+            fig, ax = plt.subplots(figsize=(8, fig_h))
+
+            data = np.stack([r[1] for r in rows])           # (n_rows, n_pos_bins)
+            im = ax.imshow(data, aspect="auto", cmap=cmap,
+                           vmin=vmin, vmax=vmax,
+                           extent=[0, 1, n_rows - 0.5, -0.5])
+            ax.set_yticks(range(n_rows))
+            ax.set_yticklabels([r[0] for r in rows], fontsize=8)
+            ax.set_xlabel("Normalised track position")
+            ax.set_title(f"Per-mouse error — {mode} — {sess_display}  {session_str}{kmin_str}",
+                         fontsize=11)
+            cb = fig.colorbar(im, ax=ax, pad=0.02)
+            cb.set_label("Mean |error| (frac of track)", fontsize=9)
+            plt.tight_layout()
+            fpath = os.path.join(per_mouse_dir,
+                                 f"spatial_err_heatmap_{mode}_{sess}_{session_str}{kmin_str}.png")
+            _savefig_tight(fig, fpath)
+            if auto_close:
+                plt.close(fig)
+            print(f"[SAVED] {fpath}")
+
+        # =================================================================
+        # 2) Group-average heatmap strips (one figure per mode)
+        # =================================================================
+        for mode in modes:
+            strips = []       # (label, mean_err_1d)
+            for g in groups:
+                mice_g = [m for m, p in mp.items()
+                          if p["group"] == g and mode in p]
+                if not mice_g:
+                    continue
+                stacked = np.stack([mp[m][mode]["mean_err"] for m in mice_g])
+                group_mean = np.nanmean(stacked, axis=0)
+                strips.append((f"{group_labels.get(g, g)} (n={len(mice_g)})", group_mean))
+            if not strips:
+                continue
+
+            n_strips = len(strips)
+            fig_h = max(1.2, 0.6 * n_strips + 0.8)
+            fig, ax = plt.subplots(figsize=(8, fig_h))
+
+            data = np.stack([s[1] for s in strips])
+            im = ax.imshow(data, aspect="auto", cmap=cmap,
+                           vmin=vmin, vmax=vmax,
+                           extent=[0, 1, n_strips - 0.5, -0.5])
+            ax.set_yticks(range(n_strips))
+            ax.set_yticklabels([s[0] for s in strips], fontsize=10)
+            ax.set_xlabel("Normalised track position")
+            ax.set_title(f"Group avg error — {mode} — {sess_display}  {session_str}{kmin_str}",
+                         fontsize=11)
+            cb = fig.colorbar(im, ax=ax, pad=0.02)
+            cb.set_label("Mean |error| (frac of track)", fontsize=9)
+            plt.tight_layout()
+            fpath = os.path.join(save_dir,
+                                 f"group_spatial_err_heatmap_{mode}_{sess}_{session_str}{kmin_str}.png")
+            _savefig_tight(fig, fpath)
+            if auto_close:
+                plt.close(fig)
+            print(f"[SAVED] {fpath}")
+
+
+import numpy as np
+import pandas as pd
+import statsmodels.formula.api as smf
+from scipy.stats import chi2
+
+def build_stacked_df(df_full, df_shared):
+    df_full = df_full.copy()
+    df_shared = df_shared.copy()
+    df_full["neur_set"] = "all"
+    df_shared["neur_set"] = "shared"
+    df = pd.concat([df_full, df_shared], axis=0, ignore_index=True)
+
+    # enforce categorical + reference levels if you want
+    df["mouse"] = df["mouse"].astype(str)
+    df["group"] = pd.Categorical(df["group"].astype(str), categories=["mCherry", "hM3D", "hM4D"], ordered=False)
+    df["condition"] = pd.Categorical(df["condition"].astype(str),
+                                     categories=["within_LT1", "within_LT2", "LT1_to_LT2"],
+                                     ordered=True)
+    df["neur_set"] = pd.Categorical(df["neur_set"].astype(str), categories=["all", "shared"], ordered=True)
+    return df
+
+
+def fit_stacked_mixedlm(df, error_col):
+    formula = f"{error_col} ~ group * condition * neur_set"
+    model = smf.mixedlm(formula, df, groups=df["mouse"])
+    res = model.fit(reml=False)
+    return res
+
+
+def _fe_design_vector(param_index, group, condition, neur_set):
+    """
+    Fixed-effects design vector aligned to res.fe_params.index for:
+      y ~ group * condition * neur_set
+    Reference levels:
+      group=mCherry, condition=within_LT1, neur_set=all
+    """
+    idx = list(param_index)
+    x = np.zeros(len(idx), dtype=float)
+
+    def set_if(name):
+        if name in idx:
+            x[idx.index(name)] = 1.0
+
+    set_if("Intercept")
+
+    # main effects
+    if group == "hM3D":
+        set_if("group[T.hM3D]")
+    elif group == "hM4D":
+        set_if("group[T.hM4D]")
+
+    if condition == "within_LT2":
+        set_if("condition[T.within_LT2]")
+    elif condition == "LT1_to_LT2":
+        set_if("condition[T.LT1_to_LT2]")
+
+    if neur_set == "shared":
+        set_if("neur_set[T.shared]")
+
+    # 2-way interactions
+    if group == "hM3D" and condition == "within_LT2":
+        set_if("group[T.hM3D]:condition[T.within_LT2]")
+    if group == "hM4D" and condition == "within_LT2":
+        set_if("group[T.hM4D]:condition[T.within_LT2]")
+    if group == "hM3D" and condition == "LT1_to_LT2":
+        set_if("group[T.hM3D]:condition[T.LT1_to_LT2]")
+    if group == "hM4D" and condition == "LT1_to_LT2":
+        set_if("group[T.hM4D]:condition[T.LT1_to_LT2]")
+
+    if group == "hM3D" and neur_set == "shared":
+        set_if("group[T.hM3D]:neur_set[T.shared]")
+    if group == "hM4D" and neur_set == "shared":
+        set_if("group[T.hM4D]:neur_set[T.shared]")
+
+    if condition == "within_LT2" and neur_set == "shared":
+        set_if("condition[T.within_LT2]:neur_set[T.shared]")
+    if condition == "LT1_to_LT2" and neur_set == "shared":
+        set_if("condition[T.LT1_to_LT2]:neur_set[T.shared]")
+
+    # 3-way interactions
+    if group == "hM3D" and condition == "within_LT2" and neur_set == "shared":
+        set_if("group[T.hM3D]:condition[T.within_LT2]:neur_set[T.shared]")
+    if group == "hM4D" and condition == "within_LT2" and neur_set == "shared":
+        set_if("group[T.hM4D]:condition[T.within_LT2]:neur_set[T.shared]")
+    if group == "hM3D" and condition == "LT1_to_LT2" and neur_set == "shared":
+        set_if("group[T.hM3D]:condition[T.LT1_to_LT2]:neur_set[T.shared]")
+    if group == "hM4D" and condition == "LT1_to_LT2" and neur_set == "shared":
+        set_if("group[T.hM4D]:condition[T.LT1_to_LT2]:neur_set[T.shared]")
+
+    return x
+
+
+def omnibus_group_test(res, condition, neur_set):
+    """
+    2-df omnibus Wald test within a (condition × neur_set) cell:
+      H0: Ctl = Exc = Inh
+    Implemented as joint test of:
+      (hM3D - mCherry) == 0 and (hM4D - mCherry) == 0
+    """
+    params = res.fe_params
+    p_fe = len(params)
+
+    # CRITICAL FIX: slice covariance to fixed-effects block only
+    V_full = np.asarray(res.cov_params())
+    V = V_full[:p_fe, :p_fe]
+    beta = params.values
+
+    x_ctl = _fe_design_vector(params.index, "mCherry", condition, neur_set)
+    x_exc = _fe_design_vector(params.index, "hM3D",   condition, neur_set)
+    x_inh = _fe_design_vector(params.index, "hM4D",   condition, neur_set)
+
+    C = np.vstack([x_exc - x_ctl, x_inh - x_ctl])  # (2 x p_fe)
+
+    diff = C @ beta                       # (2,)
+    W = C @ V @ C.T                       # (2 x 2)
+
+    stat = float(diff.T @ np.linalg.inv(W) @ diff)
+    pval = float(1.0 - chi2.cdf(stat, df=2))
+    return stat, pval
+
+
+def run_six_omnibus_tests(res):
+    cells = [
+        ("within_LT1", "all"),
+        ("within_LT1", "shared"),
+        ("within_LT2", "all"),
+        ("within_LT2", "shared"),
+        ("LT1_to_LT2", "all"),
+        ("LT1_to_LT2", "shared"),
+    ]
+    out = []
+    for cond, ns in cells:
+        stat, p = omnibus_group_test(res, cond, ns)
+        out.append({"condition": cond, "neur_set": ns, "chi2_df2": stat, "p": p})
+    return pd.DataFrame(out)
+
 
 
 print("loaded")
