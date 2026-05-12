@@ -22,6 +22,8 @@ dead code is left for follow-up patches once output parity is verified.
 from __future__ import annotations
 
 import os
+import pickle
+import sys
 import traceback
 from datetime import datetime
 from types import SimpleNamespace
@@ -132,11 +134,47 @@ def _resolve_paper_dir(paper_dir: Optional[str]) -> str:
 
 
 # ===========================================================================
+def _deep_size(obj, seen=None):
+    """Recursive byte size of an object: numpy arrays count nbytes, containers recurse."""
+    if seen is None:
+        seen = set()
+    if id(obj) in seen:
+        return 0
+    seen.add(id(obj))
+    if isinstance(obj, np.ndarray):
+        return obj.nbytes
+    if hasattr(obj, '__dict__'):
+        return sum(_deep_size(v, seen) for v in obj.__dict__.values())
+    if isinstance(obj, dict):
+        return sum(_deep_size(v, seen) for v in obj.values())
+    if isinstance(obj, (list, tuple, set, frozenset)):
+        return sum(_deep_size(v, seen) for v in obj)
+    return sys.getsizeof(obj)
+
+
+def report_ds_memory(ds, top_n: int = 15, min_mb: float = 1.0) -> None:
+    """Print total deep size of ``ds`` and its top-N largest top-level attributes."""
+    total = _deep_size(ds)
+    print(f'ds total: {total / 1e9:.2f} GB')
+    sizes = [(_deep_size(v), k) for k, v in ds.__dict__.items()]
+    sizes.sort(reverse=True)
+    print(f'top {top_n} attributes (>= {min_mb:.0f} MB):')
+    threshold = min_mb * 1e6
+    for sz, name in sizes[:top_n]:
+        if sz < threshold:
+            break
+        print(f'  {sz / 1e9:6.2f} GB  {name}')
+
+
+# ===========================================================================
 def load_all_mice(
     cfg: Optional[PipelineConfig] = None,
     *,
     plots_dir: Optional[str] = None,
     paper_dir: Optional[str] = None,
+    use_cache: bool = True,
+    cache_path: Optional[str] = None,
+    report_memory: bool = True,
 ) -> SimpleNamespace:
     """Build the loaded dataset state and return it.
 
@@ -147,6 +185,14 @@ def load_all_mice(
     plots_dir, paper_dir
         Optional overrides; default to the host-aware paths used by
         ``caban/main.py``.
+    use_cache
+        If True (default), load ``ds`` from ``cache_path`` when it exists and
+        otherwise write a fresh build to ``cache_path``. If False, always
+        rebuild and never touch the pickle.
+    cache_path
+        Path to the ``ds`` pickle. Defaults to ``<NPY_SAVE_PATH>/ds_cache.pkl``.
+    report_memory
+        If True (default), print a deep-size breakdown of ``ds`` after load.
 
     Returns
     -------
@@ -158,6 +204,51 @@ def load_all_mice(
     """
     if cfg is None:
         cfg = PipelineConfig()
+
+    if cache_path is None:
+        cache_path = os.path.join(NPY_SAVE_PATH, 'ds_cache.pkl')  # noqa: F405
+
+    print(f'cache path : {cache_path}')
+    print(f'  exists   : {os.path.exists(cache_path)}')
+    if os.path.exists(cache_path):
+        print(f'  size     : {os.path.getsize(cache_path) / 1e9:.2f} GB')
+
+    if use_cache and os.path.exists(cache_path):
+        print('loading ds from pickle (skipping fresh build)...')
+        with open(cache_path, 'rb') as f:
+            ds = pickle.load(f)
+        # Refresh cfg in case the user edited it since the cache was written.
+        ds.cfg = cfg
+        # Back-fill NPY_SAVE_PATH for older caches that pre-date this attribute.
+        if not hasattr(ds, 'NPY_SAVE_PATH'):
+            ds.NPY_SAVE_PATH = NPY_SAVE_PATH  # noqa: F405
+        if report_memory:
+            print()
+            report_ds_memory(ds)
+        return ds
+
+    ds = _build_dataset(cfg, plots_dir=plots_dir, paper_dir=paper_dir)
+
+    if use_cache:
+        print(f'writing ds_cache.pkl -> {cache_path}')
+        with open(cache_path, 'wb') as f:
+            pickle.dump(ds, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+    if report_memory:
+        print()
+        report_ds_memory(ds)
+
+    return ds
+
+
+# ===========================================================================
+def _build_dataset(
+    cfg: PipelineConfig,
+    *,
+    plots_dir: Optional[str] = None,
+    paper_dir: Optional[str] = None,
+) -> SimpleNamespace:
+    """Internal: build a fresh ``ds`` namespace from scratch (no cache logic)."""
 
     DEBUG = cfg.DEBUG
     LOCAL_DATA = cfg.LOCAL_DATA
@@ -1125,6 +1216,7 @@ def load_all_mice(
     ds = SimpleNamespace(
         cfg=cfg,
         # paths / dirs
+        NPY_SAVE_PATH=NPY_SAVE_PATH,
         PLOTS_DIR=PLOTS_DIR,
         PAPER_DIR=PAPER_DIR,
         TFC_cond_savepath=TFC_cond_savepath,

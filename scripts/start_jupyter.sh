@@ -10,6 +10,6 @@ CONDA_BASE="$(conda info --base)"
 source "${CONDA_BASE}/etc/profile.d/conda.sh"
 conda activate caban
 
-cd /Users/vsekulic/code/sstca2
+cd /Users/vsekulic/code/caban
 
 exec jupyter lab

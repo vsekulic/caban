@@ -39,7 +39,6 @@ from sklearn.preprocessing import StandardScaler  # noqa: F401
 
 from caban.config import PipelineConfig  # noqa: F401
 
-
 # ---------------------------------------------------------------------------
 # Shared helpers used by paradigm-A/B/C and decoder-paramset sections.
 # Pulled out of the inline main.py bodies so they can be referenced as
@@ -5764,4 +5763,6 @@ def run_binned_activities(ds, cfg):
         pass
 
     # ===== end verbatim body =====
+
+
 

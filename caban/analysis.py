@@ -1103,7 +1103,7 @@ def collapse_runs(arr):
 
 def process_PSTH_hist(PLOTS_DIR, mice_per_group, crossreg_mice, session, mapping_type, stim='shock', frames_lookaround=40, \
     frames_save = 200, shaded='sem', num_shuffles=100, percentile=95.0, auto_close=True, X_hist_use='S', use_YrA=False, \
-    normalize_velocity=False, sharey=False, spike_onset_only=False, normalize_per_mouse=False):
+    normalize_velocity=False, sharey=False, spike_onset_only=False, normalize_per_mouse=False, show_plot=False):
     '''
     process_PSTH_hist(PLOTS_DIR, mice_per_group, TFC_cond_crossreg, TFC_cond, mapping, stim='shock', X_hist_use='S', use_YrA=False, normalize_velocity=False, sharey=True, frames_lookaround=MINISCOPE_FPS*2)
     '''
@@ -1364,7 +1364,8 @@ def process_PSTH_hist(PLOTS_DIR, mice_per_group, crossreg_mice, session, mapping
             add_sig_bar(ax, x1, x2, y_max + i*0.1*y_max, pval)
 
     plt.tight_layout()
-    plt.show()
+    if show_plot:
+        plt.show()
     if auto_close:
         plt.close()
 
@@ -3997,6 +3998,7 @@ def plot_lt_spatial_responses_prev(
     want_YrA=False,
     normalize_global=False,      # NEW
     normalize_per_mouse=False,   # NEW
+    show_plot=False,
 ):
     """
     Plot spatial responses for cross-registered cells between LT1 and LT2, sorted according to LT1.
@@ -4534,7 +4536,8 @@ def plot_lt_spatial_responses_prev(
             f"tuning_LT1_LT2_{mouse}_{group}_{session_str}_crossreg_{mapping}_{S_file_str}_norm-{norm_tag}.png",
         )
         fig.savefig(savefile, dpi=300)
-        plt.show()
+        if show_plot:
+            plt.show()
         if auto_close:
             plt.close(fig)
 
@@ -4560,7 +4563,8 @@ def plot_lt_spatial_responses_prev(
             f"pv_corr_{mouse}_{group}_{session_str}_crossreg_{mapping}_{S_file_str}.png",
         )
         fig2.savefig(savefile2, dpi=300)
-        plt.show()
+        if show_plot:
+            plt.show()
         if auto_close:
             plt.close(fig2)
 
@@ -4595,7 +4599,8 @@ def plot_lt_spatial_responses_prev(
                         f"turn_sanity_LT1_{mouse}_{group}_{session_str}_crossreg_{mapping}_{S_file_str}.png",
                     )
                     figS.savefig(sfile, dpi=300)
-                    plt.show()
+                    if show_plot:
+                        plt.show()
                     if auto_close:
                         plt.close(figS)
                 except Exception as e:
@@ -4628,7 +4633,8 @@ def plot_lt_spatial_responses_prev(
                         f"turn_sanity_LT2_{mouse}_{group}_{session_str}_crossreg_{mapping}_{S_file_str}.png",
                     )
                     figS.savefig(sfile, dpi=300)
-                    plt.show()
+                    if show_plot:
+                        plt.show()
                     if auto_close:
                         plt.close(figS)
                 except Exception as e:
@@ -4693,7 +4699,8 @@ def plot_lt_spatial_responses_prev(
                             f"pf_means_sanity_{mouse}_{group}_{session_str}_crossreg_{mapping}_cell{cell_id_plot}_{S_file_str}.png",
                         )
                         figC.savefig(sfile, dpi=300)
-                        plt.show()
+                        if show_plot:
+                            plt.show()
                         if auto_close:
                             plt.close(figC)
                     except Exception as e:
@@ -4845,6 +4852,7 @@ def plot_lt_within_session_tuning(
     arm_cutoff_perc=0.8,
     mapping=None,
     use_sig_responses=False,
+    show_plot=False,
 ):
     """
     For each mouse, plot a **single-session** place-field tuning-curve heatmap
@@ -5108,7 +5116,8 @@ def plot_lt_within_session_tuning(
         file_out = os.path.join(save_path, f"within_session_tuning_{mouse}_{group}_{pf_str}_{sig_str}.png")
         fig.savefig(file_out, dpi=300, bbox_inches="tight")
         print(f'[INFO] Saved within-session tuning plot for {mouse} to {file_out}')
-        plt.show()
+        if show_plot:
+            plt.show()
         if auto_close:
             plt.close(fig)
 
@@ -5153,6 +5162,7 @@ def plot_lt_within_session_tuning_normalized(
     want_C=False,
     want_YrA=False,
     arm_cutoff_perc=0.8,
+    show_plot=False,
 ):
     """
     Per-mouse within-session place-field heatmap with NORMALISED position
@@ -5388,7 +5398,8 @@ def plot_lt_within_session_tuning_normalized(
 
         fig.savefig(os.path.join(save_path, f"within_session_tuning_norm_{mouse}_{group}_{mapping_str}_{pf_str}_{sig_str}.png"),
                     dpi=300, bbox_inches="tight")
-        plt.show()
+        if show_plot:
+            plt.show()
         if auto_close:
             plt.close(fig)
 
@@ -5410,6 +5421,7 @@ def plot_lt_within_session_tuning_group_averaged(
     arm_cutoff_perc=0.8,
     vmin=0.0,
     vmax=1.0,
+    show_plot=False,
 ):
     """
     Group-averaged within-session place-field heatmap on a normalised [0, 1]
@@ -5680,7 +5692,8 @@ def plot_lt_within_session_tuning_group_averaged(
         fig.savefig(os.path.join(save_path,
                     f"within_session_tuning_group_avg_{group}_{mapping_str}_{pf_str}_{sig_str}.png"),
                     dpi=300, bbox_inches="tight")
-        plt.show()
+        if show_plot:
+            plt.show()
         if auto_close:
             plt.close(fig)
 
@@ -5696,6 +5709,7 @@ def plot_lt_spatial_responses(
     want_sanity_sanity=True,
     how_many_sanity_sanity_cells=3,
     auto_close=True,
+    show_plot=False,
     want_S=False,
     want_C=False,
     want_YrA=False,
@@ -6444,7 +6458,8 @@ def plot_lt_spatial_responses(
             f"tuning_LT1_LT2_{mouse}_{group}_{session_str}_crossreg_{mapping}_{S_file_str}_norm-{norm_tag}_sortby-{sort_by}.png",
         )
         fig.savefig(savefile, dpi=300)
-        plt.show()
+        if show_plot:
+            plt.show()
         if auto_close:
             plt.close(fig)
 
@@ -6494,7 +6509,8 @@ def plot_lt_spatial_responses(
             f"pv_corr_{mouse}_{group}_{session_str}_crossreg_{mapping}_{S_file_str}_PV-{'norm' if pv_use_normalized else 'raw'}.png",
         )
         fig2.savefig(savefile2, dpi=300)
-        plt.show()
+        if show_plot:
+            plt.show()
         if auto_close:
             plt.close(fig2)
 
@@ -6526,7 +6542,8 @@ def plot_lt_spatial_responses(
                             f"turn_sanity_{which}_{mouse}_{group}_{session_str}_crossreg_{mapping}_{S_file_str}.png",
                         )
                         figS.savefig(sfile, dpi=300)
-                        plt.show()
+                        if show_plot:
+                            plt.show()
                         if auto_close:
                             plt.close(figS)
                     except Exception as e:
@@ -6581,7 +6598,8 @@ def plot_lt_spatial_responses(
                             f"pf_means_sanity_{mouse}_{group}_{session_str}_crossreg_{mapping}_cell{cell_id_plot}_{S_file_str}.png",
                         )
                         figC.savefig(sfile, dpi=300)
-                        plt.show()
+                        if show_plot:
+                            plt.show()
                         if auto_close:
                             plt.close(figC)
                     except Exception as e:
@@ -6600,6 +6618,7 @@ def plot_tiling_metrics_anova(
     PLOTS_DIR=".",
     session_str="TFC_cond_LT1",
     pf_str="pfALL",
+    show_plot=False,
     metric_keys=None,
     auto_close=True,
     paper_plots=False,
@@ -6813,7 +6832,8 @@ def plot_tiling_metrics_anova(
         savefile = os.path.join(save_dir, f"tiling_{mk}_{session_str}.png")
         fig.savefig(savefile, dpi=300)
         print(f"[tiling] saved: {savefile}")
-        plt.show()
+        if show_plot:
+            plt.show()
         if auto_close:
             plt.close(fig)
 
@@ -6893,7 +6913,8 @@ def plot_tiling_metrics_anova(
             sfile_pdf = os.path.join(save_dir, f"paper_tiling_{mk}_{session_str}.pdf")
             fig_p.savefig(sfile_pdf, bbox_inches="tight")
             print(f"[tiling] saved: {sfile_pdf}")
-            plt.show()
+            if show_plot:
+                plt.show()
             if auto_close:
                 plt.close(fig_p)
 
@@ -6911,6 +6932,7 @@ def plot_pv_corr_anova_prev(
     mouse_groups,
     title="PV correlation by group",
     ylabel="Average diagonal PV correlation",
+    show_plot=False,
 ):
     """
     Parameters
@@ -7037,7 +7059,8 @@ def plot_pv_corr_anova_prev(
     ax.spines["right"].set_visible(False)
 
     plt.tight_layout()
-    plt.show()
+    if show_plot:
+        plt.show()
 
     # -------------------------------------------------
     # 5. Print stats (as in your panel)
@@ -7584,6 +7607,7 @@ def plot_pv_corr_anova_zones(
     metric_keys=None,
     zone_keys=None,
     paper_plots=False,
+    show_plot=False,
 ):
     """
     Statistical comparison of zone-split PV correlation metrics across groups.
@@ -7790,7 +7814,8 @@ def plot_pv_corr_anova_zones(
 
             if save_path is not None:
                 fig.savefig(os.path.join(save_path, f"pv_zone_anova_{zk}_{mk}_{type}_{mapping}.png"), dpi=300)
-            plt.show()
+            if show_plot:
+                plt.show()
             if auto_close:
                 plt.close(fig)
 
@@ -7991,6 +8016,7 @@ def plot_pv_corr_zone_heatmaps(
     mapping="LT1+LT2",
     pf_str="pfALL",
     auto_close=True,
+    show_plot=False,
 ):
     """
     For each mouse, plot the full PV correlation matrix with zone boundaries
@@ -8064,7 +8090,8 @@ def plot_pv_corr_zone_heatmaps(
 
         if save_path is not None:
             fig.savefig(os.path.join(save_path, f"pv_zone_heatmaps_{mouse}_{group}_{type}_{mapping}.png"), dpi=300, bbox_inches="tight")
-        plt.show()
+        if show_plot:
+            plt.show()
         if auto_close:
             plt.close(fig)
 
@@ -8081,6 +8108,7 @@ def plot_pv_corr_group_averaged(
     mapping="LT1+LT2",
     pf_str="pfALL",
     auto_close=True,
+    show_plot=False,
     vmin=-0.3,
     vmax=1.0,
     show_sem=True,
@@ -8212,7 +8240,8 @@ def plot_pv_corr_group_averaged(
     if save_path is not None:
         fig.savefig(os.path.join(save_path, f"pv_group_averaged_{type}_{mapping}.png"),
                     dpi=300, bbox_inches="tight")
-    plt.show()
+    if show_plot:
+        plt.show()
     if auto_close:
         plt.close(fig)
 
@@ -8223,6 +8252,7 @@ def plot_pv_corr_zone_heatmaps_group_averaged(
     PLOTS_DIR=None,
     type="global",
     mapping="LT1+LT2",
+    show_plot=False,
     pf_str="pfALL",
     auto_close=True,
     zone_grid_size=40,
@@ -8377,7 +8407,8 @@ def plot_pv_corr_zone_heatmaps_group_averaged(
             fig.savefig(os.path.join(save_path,
                         f"pv_zone_heatmaps_group_avg_{group}_{type}_{mapping}.png"),
                         dpi=300, bbox_inches="tight")
-        plt.show()
+        if show_plot:
+            plt.show()
         if auto_close:
             plt.close(fig)
 
@@ -11186,6 +11217,7 @@ def plot_projection_sanity(
     d_px,
     save_path=None,
     subsample=1,
+    show_plot=False,
     auto_close=True
 ):
     """
@@ -11317,7 +11349,8 @@ def plot_projection_sanity(
         print(f"     {fig2_pdf}")
         print(f"     {fig2_png}")
 
-    plt.show()
+    if show_plot:
+        plt.show()
     if auto_close:
         plt.close(fig=fig1)
         plt.close(fig=fig2)
@@ -11731,7 +11764,7 @@ def run_occupancy_group_stats(df: pd.DataFrame, save_dir: str, *,
                         order=sess_order, hue_order=group_nice_order,
                         palette=pal_box, ax=ax, showfliers=False, width=0.65,
                         linewidth=0.6, fliersize=0,
-                        medianprops=dict(color='black', linewidth=0.8))
+                        medianprops=dict(color='black', linewidth=0.8), legend=False)
             sns.stripplot(data=sub, x="session", y=metric_col, hue="group_nice",
                           order=sess_order, hue_order=group_nice_order,
                           palette=pal_dot, ax=ax, dodge=True, size=2.5,
@@ -11783,7 +11816,7 @@ def run_occupancy_group_stats(df: pd.DataFrame, save_dir: str, *,
                 sns.boxplot(data=sub, x="group_nice", y=metric_col,
                             order=groups_present, palette=pal_box, ax=ax,
                             showfliers=False, width=0.5, linewidth=0.6,
-                            medianprops=dict(color='black', linewidth=0.8))
+                            medianprops=dict(color='black', linewidth=0.8), hue="group_nice", legend=False)
                 sns.stripplot(data=sub, x="group_nice", y=metric_col,
                               order=groups_present, palette=pal_dot, ax=ax,
                               size=3, alpha=0.85, edgecolor="k",
