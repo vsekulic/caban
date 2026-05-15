@@ -27,10 +27,11 @@ from caban.sessions import *   # noqa: F401,F403
 from caban.analysis import *   # noqa: F401,F403
 from caban.decoder import *    # noqa: F401,F403
 from caban.decoder import _PVT_MODE_LABEL_TO_KEY  # noqa: F401
+from caban.engram import ENGRAM_REFERENCE
 from caban.population import EXCLUDE_MICE_CROSSREG as _PCA_EXCLUDE
 from caban.population import run_population_pca_pipeline, run_pca_state_metrics_from_results
 from caban.isomap import run_isomap_pipeline
-from caban.epoch_analysis import run_epoch_analysis_all_mice
+from caban.epoch_analysis import run_epoch_analysis_all_mice, run_cross_session_epoch_analysis_all_mice
 from caban.engram_sanity import plot_engram_sanity
 
 import statsmodels.api as sm  # noqa: F401
@@ -531,46 +532,41 @@ def run_pf_and_loc(ds, cfg):
     # ===== verbatim body from caban/main.py =====
     if plot_pf_and_loc: # and not DEVEL_SWITCH:
         if BEHAVIOUR_TYPE == 'movement':
-            pcells_mice = dict()
             if plot_pf_raw_maps:
                 plot_location_map(PLOTS_DIR, mice_per_group, TFC_cond, 'TFC_cond')
-            plot_fluorescence_map(PLOTS_DIR, TFC_cond, mouse_groups, 'TFC_cond', bin_width=34, random_width=4, want_3D=True, pcells_mice=pcells_mice, \
+            plot_fluorescence_map(PLOTS_DIR, TFC_cond, mouse_groups, 'TFC_cond', bin_width=34, random_width=4, want_3D=True, pcells_mice=None, \
                 max_fields=45, only_fm_pcells=True, print_pcell_maps=True, plot_pf_maps=plot_pf_raw_maps) 
             if plot_pf_raw_maps:
                 plot_pf_analyses(PLOTS_DIR, TFC_cond, mouse_groups, 'TFC_cond')
                 plot_pf_analyses(PLOTS_DIR, TFC_cond, mouse_groups, 'TFC_cond', crossreg=TFC_B_B_1wk_crossreg, mapping=mapping_TFC_cond_Test_B_Test_B_1wk)
 
-            pcells_mice_B = dict()
             if plot_pf_raw_maps:
                 plot_location_map(PLOTS_DIR, mice_per_group, Test_B, 'Test_B')
-            plot_fluorescence_map(PLOTS_DIR, Test_B, mouse_groups, 'Test_B', bin_width=34, random_width=4, want_3D=True, pcells_mice=pcells_mice_B, \
+            plot_fluorescence_map(PLOTS_DIR, Test_B, mouse_groups, 'Test_B', bin_width=34, random_width=4, want_3D=True, pcells_mice=None, \
                 max_fields=45, only_fm_pcells=True, print_pcell_maps=True, plot_pf_maps=plot_pf_raw_maps)
             if plot_pf_raw_maps:
                 plot_pf_analyses(PLOTS_DIR, Test_B, mouse_groups, 'Test_B')
                 plot_pf_analyses(PLOTS_DIR, Test_B, mouse_groups, 'Test_B', crossreg=TFC_B_B_1wk_crossreg, mapping=mapping_TFC_cond_Test_B_Test_B_1wk)
 
-            pcells_mice_B_1wk = dict()
             if plot_pf_raw_maps:
                 plot_location_map(PLOTS_DIR, mice_per_group, Test_B_1wk, 'Test_B_1wk')
-            plot_fluorescence_map(PLOTS_DIR, Test_B_1wk, mouse_groups, 'Test_B_1wk', bin_width=34, random_width=4, want_3D=True, pcells_mice=pcells_mice_B_1wk, \
+            plot_fluorescence_map(PLOTS_DIR, Test_B_1wk, mouse_groups, 'Test_B_1wk', bin_width=34, random_width=4, want_3D=True, pcells_mice=None, \
                 max_fields=45, only_fm_pcells=True, print_pcell_maps=True, plot_pf_maps=plot_pf_raw_maps)
             if plot_pf_raw_maps:
                 plot_pf_analyses(PLOTS_DIR, Test_B_1wk, mouse_groups, 'Test_B_1wk')
                 plot_pf_analyses(PLOTS_DIR, Test_B_1wk, mouse_groups, 'Test_B_1wk', crossreg=TFC_B_B_1wk_crossreg, mapping=mapping_TFC_cond_Test_B_Test_B_1wk)
 
-            pcells_mice_A = dict()
             if plot_pf_raw_maps:
                 plot_location_map(PLOTS_DIR, mice_per_group, Test_A, 'Test_A')
-            plot_fluorescence_map(PLOTS_DIR, Test_A, mouse_groups, 'Test_A', bin_width=34, random_width=4, want_3D=True, pcells_mice=pcells_mice_A, \
+            plot_fluorescence_map(PLOTS_DIR, Test_A, mouse_groups, 'Test_A', bin_width=34, random_width=4, want_3D=True, pcells_mice=None, \
                 max_fields=45, only_fm_pcells=True, print_pcell_maps=True, plot_pf_maps=plot_pf_raw_maps)
             if plot_pf_raw_maps:
                 plot_pf_analyses(PLOTS_DIR, Test_A, mouse_groups, 'Test_A')
                 plot_pf_analyses(PLOTS_DIR, Test_A, mouse_groups, 'Test_A', crossreg=TFC_A_A_1wk_crossreg, mapping=mapping_TFC_cond_Test_A_Test_A_1wk)
 
-            pcells_mice_A_1wk = dict()
             if plot_pf_raw_maps:
                 plot_location_map(PLOTS_DIR, mice_per_group, Test_A_1wk, 'Test_A_1wk')
-            plot_fluorescence_map(PLOTS_DIR, Test_A_1wk, mouse_groups, 'Test_A_1wk', bin_width=34, random_width=4, want_3D=True, pcells_mice=pcells_mice_A_1wk, \
+            plot_fluorescence_map(PLOTS_DIR, Test_A_1wk, mouse_groups, 'Test_A_1wk', bin_width=34, random_width=4, want_3D=True, pcells_mice=None, \
                 max_fields=45, only_fm_pcells=True, print_pcell_maps=True, plot_pf_maps=plot_pf_raw_maps)
             if plot_pf_raw_maps:
                 plot_pf_analyses(PLOTS_DIR, Test_A_1wk, mouse_groups, 'Test_A_1wk')
@@ -713,81 +709,88 @@ def run_LT_pfs(ds, cfg):
     if plot_LT_pfs:
     #if plot_LT_pfs and not DEVEL_SWITCH:
 
-        # ---- Place-field count filter ----
-        # Set to None for all place cells, or an integer (1, 2, ...) to include
-        # only cells with <= that many place fields.
-        MAX_PF_COUNT = None        # None -> pfALL;  1 -> pf1 (single-field only);  2 -> pf1+pf2;  etc.
-        _pf_str = "pfALL" if (MAX_PF_COUNT is None) else f"pf{int(MAX_PF_COUNT)}"
-        PAPER_PLOTS = True        # True -> generate additional compact publication-quality figures
+        interactive_before = plt.isinteractive()
+        plt.ioff()
+        try:
+            # ---- Place-field count filter ----
+            # Set to None for all place cells, or an integer (1, 2, ...) to include
+            # only cells with <= that many place fields.
+            MAX_PF_COUNT = None        # None -> pfALL;  1 -> pf1 (single-field only);  2 -> pf1+pf2;  etc.
+            _pf_str = "pfALL" if (MAX_PF_COUNT is None) else f"pf{int(MAX_PF_COUNT)}"
+            PAPER_PLOTS = True        # True -> generate additional compact publication-quality figures
 
-        # plot mapping of mouse positions to centerline of LT
-        plot_LT_linearized(PLOTS_DIR, TFC_cond_LT1, mouse_groups, 'TFC_cond_LT1')
-        plot_LT_linearized(PLOTS_DIR, TFC_cond_LT2, mouse_groups, 'TFC_cond_LT2')
+            # plot mapping of mouse positions to centerline of LT
+            plot_LT_linearized(PLOTS_DIR, TFC_cond_LT1, mouse_groups, 'TFC_cond_LT1')
+            plot_LT_linearized(PLOTS_DIR, TFC_cond_LT2, mouse_groups, 'TFC_cond_LT2')
 
-        plot_location_map(PLOTS_DIR, mice_per_group, TFC_cond_LT1, 'TFC_cond_LT1')
-        plot_location_map(PLOTS_DIR, mice_per_group, TFC_cond_LT2, 'TFC_cond_LT2')
+            plot_location_map(PLOTS_DIR, mice_per_group, TFC_cond_LT1, 'TFC_cond_LT1')
+            plot_location_map(PLOTS_DIR, mice_per_group, TFC_cond_LT2, 'TFC_cond_LT2')
 
-        sig_responses_TFC_cond_LT1 = get_fluorescence_map(TFC_cond_LT1, "TFC_cond_LT1", NPY_SAVE_PATH, PLOTS_DIR=PLOTS_DIR, mouse_groups=mouse_groups, \
-            bin_width=4.5, random_width=4, want_3D=True, max_fields=45, only_fm_pcells=True, print_pcell_maps=True, merge_distance=4)
-        sig_responses_TFC_cond_LT2 = get_fluorescence_map(TFC_cond_LT2, "TFC_cond_LT2", NPY_SAVE_PATH, PLOTS_DIR=PLOTS_DIR, mouse_groups=mouse_groups, \
-            bin_width=4.5, random_width=4, want_3D=True, max_fields=45, only_fm_pcells=True, print_pcell_maps=True, merge_distance=4)
+            sig_responses_TFC_cond_LT1 = get_fluorescence_map(TFC_cond_LT1, "TFC_cond_LT1", NPY_SAVE_PATH, PLOTS_DIR=PLOTS_DIR, mouse_groups=mouse_groups, \
+                bin_width=4.5, random_width=4, want_3D=True, max_fields=45, only_fm_pcells=True, print_pcell_maps=True, merge_distance=4)
+            sig_responses_TFC_cond_LT2 = get_fluorescence_map(TFC_cond_LT2, "TFC_cond_LT2", NPY_SAVE_PATH, PLOTS_DIR=PLOTS_DIR, mouse_groups=mouse_groups, \
+                bin_width=4.5, random_width=4, want_3D=True, max_fields=45, only_fm_pcells=True, print_pcell_maps=True, merge_distance=4)
 
-        plot_pf_analyses(PLOTS_DIR, TFC_cond_LT1, mouse_groups, 'TFC_cond_LT1')
-        plot_pf_analyses(PLOTS_DIR, TFC_cond_LT2, mouse_groups, 'TFC_cond_LT2')    
+            plot_pf_analyses(PLOTS_DIR, TFC_cond_LT1, mouse_groups, 'TFC_cond_LT1')
+            plot_pf_analyses(PLOTS_DIR, TFC_cond_LT2, mouse_groups, 'TFC_cond_LT2')    
 
 
-        # Loop through mappings and produce tilings/analyses for all
-        for mapping in ['full', 'LT1+LT2', 'TFC_cond+LT1+LT2']:
-            mapping_str = f"mapping_{mapping}"
-            # Main PF count variants
-            tiling_LT1 = plot_lt_within_session_tuning(
-                PLOTS_DIR, TFC_cond_LT1, mouse_groups,
-                f'TFC_cond_LT1_{mapping_str}',
-                max_pf_count=MAX_PF_COUNT, want_S=True, mapping=mapping)
-            tiling_LT2 = plot_lt_within_session_tuning(
-                PLOTS_DIR, TFC_cond_LT2, mouse_groups,
-                f'TFC_cond_LT2_{mapping_str}',
-                max_pf_count=MAX_PF_COUNT, want_S=True, mapping=mapping)
-            tiling_LT1_pf1 = plot_lt_within_session_tuning(
-                PLOTS_DIR, TFC_cond_LT1, mouse_groups,
-                f'TFC_cond_LT1_{mapping_str}',
-                max_pf_count=1, want_S=True, mapping=mapping)
-            tiling_LT2_pf1 = plot_lt_within_session_tuning(
-                PLOTS_DIR, TFC_cond_LT2, mouse_groups,
-                f'TFC_cond_LT2_{mapping_str}',
-                max_pf_count=1, want_S=True, mapping=mapping)
-            tiling_LT1_pf2 = plot_lt_within_session_tuning(
-                PLOTS_DIR, TFC_cond_LT1, mouse_groups,
-                f'TFC_cond_LT1_{mapping_str}',
-                max_pf_count=2, want_S=True, mapping=mapping)
-            tiling_LT2_pf2 = plot_lt_within_session_tuning(
-                PLOTS_DIR, TFC_cond_LT2, mouse_groups,
-                f'TFC_cond_LT2_{mapping_str}',
-                max_pf_count=2, want_S=True, mapping=mapping)
+            # Loop through mappings and produce tilings/analyses for all
+            for mapping in ['full', 'LT1+LT2', 'TFC_cond+LT1+LT2']:
+                mapping_str = f"mapping_{mapping}"
+                # Main PF count variants
+                tiling_LT1 = plot_lt_within_session_tuning(
+                    PLOTS_DIR, TFC_cond_LT1, mouse_groups,
+                    f'TFC_cond_LT1_{mapping_str}',
+                    max_pf_count=MAX_PF_COUNT, want_S=True, mapping=mapping)
+                tiling_LT2 = plot_lt_within_session_tuning(
+                    PLOTS_DIR, TFC_cond_LT2, mouse_groups,
+                    f'TFC_cond_LT2_{mapping_str}',
+                    max_pf_count=MAX_PF_COUNT, want_S=True, mapping=mapping)
+                tiling_LT1_pf1 = plot_lt_within_session_tuning(
+                    PLOTS_DIR, TFC_cond_LT1, mouse_groups,
+                    f'TFC_cond_LT1_{mapping_str}',
+                    max_pf_count=1, want_S=True, mapping=mapping)
+                tiling_LT2_pf1 = plot_lt_within_session_tuning(
+                    PLOTS_DIR, TFC_cond_LT2, mouse_groups,
+                    f'TFC_cond_LT2_{mapping_str}',
+                    max_pf_count=1, want_S=True, mapping=mapping)
+                tiling_LT1_pf2 = plot_lt_within_session_tuning(
+                    PLOTS_DIR, TFC_cond_LT1, mouse_groups,
+                    f'TFC_cond_LT1_{mapping_str}',
+                    max_pf_count=2, want_S=True, mapping=mapping)
+                tiling_LT2_pf2 = plot_lt_within_session_tuning(
+                    PLOTS_DIR, TFC_cond_LT2, mouse_groups,
+                    f'TFC_cond_LT2_{mapping_str}',
+                    max_pf_count=2, want_S=True, mapping=mapping)
 
-            # Tiling metrics analyses
-            plot_tiling_metrics_anova(tiling_LT1, mouse_groups, PLOTS_DIR=PLOTS_DIR,
-                                      session_str=f'TFC_cond_LT1_{mapping_str}', pf_str=_pf_str, paper_plots=PAPER_PLOTS, mapping=mapping)
-            plot_tiling_metrics_anova(tiling_LT2, mouse_groups, PLOTS_DIR=PLOTS_DIR,
-                                      session_str=f'TFC_cond_LT2_{mapping_str}', pf_str=_pf_str, paper_plots=PAPER_PLOTS, mapping=mapping)
-            plot_tiling_metrics_anova(tiling_LT1_pf1, mouse_groups, PLOTS_DIR=PLOTS_DIR,
-                                      session_str=f'TFC_cond_LT1_{mapping_str}', pf_str='pf1', paper_plots=PAPER_PLOTS, mapping=mapping)
-            plot_tiling_metrics_anova(tiling_LT2_pf1, mouse_groups, PLOTS_DIR=PLOTS_DIR,
-                                      session_str=f'TFC_cond_LT2_{mapping_str}', pf_str='pf1', paper_plots=PAPER_PLOTS, mapping=mapping)
-            plot_tiling_metrics_anova(tiling_LT1_pf2, mouse_groups, PLOTS_DIR=PLOTS_DIR,
-                                      session_str=f'TFC_cond_LT1_{mapping_str}', pf_str='pf2', paper_plots=PAPER_PLOTS, mapping=mapping)
-            plot_tiling_metrics_anova(tiling_LT2_pf2, mouse_groups, PLOTS_DIR=PLOTS_DIR,
-                                      session_str=f'TFC_cond_LT2_{mapping_str}', pf_str='pf2', paper_plots=PAPER_PLOTS, mapping=mapping)
+                # Tiling metrics analyses
+                plot_tiling_metrics_anova(tiling_LT1, mouse_groups, PLOTS_DIR=PLOTS_DIR,
+                                          session_str=f'TFC_cond_LT1_{mapping_str}', pf_str=_pf_str, paper_plots=PAPER_PLOTS, mapping=mapping)
+                plot_tiling_metrics_anova(tiling_LT2, mouse_groups, PLOTS_DIR=PLOTS_DIR,
+                                          session_str=f'TFC_cond_LT2_{mapping_str}', pf_str=_pf_str, paper_plots=PAPER_PLOTS, mapping=mapping)
+                plot_tiling_metrics_anova(tiling_LT1_pf1, mouse_groups, PLOTS_DIR=PLOTS_DIR,
+                                          session_str=f'TFC_cond_LT1_{mapping_str}', pf_str='pf1', paper_plots=PAPER_PLOTS, mapping=mapping)
+                plot_tiling_metrics_anova(tiling_LT2_pf1, mouse_groups, PLOTS_DIR=PLOTS_DIR,
+                                          session_str=f'TFC_cond_LT2_{mapping_str}', pf_str='pf1', paper_plots=PAPER_PLOTS, mapping=mapping)
+                plot_tiling_metrics_anova(tiling_LT1_pf2, mouse_groups, PLOTS_DIR=PLOTS_DIR,
+                                          session_str=f'TFC_cond_LT1_{mapping_str}', pf_str='pf2', paper_plots=PAPER_PLOTS, mapping=mapping)
+                plot_tiling_metrics_anova(tiling_LT2_pf2, mouse_groups, PLOTS_DIR=PLOTS_DIR,
+                                          session_str=f'TFC_cond_LT2_{mapping_str}', pf_str='pf2', paper_plots=PAPER_PLOTS, mapping=mapping)
 
-        # Normalised [0,1] versions (per-mouse) - full (all sig cells) and cross-reg mappings
-        for _mapping in [None, 'LT1+LT2', 'TFC_cond+LT1+LT2']:
-            plot_lt_within_session_tuning_normalized(PLOTS_DIR, TFC_cond_LT1, mouse_groups, 'TFC_cond_LT1', mapping=_mapping, max_pf_count=MAX_PF_COUNT, want_S=True)
-            plot_lt_within_session_tuning_normalized(PLOTS_DIR, TFC_cond_LT2, mouse_groups, 'TFC_cond_LT2', mapping=_mapping, max_pf_count=MAX_PF_COUNT, want_S=True)
+            # Normalised [0,1] versions (per-mouse) - full (all sig cells) and cross-reg mappings
+            for _mapping in [None, 'LT1+LT2', 'TFC_cond+LT1+LT2']:
+                plot_lt_within_session_tuning_normalized(PLOTS_DIR, TFC_cond_LT1, mouse_groups, 'TFC_cond_LT1', mapping=_mapping, max_pf_count=MAX_PF_COUNT, want_S=True)
+                plot_lt_within_session_tuning_normalized(PLOTS_DIR, TFC_cond_LT2, mouse_groups, 'TFC_cond_LT2', mapping=_mapping, max_pf_count=MAX_PF_COUNT, want_S=True)
 
-        # Group-averaged versions (normalised, one heatmap per group) - full and cross-reg mappings
-        for _mapping in [None, 'LT1+LT2', 'TFC_cond+LT1+LT2']:
-            plot_lt_within_session_tuning_group_averaged(PLOTS_DIR, TFC_cond_LT1, mouse_groups, 'TFC_cond_LT1', mapping=_mapping, max_pf_count=MAX_PF_COUNT, want_S=True)
-            plot_lt_within_session_tuning_group_averaged(PLOTS_DIR, TFC_cond_LT2, mouse_groups, 'TFC_cond_LT2', mapping=_mapping, max_pf_count=MAX_PF_COUNT, want_S=True)
+            # Group-averaged versions (normalised, one heatmap per group) - full and cross-reg mappings
+            for _mapping in [None, 'LT1+LT2', 'TFC_cond+LT1+LT2']:
+                plot_lt_within_session_tuning_group_averaged(PLOTS_DIR, TFC_cond_LT1, mouse_groups, 'TFC_cond_LT1', mapping=_mapping, max_pf_count=MAX_PF_COUNT, want_S=True)
+                plot_lt_within_session_tuning_group_averaged(PLOTS_DIR, TFC_cond_LT2, mouse_groups, 'TFC_cond_LT2', mapping=_mapping, max_pf_count=MAX_PF_COUNT, want_S=True)
+        finally:
+            plt.close('all')
+            if interactive_before:
+                plt.ion()
 
         #pv_corr_LT1_LT2 = plot_lt_spatial_responses(PLOTS_DIR, TFC_cond_LT1, TFC_cond_LT2, mouse_groups, 'TFC_cond_LT', mapping='LT1+LT2', want_C=True, \
         #    normalize_pairwise_per_cell=True, pairwise_cell_mode='pctl', pairwise_cell_pctl=95.0)
@@ -1008,6 +1011,9 @@ def run_LT_decoding(ds, cfg):
     decoder_shuffle_type = cfg.decoder_shuffle_type
     enable_lt_shuffle_control = cfg.enable_lt_shuffle_control
     plot_LT_decoding = cfg.plot_LT_decoding
+
+    interactive_before = plt.isinteractive()
+    plt.ioff()
 
     # ===== verbatim body from caban/main.py =====
     if plot_LT_decoding:
@@ -1804,6 +1810,9 @@ def run_LT_decoding(ds, cfg):
     zone_crossreg_popcurve_n_repeats = 50  # Phase 5 repeats per N
 
     # ===== end verbatim body =====
+    plt.close('all')
+    if interactive_before:
+        plt.ion()
     return {"lt_cont_pvt": _lt_cont_pvt, "use_PCT_error": use_PCT_error}
 
 
@@ -2603,7 +2612,7 @@ def run_paradigm_A(ds, cfg, *, raw_params=None, pf_params=None):
             return f"{_n}{cfg.population_curve_suffix}"
         return _n
     _paradigm_ABC_mapping = _make_paradigm_ABC_mapping(ds)
-    _start_paradigm_log_impl = _start_paradigm_log
+    _start_paradigm_log_impl = globals()['_start_paradigm_log']
     def _start_paradigm_log(plots_dir, paradigm_label, decoder_tag, paramset, param_set_name):  # noqa: F811
         return _start_paradigm_log_impl(plots_dir, paradigm_label, decoder_tag, paramset, param_set_name, cfg=cfg)
 
@@ -2883,7 +2892,7 @@ def run_paradigm_B(ds, cfg, *, raw_params=None, pf_params=None):
             return f"{_n}{cfg.population_curve_suffix}"
         return _n
     _paradigm_ABC_mapping = _make_paradigm_ABC_mapping(ds)
-    _start_paradigm_log_impl = _start_paradigm_log
+    _start_paradigm_log_impl = globals()['_start_paradigm_log']
     def _start_paradigm_log(plots_dir, paradigm_label, decoder_tag, paramset, param_set_name):  # noqa: F811
         return _start_paradigm_log_impl(plots_dir, paradigm_label, decoder_tag, paramset, param_set_name, cfg=cfg)
 
@@ -3084,7 +3093,7 @@ def run_paradigm_C(ds, cfg, *, raw_params=None, pf_params=None):
             return f"{_n}{cfg.population_curve_suffix}"
         return _n
     _paradigm_ABC_mapping = _make_paradigm_ABC_mapping(ds)
-    _start_paradigm_log_impl = _start_paradigm_log
+    _start_paradigm_log_impl = globals()['_start_paradigm_log']
     def _start_paradigm_log(plots_dir, paradigm_label, decoder_tag, paramset, param_set_name):  # noqa: F811
         return _start_paradigm_log_impl(plots_dir, paradigm_label, decoder_tag, paramset, param_set_name, cfg=cfg)
 
@@ -3284,7 +3293,7 @@ def run_paradigm_D1(ds, cfg, *, raw_params=None, pf_params=None):
         if cfg.enable_population_curve:
             return f"{_n}{cfg.population_curve_suffix}"
         return _n
-    _start_paradigm_log_impl = _start_paradigm_log
+    _start_paradigm_log_impl = globals()['_start_paradigm_log']
     def _start_paradigm_log(plots_dir, paradigm_label, decoder_tag, paramset, param_set_name):  # noqa: F811
         return _start_paradigm_log_impl(plots_dir, paradigm_label, decoder_tag, paramset, param_set_name, cfg=cfg)
 
@@ -3477,7 +3486,7 @@ def run_paradigm_D2(ds, cfg, *, raw_params=None, pf_params=None):
         if cfg.enable_population_curve:
             return f"{_n}{cfg.population_curve_suffix}"
         return _n
-    _start_paradigm_log_impl = _start_paradigm_log
+    _start_paradigm_log_impl = globals()['_start_paradigm_log']
     def _start_paradigm_log(plots_dir, paradigm_label, decoder_tag, paramset, param_set_name):  # noqa: F811
         return _start_paradigm_log_impl(plots_dir, paradigm_label, decoder_tag, paramset, param_set_name, cfg=cfg)
 
@@ -3670,7 +3679,7 @@ def run_paradigm_E1(ds, cfg, *, raw_params=None, pf_params=None):
         if cfg.enable_population_curve:
             return f"{_n}{cfg.population_curve_suffix}"
         return _n
-    _start_paradigm_log_impl = _start_paradigm_log
+    _start_paradigm_log_impl = globals()['_start_paradigm_log']
     def _start_paradigm_log(plots_dir, paradigm_label, decoder_tag, paramset, param_set_name):  # noqa: F811
         return _start_paradigm_log_impl(plots_dir, paradigm_label, decoder_tag, paramset, param_set_name, cfg=cfg)
 
@@ -3861,7 +3870,7 @@ def run_paradigm_E2(ds, cfg, *, raw_params=None, pf_params=None):
         if cfg.enable_population_curve:
             return f"{_n}{cfg.population_curve_suffix}"
         return _n
-    _start_paradigm_log_impl = _start_paradigm_log
+    _start_paradigm_log_impl = globals()['_start_paradigm_log']
     def _start_paradigm_log(plots_dir, paradigm_label, decoder_tag, paramset, param_set_name):  # noqa: F811
         return _start_paradigm_log_impl(plots_dir, paradigm_label, decoder_tag, paramset, param_set_name, cfg=cfg)
 
@@ -4056,7 +4065,7 @@ def run_paradigm_F(ds, cfg, *, raw_params=None, pf_params=None):
         if cfg.enable_population_curve:
             return f"{_n}{cfg.population_curve_suffix}"
         return _n
-    _start_paradigm_log_impl = _start_paradigm_log
+    _start_paradigm_log_impl = globals()['_start_paradigm_log']
     def _start_paradigm_log(plots_dir, paradigm_label, decoder_tag, paramset, param_set_name):  # noqa: F811
         return _start_paradigm_log_impl(plots_dir, paradigm_label, decoder_tag, paramset, param_set_name, cfg=cfg)
 
@@ -4392,7 +4401,7 @@ def run_mixedlm_vs_tfc_cond(ds, cfg, *, mt_A_results_2D=None, mt_B_results_2D=No
 # ---------------------------------------------------------------------------
 # Section: pv_correlation_2d  (caban/main.py L5182-5562)
 # ---------------------------------------------------------------------------
-def run_pv_correlation_2d(ds, cfg):
+def run_pv_correlation_2d(ds, cfg, *, raw_params=None, pf_params=None):
     """Analysis section: pv_correlation_2d. Originally caban/main.py L5182-5562."""
     if not (cfg.plot_TFC_2D_decoding):
         return
@@ -4415,6 +4424,9 @@ def run_pv_correlation_2d(ds, cfg):
         if cfg.enable_population_curve:
             return f"{_n}{cfg.population_curve_suffix}"
         return _n
+
+    raw_n_bins = int(raw_params.n_spatial_bins) if raw_params is not None else 7
+    pf_n_bins = int(pf_params.n_spatial_bins) if pf_params is not None else raw_n_bins
 
     # ===== verbatim body from caban/main.py =====
     if plot_TFC_2D_decoding:
@@ -4449,7 +4461,7 @@ def run_pv_correlation_2d(ds, cfg):
                 mouse_groups,
                 mappings=pv_2D_mappings,
                 PLOTS_DIR=PV_2D_PLOTS_DIR,
-                n_bins=7,
+                n_bins=raw_n_bins,
                 smooth_sigma=1.0,
                 min_occupancy_frames=4,
                 first_n_sec=180.0,
@@ -4464,7 +4476,7 @@ def run_pv_correlation_2d(ds, cfg):
                     metric_name="frac_best_match_same_bin", norm_type=ntype,
                 )
                 plot_pv_delta_scores(
-                    deltas, PV_2D_PLOTS_DIR, n_bins=7,
+                    deltas, PV_2D_PLOTS_DIR, n_bins=raw_n_bins,
                     metric_label="Frac best=same", norm_label=nlabel,
                     auto_close=True,
                 )
@@ -4472,7 +4484,7 @@ def run_pv_correlation_2d(ds, cfg):
             # ---- Mixed model: metric ~ group * target * delay + (1|mouse) ----
             for ntype in ["raw", "z"]:
                 run_pv_mixed_model(
-                    pv_2D_results, mouse_groups, PV_2D_PLOTS_DIR, n_bins=7,
+                    pv_2D_results, mouse_groups, PV_2D_PLOTS_DIR, n_bins=raw_n_bins,
                     metric_name="frac_best_match_same_bin", norm_type=ntype,
                     auto_close=True,
                 )
@@ -4485,7 +4497,7 @@ def run_pv_correlation_2d(ds, cfg):
             si_results = compute_spatial_information(
                 pv_all_sessions, mouse_groups, pv_2D_mappings,
                 PLOTS_DIR=PV_2D_PLOTS_DIR,
-                n_bins=7, smooth_sigma=1.0, min_occupancy_frames=4,
+                n_bins=raw_n_bins, smooth_sigma=1.0, min_occupancy_frames=4,
                 first_n_sec=180.0, auto_close=True,
             )
             msg_end()
@@ -4495,7 +4507,7 @@ def run_pv_correlation_2d(ds, cfg):
             stab_results = compute_place_field_stability(
                 pv_all_sessions, mouse_groups, pv_2D_mappings,
                 PLOTS_DIR=PV_2D_PLOTS_DIR,
-                n_bins=7, smooth_sigma=1.0, min_occupancy_frames=4,
+                n_bins=raw_n_bins, smooth_sigma=1.0, min_occupancy_frames=4,
                 first_n_sec=180.0, auto_close=True,
             )
             msg_end()
@@ -4571,7 +4583,7 @@ def run_pv_correlation_2d(ds, cfg):
                 mouse_groups,
                 mappings=pv_2D_mappings,
                 PLOTS_DIR=PV_2D_PLOTS_DIR,
-                n_bins=7,
+                n_bins=pf_n_bins,
                 smooth_sigma=1.0,
                 min_occupancy_frames=4,
                 first_n_sec=180.0,
@@ -4586,14 +4598,14 @@ def run_pv_correlation_2d(ds, cfg):
                     metric_name="frac_best_match_same_bin", norm_type=ntype,
                 )
                 plot_pv_delta_scores(
-                    deltas_pf, PV_2D_PLOTS_DIR, n_bins=7,
+                    deltas_pf, PV_2D_PLOTS_DIR, n_bins=pf_n_bins,
                     metric_label="Frac best=same (PF)",
                     norm_label=nlabel, auto_close=True,
                 )
             # Mixed model for PF-all
             for ntype in ["raw", "z"]:
                 run_pv_mixed_model(
-                    pv_2D_PF_all, mouse_groups, PV_2D_PLOTS_DIR, n_bins=7,
+                    pv_2D_PF_all, mouse_groups, PV_2D_PLOTS_DIR, n_bins=pf_n_bins,
                     metric_name="frac_best_match_same_bin", norm_type=ntype,
                     auto_close=True, dir_suffix="_PF",
                 )
@@ -4607,7 +4619,7 @@ def run_pv_correlation_2d(ds, cfg):
                 mouse_groups,
                 mappings=pv_2D_mappings,
                 PLOTS_DIR=PV_2D_PLOTS_DIR,
-                n_bins=7,
+                n_bins=pf_n_bins,
                 smooth_sigma=1.0,
                 min_occupancy_frames=4,
                 first_n_sec=180.0,
@@ -4622,14 +4634,14 @@ def run_pv_correlation_2d(ds, cfg):
                     metric_name="frac_best_match_same_bin", norm_type=ntype,
                 )
                 plot_pv_delta_scores(
-                    deltas_pf1, PV_2D_PLOTS_DIR, n_bins=7,
+                    deltas_pf1, PV_2D_PLOTS_DIR, n_bins=pf_n_bins,
                     metric_label="Frac best=same (PF npf1)",
                     norm_label=nlabel, auto_close=True,
                 )
             # Mixed model for PF-1
             for ntype in ["raw", "z"]:
                 run_pv_mixed_model(
-                    pv_2D_PF_1, mouse_groups, PV_2D_PLOTS_DIR, n_bins=7,
+                    pv_2D_PF_1, mouse_groups, PV_2D_PLOTS_DIR, n_bins=pf_n_bins,
                     metric_name="frac_best_match_same_bin", norm_type=ntype,
                     auto_close=True, dir_suffix="_PF_npf1",
                 )
@@ -5004,10 +5016,13 @@ def run_population_pca(ds, cfg):
         return
     # --- ds attributes ---
     ENGRAM_MODES = ds.ENGRAM_MODES
+    NPY_SAVE_PATH = ds.NPY_SAVE_PATH
     PLOTS_DIR = ds.PLOTS_DIR
+    TFC_B_B_1wk_crossreg = ds.TFC_B_B_1wk_crossreg
     TFC_cond = ds.TFC_cond
     Test_B = ds.Test_B
     Test_B_1wk = ds.Test_B_1wk
+    mapping_TFC_cond_Test_B_Test_B_1wk = ds.mapping_TFC_cond_Test_B_Test_B_1wk
     engram_id = ds.engram_id
     engram_norms = ds.engram_norms
     engram_rates = ds.engram_rates
@@ -5294,7 +5309,184 @@ def run_population_vectors(ds, cfg):
 
     # ===== end verbatim body =====
 
+# ---------------------------------------------------------------------------
+# Section: UMAP
+# ---------------------------------------------------------------------------
+def run_umap(ds, cfg):
+    """Analysis section: UMAP population embeddings for TFC_cond, Test_B, Test_B_1wk."""
+    import numpy as np
+    import os
+    import matplotlib.pyplot as plt
+    from umap import UMAP
+    from mpl_toolkits.mplot3d import Axes3D
+    PLOTS_DIR = ds.PLOTS_DIR
+    TFC_B_B_1wk_crossreg = ds.TFC_B_B_1wk_crossreg
+    TFC_cond = ds.TFC_cond
+    Test_B = ds.Test_B
+    Test_B_1wk = ds.Test_B_1wk
+    mapping_TFC_cond_Test_B_Test_B_1wk = ds.mapping_TFC_cond_Test_B_Test_B_1wk
+    mouse_groups = ds.mouse_groups
+    # --- 1. Single-session TFC_cond UMAP ---
+    for m in mouse_groups:
+        sess = TFC_cond[m]
+        S = sess.S
+        fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+        axes = axes.flatten()
+        for i, norm_str in enumerate(['Normalized', 'Non-normalized']):
+            if norm_str == 'Normalized':
+                S_normalized = np.nan_to_num((S - S.mean(axis=1, keepdims=True)) / S.std(axis=1, keepdims=True))
+            else:
+                S_normalized = S
+            umap = UMAP(n_components=2, n_neighbors=150, n_jobs=-1)
+            embedding = umap.fit_transform(S_normalized.T)
+            first_shock_idx = 0
+            last_shock_idx = len(sess.shock_onsets)-1
+            first_tone_idx = 0
+            last_tone_idx = len(sess.tone_onsets)-1
+            for j, (title_str, shock_idx_to_use, tone_idx_to_use) in enumerate(zip(['First', 'Last'], [first_shock_idx, last_shock_idx], [first_tone_idx, last_tone_idx])):
+                ax = axes[i * 2 + j]
+                sc = ax.scatter(embedding[:, 0], embedding[:, 1], c=np.arange(S.shape[1]), cmap='viridis', s=2, alpha=1)
+                ax.scatter(embedding[sess.tone_onsets[tone_idx_to_use]:sess.tone_offsets[tone_idx_to_use], 0], embedding[sess.tone_onsets[tone_idx_to_use]:sess.tone_offsets[tone_idx_to_use], 1], color='blue', label='Tone Period', s=10, alpha=1, marker='^')
+                ax.scatter(embedding[sess.shock_onsets[shock_idx_to_use]:sess.shock_offsets[shock_idx_to_use], 0], embedding[sess.shock_onsets[shock_idx_to_use]:sess.shock_offsets[shock_idx_to_use], 1], color='red', label='Shock Period', s=8, alpha=1, marker='x')
+                ax.set_title(f'UMAP Embedding {title_str} {norm_str}')
+        handles, labels = ax.get_legend_handles_labels()
+        fig.legend(handles, labels, loc='center left', bbox_to_anchor=(0, 0.5), fontsize='small')
+        plt.colorbar(sc, ax=axes, label='Frame index', shrink=0.7)
+        plt.suptitle(f'{m} {mouse_groups[m]} UMAP embedding (n_neighbors=150)')
+        plt.show()
+        save_path = os.path.join(PLOTS_DIR, 'UMAP', f'{m}')
+        os.makedirs(save_path, exist_ok=True)
+        plt.savefig(os.path.join(save_path, f'UMAP-{mouse_groups[m]}-{m}.png'), format='png', dpi=600)
+        plt.close()
 
+    # --- 2. Cross-registered UMAP (separate fit per session) ---
+    for m in mouse_groups:
+        if m in ['G07', 'G15']:
+            continue
+        S_i_TFC_cond = get_S_indeces_crossreg(TFC_cond[m], TFC_B_B_1wk_crossreg[m], mapping_TFC_cond_Test_B_Test_B_1wk)
+        S_i_Test_B = get_S_indeces_crossreg(Test_B[m], TFC_B_B_1wk_crossreg[m], mapping_TFC_cond_Test_B_Test_B_1wk)
+        S_i_Test_B_1wk = get_S_indeces_crossreg(Test_B_1wk[m], TFC_B_B_1wk_crossreg[m], mapping_TFC_cond_Test_B_Test_B_1wk)
+        sess_TFC_cond = TFC_cond[m]
+        sess_Test_B = Test_B[m]
+        sess_Test_B_1wk = Test_B_1wk[m]
+        S_TFC_cond = sess_TFC_cond.S[S_i_TFC_cond, :]
+        S_Test_B = sess_Test_B.S[S_i_Test_B, :]
+        S_Test_B_1wk = sess_Test_B_1wk.S[S_i_Test_B_1wk, :]
+        S_TFC_cond_n = np.nan_to_num((S_TFC_cond - S_TFC_cond.mean(axis=1, keepdims=True)) / S_TFC_cond.std(axis=1, keepdims=True))
+        S_Test_B_n = np.nan_to_num((S_Test_B - S_Test_B.mean(axis=1, keepdims=True)) / S_Test_B.std(axis=1, keepdims=True))
+        S_Test_B_1wk_n = np.nan_to_num((S_Test_B_1wk - S_Test_B_1wk.mean(axis=1, keepdims=True)) / S_Test_B_1wk.std(axis=1, keepdims=True))
+        umap_TFC_cond = UMAP(n_components=2, n_jobs=-1)
+        umap_Test_B = UMAP(n_components=2, n_jobs=-1)
+        umap_Test_B_1wk = UMAP(n_components=2, n_jobs=-1)
+        embedding_TFC_cond = umap_TFC_cond.fit_transform(S_TFC_cond_n.T)
+        embedding_Test_B = umap_Test_B.fit_transform(S_Test_B_n.T)
+        embedding_Test_B_1wk = umap_Test_B_1wk.fit_transform(S_Test_B_1wk_n.T)
+        fig, axes = plt.subplots(2, 3, figsize=(15, 10))
+        for i, first_last_str in enumerate(['First', 'Last']):
+            ax = axes[i, 0]
+            sc = ax.scatter(embedding_TFC_cond[:, 0], embedding_TFC_cond[:, 1], c=np.arange(S_TFC_cond.shape[1]), cmap='viridis', s=2, alpha=1)
+            ax.scatter(embedding_TFC_cond[sess_TFC_cond.tone_onsets[i]:sess_TFC_cond.tone_offsets[i], 0], embedding_TFC_cond[sess_TFC_cond.tone_onsets[i]:sess_TFC_cond.tone_offsets[i], 1], color='blue', label='Tone Period', s=10, alpha=1, marker='^')
+            ax.scatter(embedding_TFC_cond[sess_TFC_cond.shock_onsets[i]:sess_TFC_cond.shock_offsets[i], 0], embedding_TFC_cond[sess_TFC_cond.shock_onsets[i]:sess_TFC_cond.shock_offsets[i], 1], color='red', label='Shock Period', s=8, alpha=1, marker='x')
+            ax.set_title(f'TFC_cond {first_last_str}')
+            ax = axes[i, 1]
+            sc = ax.scatter(embedding_Test_B[:, 0], embedding_Test_B[:, 1], c=np.arange(S_Test_B.shape[1]), cmap='viridis', s=2, alpha=1)
+            ax.scatter(embedding_Test_B[sess_Test_B.tone_onsets[i]:sess_Test_B.tone_offsets[i], 0], embedding_Test_B[sess_Test_B.tone_onsets[i]:sess_Test_B.tone_offsets[i], 1], color='blue', label='Tone Period', s=10, alpha=1, marker='^')
+            ax.set_title(f'Test_B {first_last_str}')
+            ax = axes[i, 2]
+            sc = ax.scatter(embedding_Test_B_1wk[:, 0], embedding_Test_B_1wk[:, 1], c=np.arange(S_Test_B_1wk.shape[1]), cmap='viridis', s=2, alpha=1)
+            ax.scatter(embedding_Test_B_1wk[sess_Test_B_1wk.tone_onsets[i]:sess_Test_B_1wk.tone_offsets[i], 0], embedding_Test_B_1wk[sess_Test_B_1wk.tone_onsets[i]:sess_Test_B_1wk.tone_offsets[i], 1], color='blue', label='Tone Period', s=10, alpha=1, marker='^')
+            ax.set_title(f'Test_B_1wk {first_last_str}')
+        handles, labels = ax.get_legend_handles_labels()
+        fig.legend(handles, labels, loc='center left', bbox_to_anchor=(0, 0.5), fontsize='small')
+        plt.colorbar(sc, ax=axes, label='Frame index', shrink=0.7)
+        plt.suptitle(f'{m} {mouse_groups[m]} UMAP embedding (crossreg, separate fit)')
+        plt.show()
+        save_path = os.path.join(PLOTS_DIR, 'UMAP', 'crossreg', f'{m}')
+        os.makedirs(save_path, exist_ok=True)
+        plt.savefig(os.path.join(save_path, f'UMAP-crossreg-{mouse_groups[m]}-{m}.png'), format='png', dpi=600)
+        plt.close()
+
+    # --- 3. Cross-registered UMAP (fit on TFC_cond, transform recall) ---
+    for m in mouse_groups:
+        if m in ['G07', 'G15']:
+            continue
+        S_i_TFC_cond = get_S_indeces_crossreg(TFC_cond[m], TFC_B_B_1wk_crossreg[m], mapping_TFC_cond_Test_B_Test_B_1wk)
+        S_i_Test_B = get_S_indeces_crossreg(Test_B[m], TFC_B_B_1wk_crossreg[m], mapping_TFC_cond_Test_B_Test_B_1wk)
+        S_i_Test_B_1wk = get_S_indeces_crossreg(Test_B_1wk[m], TFC_B_B_1wk_crossreg[m], mapping_TFC_cond_Test_B_Test_B_1wk)
+        sess_TFC_cond = TFC_cond[m]
+        sess_Test_B = Test_B[m]
+        sess_Test_B_1wk = Test_B_1wk[m]
+        S_TFC_cond = sess_TFC_cond.S[S_i_TFC_cond, :]
+        S_Test_B = sess_Test_B.S[S_i_Test_B, :]
+        S_Test_B_1wk = sess_Test_B_1wk.S[S_i_Test_B_1wk, :]
+        S_TFC_cond_n = np.nan_to_num((S_TFC_cond - S_TFC_cond.mean(axis=1, keepdims=True)) / S_TFC_cond.std(axis=1, keepdims=True))
+        S_Test_B_n = np.nan_to_num((S_Test_B - S_Test_B.mean(axis=1, keepdims=True)) / S_Test_B.std(axis=1, keepdims=True))
+        S_Test_B_1wk_n = np.nan_to_num((S_Test_B_1wk - S_Test_B_1wk.mean(axis=1, keepdims=True)) / S_Test_B_1wk.std(axis=1, keepdims=True))
+        umap_TFC_cond = UMAP(n_components=2, n_jobs=-1)
+        embedding_TFC_cond = umap_TFC_cond.fit_transform(S_TFC_cond_n.T)
+        embedding_Test_B = umap_TFC_cond.transform(S_Test_B_n.T)
+        embedding_Test_B_1wk = umap_TFC_cond.transform(S_Test_B_1wk_n.T)
+        fig, axes = plt.subplots(2, 3, figsize=(15, 10))
+        for i, first_last_str in enumerate(['First', 'Last']):
+            ax = axes[i, 0]
+            sc = ax.scatter(embedding_TFC_cond[:, 0], embedding_TFC_cond[:, 1], c=np.arange(S_TFC_cond.shape[1]), cmap='viridis', s=2, alpha=1)
+            ax.scatter(embedding_TFC_cond[sess_TFC_cond.tone_onsets[i]:sess_TFC_cond.tone_offsets[i], 0], embedding_TFC_cond[sess_TFC_cond.tone_onsets[i]:sess_TFC_cond.tone_offsets[i], 1], color='blue', label='Tone Period', s=10, alpha=1, marker='^')
+            ax.scatter(embedding_TFC_cond[sess_TFC_cond.shock_onsets[i]:sess_TFC_cond.shock_offsets[i], 0], embedding_TFC_cond[sess_TFC_cond.shock_onsets[i]:sess_TFC_cond.shock_offsets[i], 1], color='red', label='Shock Period', s=8, alpha=1, marker='x')
+            ax.set_title(f'TFC_cond {first_last_str}')
+            ax = axes[i, 1]
+            sc = ax.scatter(embedding_Test_B[:, 0], embedding_Test_B[:, 1], c=np.arange(S_Test_B.shape[1]), cmap='viridis', s=2, alpha=1)
+            ax.scatter(embedding_Test_B[sess_Test_B.tone_onsets[i]:sess_Test_B.tone_offsets[i], 0], embedding_Test_B[sess_Test_B.tone_onsets[i]:sess_Test_B.tone_offsets[i], 1], color='blue', label='Tone Period', s=10, alpha=1, marker='^')
+            ax.set_title(f'Test_B {first_last_str}')
+            ax = axes[i, 2]
+            sc = ax.scatter(embedding_Test_B_1wk[:, 0], embedding_Test_B_1wk[:, 1], c=np.arange(S_Test_B_1wk.shape[1]), cmap='viridis', s=2, alpha=1)
+            ax.scatter(embedding_Test_B_1wk[sess_Test_B_1wk.tone_onsets[i]:sess_Test_B_1wk.tone_offsets[i], 0], embedding_Test_B_1wk[sess_Test_B_1wk.tone_onsets[i]:sess_Test_B_1wk.tone_offsets[i], 1], color='blue', label='Tone Period', s=10, alpha=1, marker='^')
+            ax.set_title(f'Test_B_1wk {first_last_str}')
+        handles, labels = ax.get_legend_handles_labels()
+        fig.legend(handles, labels, loc='center left', bbox_to_anchor=(0, 0.5), fontsize='small')
+        plt.colorbar(sc, ax=axes, label='Frame index', shrink=0.7)
+        plt.suptitle(f'{m} {mouse_groups[m]} UMAP embedding (crossreg, TFC_cond fit)')
+        plt.show()
+        save_path = os.path.join(PLOTS_DIR, 'UMAP', 'crossreg-TFC', f'{m}')
+        os.makedirs(save_path, exist_ok=True)
+        plt.savefig(os.path.join(save_path, f'UMAP-crossreg-{mouse_groups[m]}-{m}.png'), format='png', dpi=600)
+        plt.close()
+
+    # --- 4. Concatenated-session UMAP block ---
+    for m in mouse_groups:
+        if m in ['G07', 'G15']:
+            continue
+        S_i_TFC_cond = get_S_indeces_crossreg(TFC_cond[m], TFC_B_B_1wk_crossreg[m], mapping_TFC_cond_Test_B_Test_B_1wk)
+        S_i_Test_B = get_S_indeces_crossreg(Test_B[m], TFC_B_B_1wk_crossreg[m], mapping_TFC_cond_Test_B_Test_B_1wk)
+        S_i_Test_B_1wk = get_S_indeces_crossreg(Test_B_1wk[m], TFC_B_B_1wk_crossreg[m], mapping_TFC_cond_Test_B_Test_B_1wk)
+        sess_TFC_cond = TFC_cond[m]
+        sess_Test_B = Test_B[m]
+        sess_Test_B_1wk = Test_B_1wk[m]
+        S_TFC_cond = sess_TFC_cond.S[S_i_TFC_cond, :]
+        S_Test_B = sess_Test_B.S[S_i_Test_B, :]
+        S_Test_B_1wk = sess_Test_B_1wk.S[S_i_Test_B_1wk, :]
+        combined_S = np.hstack((S_TFC_cond, S_Test_B, S_Test_B_1wk))
+        S_normalized = (combined_S - combined_S.mean(axis=1, keepdims=True)) / combined_S.std(axis=1, keepdims=True)
+        umap = UMAP(n_components=2, n_jobs=-1)
+        embedding = umap.fit_transform(S_normalized.T)
+        frames_TFC_cond = S_TFC_cond.shape[1]
+        frames_Test_B = S_Test_B.shape[1]
+        frames_Test_B_1wk = S_Test_B_1wk.shape[1]
+        fig = plt.figure(figsize=(15, 10))
+        ax = fig.add_subplot(111, projection='3d')
+        sc1 = ax.scatter(embedding[:frames_TFC_cond, 0], embedding[:frames_TFC_cond, 1], np.arange(frames_TFC_cond), c=np.arange(frames_TFC_cond), cmap='viridis', label='TFC_cond')
+        sc2 = ax.scatter(embedding[frames_TFC_cond:frames_TFC_cond + frames_Test_B, 0], embedding[frames_TFC_cond:frames_TFC_cond + frames_Test_B, 1], np.arange(frames_Test_B) + frames_TFC_cond, c=np.arange(frames_Test_B), cmap='plasma', label='Test_B')
+        sc3 = ax.scatter(embedding[frames_TFC_cond + frames_Test_B:, 0], embedding[frames_TFC_cond + frames_Test_B:, 1], np.arange(frames_Test_B_1wk) + frames_TFC_cond + frames_Test_B, c=np.arange(frames_Test_B_1wk), cmap='inferno', label='Test_B_1wk')
+        ax.set_xlabel('UMAP1')
+        ax.set_ylabel('UMAP2')
+        ax.set_zlabel('Time')
+        plt.legend()
+        plt.title('Combined 3D UMAP Embedding with Time Progression')
+        plt.show()
+        save_path = os.path.join(PLOTS_DIR, 'UMAP', 'concat', f'{m}')
+        os.makedirs(save_path, exist_ok=True)
+        plt.savefig(os.path.join(save_path, f'UMAP-concat-{mouse_groups[m]}-{m}.png'), format='png', dpi=600)
+        plt.close()
+    
 # ---------------------------------------------------------------------------
 # Section: population_vector_distances  (caban/main.py L5938-6367)
 # ---------------------------------------------------------------------------

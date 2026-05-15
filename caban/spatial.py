@@ -259,6 +259,14 @@ class FluorescenceMap:
         # Key save structure; see class constructor for all data and meanings. Primarily used by FluorescenceMap.find_place_fields()
         self.pf = PlaceFields(to_pickle=to_pickle, sess=sess, mouse=mouse, num_cells=load_num_cells)
 
+    def compact_in_memory(self):
+        """Keep downstream-safe state; only shed clearly transient shuffle payloads."""
+        # Keep S and both fluorescence maps available for later analysis/debugging.
+        # The shuffle tensor is only useful for pcell significance estimation, so
+        # once sig_responses / pf outputs exist it can be safely dropped.
+        if getattr(self, 'sig_responses', None) is not None:
+            self.shuffled_responses = np.array([], dtype=np.float32)
+
     def check_fluorescence_map(self):
         if self.fluorescence_map is None:
             self.fluorescence_map = self.generate_map()
@@ -439,7 +447,7 @@ class FluorescenceMap:
             # Shift entire spike array by random amount, up to num_shifts number of times.
             # Only need to shuffle once (num_shifts number of times, of course) to compare all place fields.
             shuffled_matrix = np.zeros((num_shifts, self.fluorescence_map_occup.shape[0], \
-                self.fluorescence_map_occup.shape[1], self.num_cells))        
+                self.fluorescence_map_occup.shape[1], self.num_cells), dtype=np.float32)
             for i in range(num_shifts):
                 shift_range = np.arange(5*MINISCOPE_FPS, (5*60)*MINISCOPE_FPS)
                 print(".", end='')
@@ -2512,7 +2520,7 @@ def _skaggs_spatial_info(rate_map, occupancy, valid_mask):
 #  Pooled-neuron spatial information helpers
 # ---------------------------------------------------------------------------
 _SPATIAL_METHODS_TEMPLATES_DIR = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "analysis_methods_templates")
+    os.path.dirname(os.path.abspath(__file__)), "..", "analysis_methods_templates")
 
 
 def _copy_si_methods_template(template_filename, dest_dir):

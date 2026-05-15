@@ -209,6 +209,29 @@ class CrossRegMapping:
         return cells
 
 class BehaviourSession:
+    _cache_pruned_fields = {
+        'A',
+        'A_idx',
+        'C_full',
+        'C_mov',
+        'C_imm',
+        'C_zarr',
+        'S_full',
+        'S_mov',
+        'S_imm',
+        'S_zarr',
+        'YrA_full',
+        'YrA_mov',
+        'YrA_imm',
+        'YrA_zarr',
+        'S_spikes',
+        'S_peakval',
+        'S_spikes_mov',
+        'S_peakval_mov',
+        'S_spikes_imm',
+        'S_peakval_imm',
+    }
+
     def __init__(self, mouse, dpath, session_bounds=[], plot_sample_cell=False, data_dir='', session_group='session', crossreg='', savepath='', session_type='Behaviour',
         behaviour_type=None, saver_prefix='', behaviour_condition=None, pyr_percentile_cutoff=90):
 
@@ -254,6 +277,79 @@ class BehaviourSession:
         self.find_exp_boundaries()
         self.get_location_data() # Need to do this first as this can be used for masking spike data in get_CS_matrices()
         self.get_CS_matrices()
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        for field_name in self._cache_pruned_fields:
+            state.pop(field_name, None)
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+
+    def _load_cached_array(self, saver_name, cache_name):
+        saver = getattr(self, saver_name)
+        value = saver.load(cache_name)
+        setattr(self, cache_name, value)
+        return value
+
+    def _compute_velocity_masked_activity(self, base_name, attr_name):
+        base = getattr(self, base_name)
+        mask = (self.velocities_miniscope_smooth[:base.shape[1]] >= 2.0).astype(int)
+        value = np.multiply(base, mask)
+        setattr(self, attr_name, value)
+        return value
+
+    def __getattr__(self, name):
+        if name == 'A' or name == 'A_idx':
+            self.get_A_matrix()
+            return getattr(self, name)
+
+        if name in {'S_full', 'C_full'}:
+            return self._load_cached_array('saver_CS_matrices', name)
+
+        if name == 'YrA_full':
+            saver = getattr(self, 'saver_YrA', None)
+            if saver is None:
+                raise AttributeError(name)
+            value = saver.load('YrA_full')
+            setattr(self, name, value)
+            return value
+
+        if name == 'S_mov':
+            return self._compute_velocity_masked_activity('S', name)
+        if name == 'S_imm':
+            value = np.multiply(self.S, (self.velocities_miniscope_smooth[:self.S.shape[1]] < 2.0).astype(int))
+            setattr(self, name, value)
+            return value
+        if name == 'C_mov':
+            return self._compute_velocity_masked_activity('C', name)
+        if name == 'C_imm':
+            value = np.multiply(self.C, (self.velocities_miniscope_smooth[:self.C.shape[1]] < 2.0).astype(int))
+            setattr(self, name, value)
+            return value
+        if name == 'YrA_mov':
+            if getattr(self, 'YrA', None) is None:
+                raise AttributeError(name)
+            return self._compute_velocity_masked_activity('YrA', name)
+        if name == 'YrA_imm':
+            if getattr(self, 'YrA', None) is None:
+                raise AttributeError(name)
+            value = np.multiply(self.YrA, (self.velocities_miniscope_smooth[:self.YrA.shape[1]] < 2.0).astype(int))
+            setattr(self, name, value)
+            return value
+
+        if name in {'S_spikes', 'S_peakval'}:
+            self.S_spikes, self.S_peakval = find_spikes_ca_S(self.S, self.thres, want_peakval=True)
+            return getattr(self, name)
+        if name in {'S_spikes_mov', 'S_peakval_mov'}:
+            self.S_spikes_mov, self.S_peakval_mov = find_spikes_ca_S(self.S_mov, self.thres, want_peakval=True)
+            return getattr(self, name)
+        if name in {'S_spikes_imm', 'S_peakval_imm'}:
+            self.S_spikes_imm, self.S_peakval_imm = find_spikes_ca_S(self.S_imm, self.thres, want_peakval=True)
+            return getattr(self, name)
+
+        raise AttributeError(name)
 
     def set_minian_output_dir(self):
         if not self.minian_output_dir:

@@ -2,6 +2,7 @@ from random import shuffle
 import numpy as np
 from caban.utilities import *
 from scipy.ndimage import gaussian_filter
+from scipy.integrate import trapezoid as trapz
 from numpy.random import default_rng
 import time
 from sklearn import mixture
@@ -17,6 +18,9 @@ import statsmodels.formula.api as smf
 import pandas as pd
 import os
 import sys
+import glob
+import shutil
+import subprocess
 from patsy import dmatrix
 from scipy.stats import norm, chi2, wilcoxon
 from matplotlib.gridspec import GridSpec, GridSpecFromSubplotSpec
@@ -549,13 +553,15 @@ def attach_lap_segmentations(
                 print(f"[{mouse}] LT1: n_laps={seg1.n_laps}  valid={info['LT1_valid_frac']:.3f}  jumps={info['LT1_jump_count']}")
 
             fig, ax = Laps1D.plot_laps(x1, seg1, title=f"{mouse} LT1 laps")
-            plt.show()
+            if plot_debug:
+                plt.show()
             savefile = os.path.join(
                 save_path,
                 f"lap_segmentation_{mouse}_{mouse_groups[mouse]}_{session_str}_crossreg_{mapping}_laps_LT1.png",
             )
             fig.savefig(savefile, dpi=300)
-            plt.show()
+            if plot_debug:
+                plt.show()
             if auto_close:
                 plt.close(fig)   
 
@@ -585,13 +591,15 @@ def attach_lap_segmentations(
                 print(f"[{mouse}] LT2: n_laps={seg2.n_laps}  valid={info['LT2_valid_frac']:.3f}  jumps={info['LT2_jump_count']}")
 
             fig, ax = Laps1D.plot_laps(x2, seg2, title=f"{mouse} LT2 laps")
-            plt.show()
+            if plot_debug:
+                plt.show()
             savefile = os.path.join(
                 save_path,
                 f"lap_segmentation_{mouse}_{mouse_groups[mouse]}_{session_str}_crossreg_{mapping}_laps_LT2.png",
             )
             fig.savefig(savefile, dpi=300)
-            plt.show()
+            if plot_debug:
+                plt.show()
             if auto_close:
                 plt.close(fig)                
 
@@ -4050,10 +4058,30 @@ def _format_lt_contrast_title(key: str) -> str:
 # -------------------------------------------------------------------
 
 def _find_rscript() -> str:
-    """Locate Rscript.exe (Windows) with lme4+lmerTest+emmeans. Returns absolute path or raises."""
-    import glob, subprocess
-    candidates = sorted(
-        glob.glob(r"C:\Program Files\R\R-*\bin\Rscript.exe"), reverse=True)
+    """Locate Rscript with lme4+lmerTest+emmeans. Returns absolute path or raises."""
+    candidates = []
+
+    # Prefer Rscript on PATH (works for conda, Linux/macOS, and Windows PATH setups).
+    rscript_on_path = shutil.which("Rscript")
+    if rscript_on_path:
+        candidates.append(rscript_on_path)
+
+    # Windows default install locations.
+    candidates.extend(sorted(
+        glob.glob(r"C:\Program Files\R\R-*\bin\Rscript.exe"), reverse=True))
+
+    # Common conda locations when PATH is not populated as expected.
+    conda_prefix = os.environ.get("CONDA_PREFIX")
+    if conda_prefix:
+        candidates.extend([
+            os.path.join(conda_prefix, "bin", "Rscript"),
+            os.path.join(conda_prefix, "Scripts", "Rscript.exe"),
+        ])
+
+    # Deduplicate while preserving order.
+    seen = set()
+    candidates = [c for c in candidates if not (c in seen or seen.add(c))]
+
     for c in candidates:
         if not os.path.isfile(c):
             continue
@@ -4067,8 +4095,9 @@ def _find_rscript() -> str:
         except Exception:
             continue
     raise FileNotFoundError(
-        "No Rscript.exe found with lme4+lmerTest+emmeans installed. "
-        "Install R and run: install.packages(c('lme4','lmerTest','emmeans'))")
+        "No Rscript found with lme4+lmerTest+emmeans installed. "
+        "Install R in the active environment and run: "
+        "install.packages(c('lme4','lmerTest','emmeans'))")
 
 
 _R_LMER_EMMEANS_SCRIPT = r"""
@@ -11243,9 +11272,9 @@ def _test_population_curve_group_interaction(
 # Path to the methods/ directory co-located with this script
 _METHODS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "methods")
 
-# Path to analysis_methods_templates/ directory co-located with this script
+# Path to the repo-level analysis_methods_templates/ directory
 _ANALYSIS_METHODS_TEMPLATES_DIR = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "analysis_methods_templates")
+    os.path.dirname(os.path.abspath(__file__)), "..", "analysis_methods_templates")
 
 
 def _copy_analysis_methods_template(template_filename: str, dest_dir: str) -> None:
@@ -23157,7 +23186,7 @@ def run_phase5_group_stats(df_popcurve, save_dir, *, auto_close=True):
         vals = sub_s["score_mean"].values.astype(float)
         mask = np.isfinite(ns) & np.isfinite(vals)
         if mask.sum() >= 2:
-            auc = float(np.trapz(vals[mask], ns[mask]))
+            auc = float(trapz(vals[mask], ns[mask]))
         else:
             auc = np.nan
         auc_records.append({"mouse": mouse, "group": group,

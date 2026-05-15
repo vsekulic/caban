@@ -20,6 +20,7 @@ from numpy.random import default_rng
 from scipy.ndimage import gaussian_filter
 from scipy.signal import savgol_filter
 from scipy.stats import zscore
+from scipy.integrate import trapezoid as trapz
 from statsmodels.stats.multitest import multipletests
 from sklearn.preprocessing import PowerTransformer
 from scipy.cluster.hierarchy import linkage, dendrogram
@@ -1276,11 +1277,11 @@ def process_PSTH_hist(PLOTS_DIR, mice_per_group, crossreg_mice, session, mapping
     for group in groups:
         Y = norm_group_PSTH[group]
         # Pre-stimulus: bins 0..frames_lookaround (exclusive)
-        #pre_aoc.append(np.trapz(Y[:, :frames_lookaround], axis=1))
-        pre_aoc.append(np.trapz(Y[:, :frames_lookaround//2:frames_lookaround], axis=1))
+        #pre_aoc.append(trapz(Y[:, :frames_lookaround], axis=1))
+        pre_aoc.append(trapz(Y[:, :frames_lookaround//2:frames_lookaround], axis=1))
         # Post-stimulus: bins frames_lookaround..end
-        #post_aoc.append(np.trapz(Y[:, frames_lookaround:], axis=1))
-        post_aoc.append(np.trapz(Y[:, frames_lookaround//2:], axis=1))
+        #post_aoc.append(trapz(Y[:, frames_lookaround:], axis=1))
+        post_aoc.append(trapz(Y[:, frames_lookaround//2:], axis=1))
 
     # Pre-stimulus ANOVA
     f_pre = stats.f_oneway(*pre_aoc)
@@ -2864,16 +2865,16 @@ def process_PSTH_simple(PLOTS_DIR, mice_per_group, crossreg_mice, session, mappi
                             # and the integrals are based on the shape, so it doesn't change the result, only makes it correctly
                             # calculated.
                             if np.min(C_norm) < 0:
-                                trapz_cells[group].append(np.trapz(C_norm - np.min(C_norm)) / np.max(C_norm))
+                                trapz_cells[group].append(trapz(C_norm - np.min(C_norm)) / np.max(C_norm))
                             else:
-                                trapz_cells[group].append(np.trapz(C_norm) / np.max(C_norm))
+                                trapz_cells[group].append(trapz(C_norm) / np.max(C_norm))
                             #print(C_mouse)
                         else:
                             C_mouse = np.add(C_mouse, C[cell,save_period])#period])
                             if np.min(C[cell,save_period]) < 0:
-                                trapz_cells[group].append(np.trapz(C[cell,save_period] - np.min(C[cell,save_period])) / np.max(C[cell,save_period]))
+                                trapz_cells[group].append(trapz(C[cell,save_period] - np.min(C[cell,save_period])) / np.max(C[cell,save_period]))
                             else:
-                                trapz_cells[group].append(np.trapz(C[cell,save_period]) / np.max(C[cell,save_period]))
+                                trapz_cells[group].append(trapz(C[cell,save_period]) / np.max(C[cell,save_period]))
                             if not inserted_PSTH[group]:
                                 PSTH_cells[group] = C[cell, save_period]
                                 inserted_PSTH[group] = True
@@ -2964,7 +2965,7 @@ def process_PSTH_simple(PLOTS_DIR, mice_per_group, crossreg_mice, session, mappi
 
     #print('*** PSTH: max_val is {}'.format(mav_val))
     #for group in PSTH_cells.keys():
-    #    trapz_cells[group] = np.trapz(PSTH_cells[group]/max_val, axis=1)
+    #    trapz_cells[group] = trapz(PSTH_cells[group]/max_val, axis=1)
 
     return nonzero_cells, frac_tots, trapz_cells, PSTH_cells, max_per_cell
 
@@ -3104,16 +3105,16 @@ def process_PSTH_simple_S(PLOTS_DIR, mice_per_group, crossreg_mice, session, map
                             # and the integrals are based on the shape, so it doesn't change the result, only makes it correctly
                             # calculated.
                             if np.min(S_norm) < 0:
-                                trapz_cells[group].append(np.trapz(S_norm - np.min(S_norm)) / np.max(S_norm))
+                                trapz_cells[group].append(trapz(S_norm - np.min(S_norm)) / np.max(S_norm))
                             else:
-                                trapz_cells[group].append(np.trapz(S_norm) / np.max(S_norm))
+                                trapz_cells[group].append(trapz(S_norm) / np.max(S_norm))
                             #print(C_mouse)
                         else:
                             S_mouse = np.add(S_mouse, S[cell,save_period])#period])
                             if np.min(S[cell,save_period]) < 0:
-                                trapz_cells[group].append(np.trapz(S[cell,save_period] - np.min(S[cell,save_period])) / np.max(S[cell,save_period]))
+                                trapz_cells[group].append(trapz(S[cell,save_period] - np.min(S[cell,save_period])) / np.max(S[cell,save_period]))
                             else:
-                                trapz_cells[group].append(np.trapz(S[cell,save_period]) / np.max(S[cell,save_period]))
+                                trapz_cells[group].append(trapz(S[cell,save_period]) / np.max(S[cell,save_period]))
                             if not inserted_PSTH[group]:
                                 PSTH_cells[group] = S[cell, save_period]
                                 inserted_PSTH[group] = True
@@ -3204,7 +3205,7 @@ def process_PSTH_simple_S(PLOTS_DIR, mice_per_group, crossreg_mice, session, map
 
     #print('*** PSTH: max_val is {}'.format(mav_val))
     #for group in PSTH_cells.keys():
-    #    trapz_cells[group] = np.trapz(PSTH_cells[group]/max_val, axis=1)
+    #    trapz_cells[group] = trapz(PSTH_cells[group]/max_val, axis=1)
 
     return nonzero_cells, frac_tots, trapz_cells, PSTH_cells, max_per_cell
 
@@ -3393,7 +3394,7 @@ def plot_fluorescence_map_plotter(fluorescence_map, cells, random_width, SAVE_PA
         plt.close(fig_S)
 
 def plot_fluorescence_map_helper(mouse, sess, mouse_groups, session_str, bin_width, cells=np.array([]), random_width=0, SAVE_PATH=None, \
-    PLOTS_DIR=None, want_3D=False, pcells_mice=dict(), max_fields=15, random_pcells_per_field=5, only_fm_pcells=False, print_pcell_maps=False, \
+    PLOTS_DIR=None, want_3D=False, pcells_mice=None, max_fields=15, random_pcells_per_field=5, only_fm_pcells=False, print_pcell_maps=False, \
     loc_bounds=None, merge_distance=4, plot_pf_maps=True):
     '''
     plot_fluorescence_map_helper().
@@ -3483,7 +3484,8 @@ def plot_fluorescence_map_helper(mouse, sess, mouse_groups, session_str, bin_wid
     percentile = 99.0
     sig_responses = fm.get_significant_response_profiles(percentile=percentile)
     #plot_fluorescence_map_plotter(fluorescence_map / np.max(fluorescence_map), cells, random_width, SAVE_PATH, mouse, mouse_groups, session_str, bin_width, 'movement_norm')
-    pcells_mice[mouse] = sig_responses
+    if pcells_mice is not None:
+        pcells_mice[mouse] = sig_responses
     sess.fm = fm
     sess.loc = loc
     sess.sig_responses = sig_responses
@@ -3492,6 +3494,7 @@ def plot_fluorescence_map_helper(mouse, sess, mouse_groups, session_str, bin_wid
     if not plot_pf_maps:
         # Skip heavy per-cell plotting; jump straight to place field detection.
         fm.find_place_fields(sess, method='iterative_gauss', merge_distance=merge_distance)
+        fm.compact_in_memory()
         return
 
     pcells_num_fields = dict()
@@ -3528,8 +3531,9 @@ def plot_fluorescence_map_helper(mouse, sess, mouse_groups, session_str, bin_wid
 
     # 7. Find actual place fields now
     fm.find_place_fields(sess, method='iterative_gauss', merge_distance=merge_distance)
+    fm.compact_in_memory()
 
-def plot_fluorescence_map(PLOTS_DIR, session, mouse_groups, session_str, bin_width=20, random_width=0, cells=np.array([]), want_3D=False, pcells_mice=dict(), \
+def plot_fluorescence_map(PLOTS_DIR, session, mouse_groups, session_str, bin_width=20, random_width=0, cells=np.array([]), want_3D=False, pcells_mice=None, \
     max_fields=15, only_fm_pcells=False, print_pcell_maps=False, merge_distance=4, plot_pf_maps=True):
 
     save_path = os.path.join(PLOTS_DIR, 'fluorescence_maps_{}fields_{}'.format(max_fields, session_str)) #'{}_{}_fluorescence-map.png'.format(session_str, m))

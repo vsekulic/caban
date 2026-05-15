@@ -95,7 +95,7 @@ AZIM_ROTATION = 70
 
 _METHODS_TEMPLATE_FILENAME = "population_pca_methods.txt"
 _METHODS_TEMPLATES_DIR = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "analysis_methods_templates"
+    os.path.dirname(os.path.abspath(__file__)), "..", "analysis_methods_templates"
 )
 
 # NPY cache subdir under NPY_SAVE_PATH

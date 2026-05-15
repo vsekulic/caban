@@ -140,7 +140,7 @@ def _perevent_metrics_by_section(scheme):
 
 _METHODS_TEMPLATE_FILENAME = "pca_state_metrics_methods.txt"
 _METHODS_TEMPLATES_DIR = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "analysis_methods_templates"
+    os.path.dirname(os.path.abspath(__file__)), "..", "analysis_methods_templates"
 )
 _OUT_SUBDIR = "PCA_state_metrics"
 

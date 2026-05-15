@@ -25,6 +25,7 @@ import os
 import pickle
 import sys
 import traceback
+from collections import Counter
 from datetime import datetime
 from types import SimpleNamespace
 from typing import Optional
@@ -166,6 +167,185 @@ def report_ds_memory(ds, top_n: int = 15, min_mb: float = 1.0) -> None:
         print(f'  {sz / 1e9:6.2f} GB  {name}')
 
 
+def report_cache_compression(ds, top_n: int = 10) -> None:
+    """Print a compact summary of what the cache pruned or can lazily restore."""
+    print('cache compression report:')
+    print(f'  format version: {getattr(ds, "cache_format_version", "unknown")}')
+
+    session_counts = Counter()
+    prunable_counts = Counter()
+    missing_counts = Counter()
+    tracked_fields = [
+        'C_full', 'S_full', 'YrA_full',
+        'S_spikes', 'S_peakval',
+        'S_mov', 'S_imm', 'C_mov', 'C_imm', 'YrA_mov', 'YrA_imm',
+    ]
+    tracked_present = Counter()
+    tracked_missing = Counter()
+    largest_sessions = []
+    seen = set()
+
+    def _iter_session_objects(path, value):
+        value_id = id(value)
+        if value_id in seen:
+            return
+        seen.add(value_id)
+
+        if hasattr(value, '_cache_pruned_fields') and hasattr(value, '__dict__'):
+            yield path, value
+            return
+
+        if isinstance(value, dict):
+            for key, child in value.items():
+                yield from _iter_session_objects(f'{path}.{key}', child)
+            return
+
+        if isinstance(value, (list, tuple)):
+            for idx, child in enumerate(value):
+                yield from _iter_session_objects(f'{path}[{idx}]', child)
+            return
+
+    for attr_name, attr_value in ds.__dict__.items():
+        for obj_path, obj_value in _iter_session_objects(attr_name, attr_value):
+            session_counts[type(obj_value).__name__] += 1
+            prunable_fields = sorted(obj_value._cache_pruned_fields)
+            missing_fields = [
+                field_name for field_name in obj_value._cache_pruned_fields
+                if field_name not in obj_value.__dict__
+            ]
+            for field_name in prunable_fields:
+                prunable_counts[field_name] += 1
+            for field_name in missing_fields:
+                missing_counts[field_name] += 1
+            for field_name in tracked_fields:
+                if field_name in obj_value.__dict__:
+                    tracked_present[field_name] += 1
+                else:
+                    tracked_missing[field_name] += 1
+            largest_sessions.append((obj_path, _deep_size(obj_value), len(missing_fields), type(obj_value).__name__))
+
+    if session_counts:
+        session_summary = ', '.join(f'{count} {class_name}' for class_name, count in sorted(session_counts.items()))
+        print(f'  session objects: {session_summary}')
+    else:
+        print('  session objects: none found')
+
+    if prunable_counts:
+        print(f'  prunable fields (top {top_n}):')
+        for field_name, count in prunable_counts.most_common(top_n):
+            print(f'    {field_name}: {count}')
+
+    if missing_counts:
+        print(f'  missing in cache (top {top_n}):')
+        for field_name, count in missing_counts.most_common(top_n):
+            print(f'    {field_name}: {count}')
+    else:
+        print('  missing in cache: none detected')
+
+    if tracked_present or tracked_missing:
+        print('  tracked heavy fields (present/missing):')
+        for field_name in tracked_fields:
+            present_n = tracked_present.get(field_name, 0)
+            missing_n = tracked_missing.get(field_name, 0)
+            print(f'    {field_name}: {present_n}/{missing_n}')
+
+    if largest_sessions:
+        print(f'  largest cached sessions (top {top_n}):')
+        largest_sessions.sort(key=lambda item: item[1], reverse=True)
+        for attr_name, size_bytes, pruned_count, class_name in largest_sessions[:top_n]:
+            print(f'    {size_bytes / 1e9:6.2f} GB  {attr_name} [{class_name}, pruned={pruned_count}]')
+
+
+CACHE_FORMAT_VERSION = 2
+
+
+def _compact_ndarray(arr: np.ndarray) -> np.ndarray:
+    """Downcast dense numeric arrays to smaller dtypes when it is safe to do so."""
+    if arr.dtype == np.float64:
+        return arr.astype(np.float32, copy=False)
+    if arr.dtype == np.int64 and arr.size > 0:
+        int32_info = np.iinfo(np.int32)
+        arr_min = arr.min()
+        arr_max = arr.max()
+        if arr_min >= int32_info.min and arr_max <= int32_info.max:
+            return arr.astype(np.int32, copy=False)
+    if arr.dtype == np.uint64 and arr.size > 0:
+        uint32_info = np.iinfo(np.uint32)
+        if arr.max() <= uint32_info.max:
+            return arr.astype(np.uint32, copy=False)
+    return arr
+
+
+def _compact_cache_value(value, seen=None):
+    """Recursively compact numpy-heavy objects in-place for smaller cache payloads."""
+    if seen is None:
+        seen = {}
+
+    value_id = id(value)
+    if value_id in seen:
+        return seen[value_id]
+
+    if isinstance(value, np.ndarray):
+        compact = _compact_ndarray(value)
+        seen[value_id] = compact
+        return compact
+
+    if value.__class__.__module__.startswith('scipy.sparse'):
+        seen[value_id] = value
+        return value
+
+    if isinstance(value, dict):
+        seen[value_id] = value
+        for key in list(value.keys()):
+            value[key] = _compact_cache_value(value[key], seen)
+        return value
+
+    if isinstance(value, list):
+        seen[value_id] = value
+        for idx in range(len(value)):
+            value[idx] = _compact_cache_value(value[idx], seen)
+        return value
+
+    if isinstance(value, tuple):
+        compact = tuple(_compact_cache_value(item, seen) for item in value)
+        seen[value_id] = compact
+        return compact
+
+    if isinstance(value, set):
+        compact = {_compact_cache_value(item, seen) for item in value}
+        seen[value_id] = compact
+        return compact
+
+    if isinstance(value, SimpleNamespace) or hasattr(value, '__dict__'):
+        seen[value_id] = value
+        for attr_name, attr_value in vars(value).items():
+            setattr(value, attr_name, _compact_cache_value(attr_value, seen))
+        return value
+
+    seen[value_id] = value
+    return value
+
+
+def _load_cache_payload(cache_path: str):
+    with open(cache_path, 'rb') as f:
+        payload = pickle.load(f)
+
+    is_versioned = isinstance(payload, dict) and payload.get('cache_format_version') == CACHE_FORMAT_VERSION
+    if is_versioned:
+        payload = payload['ds']
+
+    return _compact_cache_value(payload), is_versioned
+
+
+def _dump_cache_payload(cache_path: str, ds) -> None:
+    payload = {
+        'cache_format_version': CACHE_FORMAT_VERSION,
+        'ds': _compact_cache_value(ds),
+    }
+    with open(cache_path, 'wb') as f:
+        pickle.dump(payload, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+
 # ===========================================================================
 def load_all_mice(
     cfg: Optional[PipelineConfig] = None,
@@ -190,7 +370,7 @@ def load_all_mice(
         otherwise write a fresh build to ``cache_path``. If False, always
         rebuild and never touch the pickle.
     cache_path
-        Path to the ``ds`` pickle. Defaults to ``<NPY_SAVE_PATH>/ds_cache.pkl``.
+        Path to the compact ``ds`` cache. Defaults to ``<NPY_SAVE_PATH>/ds_cache.pkl``.
     report_memory
         If True (default), print a deep-size breakdown of ``ds`` after load.
 
@@ -215,28 +395,34 @@ def load_all_mice(
 
     if use_cache and os.path.exists(cache_path):
         print('loading ds from pickle (skipping fresh build)...')
-        with open(cache_path, 'rb') as f:
-            ds = pickle.load(f)
+        ds, is_versioned = _load_cache_payload(cache_path)
         # Refresh cfg in case the user edited it since the cache was written.
         ds.cfg = cfg
+        ds.cache_format_version = CACHE_FORMAT_VERSION
         # Back-fill NPY_SAVE_PATH for older caches that pre-date this attribute.
         if not hasattr(ds, 'NPY_SAVE_PATH'):
             ds.NPY_SAVE_PATH = NPY_SAVE_PATH  # noqa: F405
+        if not is_versioned:
+            print('rewriting legacy cache into compact format...')
+            _dump_cache_payload(cache_path, ds)
         if report_memory:
             print()
             report_ds_memory(ds)
+            report_cache_compression(ds)
         return ds
 
     ds = _build_dataset(cfg, plots_dir=plots_dir, paper_dir=paper_dir)
+    ds = _compact_cache_value(ds)
+    ds.cache_format_version = CACHE_FORMAT_VERSION
 
     if use_cache:
         print(f'writing ds_cache.pkl -> {cache_path}')
-        with open(cache_path, 'wb') as f:
-            pickle.dump(ds, f, protocol=pickle.HIGHEST_PROTOCOL)
+        _dump_cache_payload(cache_path, ds)
 
     if report_memory:
         print()
         report_ds_memory(ds)
+        report_cache_compression(ds)
 
     return ds
 

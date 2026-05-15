@@ -2964,7 +2964,7 @@ if plot_TFC_2D_decoding:
         targets_D1_pf = {k: v for k, v in targets_D1_pf.items() if v}
 
         if targets_D1_pf:
-            _plog_orig, _plog_file = _start_paradigm_log(
+            _plog_orig, _plog_file = __start_paradigm_log(
                 MT_D1_PF_PLOTS_DIR, "Paradigm D1", "PF 2D", pf_params, optimization_pf_param_set)
             print(f"\n{'='*60}")
             print(f"  Paradigm D1 (PF): Train TFC_cond PF -> {list(targets_D1_pf.keys())}")
