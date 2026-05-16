@@ -5327,7 +5327,9 @@ def run_umap(ds, cfg):
     mapping_TFC_cond_Test_B_Test_B_1wk = ds.mapping_TFC_cond_Test_B_Test_B_1wk
     mouse_groups = ds.mouse_groups
     # --- 1. Single-session TFC_cond UMAP ---
+    print("*** UMAP (1) Single-session TFC_cond\n")
     for m in mouse_groups:
+        print(f" {m}...", end='', flush=True)
         sess = TFC_cond[m]
         S = sess.S
         fig, axes = plt.subplots(2, 2, figsize=(15, 10))
@@ -5358,11 +5360,14 @@ def run_umap(ds, cfg):
         os.makedirs(save_path, exist_ok=True)
         plt.savefig(os.path.join(save_path, f'UMAP-{mouse_groups[m]}-{m}.png'), format='png', dpi=600)
         plt.close()
+    print('done.')
 
     # --- 2. Cross-registered UMAP (separate fit per session) ---
+    print("*** UMAP (2) Cross-registered UMAP (separate fit per session)\n")
     for m in mouse_groups:
         if m in ['G07', 'G15']:
             continue
+        print(f" {m}...", end='', flush=True)
         S_i_TFC_cond = get_S_indeces_crossreg(TFC_cond[m], TFC_B_B_1wk_crossreg[m], mapping_TFC_cond_Test_B_Test_B_1wk)
         S_i_Test_B = get_S_indeces_crossreg(Test_B[m], TFC_B_B_1wk_crossreg[m], mapping_TFC_cond_Test_B_Test_B_1wk)
         S_i_Test_B_1wk = get_S_indeces_crossreg(Test_B_1wk[m], TFC_B_B_1wk_crossreg[m], mapping_TFC_cond_Test_B_Test_B_1wk)
@@ -5405,11 +5410,14 @@ def run_umap(ds, cfg):
         os.makedirs(save_path, exist_ok=True)
         plt.savefig(os.path.join(save_path, f'UMAP-crossreg-{mouse_groups[m]}-{m}.png'), format='png', dpi=600)
         plt.close()
+    print('done.')
 
     # --- 3. Cross-registered UMAP (fit on TFC_cond, transform recall) ---
+    print("*** UMAP (3) Cross-registered UMAP (fit on TFC_cond, transform recall)\n")
     for m in mouse_groups:
         if m in ['G07', 'G15']:
             continue
+        print(f" {m}...", end='', flush=True)
         S_i_TFC_cond = get_S_indeces_crossreg(TFC_cond[m], TFC_B_B_1wk_crossreg[m], mapping_TFC_cond_Test_B_Test_B_1wk)
         S_i_Test_B = get_S_indeces_crossreg(Test_B[m], TFC_B_B_1wk_crossreg[m], mapping_TFC_cond_Test_B_Test_B_1wk)
         S_i_Test_B_1wk = get_S_indeces_crossreg(Test_B_1wk[m], TFC_B_B_1wk_crossreg[m], mapping_TFC_cond_Test_B_Test_B_1wk)
@@ -5450,11 +5458,14 @@ def run_umap(ds, cfg):
         os.makedirs(save_path, exist_ok=True)
         plt.savefig(os.path.join(save_path, f'UMAP-crossreg-{mouse_groups[m]}-{m}.png'), format='png', dpi=600)
         plt.close()
+    print('done.')
 
     # --- 4. Concatenated-session UMAP block ---
+    print("*** UMAP (4) Concatenated-session UMAP\n")
     for m in mouse_groups:
         if m in ['G07', 'G15']:
             continue
+        print(f" {m}...", end='', flush=True)
         S_i_TFC_cond = get_S_indeces_crossreg(TFC_cond[m], TFC_B_B_1wk_crossreg[m], mapping_TFC_cond_Test_B_Test_B_1wk)
         S_i_Test_B = get_S_indeces_crossreg(Test_B[m], TFC_B_B_1wk_crossreg[m], mapping_TFC_cond_Test_B_Test_B_1wk)
         S_i_Test_B_1wk = get_S_indeces_crossreg(Test_B_1wk[m], TFC_B_B_1wk_crossreg[m], mapping_TFC_cond_Test_B_Test_B_1wk)
@@ -5486,7 +5497,9 @@ def run_umap(ds, cfg):
         os.makedirs(save_path, exist_ok=True)
         plt.savefig(os.path.join(save_path, f'UMAP-concat-{mouse_groups[m]}-{m}.png'), format='png', dpi=600)
         plt.close()
-    
+    print('done.')
+
+
 # ---------------------------------------------------------------------------
 # Section: population_vector_distances  (caban/main.py L5938-6367)
 # ---------------------------------------------------------------------------
