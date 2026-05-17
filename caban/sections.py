@@ -5499,6 +5499,326 @@ def run_umap(ds, cfg):
         plt.close()
     print('done.')
 
+# ---------------------------------------------------------------------------
+# Section: Cross-registered PCA+UMAP
+# ---------------------------------------------------------------------------
+def run_crossreg_pca_umap(
+    ds,
+    cfg,
+    *,
+    z_score_sess="TFC_cond",
+    fit_sess="TFC_cond",
+    n_pca_components=30,
+    umap_n_neighbors=30,
+    umap_min_dist=0.1,
+    umap_metric="cosine",
+    random_state=None,          # None allows parallel UMAP; fixed seed may force serial behavior
+    umap_n_jobs=-1,             # -1 = all cores
+    set_parallel_threads=True,
+    skip_mice=("G07", "G15"),
+    session_order=("TFC_cond", "Test_B", "Test_B_1wk"),
+    save_embeddings=True,
+    auto_close=True,
+):
+    """Cross-registered PCA→UMAP embeddings for TFC_cond/Test_B/Test_B_1wk."""
+    import os
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from sklearn.decomposition import PCA
+    from umap import UMAP
+
+    # ---- Parallelization setup ----
+    if umap_n_jobs in (None, -1):
+        n_threads = os.cpu_count() or 1
+        umap_n_jobs_eff = -1
+    else:
+        n_threads = int(umap_n_jobs)
+        umap_n_jobs_eff = int(umap_n_jobs)
+
+    if set_parallel_threads:
+        for var in [
+            "OMP_NUM_THREADS",
+            "OPENBLAS_NUM_THREADS",
+            "MKL_NUM_THREADS",
+            "VECLIB_MAXIMUM_THREADS",
+            "NUMEXPR_NUM_THREADS",
+        ]:
+            os.environ[var] = str(n_threads)
+
+        try:
+            import numba
+            numba.set_num_threads(n_threads)
+        except Exception:
+            pass
+
+    if random_state is not None and umap_n_jobs_eff != 1:
+        print(
+            "[WARN] UMAP with random_state set may override parallel execution. "
+            "For maximum cores, use random_state=None."
+        )
+
+    valid_sessions = {"TFC_cond", "Test_B", "Test_B_1wk"}
+    if z_score_sess not in valid_sessions:
+        raise ValueError(f"z_score_sess must be one of {sorted(valid_sessions)}, got {z_score_sess!r}")
+    if fit_sess not in valid_sessions:
+        raise ValueError(f"fit_sess must be one of {sorted(valid_sessions)}, got {fit_sess!r}")
+
+    PLOTS_DIR = ds.PLOTS_DIR
+    mouse_groups = ds.mouse_groups
+    TFC_cond = ds.TFC_cond
+    Test_B = ds.Test_B
+    Test_B_1wk = ds.Test_B_1wk
+    TFC_B_B_1wk_crossreg = ds.TFC_B_B_1wk_crossreg
+    mapping = ds.mapping_TFC_cond_Test_B_Test_B_1wk
+
+    sess_dicts = {
+        "TFC_cond": TFC_cond,
+        "Test_B": Test_B,
+        "Test_B_1wk": Test_B_1wk,
+    }
+
+    tag = (
+        f"zscore_{z_score_sess}"
+        f"__fit_{fit_sess}"
+        f"__pca{n_pca_components}"
+        f"__umapN{umap_n_neighbors}_{umap_metric}"
+    )
+    root_save_path = os.path.join(PLOTS_DIR, "UMAP", "crossreg_PCA_UMAP", tag)
+    os.makedirs(root_save_path, exist_ok=True)
+
+    print("*** Cross-registered PCA→UMAP")
+    print(f"    z-score reference : {z_score_sess}")
+    print(f"    PCA/UMAP fit      : {fit_sess}")
+    print(f"    PCA components    : {n_pca_components}")
+    print(f"    UMAP              : n_neighbors={umap_n_neighbors}, min_dist={umap_min_dist}, metric={umap_metric}")
+    print(f"    UMAP n_jobs       : {umap_n_jobs}")
+    print(f"    thread target     : {n_threads}")
+    print(f"    random_state      : {random_state}")
+    print(f"    output            : {root_save_path}\n")
+
+    def _crossreg_indices(mouse):
+        return {
+            "TFC_cond": get_S_indeces_crossreg(TFC_cond[mouse], TFC_B_B_1wk_crossreg[mouse], mapping),
+            "Test_B": get_S_indeces_crossreg(Test_B[mouse], TFC_B_B_1wk_crossreg[mouse], mapping),
+            "Test_B_1wk": get_S_indeces_crossreg(Test_B_1wk[mouse], TFC_B_B_1wk_crossreg[mouse], mapping),
+        }
+
+    def _event_slice(sess, event_name, event_idx):
+        on_name = f"{event_name}_onsets"
+        off_name = f"{event_name}_offsets"
+        if not hasattr(sess, on_name) or not hasattr(sess, off_name):
+            return None
+        onsets = getattr(sess, on_name)
+        offsets = getattr(sess, off_name)
+        if onsets is None or offsets is None or len(onsets) == 0 or len(offsets) == 0:
+            return None
+        if event_idx >= len(onsets) or event_idx >= len(offsets):
+            return None
+        return slice(int(onsets[event_idx]), int(offsets[event_idx]))
+
+    def _scatter_session(ax, emb, sess, session_name, first_last_idx, n_frames):
+        sc = ax.scatter(
+            emb[:, 0], emb[:, 1],
+            c=np.arange(n_frames), cmap="viridis", s=2, alpha=1,
+        )
+
+        tone_sl = _event_slice(sess, "tone", first_last_idx)
+        if tone_sl is not None:
+            ax.scatter(
+                emb[tone_sl, 0], emb[tone_sl, 1],
+                color="blue", label="Tone Period", s=10, alpha=1, marker="^",
+            )
+
+        shock_sl = _event_slice(sess, "shock", first_last_idx)
+        if shock_sl is not None:
+            ax.scatter(
+                emb[shock_sl, 0], emb[shock_sl, 1],
+                color="red", label="Shock Period", s=8, alpha=1, marker="x",
+            )
+
+        ax.set_title(session_name)
+        ax.set_xlabel("UMAP1")
+        ax.set_ylabel("UMAP2")
+        return sc
+
+    results = {}
+
+    for mouse in mouse_groups:
+        if mouse in skip_mice:
+            print(f" {mouse} skipped (listed in skip_mice)")
+            continue
+        if any(mouse not in sess_dicts[s] for s in session_order):
+            print(f" {mouse} skipped (missing one of {session_order})")
+            continue
+        if mouse not in TFC_B_B_1wk_crossreg:
+            print(f" {mouse} skipped (missing TFC_B_B_1wk_crossreg)")
+            continue
+
+        print(f" {mouse} ({mouse_groups[mouse]})...", end="", flush=True)
+
+        try:
+            idx = _crossreg_indices(mouse)
+            sess = {s: sess_dicts[s][mouse] for s in session_order}
+            S = {
+                s: np.asarray(sess[s].S[idx[s], :], dtype=np.float64)
+                for s in session_order
+            }
+
+            # Z-score reference session defines mean/std for all sessions.
+            mu = np.nanmean(S[z_score_sess], axis=1, keepdims=True)
+            sigma = np.nanstd(S[z_score_sess], axis=1, keepdims=True)
+            sigma[~np.isfinite(sigma) | (sigma == 0)] = 1.0
+
+            X = {
+                s: np.nan_to_num((S[s] - mu) / sigma)
+                for s in session_order
+            }
+
+            n_components_eff = int(
+                min(n_pca_components, X[fit_sess].shape[0], X[fit_sess].shape[1])
+            )
+            if n_components_eff < 2:
+                print(f" skipped (too few PCA components: {n_components_eff})")
+                continue
+
+            pca = PCA(
+                n_components=n_components_eff,
+                svd_solver="auto",
+                random_state=random_state,
+            )
+
+            Z = {}
+            Z[fit_sess] = pca.fit_transform(X[fit_sess].T)
+            for s in session_order:
+                if s != fit_sess:
+                    Z[s] = pca.transform(X[s].T)
+
+            reducer = UMAP(
+                n_components=2,
+                n_neighbors=umap_n_neighbors,
+                min_dist=umap_min_dist,
+                metric=umap_metric,
+                random_state=random_state,
+                n_jobs=umap_n_jobs_eff,
+            )
+
+            U = {}
+            U[fit_sess] = reducer.fit_transform(Z[fit_sess])
+            for s in session_order:
+                if s != fit_sess:
+                    U[s] = reducer.transform(Z[s])
+
+            evr = pca.explained_variance_ratio_
+            evr_sum = float(np.nansum(evr))
+
+            fig, axes = plt.subplots(2, 3, figsize=(15, 10), constrained_layout=False)
+            last_sc = None
+
+            for row, event_idx in enumerate([0, -1]):
+                row_label = "First" if row == 0 else "Last"
+
+                for col, s in enumerate(session_order):
+                    ax = axes[row, col]
+                    sess_obj = sess[s]
+
+                    if event_idx == -1:
+                        tone_onsets = getattr(sess_obj, "tone_onsets", [])
+                        idx_to_plot = max(0, len(tone_onsets) - 1) if len(tone_onsets) else 0
+                    else:
+                        idx_to_plot = event_idx
+
+                    last_sc = _scatter_session(
+                        ax,
+                        U[s],
+                        sess_obj,
+                        f"{s} {row_label}",
+                        idx_to_plot,
+                        S[s].shape[1],
+                    )
+
+            handles, labels = axes[0, 0].get_legend_handles_labels()
+            if not handles:
+                for ax in axes.ravel():
+                    handles, labels = ax.get_legend_handles_labels()
+                    if handles:
+                        break
+
+            if handles:
+                fig.legend(
+                    handles,
+                    labels,
+                    loc="center left",
+                    bbox_to_anchor=(0, 0.5),
+                    fontsize="small",
+                )
+
+            if last_sc is not None:
+                fig.colorbar(last_sc, ax=axes, label="Frame index", shrink=0.7)
+
+            fig.suptitle(
+                f"{mouse} {mouse_groups[mouse]} PCA→UMAP crossreg | "
+                f"z-score={z_score_sess}, fit={fit_sess}, "
+                f"PCA n={n_components_eff}, EVR={evr_sum:.3f}"
+            )
+
+            mouse_save_path = os.path.join(root_save_path, mouse)
+            os.makedirs(mouse_save_path, exist_ok=True)
+
+            fig_path = os.path.join(
+                mouse_save_path,
+                f"PCA-UMAP-crossreg-{mouse_groups[mouse]}-{mouse}-{tag}.png",
+            )
+
+            plt.savefig(fig_path, format="png", dpi=600, bbox_inches="tight")
+            plt.show()
+
+            if auto_close:
+                plt.close(fig)
+
+            if save_embeddings:
+                npz_path = os.path.join(
+                    mouse_save_path,
+                    f"PCA-UMAP-crossreg-{mouse_groups[mouse]}-{mouse}-{tag}.npz",
+                )
+
+                np.savez_compressed(
+                    npz_path,
+                    z_score_sess=z_score_sess,
+                    fit_sess=fit_sess,
+                    session_order=np.array(session_order),
+                    pca_explained_variance_ratio=evr,
+                    pca_explained_variance_ratio_sum=evr_sum,
+                    zscore_mu=mu.squeeze(),
+                    zscore_sigma=sigma.squeeze(),
+                    **{f"PCA_{s}": Z[s] for s in session_order},
+                    **{f"UMAP_{s}": U[s] for s in session_order},
+                )
+
+            results[mouse] = {
+                "group": mouse_groups[mouse],
+                "z_score_sess": z_score_sess,
+                "fit_sess": fit_sess,
+                "session_order": tuple(session_order),
+                "pca": pca,
+                "umap": reducer,
+                "pca_scores": Z,
+                "umap_embeddings": U,
+                "explained_variance_ratio": evr,
+                "explained_variance_ratio_sum": evr_sum,
+                "zscore_mu": mu,
+                "zscore_sigma": sigma,
+                "fig_path": fig_path,
+            }
+
+            print(f" done. PCA EVR={evr_sum:.3f}")
+
+        except Exception as exc:
+            print(f" FAILED: {exc}")
+            import traceback
+            traceback.print_exc()
+
+    print("done.")
+    return results
 
 # ---------------------------------------------------------------------------
 # Section: population_vector_distances  (caban/main.py L5938-6367)
