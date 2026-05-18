@@ -5506,6 +5506,7 @@ def run_crossreg_pca_umap(
     ds,
     cfg,
     *,
+    bin_size_s=1,
     z_score_sess="TFC_cond",
     fit_sess="TFC_cond",
     n_pca_components=30,
@@ -5519,8 +5520,13 @@ def run_crossreg_pca_umap(
     session_order=("TFC_cond", "Test_B", "Test_B_1wk"),
     save_embeddings=True,
     auto_close=True,
+    verbose=False,
 ):
-    """Cross-registered PCA→UMAP embeddings for TFC_cond/Test_B/Test_B_1wk."""
+    """Cross-registered PCA→UMAP embeddings for TFC_cond/Test_B/Test_B_1wk.
+
+    Time binning is applied to S before z-scoring/PCA/UMAP using
+    frames_per_bin = round(MINISCOPE_FPS * bin_size_s).
+    """
     import os
     import numpy as np
     import matplotlib.pyplot as plt
@@ -5558,6 +5564,20 @@ def run_crossreg_pca_umap(
         )
 
     valid_sessions = {"TFC_cond", "Test_B", "Test_B_1wk"}
+    if bin_size_s < 0:
+        raise ValueError(f"bin_size_s must be >= 0, got {bin_size_s!r}")
+    
+    # bin_size_s=0 means no binning; use original frame resolution.
+    # bin_size_s > 0 means time-bin at that resolution in seconds.
+    frames_per_bin = None
+    if bin_size_s > 0:
+        frames_per_bin = int(round(MINISCOPE_FPS * float(bin_size_s)))
+        if frames_per_bin < 1:
+            raise ValueError(
+                f"Computed frames_per_bin must be >= 1, got {frames_per_bin} "
+                f"from MINISCOPE_FPS={MINISCOPE_FPS} and bin_size_s={bin_size_s}."
+            )
+
     if z_score_sess not in valid_sessions:
         raise ValueError(f"z_score_sess must be one of {sorted(valid_sessions)}, got {z_score_sess!r}")
     if fit_sess not in valid_sessions:
@@ -5579,6 +5599,7 @@ def run_crossreg_pca_umap(
 
     tag = (
         f"zscore_{z_score_sess}"
+        f"__bin_size_s_{float(bin_size_s):g}s"
         f"__fit_{fit_sess}"
         f"__pca{n_pca_components}"
         f"__umapN{umap_n_neighbors}_{umap_metric}"
@@ -5589,6 +5610,9 @@ def run_crossreg_pca_umap(
     print("*** Cross-registered PCA→UMAP")
     print(f"    z-score reference : {z_score_sess}")
     print(f"    PCA/UMAP fit      : {fit_sess}")
+    print(f"    bin_size_s        : {bin_size_s}" + (f" (no binning)" if bin_size_s == 0 else ""))
+    if frames_per_bin is not None:
+        print(f"    frames_per_bin    : {frames_per_bin}")
     print(f"    PCA components    : {n_pca_components}")
     print(f"    UMAP              : n_neighbors={umap_n_neighbors}, min_dist={umap_min_dist}, metric={umap_metric}")
     print(f"    UMAP n_jobs       : {umap_n_jobs}")
@@ -5603,7 +5627,28 @@ def run_crossreg_pca_umap(
             "Test_B_1wk": get_S_indeces_crossreg(Test_B_1wk[mouse], TFC_B_B_1wk_crossreg[mouse], mapping),
         }
 
-    def _event_slice(sess, event_name, event_idx):
+    def _bin_matrix_time(S_in, frames_per_bin, *, mouse, session_name):
+        n_cells, n_frames = S_in.shape
+        usable_frames = (n_frames // frames_per_bin) * frames_per_bin
+        dropped_frames = n_frames - usable_frames
+        if usable_frames <= 0:
+            raise ValueError(
+                f"{mouse} {session_name}: cannot bin {n_frames} frames with "
+                f"frames_per_bin={frames_per_bin}."
+            )
+
+        if dropped_frames > 0 and verbose:
+            print(
+                f"\n    [INFO] {mouse} {session_name}: dropped {dropped_frames} trailing "
+                f"frames for binning (frames_per_bin={frames_per_bin})."
+            )
+
+        S_trim = S_in[:, :usable_frames]
+        n_bins = usable_frames // frames_per_bin
+        S_binned = S_trim.reshape(n_cells, n_bins, frames_per_bin).mean(axis=2)
+        return S_binned, usable_frames, dropped_frames
+
+    def _event_slice(sess, event_name, event_idx, frames_per_bin, n_bins):
         on_name = f"{event_name}_onsets"
         off_name = f"{event_name}_offsets"
         if not hasattr(sess, on_name) or not hasattr(sess, off_name):
@@ -5614,7 +5659,43 @@ def run_crossreg_pca_umap(
             return None
         if event_idx >= len(onsets) or event_idx >= len(offsets):
             return None
-        return slice(int(onsets[event_idx]), int(offsets[event_idx]))
+
+        onset = int(onsets[event_idx])
+        offset = int(offsets[event_idx])
+        if offset <= onset:
+            return None
+
+        # If no binning (frames_per_bin is None), use frame indices directly
+        if frames_per_bin is None:
+            start_bin = onset
+            stop_bin = offset
+        else:
+            start_bin = int(np.floor(onset / frames_per_bin))
+            stop_bin = int(np.ceil(offset / frames_per_bin))
+
+        start_bin = max(0, min(start_bin, n_bins))
+        stop_bin = max(0, min(stop_bin, n_bins))
+        if stop_bin <= start_bin:
+            return None
+        return slice(start_bin, stop_bin)
+
+    def _all_event_slices(sess, event_name, frames_per_bin, n_bins):
+        on_name = f"{event_name}_onsets"
+        off_name = f"{event_name}_offsets"
+        if not hasattr(sess, on_name) or not hasattr(sess, off_name):
+            return []
+        onsets = getattr(sess, on_name)
+        offsets = getattr(sess, off_name)
+        if onsets is None or offsets is None:
+            return []
+
+        n_events = min(len(onsets), len(offsets))
+        slices = []
+        for i in range(n_events):
+            sl = _event_slice(sess, event_name, i, frames_per_bin, n_bins)
+            if sl is not None:
+                slices.append(sl)
+        return slices
 
     def _scatter_session(ax, emb, sess, session_name, first_last_idx, n_frames):
         sc = ax.scatter(
@@ -5622,14 +5703,14 @@ def run_crossreg_pca_umap(
             c=np.arange(n_frames), cmap="viridis", s=2, alpha=1,
         )
 
-        tone_sl = _event_slice(sess, "tone", first_last_idx)
+        tone_sl = _event_slice(sess, "tone", first_last_idx, frames_per_bin, n_frames)
         if tone_sl is not None:
             ax.scatter(
                 emb[tone_sl, 0], emb[tone_sl, 1],
                 color="blue", label="Tone Period", s=10, alpha=1, marker="^",
             )
 
-        shock_sl = _event_slice(sess, "shock", first_last_idx)
+        shock_sl = _event_slice(sess, "shock", first_last_idx, frames_per_bin, n_frames)
         if shock_sl is not None:
             ax.scatter(
                 emb[shock_sl, 0], emb[shock_sl, 1],
@@ -5659,10 +5740,28 @@ def run_crossreg_pca_umap(
         try:
             idx = _crossreg_indices(mouse)
             sess = {s: sess_dicts[s][mouse] for s in session_order}
-            S = {
+            S_raw = {
                 s: np.asarray(sess[s].S[idx[s], :], dtype=np.float64)
                 for s in session_order
             }
+
+            S = {}
+            binned_usable_frames = {}
+            binned_dropped_frames = {}
+            for s in session_order:
+                if frames_per_bin is None:
+                    # No binning: use original S directly
+                    S[s] = S_raw[s]
+                    binned_usable_frames[s] = S_raw[s].shape[1]
+                    binned_dropped_frames[s] = 0
+                else:
+                    # Apply time binning
+                    S[s], binned_usable_frames[s], binned_dropped_frames[s] = _bin_matrix_time(
+                        S_raw[s],
+                        frames_per_bin,
+                        mouse=mouse,
+                        session_name=s,
+                    )
 
             # Z-score reference session defines mean/std for all sessions.
             mu = np.nanmean(S[z_score_sess], axis=1, keepdims=True)
@@ -5755,9 +5854,11 @@ def run_crossreg_pca_umap(
             if last_sc is not None:
                 fig.colorbar(last_sc, ax=axes, label="Frame index", shrink=0.7)
 
+            bin_str = "no binning" if bin_size_s == 0 else f"bin={float(bin_size_s):g}s (fpb={frames_per_bin})"
             fig.suptitle(
                 f"{mouse} {mouse_groups[mouse]} PCA→UMAP crossreg | "
                 f"z-score={z_score_sess}, fit={fit_sess}, "
+                f"{bin_str}, "
                 f"PCA n={n_components_eff}, EVR={evr_sum:.3f}"
             )
 
@@ -5775,6 +5876,88 @@ def run_crossreg_pca_umap(
             if auto_close:
                 plt.close(fig)
 
+            # Separate view: all binned time points with all tone/shock periods.
+            fig_all, axes_all = plt.subplots(1, 3, figsize=(15, 5), constrained_layout=False)
+            last_sc_all = None
+
+            for col, s in enumerate(session_order):
+                ax = axes_all[col]
+                emb = U[s]
+                sess_obj = sess[s]
+                n_bins = emb.shape[0]
+
+                last_sc_all = ax.scatter(
+                    emb[:, 0],
+                    emb[:, 1],
+                    c=np.arange(n_bins),
+                    cmap="viridis",
+                    s=2,
+                    alpha=1,
+                )
+
+                tone_slices = _all_event_slices(sess_obj, "tone", frames_per_bin, n_bins)
+                for i, sl in enumerate(tone_slices):
+                    ax.scatter(
+                        emb[sl, 0],
+                        emb[sl, 1],
+                        color="blue",
+                        s=9,
+                        alpha=0.9,
+                        marker="^",
+                        label="Tone Period" if i == 0 else None,
+                    )
+
+                shock_slices = _all_event_slices(sess_obj, "shock", frames_per_bin, n_bins)
+                for i, sl in enumerate(shock_slices):
+                    ax.scatter(
+                        emb[sl, 0],
+                        emb[sl, 1],
+                        color="red",
+                        s=8,
+                        alpha=0.9,
+                        marker="x",
+                        label="Shock Period" if i == 0 else None,
+                    )
+
+                ax.set_title(f"{s} all binned points")
+                ax.set_xlabel("UMAP1")
+                ax.set_ylabel("UMAP2")
+
+            handles_all, labels_all = axes_all[0].get_legend_handles_labels()
+            if not handles_all:
+                for ax in axes_all:
+                    handles_all, labels_all = ax.get_legend_handles_labels()
+                    if handles_all:
+                        break
+
+            if handles_all:
+                fig_all.legend(
+                    handles_all,
+                    labels_all,
+                    loc="center left",
+                    bbox_to_anchor=(0, 0.5),
+                    fontsize="small",
+                )
+
+            if last_sc_all is not None:
+                fig_all.colorbar(last_sc_all, ax=axes_all, label="Binned frame index", shrink=0.8)
+
+            bin_str_all = "no binning" if bin_size_s == 0 else f"bin={float(bin_size_s):g}s (fpb={frames_per_bin})"
+            fig_all.suptitle(
+                f"{mouse} {mouse_groups[mouse]} PCA→UMAP crossreg | all points | "
+                f"z-score={z_score_sess}, fit={fit_sess}, {bin_str_all}"
+            )
+
+            fig_all_path = os.path.join(
+                mouse_save_path,
+                f"PCA-UMAP-crossreg-ALL-BINS-{mouse_groups[mouse]}-{mouse}-{tag}.png",
+            )
+            plt.savefig(fig_all_path, format="png", dpi=600, bbox_inches="tight")
+            plt.show()
+
+            if auto_close:
+                plt.close(fig_all)
+
             if save_embeddings:
                 npz_path = os.path.join(
                     mouse_save_path,
@@ -5783,6 +5966,8 @@ def run_crossreg_pca_umap(
 
                 np.savez_compressed(
                     npz_path,
+                    bin_size_s=float(bin_size_s),
+                    frames_per_bin=int(frames_per_bin),
                     z_score_sess=z_score_sess,
                     fit_sess=fit_sess,
                     session_order=np.array(session_order),
@@ -5790,12 +5975,16 @@ def run_crossreg_pca_umap(
                     pca_explained_variance_ratio_sum=evr_sum,
                     zscore_mu=mu.squeeze(),
                     zscore_sigma=sigma.squeeze(),
+                    **{f"usable_frames_{s}": int(binned_usable_frames[s]) for s in session_order},
+                    **{f"dropped_frames_{s}": int(binned_dropped_frames[s]) for s in session_order},
                     **{f"PCA_{s}": Z[s] for s in session_order},
                     **{f"UMAP_{s}": U[s] for s in session_order},
                 )
 
             results[mouse] = {
                 "group": mouse_groups[mouse],
+                "bin_size_s": float(bin_size_s),
+                "frames_per_bin": int(frames_per_bin) if frames_per_bin is not None else None,
                 "z_score_sess": z_score_sess,
                 "fit_sess": fit_sess,
                 "session_order": tuple(session_order),
@@ -5808,6 +5997,7 @@ def run_crossreg_pca_umap(
                 "zscore_mu": mu,
                 "zscore_sigma": sigma,
                 "fig_path": fig_path,
+                "fig_all_bins_path": fig_all_path,
             }
 
             print(f" done. PCA EVR={evr_sum:.3f}")
