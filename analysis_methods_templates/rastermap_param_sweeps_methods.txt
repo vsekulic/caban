@@ -1,0 +1,40 @@
+Rastermap parameter sweep methods
+
+Overview
+This analysis runs Rastermap embeddings across a predefined hyperparameter grid and saves per-mouse plots for each parameter combination.
+
+Data and session scope
+- Input matrix for each run is session S (neurons x time) from the loaded dataset object.
+- Sessions swept together are user-specified (for example: TFC_cond, Test_B, Test_B_1wk).
+- For each requested session, all available mice in that session dictionary are processed.
+
+Rastermap fit
+- Model: rastermap.Rastermap(...).fit(spks)
+- Swept parameters:
+  - n_PCs
+  - n_clusters
+  - locality
+  - time_lag_window
+- Additional controls:
+  - grid_upsample
+  - visualization limits vmin / vmax
+
+Visualization
+- Plot uses model.X_embedding rendered with matplotlib imshow and gray_r colormap.
+- Event overlays:
+  - TFC_cond: tone onset/offset (blue dashed) and shock onset/offset (red dashed).
+  - Test_B / Test_B_1wk: tone onset/offset (blue dashed).
+
+Output hierarchy and filenames
+- Root output path:
+  PLOTS_DIR/rastermap/param_sweeps/<sweep_label>/
+- Per-parameter directory hierarchy:
+  n_PCs_<X>/n_clusters_<Y>/locality_<Z>/time_lag_window_<AA>/
+- Leaf filenames are group-first and encode run identity:
+  <group>_<mouse>_session_<session>_n_PCs_<X>_n_clusters_<Y>_locality_<Z>_time_lag_window_<AA>.png
+  Optional PDF with same stem when enabled.
+
+Reproducibility notes
+- The sweep label is deterministic from the session list unless overridden.
+- No silent skipping is used: unsupported sessions or missing metadata raise errors.
+- Figure handles are closed after save during sweeps to control memory usage.

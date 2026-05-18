@@ -27,7 +27,7 @@ from caban.utilities import *  # noqa: F401,F403
 from caban.sessions import *   # noqa: F401,F403
 from caban.analysis import *   # noqa: F401,F403
 from caban.decoder import *    # noqa: F401,F403
-from caban.decoder import _PVT_MODE_LABEL_TO_KEY  # noqa: F401
+from caban.decoder import _PVT_MODE_LABEL_TO_KEY, _copy_analysis_methods_template  # noqa: F401
 from caban.engram import ENGRAM_REFERENCE
 from caban.population import EXCLUDE_MICE_CROSSREG as _PCA_EXCLUDE
 from caban.population import run_population_pca_pipeline, run_pca_state_metrics_from_results
@@ -119,8 +119,10 @@ def run_rastermap_single_mouse(
     n_clusters=100,
     locality=0.75,
     time_lag_window=5,
+    grid_upsample=None,
     vmin=0,
     vmax=1.5,
+    show_plot=True,
 ):
     """Fit and plot a Rastermap embedding for one mouse/session."""
     session_lookup = {
@@ -128,29 +130,63 @@ def run_rastermap_single_mouse(
         "LT1": ds.TFC_cond_LT1,
         "LT2": ds.TFC_cond_LT2,
     }
+    if hasattr(ds, "Test_B"):
+        session_lookup["Test_B"] = ds.Test_B
+    if hasattr(ds, "Test_B_1wk"):
+        session_lookup["Test_B_1wk"] = ds.Test_B_1wk
 
     if session_name not in session_lookup:
         raise ValueError(f"Unsupported session_name={session_name!r}.")
     if m not in session_lookup[session_name]:
         raise KeyError(f"Mouse {m!r} is not available in session {session_name!r}.")
+    if not hasattr(ds, "mouse_groups"):
+        raise RuntimeError("Dataset object is missing mouse_groups.")
+    if m not in ds.mouse_groups:
+        raise RuntimeError(f"Mouse {m!r} is missing from ds.mouse_groups.")
 
     session = session_lookup[session_name][m]
+    mouse_group = ds.mouse_groups[m]
     spks = np.asarray(session.S, dtype="float32")
 
-    model = Rastermap(
-        n_PCs=n_PCs,
-        n_clusters=n_clusters,
-        locality=locality,
-        time_lag_window=time_lag_window,
-    ).fit(spks)
+    rastermap_kwargs = {
+        "n_PCs": n_PCs,
+        "n_clusters": n_clusters,
+        "locality": locality,
+        "time_lag_window": time_lag_window,
+    }
+    if grid_upsample is not None:
+        rastermap_kwargs["grid_upsample"] = grid_upsample
+
+    print(f"[rastermap] calling Rastermap with kwargs: {rastermap_kwargs}", flush=True)
+    model = Rastermap(**rastermap_kwargs).fit(spks)
 
     fig = plt.figure(figsize=(12, 5))
     ax = fig.add_subplot(111)
     ax.imshow(model.X_embedding, vmin=vmin, vmax=vmax, cmap="gray_r", aspect="auto")
-    ax.set_title(f"Rastermap embedding for {m} ({session_name})")
+
+    def _draw_event_lines(onsets, offsets, color):
+        for x in onsets:
+            ax.axvline(x=float(x), color=color, linestyle="--", linewidth=1.0, alpha=0.8)
+        for x in offsets:
+            ax.axvline(x=float(x), color=color, linestyle="--", linewidth=1.0, alpha=0.8)
+
+    if session_name == "TFC_cond":
+        if not (hasattr(session, "tone_onsets") and hasattr(session, "tone_offsets")):
+            raise RuntimeError("TFC_cond session is missing tone onset/offset fields.")
+        if not (hasattr(session, "shock_onsets") and hasattr(session, "shock_offsets")):
+            raise RuntimeError("TFC_cond session is missing shock onset/offset fields.")
+        _draw_event_lines(session.tone_onsets, session.tone_offsets, "b")
+        _draw_event_lines(session.shock_onsets, session.shock_offsets, "r")
+    elif session_name in {"Test_B", "Test_B_1wk"}:
+        if not (hasattr(session, "tone_onsets") and hasattr(session, "tone_offsets")):
+            raise RuntimeError(f"{session_name} session is missing tone onset/offset fields.")
+        _draw_event_lines(session.tone_onsets, session.tone_offsets, "b")
+
+    ax.set_title(f"Rastermap embedding for {m} ({mouse_group}) [{session_name}]")
     ax.set_xlabel("Time bin")
     ax.set_ylabel("Sorted neuron bin")
-    plt.show()
+    if show_plot:
+        plt.show()
 
     return {
         "session": session,
@@ -161,6 +197,139 @@ def run_rastermap_single_mouse(
         "X_embedding": model.X_embedding,
         "figure": fig,
         "axes": ax,
+        "mouse": m,
+        "mouse_group": mouse_group,
+        "session_name": session_name,
+    }
+
+
+def run_rastermap_sweep(
+    ds,
+    *,
+    session_l,
+    n_PCs,
+    n_clusters,
+    locality,
+    time_lag_window,
+    grid_upsample=2,
+    vmin=0,
+    vmax=1.5,
+    plot_PDF=True,
+    dpi=300,
+    sweep_label=None,
+    close_fig=True,
+):
+    """Run one Rastermap parameter combo across all mice in each requested session."""
+    if not session_l:
+        raise RuntimeError("session_l cannot be empty.")
+    if not hasattr(ds, "PLOTS_DIR"):
+        raise RuntimeError("Dataset object is missing PLOTS_DIR.")
+    if not hasattr(ds, "mouse_groups"):
+        raise RuntimeError("Dataset object is missing mouse_groups.")
+
+    session_lookup = {
+        "TFC_cond": ds.TFC_cond,
+        "LT1": ds.TFC_cond_LT1,
+        "LT2": ds.TFC_cond_LT2,
+    }
+    if hasattr(ds, "Test_B"):
+        session_lookup["Test_B"] = ds.Test_B
+    if hasattr(ds, "Test_B_1wk"):
+        session_lookup["Test_B_1wk"] = ds.Test_B_1wk
+
+    for session_name in session_l:
+        if session_name not in session_lookup:
+            raise RuntimeError(f"Unsupported session_name in session_l: {session_name!r}")
+
+    if sweep_label is None:
+        sweep_label = "sweep_" + "__".join(session_l)
+
+    sweep_root = os.path.join(ds.PLOTS_DIR, "rastermap", "param_sweeps", sweep_label)
+    os.makedirs(sweep_root, exist_ok=True)
+    _copy_analysis_methods_template("rastermap_param_sweeps_methods.txt", sweep_root)
+
+    leaf_dir = os.path.join(
+        sweep_root,
+        f"n_PCs_{n_PCs}",
+        f"n_clusters_{n_clusters}",
+        f"locality_{locality}",
+        f"time_lag_window_{time_lag_window}",
+    )
+    os.makedirs(leaf_dir, exist_ok=True)
+    pdf_dir = None
+    if plot_PDF:
+        pdf_dir = os.path.join(leaf_dir, "pdf")
+        os.makedirs(pdf_dir, exist_ok=True)
+
+    saved_files = []
+    runs = 0
+    for session_name in session_l:
+        session_dict = session_lookup[session_name]
+        mice = sorted(session_dict.keys())
+        if not mice:
+            raise RuntimeError(f"No mice found for session {session_name!r}.")
+
+        for m in mice:
+            result = run_rastermap_single_mouse(
+                ds,
+                m=m,
+                session_name=session_name,
+                n_PCs=n_PCs,
+                n_clusters=n_clusters,
+                locality=locality,
+                time_lag_window=time_lag_window,
+                grid_upsample=grid_upsample,
+                vmin=vmin,
+                vmax=vmax,
+                show_plot=False,
+            )
+
+            if m not in ds.mouse_groups:
+                raise RuntimeError(f"Mouse {m!r} missing from ds.mouse_groups.")
+            group = ds.mouse_groups[m]
+            stem = (
+                f"{group}_{m}_session_{session_name}"
+                f"_n_PCs_{n_PCs}"
+                f"_n_clusters_{n_clusters}"
+                f"_locality_{locality}"
+                f"_time_lag_window_{time_lag_window}"
+            )
+            png_path = os.path.join(leaf_dir, f"{stem}.png")
+            result["figure"].savefig(
+                png_path,
+                format="png",
+                dpi=dpi,
+                bbox_inches="tight",
+                pad_inches=0,
+            )
+            saved_files.append(png_path)
+
+            if plot_PDF:
+                if pdf_dir is None:
+                    raise RuntimeError("Internal error: pdf_dir is None while plot_PDF=True.")
+                pdf_path = os.path.join(pdf_dir, f"{stem}.pdf")
+                result["figure"].savefig(
+                    pdf_path,
+                    format="pdf",
+                    dpi=dpi,
+                    bbox_inches="tight",
+                    pad_inches=0,
+                )
+                saved_files.append(pdf_path)
+
+            if close_fig:
+                plt.close(result["figure"])
+            runs += 1
+
+    print(
+        f"[rastermap sweep] saved {len(saved_files)} files across {runs} runs -> {leaf_dir}",
+        flush=True,
+    )
+    return {
+        "sweep_root": sweep_root,
+        "leaf_dir": leaf_dir,
+        "runs": runs,
+        "saved_files": saved_files,
     }
 
 
