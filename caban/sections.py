@@ -17,6 +17,7 @@ from typing import Optional
 
 import numpy as np
 import matplotlib.pyplot as plt
+from rastermap import Rastermap
 
 # Star-imports mirror caban/main.py top-of-file so every plot_/process_
 # helper resolves at module scope without per-function imports.
@@ -106,6 +107,60 @@ def _make_paradigm_ABC_mapping(ds):
         "Test_B_1wk": ds.mapping_TFC_cond_Test_B_Test_B_1wk,
         "TFC_cond":   ds.mapping_TFC_cond_Test_B_Test_B_1wk,
         "default":    ds.mapping_TFC_cond_Test_B_Test_B_1wk,
+    }
+
+
+def run_rastermap_single_mouse(
+    ds,
+    m,
+    session_name="LT1",
+    *,
+    n_PCs=200,
+    n_clusters=100,
+    locality=0.75,
+    time_lag_window=5,
+    vmin=0,
+    vmax=1.5,
+):
+    """Fit and plot a Rastermap embedding for one mouse/session."""
+    session_lookup = {
+        "TFC_cond": ds.TFC_cond,
+        "LT1": ds.TFC_cond_LT1,
+        "LT2": ds.TFC_cond_LT2,
+    }
+
+    if session_name not in session_lookup:
+        raise ValueError(f"Unsupported session_name={session_name!r}.")
+    if m not in session_lookup[session_name]:
+        raise KeyError(f"Mouse {m!r} is not available in session {session_name!r}.")
+
+    session = session_lookup[session_name][m]
+    spks = np.asarray(session.S, dtype="float32")
+
+    model = Rastermap(
+        n_PCs=n_PCs,
+        n_clusters=n_clusters,
+        locality=locality,
+        time_lag_window=time_lag_window,
+    ).fit(spks)
+
+    fig = plt.figure(figsize=(12, 5))
+    ax = fig.add_subplot(111)
+    ax.imshow(model.X_embedding, vmin=vmin, vmax=vmax, cmap="gray_r", aspect="auto")
+    ax.set_title(f"Rastermap embedding for {m} ({session_name})")
+    ax.set_xlabel("Time bin")
+    ax.set_ylabel("Sorted neuron bin")
+    plt.show()
+
+    return {
+        "session": session,
+        "spks": spks,
+        "model": model,
+        "embedding": model.embedding,
+        "isort": model.isort,
+        "X_embedding": model.X_embedding,
+        "figure": fig,
+        "axes": ax,
     }
 
 
