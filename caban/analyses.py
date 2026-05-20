@@ -88,7 +88,7 @@ if plot_sp_rates and not DEVEL_SWITCH:
     msg_end()
 
     # Finally plot interneuron cutoff threshold plots
-    plot_interneuron_cutoff(PLOTS_DIR, TFC_cond)
+    plot_interneuron_cutoff(PLOTS_DIR, TFC_cond, mice_per_group)
 
 if plot_binned_sp_rates and not DEVEL_SWITCH:
     msg_start('*** Generating binned spiking TFC_cond plots')

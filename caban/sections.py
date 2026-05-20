@@ -17,6 +17,7 @@ from typing import Optional
 
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.colors import to_rgb
 from rastermap import Rastermap
 
 # Star-imports mirror caban/main.py top-of-file so every plot_/process_
@@ -149,20 +150,37 @@ def run_rastermap_single_mouse(
     spks = np.asarray(session.S, dtype="float32")
 
     rastermap_kwargs = {
-        "n_PCs": n_PCs,
-        "n_clusters": n_clusters,
-        "locality": locality,
-        "time_lag_window": time_lag_window,
+        k: v for k, v in {
+            "n_PCs": n_PCs,
+            "n_clusters": n_clusters,
+            "locality": locality,
+            "time_lag_window": time_lag_window,
+            "grid_upsample": grid_upsample,
+        }.items() if v is not None
     }
-    if grid_upsample is not None:
-        rastermap_kwargs["grid_upsample"] = grid_upsample
-
+    
     print(f"[rastermap] calling Rastermap with kwargs: {rastermap_kwargs}", flush=True)
     model = Rastermap(**rastermap_kwargs).fit(spks)
 
+    isort = np.asarray(model.isort, dtype=np.int64)
+    if isort.ndim != 1:
+        raise RuntimeError(f"Rastermap returned non-1D isort with shape={isort.shape}.")
+    if isort.shape[0] != spks.shape[0]:
+        raise RuntimeError(
+            f"Rastermap isort length ({isort.shape[0]}) does not match neuron count ({spks.shape[0]})."
+        )
+    if np.unique(isort).shape[0] != isort.shape[0]:
+        raise RuntimeError("Rastermap isort contains duplicate indices.")
+
+    spks_sorted = spks[isort]
+    embedding = np.asarray(model.embedding)
+    embedding_sorted = embedding[isort] if embedding.shape[0] == isort.shape[0] else embedding
+    x_embedding = np.asarray(model.X_embedding)
+    x_embedding_sorted = x_embedding[isort] if x_embedding.shape[0] == isort.shape[0] else x_embedding
+
     fig = plt.figure(figsize=(12, 5))
     ax = fig.add_subplot(111)
-    ax.imshow(model.X_embedding, vmin=vmin, vmax=vmax, cmap="gray_r", aspect="auto")
+    ax.imshow(x_embedding_sorted, vmin=vmin, vmax=vmax, cmap="gray_r", aspect="auto")
 
     def _draw_event_lines(onsets, offsets, color):
         for x in onsets:
@@ -191,10 +209,13 @@ def run_rastermap_single_mouse(
     return {
         "session": session,
         "spks": spks,
+        "spks_sorted": spks_sorted,
         "model": model,
-        "embedding": model.embedding,
-        "isort": model.isort,
-        "X_embedding": model.X_embedding,
+        "embedding": embedding,
+        "embedding_sorted": embedding_sorted,
+        "isort": isort,
+        "X_embedding": x_embedding,
+        "X_embedding_sorted": x_embedding_sorted,
         "figure": fig,
         "axes": ax,
         "mouse": m,
@@ -365,6 +386,7 @@ def run_sp_rates(ds, cfg):
     mappings_all_Test_B = ds.mappings_all_Test_B
     mappings_all_Test_B_1wk = ds.mappings_all_Test_B_1wk
     mouse_groups = ds.mouse_groups
+    mice_per_group = ds.mice_per_group
     plot_interneuron_cutoff = ds.plot_interneuron_cutoff
     post_shock_activity_mapping = ds.post_shock_activity_mapping
     post_shock_sp_rates_mapping = ds.post_shock_sp_rates_mapping
@@ -441,7 +463,7 @@ def run_sp_rates(ds, cfg):
         msg_end()
 
         # Finally plot interneuron cutoff threshold plots
-        plot_interneuron_cutoff(PLOTS_DIR, TFC_cond)
+        plot_interneuron_cutoff(PLOTS_DIR, TFC_cond, mice_per_group)
 
     # ===== end verbatim body =====
 
@@ -6684,6 +6706,1046 @@ def run_population_vector_distances(ds, cfg):
 
 
     # ===== end verbatim body =====
+
+
+# ---------------------------------------------------------------------------
+# Section: avg_population_activity
+# ---------------------------------------------------------------------------
+def run_avg_population_activity(
+    ds,
+    cfg,
+    *,
+    sessions=None,
+    normalize=None,
+    signal_source="S_raw",
+    dff_baseline_method="rolling_percentile",
+    dff_baseline_percentile=20.0,
+    dff_rolling_window_s=60.0,
+    dff_eps=1e-6,
+    same_y_across=True,
+    robust_ylim_quantile=None,
+    group_trace_stat="mean",
+    exclude_top_percent_cells=None,
+    paper_axes=True,
+    paper_zoom_per_row=True,
+    paper_zoom_quantile=0.995,
+    paper_row_height=0.95,
+    figure_width=14.0,
+    trace_linewidth=0.95,
+    overlay_groups_single_axis=False,
+    overlay_alpha=0.65,
+    paper_scalebar_time_value=1.0,
+    paper_scalebar_time_unit="min",
+    paper_scalebar_amp_value=0.5,
+    plot_inline=True,
+    show_plot=None,
+    save_plot=True,
+):
+    """Plot stacked per-mouse population-mean traces per session and group.
+
+    Parameters
+    ----------
+    sessions : list[str] | None
+        Session attribute names on ``ds``. Defaults to
+        ``['TFC_cond', 'Test_B', 'Test_B_1wk']``.
+    normalize : {None, 'per', 'across'}
+        ``None``: no normalization.
+        ``'per'``: per-mouse, per-cell z-score across time, then average cells.
+        ``'across'``: per-session global z-score using all cells from all mice.
+    signal_source : {'S_raw', 'C_dff'}
+        Source matrix used for population traces.
+        ``'S_raw'`` uses deconvolved activity ``S`` directly.
+        ``'C_dff'`` computes dF/F from ``C`` before averaging.
+    dff_baseline_method : {'rolling_percentile', 'session_percentile', 'pre_tone'}
+        Baseline method for dF/F when ``signal_source='C_dff'``.
+    dff_baseline_percentile : float
+        Percentile used to estimate baseline F0 for dF/F.
+    dff_rolling_window_s : float
+        Rolling-window length in seconds used for
+        ``dff_baseline_method='rolling_percentile'``.
+    dff_eps : float
+        Positive denominator floor for dF/F to avoid divide-by-zero.
+    same_y_across : bool
+        If ``True``, apply one shared y-limit to all generated subplots so
+        amplitudes are directly comparable across groups and sessions.
+    robust_ylim_quantile : float | None
+        Optional upper quantile in ``(0.5, 1.0)`` used to compute shared
+        y-limits robustly against outliers when ``same_y_across=True``.
+        Example: ``0.995`` uses [0.5%, 99.5%] bounds.
+    group_trace_stat : {'mean', 'median'}
+        Statistic used for per-group summary traces in the 3-trace summary
+        figure (one row per group) for each session.
+    exclude_top_percent_cells : float | None
+        Exclude the top x% of cells by maximum activity before computing
+        population-mean traces. Example: ``5.0`` removes the 5% most active cells.
+        Set ``None`` (default) to include all cells.
+    paper_axes : bool
+        If ``True`` (default), use compact paper-style traces: tight y-limits,
+        no axis spines/ticks, reduced inter-trace spacing, and a corner scale
+        bar ("1 s", "0.5 a.u.").
+    paper_zoom_per_row : bool
+        If ``True`` and ``paper_axes=True``, compute y-limits per row trace
+        (instead of one shared limit) for stronger vertical zoom.
+    paper_zoom_quantile : float | None
+        Optional quantile in ``(0.5, 1.0)`` for paper per-row zoom. Example
+        ``0.995`` uses [0.5%, 99.5%] bounds and suppresses outlier spikes.
+        Set ``None`` to use full extrema.
+    paper_row_height : float
+        Row height in inches for paper mode stacked traces.
+    figure_width : float
+        Width of all generated figures in inches (default 14.0). Adjust to tune
+        the aspect ratio; height scales automatically with number of rows.
+    trace_linewidth : float
+        Line width for all plotted traces (per-mouse, summary, and overlay).
+    overlay_groups_single_axis : bool
+        If ``True``, also create one figure per session with the three group
+        summary traces overlaid on a single axis.
+    overlay_alpha : float
+        Transparency for overlaid group lines in single-axis mode.
+    paper_scalebar_time_value : float
+        Time length displayed in paper scalebar (e.g., 1.0, 5.0).
+    paper_scalebar_time_unit : {'frames', 's', 'sec', 'min', 'minute', 'minutes'}
+        Units for paper scalebar time length.
+    paper_scalebar_amp_value : float
+        Amplitude length shown in paper scalebar, in activity units.
+    plot_inline : bool
+        Whether to render figures inline.
+    show_plot : bool | None
+        Backward-compatible alias for ``plot_inline``. If provided, it
+        overrides ``plot_inline``.
+    save_plot : bool
+        Whether to save figures under ``PLOTS_DIR/population_activity_avg``.
+    """
+    del cfg  # Section-local plotting utility currently does not use cfg switches.
+
+    if sessions is None:
+        sessions = ["TFC_cond", "Test_B", "Test_B_1wk"]
+    if not isinstance(sessions, (list, tuple)) or len(sessions) == 0:
+        raise RuntimeError("sessions must be a non-empty list/tuple of ds session attribute names.")
+
+    valid_normalize = {None, "per", "across"}
+    if normalize not in valid_normalize:
+        raise RuntimeError("normalize must be one of None, 'per', or 'across'.")
+    valid_signal_source = {"S_raw", "C_dff"}
+    if signal_source not in valid_signal_source:
+        raise RuntimeError("signal_source must be one of 'S_raw' or 'C_dff'.")
+    valid_dff_baseline_method = {"rolling_percentile", "session_percentile", "pre_tone"}
+    if dff_baseline_method not in valid_dff_baseline_method:
+        raise RuntimeError(
+            "dff_baseline_method must be one of 'rolling_percentile', 'session_percentile', or 'pre_tone'."
+        )
+    if not isinstance(dff_baseline_percentile, (float, int)):
+        raise RuntimeError("dff_baseline_percentile must be a float in (0, 100).")
+    dff_baseline_percentile = float(dff_baseline_percentile)
+    if not np.isfinite(dff_baseline_percentile) or not (0 < dff_baseline_percentile < 100):
+        raise RuntimeError("dff_baseline_percentile must be finite and strictly between 0 and 100.")
+    if not isinstance(dff_rolling_window_s, (float, int)):
+        raise RuntimeError("dff_rolling_window_s must be a positive float.")
+    dff_rolling_window_s = float(dff_rolling_window_s)
+    if not np.isfinite(dff_rolling_window_s) or dff_rolling_window_s <= 0:
+        raise RuntimeError("dff_rolling_window_s must be finite and > 0.")
+    if not isinstance(dff_eps, (float, int)):
+        raise RuntimeError("dff_eps must be a positive float.")
+    dff_eps = float(dff_eps)
+    if not np.isfinite(dff_eps) or dff_eps <= 0:
+        raise RuntimeError("dff_eps must be finite and > 0.")
+
+    if not hasattr(ds, "PLOTS_DIR"):
+        raise RuntimeError("Dataset object is missing PLOTS_DIR.")
+    if not hasattr(ds, "mouse_groups"):
+        raise RuntimeError("Dataset object is missing mouse_groups.")
+
+    if not isinstance(same_y_across, bool):
+        raise RuntimeError("same_y_across must be a bool value.")
+    if robust_ylim_quantile is not None:
+        if not isinstance(robust_ylim_quantile, (float, int)):
+            raise RuntimeError("robust_ylim_quantile must be a float in (0.5, 1.0) or None.")
+        robust_ylim_quantile = float(robust_ylim_quantile)
+        if not (0.5 < robust_ylim_quantile < 1.0):
+            raise RuntimeError("robust_ylim_quantile must be strictly between 0.5 and 1.0.")
+    if group_trace_stat not in {"mean", "median"}:
+        raise RuntimeError("group_trace_stat must be either 'mean' or 'median'.")
+    if exclude_top_percent_cells is not None:
+        if not isinstance(exclude_top_percent_cells, (float, int)):
+            raise RuntimeError("exclude_top_percent_cells must be a float in (0, 100) or None.")
+        exclude_top_percent_cells = float(exclude_top_percent_cells)
+        if not (0 < exclude_top_percent_cells < 100):
+            raise RuntimeError("exclude_top_percent_cells must be strictly between 0 and 100.")
+    if not isinstance(paper_axes, bool):
+        raise RuntimeError("paper_axes must be a bool value.")
+    if not isinstance(figure_width, (float, int)) or figure_width <= 0:
+        raise RuntimeError("figure_width must be a positive number.")
+    figure_width = float(figure_width)
+    if not isinstance(trace_linewidth, (float, int)):
+        raise RuntimeError("trace_linewidth must be a positive number.")
+    trace_linewidth = float(trace_linewidth)
+    if not np.isfinite(trace_linewidth) or trace_linewidth <= 0:
+        raise RuntimeError("trace_linewidth must be finite and > 0.")
+    if not isinstance(overlay_groups_single_axis, bool):
+        raise RuntimeError("overlay_groups_single_axis must be a bool value.")
+    if not isinstance(overlay_alpha, (float, int)):
+        raise RuntimeError("overlay_alpha must be a float in (0, 1].")
+    overlay_alpha = float(overlay_alpha)
+    if not np.isfinite(overlay_alpha) or not (0 < overlay_alpha <= 1):
+        raise RuntimeError("overlay_alpha must be finite and strictly between 0 and 1.")
+    if not isinstance(paper_zoom_per_row, bool):
+        raise RuntimeError("paper_zoom_per_row must be a bool value.")
+    if paper_zoom_quantile is not None:
+        if not isinstance(paper_zoom_quantile, (float, int)):
+            raise RuntimeError("paper_zoom_quantile must be a float in (0.5, 1.0) or None.")
+        paper_zoom_quantile = float(paper_zoom_quantile)
+        if not (0.5 < paper_zoom_quantile < 1.0):
+            raise RuntimeError("paper_zoom_quantile must be strictly between 0.5 and 1.0.")
+    if not isinstance(paper_row_height, (float, int)):
+        raise RuntimeError("paper_row_height must be a positive float.")
+    paper_row_height = float(paper_row_height)
+    if not np.isfinite(paper_row_height) or paper_row_height <= 0:
+        raise RuntimeError("paper_row_height must be finite and > 0.")
+    if not isinstance(paper_scalebar_time_value, (float, int)):
+        raise RuntimeError("paper_scalebar_time_value must be a positive float.")
+    paper_scalebar_time_value = float(paper_scalebar_time_value)
+    if not np.isfinite(paper_scalebar_time_value) or paper_scalebar_time_value <= 0:
+        raise RuntimeError("paper_scalebar_time_value must be finite and > 0.")
+    if not isinstance(paper_scalebar_amp_value, (float, int)):
+        raise RuntimeError("paper_scalebar_amp_value must be a positive float.")
+    paper_scalebar_amp_value = float(paper_scalebar_amp_value)
+    if not np.isfinite(paper_scalebar_amp_value) or paper_scalebar_amp_value <= 0:
+        raise RuntimeError("paper_scalebar_amp_value must be finite and > 0.")
+    if not isinstance(paper_scalebar_time_unit, str):
+        raise RuntimeError("paper_scalebar_time_unit must be a string.")
+    paper_scalebar_time_unit = paper_scalebar_time_unit.strip().lower()
+    valid_time_units = {"frame", "frames", "s", "sec", "second", "seconds", "min", "minute", "minutes"}
+    if paper_scalebar_time_unit not in valid_time_units:
+        raise RuntimeError(
+            "paper_scalebar_time_unit must be one of frame(s), s/sec/second(s), or min/minute(s)."
+        )
+    if show_plot is not None:
+        if not isinstance(show_plot, bool):
+            raise RuntimeError("show_plot must be a bool when provided.")
+        plot_inline = show_plot
+    if not isinstance(plot_inline, bool) or not isinstance(save_plot, bool):
+        raise RuntimeError("plot_inline and save_plot must both be bool values.")
+
+    output_root = os.path.join(ds.PLOTS_DIR, "population_activity_avg")
+    os.makedirs(output_root, exist_ok=True)
+    _copy_analysis_methods_template("population_activity_session_group_methods.txt", output_root)
+
+    if "group_colours" not in globals():
+        raise RuntimeError("group_colours is not available from caban.analysis.")
+
+    required_group_colors = {
+        "hM3D": "r",
+        "hM4D": "b",
+        "mCherry": "k",
+    }
+    for group_name, expected_color in required_group_colors.items():
+        if group_name not in group_colours:
+            raise RuntimeError(f"group_colours is missing required group key {group_name!r}.")
+        if group_colours[group_name] != expected_color:
+            raise RuntimeError(
+                f"group_colours[{group_name!r}] expected {expected_color!r} but found {group_colours[group_name]!r}."
+            )
+
+    known_groups = sorted(set(ds.mouse_groups.values()))
+    ordered_groups = [g for g in ["hM3D", "hM4D", "mCherry"] if g in known_groups]
+    ordered_groups.extend([g for g in known_groups if g not in ordered_groups])
+
+    def _lighter_group_color(color_name, amount=0.55):
+        r, g, b = to_rgb(color_name)
+        return (
+            r + (1.0 - r) * amount,
+            g + (1.0 - g) * amount,
+            b + (1.0 - b) * amount,
+        )
+
+    def _stack_group_traces_with_padding(traces):
+        if len(traces) == 0:
+            raise RuntimeError("Cannot stack traces: received empty trace list.")
+
+        trace_vecs = [np.asarray(t, dtype=np.float64).reshape(-1) for t in traces]
+        lengths = [t.shape[0] for t in trace_vecs]
+        if any(n <= 0 for n in lengths):
+            raise RuntimeError("Cannot stack traces: found an empty trace.")
+
+        target_len = int(max(lengths))
+        stacked = np.empty((len(trace_vecs), target_len), dtype=np.float64)
+
+        for i, tr in enumerate(trace_vecs):
+            n = tr.shape[0]
+            stacked[i, :n] = tr
+
+            if n < target_len:
+                mu = float(np.mean(tr))
+                sigma = float(np.std(tr))
+                if not np.isfinite(mu) or not np.isfinite(sigma):
+                    raise RuntimeError("Found non-finite mean/std while padding mismatched traces.")
+
+                # Pad with per-mouse statistics so mismatched lengths do not break
+                # summary plots while keeping scale close to each mouse trace.
+                if sigma > 0:
+                    pad_len = target_len - n
+                    pad = np.empty(pad_len, dtype=np.float64)
+                    pad[0::2] = mu + sigma
+                    pad[1::2] = mu - sigma
+                    stacked[i, n:] = pad
+                else:
+                    stacked[i, n:] = mu
+
+        return stacked
+
+    def _compute_tight_ylim(y_lo, y_hi):
+        if not np.isfinite(y_lo) or not np.isfinite(y_hi):
+            raise RuntimeError("Could not compute y-limits: non-finite bounds.")
+        if y_hi <= y_lo:
+            eps = max(1e-6, abs(y_lo) * 1e-6)
+            return (y_lo - eps, y_hi + eps)
+        if paper_axes:
+            # Paper mode keeps the top bound flush with the highest value.
+            return (y_lo, y_hi)
+
+        pad = 0.05 * (y_hi - y_lo)
+        if y_lo >= 0:
+            return (0.0, y_hi + pad)
+        return (y_lo - pad, y_hi + pad)
+
+    def _compute_paper_ylim_from_values(values):
+        arr = np.asarray(values, dtype=np.float64).ravel()
+        if arr.size == 0:
+            raise RuntimeError("Cannot compute paper y-limits from empty values.")
+        if not np.all(np.isfinite(arr)):
+            raise RuntimeError("Cannot compute paper y-limits from non-finite values.")
+        if paper_zoom_quantile is None:
+            y_lo = float(np.min(arr))
+            y_hi = float(np.max(arr))
+        else:
+            q_hi = paper_zoom_quantile
+            q_lo = 1.0 - q_hi
+            y_lo = float(np.quantile(arr, q_lo))
+            y_hi = float(np.quantile(arr, q_hi))
+        return _compute_tight_ylim(y_lo, y_hi)
+
+    def _filter_cells_by_max_activity(S_mouse):
+        if exclude_top_percent_cells is None:
+            return S_mouse
+        n_cells_total = S_mouse.shape[0]
+        if n_cells_total <= 1:
+            return S_mouse
+        max_per_cell = np.max(S_mouse, axis=1)
+        threshold_percentile = 100.0 - exclude_top_percent_cells
+        threshold = np.percentile(max_per_cell, threshold_percentile)
+        mask = max_per_cell <= threshold
+        n_kept = np.sum(mask)
+        if n_kept == 0:
+            raise RuntimeError(
+                f"exclude_top_percent_cells={exclude_top_percent_cells} would remove all cells. "
+                f"Reduce the exclusion percentage."
+            )
+        return S_mouse[mask, :]
+
+    def _paper_scalebar_time_frames_and_label():
+        val = paper_scalebar_time_value
+        unit = paper_scalebar_time_unit
+        if unit in {"frame", "frames"}:
+            frames = int(round(val))
+            if frames <= 0:
+                raise RuntimeError("paper_scalebar_time_value in frames rounds to <= 0.")
+            label = f"{val:g} frame" if abs(val - 1.0) < 1e-12 else f"{val:g} frames"
+            return frames, label
+        if unit in {"s", "sec", "second", "seconds"}:
+            frames = int(round(val * float(MINISCOPE_FPS)))
+            if frames <= 0:
+                raise RuntimeError("paper_scalebar_time_value in seconds rounds to <= 0 frames.")
+            return frames, f"{val:g} s"
+        if unit in {"min", "minute", "minutes"}:
+            frames = int(round(val * 60.0 * float(MINISCOPE_FPS)))
+            if frames <= 0:
+                raise RuntimeError("paper_scalebar_time_value in minutes rounds to <= 0 frames.")
+            return frames, f"{val:g} min"
+        raise RuntimeError(f"Unhandled paper_scalebar_time_unit: {unit!r}")
+
+    def _apply_paper_axis_style(ax, row_label, *, y_lim):
+        ax.set_ylim(*y_lim)
+        ax.set_yticks([])
+        ax.set_xticks([])
+        for side in ("left", "right", "top", "bottom"):
+            ax.spines[side].set_visible(False)
+        ax.tick_params(axis="both", length=0)
+        ax.set_ylabel("")
+        ax.text(
+            -0.012,
+            0.5,
+            str(row_label),
+            transform=ax.transAxes,
+            ha="right",
+            va="center",
+            fontsize=10,
+        )
+
+    def _add_corner_scalebar(ax, *, x_len_frames, y_len_units, x_text="1 s", y_text="0.5 a.u."):
+        if x_len_frames <= 0 or y_len_units <= 0:
+            raise RuntimeError("Scale bar lengths must be positive.")
+        x0, x1 = ax.get_xlim()
+        y0, y1 = ax.get_ylim()
+        if not np.isfinite(x0) or not np.isfinite(x1) or not np.isfinite(y0) or not np.isfinite(y1):
+            raise RuntimeError("Cannot place scale bar with non-finite axis limits.")
+
+        x_span = x1 - x0
+        y_span = y1 - y0
+        if x_span <= 0 or y_span <= 0:
+            raise RuntimeError("Cannot place scale bar with non-positive axis span.")
+
+        x_anchor = x0 + 0.04 * x_span
+        y_anchor = y0 + 0.08 * y_span
+
+        ax.plot([x_anchor, x_anchor + x_len_frames], [y_anchor, y_anchor], color="k", linewidth=1.0, zorder=8)
+        ax.plot([x_anchor, x_anchor], [y_anchor, y_anchor + y_len_units], color="k", linewidth=1.0, zorder=8)
+        ax.text(
+            x_anchor + 0.5 * x_len_frames,
+            y_anchor - 0.03 * y_span,
+            x_text,
+            ha="center",
+            va="top",
+            fontsize=8,
+        )
+        ax.text(
+            x_anchor - 0.01 * x_span,
+            y_anchor + 0.5 * y_len_units,
+            y_text,
+            ha="right",
+            va="center",
+            rotation=90,
+            fontsize=8,
+        )
+
+    def _draw_event_lines(ax, onsets, offsets, color):
+        for x in onsets:
+            ax.axvline(x=float(x), color=color, linestyle="--", linewidth=1.0, alpha=0.8)
+        for x in offsets:
+            ax.axvline(x=float(x), color=color, linestyle="--", linewidth=1.0, alpha=0.8)
+
+    def _overlay_events(ax, session_name, session_obj):
+        if session_name == "TFC_cond":
+            if not (hasattr(session_obj, "tone_onsets") and hasattr(session_obj, "tone_offsets")):
+                raise RuntimeError("TFC_cond session is missing tone onset/offset fields.")
+            if not (hasattr(session_obj, "shock_onsets") and hasattr(session_obj, "shock_offsets")):
+                raise RuntimeError("TFC_cond session is missing shock onset/offset fields.")
+            _draw_event_lines(ax, session_obj.tone_onsets, session_obj.tone_offsets, "b")
+            _draw_event_lines(ax, session_obj.shock_onsets, session_obj.shock_offsets, "r")
+        elif session_name in {"Test_B", "Test_B_1wk"}:
+            if not (hasattr(session_obj, "tone_onsets") and hasattr(session_obj, "tone_offsets")):
+                raise RuntimeError(f"{session_name} session is missing tone onset/offset fields.")
+            _draw_event_lines(ax, session_obj.tone_onsets, session_obj.tone_offsets, "b")
+
+    def _zscore_trace_over_time(trace):
+        mu = float(np.mean(trace))
+        sigma = float(np.std(trace))
+        if not np.isfinite(sigma):
+            raise RuntimeError("Found non-finite std while z-scoring final population trace.")
+        if sigma == 0:
+            return np.zeros_like(trace, dtype=np.float64)
+        return (trace - mu) / sigma
+
+    def _normalize_cells_per_mouse(S_mouse):
+        mu = S_mouse.mean(axis=1, keepdims=True)
+        sigma = S_mouse.std(axis=1, keepdims=True)
+        if not np.all(np.isfinite(sigma)):
+            raise RuntimeError("Found non-finite per-cell standard deviation during per-mouse z-scoring.")
+        if np.any(sigma < 0):
+            raise RuntimeError("Found negative per-cell standard deviation during per-mouse z-scoring.")
+
+        # Constant cells (sigma == 0) are mapped to 0 z-score everywhere.
+        z = np.zeros_like(S_mouse, dtype=np.float64)
+        np.divide(S_mouse - mu, sigma, out=z, where=(sigma > 0))
+        return z
+
+    def _compute_dff_baseline_rolling_percentile(C_mouse):
+        n_cells, n_time = C_mouse.shape
+        if n_time <= 0:
+            raise RuntimeError("Cannot compute rolling percentile baseline with empty time axis.")
+        window_frames = int(round(dff_rolling_window_s * float(MINISCOPE_FPS)))
+        if window_frames <= 0:
+            raise RuntimeError(
+                f"dff_rolling_window_s={dff_rolling_window_s} yields <= 0 frames at MINISCOPE_FPS={MINISCOPE_FPS}."
+            )
+
+        pad_left = window_frames // 2
+        pad_right = window_frames - 1 - pad_left
+        baseline = np.empty_like(C_mouse, dtype=np.float64)
+        for i in range(n_cells):
+            row = np.pad(C_mouse[i], (pad_left, pad_right), mode="edge")
+            windows = np.lib.stride_tricks.sliding_window_view(row, window_shape=window_frames)
+            if windows.shape[0] != n_time:
+                raise RuntimeError(
+                    f"Unexpected rolling-window shape for dF/F baseline: {windows.shape[0]} vs {n_time}."
+                )
+            baseline[i] = np.percentile(windows, dff_baseline_percentile, axis=1)
+
+        return baseline
+
+    def _compute_dff_baseline_session_percentile(C_mouse):
+        return np.percentile(C_mouse, dff_baseline_percentile, axis=1, keepdims=True)
+
+    def _compute_dff_baseline_pre_tone(C_mouse, session_name, session_obj):
+        if not (hasattr(session_obj, "tone_onsets") and len(session_obj.tone_onsets) > 0):
+            raise RuntimeError(
+                f"dff_baseline_method='pre_tone' requires tone_onsets for session {session_name}."
+            )
+        first_tone = int(np.floor(float(np.min(np.asarray(session_obj.tone_onsets, dtype=np.float64)))))
+        if first_tone <= 0:
+            raise RuntimeError(
+                f"Session {session_name} has no pre-tone frames before first tone onset ({first_tone})."
+            )
+        if first_tone > C_mouse.shape[1]:
+            raise RuntimeError(
+                f"First tone onset {first_tone} exceeds trace length {C_mouse.shape[1]} for session {session_name}."
+            )
+        C_pre = C_mouse[:, :first_tone]
+        if C_pre.shape[1] <= 0:
+            raise RuntimeError(f"Session {session_name} has empty pre-tone baseline window.")
+        return np.percentile(C_pre, dff_baseline_percentile, axis=1, keepdims=True)
+
+    def _compute_dff_from_C(C_mouse, session_name, session_obj):
+        if dff_baseline_method == "rolling_percentile":
+            baseline = _compute_dff_baseline_rolling_percentile(C_mouse)
+        elif dff_baseline_method == "session_percentile":
+            baseline = _compute_dff_baseline_session_percentile(C_mouse)
+        elif dff_baseline_method == "pre_tone":
+            baseline = _compute_dff_baseline_pre_tone(C_mouse, session_name, session_obj)
+        else:
+            raise RuntimeError(f"Unhandled dff_baseline_method: {dff_baseline_method!r}")
+
+        denom = np.maximum(baseline, dff_eps)
+        dff = (C_mouse - baseline) / denom
+        if not np.all(np.isfinite(dff)):
+            raise RuntimeError(
+                f"Computed non-finite dF/F values for session {session_name} using method {dff_baseline_method}."
+            )
+        return dff
+
+    def _select_signal_matrix(session_name, mouse, session_obj):
+        if signal_source == "S_raw":
+            if not hasattr(session_obj, "S"):
+                raise RuntimeError(f"Session object {session_name}[{mouse}] is missing S matrix.")
+            signal = np.asarray(session_obj.S, dtype=np.float64)
+        elif signal_source == "C_dff":
+            if not hasattr(session_obj, "C"):
+                raise RuntimeError(f"Session object {session_name}[{mouse}] is missing C matrix for dF/F.")
+            C_mouse = np.asarray(session_obj.C, dtype=np.float64)
+            if C_mouse.ndim != 2:
+                raise RuntimeError(
+                    f"Session matrix {session_name}[{mouse}].C must be 2D for dF/F; got shape {C_mouse.shape}."
+                )
+            if C_mouse.shape[0] <= 0 or C_mouse.shape[1] <= 0:
+                raise RuntimeError(f"Session matrix {session_name}[{mouse}].C has invalid shape {C_mouse.shape}.")
+            if not np.all(np.isfinite(C_mouse)):
+                raise RuntimeError(f"Session matrix {session_name}[{mouse}].C contains non-finite values.")
+            signal = _compute_dff_from_C(C_mouse, session_name, session_obj)
+        else:
+            raise RuntimeError(f"Unhandled signal_source: {signal_source!r}")
+
+        if signal.ndim != 2:
+            raise RuntimeError(
+                f"Selected signal matrix {session_name}[{mouse}] must be 2D; got shape {signal.shape}."
+            )
+        if signal.shape[0] <= 0 or signal.shape[1] <= 0:
+            raise RuntimeError(
+                f"Selected signal matrix {session_name}[{mouse}] has invalid shape {signal.shape}."
+            )
+        if not np.all(np.isfinite(signal)):
+            raise RuntimeError(f"Selected signal matrix {session_name}[{mouse}] contains non-finite values.")
+        return signal
+
+    normalize_label = "raw" if normalize is None else normalize
+    if signal_source == "S_raw":
+        baseline_tag = "na"
+    else:
+        baseline_tag = f"{dff_baseline_method}_q{dff_baseline_percentile:g}_w{dff_rolling_window_s:g}s"
+    signal_tag = f"{signal_source}__{baseline_tag}"
+    saved_paths = []
+    paper_scalebar_x_frames, paper_scalebar_x_label = _paper_scalebar_time_frames_and_label()
+    paper_scalebar_y_label = f"{paper_scalebar_amp_value:g} a.u."
+
+    session_payloads = []
+    global_y_min = np.inf
+    global_y_max = -np.inf
+    all_trace_values = []
+
+    for session_name in sessions:
+        if not hasattr(ds, session_name):
+            raise RuntimeError(f"Dataset object does not have requested session attribute {session_name!r}.")
+
+        session_dict = getattr(ds, session_name)
+        if not isinstance(session_dict, dict):
+            raise RuntimeError(f"ds.{session_name} is not a dict of mouse -> session objects.")
+        if len(session_dict) == 0:
+            raise RuntimeError(f"ds.{session_name} is empty; cannot plot population activity.")
+
+        mouse_to_session = {}
+        mouse_to_signal = {}
+        for mouse in sorted(session_dict.keys()):
+            if mouse not in ds.mouse_groups:
+                raise RuntimeError(f"Mouse {mouse!r} in {session_name} is missing from ds.mouse_groups.")
+
+            session_obj = session_dict[mouse]
+            signal_mouse = _select_signal_matrix(session_name, mouse, session_obj)
+
+            mouse_to_session[mouse] = session_obj
+            mouse_to_signal[mouse] = signal_mouse
+
+        if normalize == "across":
+            pooled_vals = np.concatenate([arr.reshape(-1) for arr in mouse_to_signal.values()])
+            pooled_mu = float(np.mean(pooled_vals))
+            pooled_sigma = float(np.std(pooled_vals))
+            if not np.isfinite(pooled_sigma) or pooled_sigma <= 0:
+                raise RuntimeError(
+                    f"Invalid global std for normalize='across' in session {session_name}: {pooled_sigma}."
+                )
+            mouse_to_trace = {
+                mouse: np.mean(((_filter_cells_by_max_activity(S_mouse)) - pooled_mu) / pooled_sigma, axis=0)
+                for mouse, S_mouse in mouse_to_signal.items()
+            }
+        elif normalize == "per":
+            mouse_to_trace = {
+                mouse: np.mean(_normalize_cells_per_mouse(_filter_cells_by_max_activity(S_mouse)), axis=0)
+                for mouse, S_mouse in mouse_to_signal.items()
+            }
+        else:
+            mouse_to_trace = {
+                mouse: np.mean(_filter_cells_by_max_activity(S_mouse), axis=0)
+                for mouse, S_mouse in mouse_to_signal.items()
+            }
+
+        group_to_mice = {}
+        for mouse in sorted(mouse_to_session.keys()):
+            group = ds.mouse_groups[mouse]
+            group_to_mice.setdefault(group, []).append(mouse)
+
+        for trace in mouse_to_trace.values():
+            trace_min = float(np.min(trace))
+            trace_max = float(np.max(trace))
+            if trace_min < global_y_min:
+                global_y_min = trace_min
+            if trace_max > global_y_max:
+                global_y_max = trace_max
+            all_trace_values.append(np.asarray(trace, dtype=np.float64).ravel())
+
+        session_payloads.append(
+            {
+                "session_name": session_name,
+                "mouse_to_session": mouse_to_session,
+                "mouse_to_trace": mouse_to_trace,
+                "group_to_mice": group_to_mice,
+            }
+        )
+
+    if same_y_across:
+        if not np.isfinite(global_y_min) or not np.isfinite(global_y_max):
+            raise RuntimeError("Could not determine shared y-limits: non-finite global extrema.")
+        if robust_ylim_quantile is not None:
+            if len(all_trace_values) == 0:
+                raise RuntimeError("Could not compute robust y-limits: no trace values found.")
+            pooled = np.concatenate(all_trace_values)
+            q_hi = robust_ylim_quantile
+            q_lo = 1.0 - q_hi
+            y_lo = float(np.quantile(pooled, q_lo))
+            y_hi = float(np.quantile(pooled, q_hi))
+            if not np.isfinite(y_lo) or not np.isfinite(y_hi):
+                raise RuntimeError("Could not compute robust y-limits: non-finite quantile bounds.")
+            shared_ylim = _compute_tight_ylim(y_lo, y_hi)
+        else:
+            shared_ylim = _compute_tight_ylim(global_y_min, global_y_max)
+    else:
+        shared_ylim = None
+
+    for payload in session_payloads:
+        session_name = payload["session_name"]
+        mouse_to_session = payload["mouse_to_session"]
+        mouse_to_trace = payload["mouse_to_trace"]
+        group_to_mice = payload["group_to_mice"]
+
+        for group in ordered_groups:
+            if group not in group_to_mice:
+                continue
+
+            if group not in group_colours:
+                raise RuntimeError(f"No color specified in group_colours for group {group!r}.")
+            group_color = group_colours[group]
+
+            mice_this_group = sorted(group_to_mice[group])
+            n_rows = len(mice_this_group)
+            if paper_axes:
+                fig_h = max(paper_row_height * n_rows + 0.5, 2.0)
+            else:
+                fig_h = max(2.2 * n_rows, 3.5)
+            fig, axes = plt.subplots(n_rows, 1, figsize=(figure_width, fig_h), sharex=True, constrained_layout=not paper_axes)
+            if n_rows == 1:
+                axes = [axes]
+            if paper_axes:
+                fig.subplots_adjust(left=0.08, right=0.995, top=0.93, bottom=0.06, hspace=0.02)
+
+            group_trace_arrays = [np.asarray(mouse_to_trace[m], dtype=np.float64).reshape(-1) for m in mice_this_group]
+            if same_y_across:
+                local_ylim = shared_ylim
+            else:
+                local_stack = _stack_group_traces_with_padding(group_trace_arrays)
+                local_vals = local_stack.ravel()
+                if robust_ylim_quantile is None:
+                    y_lo_local = float(np.min(local_vals))
+                    y_hi_local = float(np.max(local_vals))
+                else:
+                    q_hi_local = robust_ylim_quantile
+                    q_lo_local = 1.0 - q_hi_local
+                    y_lo_local = float(np.quantile(local_vals, q_lo_local))
+                    y_hi_local = float(np.quantile(local_vals, q_hi_local))
+                local_ylim = _compute_tight_ylim(y_lo_local, y_hi_local)
+
+            for ax, mouse in zip(axes, mice_this_group):
+                trace = mouse_to_trace[mouse]
+                ax.plot(np.arange(trace.shape[0]), trace, color=group_color, linewidth=trace_linewidth, zorder=5)
+                _overlay_events(ax, session_name, mouse_to_session[mouse])
+                if paper_axes:
+                    if paper_zoom_per_row:
+                        row_ylim = _compute_paper_ylim_from_values(trace)
+                    else:
+                        row_ylim = local_ylim
+                    _apply_paper_axis_style(ax, mouse, y_lim=row_ylim)
+                else:
+                    if local_ylim is not None:
+                        ax.set_ylim(*local_ylim)
+                    ax.set_ylabel(mouse, rotation=0, labelpad=22, va="center")
+                    ax.spines["right"].set_visible(False)
+                    ax.spines["top"].set_visible(False)
+
+            if paper_axes:
+                _add_corner_scalebar(
+                    axes[-1],
+                    x_len_frames=paper_scalebar_x_frames,
+                    y_len_units=paper_scalebar_amp_value,
+                    x_text=paper_scalebar_x_label,
+                    y_text=paper_scalebar_y_label,
+                )
+            else:
+                axes[-1].set_xlabel("Time (frame)")
+            fig.suptitle(
+                (
+                    f"Population activity (cell-mean) | session={session_name} | group={group} | "
+                    f"normalize={normalize_label} | signal={signal_source} | baseline={baseline_tag}"
+                ),
+                fontsize=12,
+            )
+
+            if save_plot:
+                out_dir = os.path.join(output_root, session_name, f"normalize_{normalize_label}")
+                os.makedirs(out_dir, exist_ok=True)
+                save_path = os.path.join(
+                    out_dir,
+                    (
+                        f"population_activity__session_{session_name}__group_{group}"
+                        f"__normalize_{normalize_label}__signal_{signal_tag}.png"
+                    ),
+                )
+                save_parent = os.path.dirname(save_path)
+                os.makedirs(save_parent, exist_ok=True)
+                try:
+                    fig.savefig(save_path, format="png", dpi=300, bbox_inches="tight")
+                except FileNotFoundError as exc:
+                    raise RuntimeError(
+                        f"Failed to save figure because parent directory is missing: {save_parent}"
+                    ) from exc
+                saved_paths.append(save_path)
+
+            if plot_inline:
+                plt.show()
+            plt.close(fig)
+
+        # Per-session summary figure: one row per group with center trace + SEM.
+        summary_groups = [g for g in ["hM3D", "hM4D", "mCherry"]]
+        for g in summary_groups:
+            if g not in group_to_mice or len(group_to_mice[g]) == 0:
+                raise RuntimeError(
+                    f"Session {session_name} is missing mice for required group {g!r}; "
+                    "cannot build 3-group summary trace figure."
+                )
+
+        fig_summary, axes_summary = plt.subplots(
+            len(summary_groups),
+            1,
+            figsize=(figure_width, max((paper_row_height * len(summary_groups) + 0.5) if paper_axes else (2.2 * len(summary_groups)), 2.0 if paper_axes else 5.0)),
+            sharex=True,
+            constrained_layout=not paper_axes,
+        )
+        if len(summary_groups) == 1:
+            axes_summary = [axes_summary]
+        if paper_axes:
+            fig_summary.subplots_adjust(left=0.08, right=0.995, top=0.93, bottom=0.06, hspace=0.02)
+
+        summary_values_for_ylim = []
+        for group in summary_groups:
+            mice_this_group = sorted(group_to_mice[group])
+            trace_stack = _stack_group_traces_with_padding([mouse_to_trace[m] for m in mice_this_group])
+            if group_trace_stat == "mean":
+                center = np.mean(trace_stack, axis=0)
+            else:
+                center = np.median(trace_stack, axis=0)
+            if trace_stack.shape[0] <= 1:
+                sem = np.zeros_like(center, dtype=np.float64)
+            else:
+                sem = np.std(trace_stack, axis=0, ddof=1) / np.sqrt(float(trace_stack.shape[0]))
+            summary_values_for_ylim.append(center + sem)
+            summary_values_for_ylim.append(center - sem)
+
+        if same_y_across:
+            summary_ylim = shared_ylim
+        else:
+            summary_vals = np.concatenate([np.asarray(v, dtype=np.float64).ravel() for v in summary_values_for_ylim])
+            if robust_ylim_quantile is None:
+                y_lo_sum = float(np.min(summary_vals))
+                y_hi_sum = float(np.max(summary_vals))
+            else:
+                q_hi_sum = robust_ylim_quantile
+                q_lo_sum = 1.0 - q_hi_sum
+                y_lo_sum = float(np.quantile(summary_vals, q_lo_sum))
+                y_hi_sum = float(np.quantile(summary_vals, q_hi_sum))
+            summary_ylim = _compute_tight_ylim(y_lo_sum, y_hi_sum)
+
+        for ax, group in zip(axes_summary, summary_groups):
+            mice_this_group = sorted(group_to_mice[group])
+            trace_stack = _stack_group_traces_with_padding([mouse_to_trace[m] for m in mice_this_group])
+
+            if group_trace_stat == "mean":
+                center = np.mean(trace_stack, axis=0)
+            else:
+                center = np.median(trace_stack, axis=0)
+
+            if trace_stack.shape[0] <= 1:
+                sem = np.zeros_like(center, dtype=np.float64)
+            else:
+                sem = np.std(trace_stack, axis=0, ddof=1) / np.sqrt(float(trace_stack.shape[0]))
+
+            line_color = group_colours[group]
+            shade_color = _lighter_group_color(line_color)
+            x = np.arange(center.shape[0])
+
+            ax.plot(x, center, color=line_color, linewidth=trace_linewidth, zorder=6)
+            ax.fill_between(x, center - sem, center + sem, color=shade_color, alpha=0.45, linewidth=0, zorder=4)
+            _overlay_events(ax, session_name, mouse_to_session[mice_this_group[0]])
+            if paper_axes:
+                if paper_zoom_per_row:
+                    row_summary_vals = np.concatenate([center - sem, center + sem])
+                    row_summary_ylim = _compute_paper_ylim_from_values(row_summary_vals)
+                else:
+                    row_summary_ylim = summary_ylim
+                _apply_paper_axis_style(ax, group, y_lim=row_summary_ylim)
+            else:
+                if summary_ylim is not None:
+                    ax.set_ylim(*summary_ylim)
+                ax.set_ylabel(group, rotation=0, labelpad=24, va="center")
+                ax.spines["right"].set_visible(False)
+                ax.spines["top"].set_visible(False)
+
+        if paper_axes:
+            _add_corner_scalebar(
+                axes_summary[-1],
+                x_len_frames=paper_scalebar_x_frames,
+                y_len_units=paper_scalebar_amp_value,
+                x_text=paper_scalebar_x_label,
+                y_text=paper_scalebar_y_label,
+            )
+        else:
+            axes_summary[-1].set_xlabel("Time (frame)")
+        fig_summary.suptitle(
+            (
+                f"Population activity summary (group {group_trace_stat} +/- SEM) | "
+                f"session={session_name} | normalize={normalize_label} | signal={signal_source} | baseline={baseline_tag}"
+            ),
+            fontsize=12,
+        )
+
+        if save_plot:
+            out_dir = os.path.join(output_root, session_name, f"normalize_{normalize_label}")
+            os.makedirs(out_dir, exist_ok=True)
+            save_summary_path = os.path.join(
+                out_dir,
+                (
+                    f"population_activity_summary__session_{session_name}"
+                    f"__stat_{group_trace_stat}__normalize_{normalize_label}__signal_{signal_tag}.png"
+                ),
+            )
+            save_parent = os.path.dirname(save_summary_path)
+            os.makedirs(save_parent, exist_ok=True)
+            try:
+                fig_summary.savefig(save_summary_path, format="png", dpi=300, bbox_inches="tight")
+            except FileNotFoundError as exc:
+                raise RuntimeError(
+                    f"Failed to save summary figure because parent directory is missing: {save_parent}"
+                ) from exc
+            saved_paths.append(save_summary_path)
+
+        if plot_inline:
+            plt.show()
+        plt.close(fig_summary)
+
+        if overlay_groups_single_axis:
+            fig_overlay, ax_overlay = plt.subplots(
+                1,
+                1,
+                figsize=(
+                    figure_width,
+                    max(
+                        (paper_row_height * 1.8 + 0.5) if paper_axes else 4.0,
+                        2.0 if paper_axes else 4.0,
+                    ),
+                ),
+                constrained_layout=not paper_axes,
+            )
+            if paper_axes:
+                fig_overlay.subplots_adjust(left=0.08, right=0.995, top=0.93, bottom=0.06)
+
+            overlay_values_for_ylim = []
+            for group in summary_groups:
+                mice_this_group = sorted(group_to_mice[group])
+                trace_stack = _stack_group_traces_with_padding([mouse_to_trace[m] for m in mice_this_group])
+                if group_trace_stat == "mean":
+                    center = np.mean(trace_stack, axis=0)
+                else:
+                    center = np.median(trace_stack, axis=0)
+
+                if trace_stack.shape[0] <= 1:
+                    sem = np.zeros_like(center, dtype=np.float64)
+                else:
+                    sem = np.std(trace_stack, axis=0, ddof=1) / np.sqrt(float(trace_stack.shape[0]))
+
+                line_color = group_colours[group]
+                shade_color = _lighter_group_color(line_color)
+                x = np.arange(center.shape[0])
+                ax_overlay.plot(
+                    x,
+                    center,
+                    color=line_color,
+                    linewidth=trace_linewidth,
+                    alpha=overlay_alpha,
+                    label=group,
+                    zorder=6,
+                )
+                ax_overlay.fill_between(
+                    x,
+                    center - sem,
+                    center + sem,
+                    color=shade_color,
+                    alpha=min(0.45, 0.6 * overlay_alpha),
+                    linewidth=0,
+                    zorder=4,
+                )
+                overlay_values_for_ylim.append(center + sem)
+                overlay_values_for_ylim.append(center - sem)
+
+            _overlay_events(ax_overlay, session_name, mouse_to_session[sorted(group_to_mice[summary_groups[0]])[0]])
+
+            if same_y_across:
+                overlay_ylim = shared_ylim
+            else:
+                overlay_vals = np.concatenate([
+                    np.asarray(v, dtype=np.float64).ravel() for v in overlay_values_for_ylim
+                ])
+                if robust_ylim_quantile is None:
+                    y_lo_overlay = float(np.min(overlay_vals))
+                    y_hi_overlay = float(np.max(overlay_vals))
+                else:
+                    q_hi_overlay = robust_ylim_quantile
+                    q_lo_overlay = 1.0 - q_hi_overlay
+                    y_lo_overlay = float(np.quantile(overlay_vals, q_lo_overlay))
+                    y_hi_overlay = float(np.quantile(overlay_vals, q_hi_overlay))
+                overlay_ylim = _compute_tight_ylim(y_lo_overlay, y_hi_overlay)
+
+            if paper_axes:
+                ax_overlay.set_ylim(*overlay_ylim)
+                ax_overlay.set_yticks([])
+                ax_overlay.set_xticks([])
+                for side in ("left", "right", "top", "bottom"):
+                    ax_overlay.spines[side].set_visible(False)
+                ax_overlay.tick_params(axis="both", length=0)
+                _add_corner_scalebar(
+                    ax_overlay,
+                    x_len_frames=paper_scalebar_x_frames,
+                    y_len_units=paper_scalebar_amp_value,
+                    x_text=paper_scalebar_x_label,
+                    y_text=paper_scalebar_y_label,
+                )
+            else:
+                ax_overlay.set_ylim(*overlay_ylim)
+                ax_overlay.set_xlabel("Time (frame)")
+                ax_overlay.spines["right"].set_visible(False)
+                ax_overlay.spines["top"].set_visible(False)
+
+            ax_overlay.legend(loc="upper right", frameon=False)
+            fig_overlay.suptitle(
+                (
+                    f"Population activity overlay (group {group_trace_stat} +/- SEM) | "
+                    f"session={session_name} | normalize={normalize_label} | signal={signal_source} | baseline={baseline_tag}"
+                ),
+                fontsize=12,
+            )
+
+            if save_plot:
+                out_dir = os.path.join(output_root, session_name, f"normalize_{normalize_label}")
+                os.makedirs(out_dir, exist_ok=True)
+                save_overlay_path = os.path.join(
+                    out_dir,
+                    (
+                        f"population_activity_overlay__session_{session_name}"
+                        f"__stat_{group_trace_stat}__normalize_{normalize_label}__signal_{signal_tag}.png"
+                    ),
+                )
+                save_parent = os.path.dirname(save_overlay_path)
+                os.makedirs(save_parent, exist_ok=True)
+                try:
+                    fig_overlay.savefig(save_overlay_path, format="png", dpi=300, bbox_inches="tight")
+                except FileNotFoundError as exc:
+                    raise RuntimeError(
+                        f"Failed to save overlay figure because parent directory is missing: {save_parent}"
+                    ) from exc
+                saved_paths.append(save_overlay_path)
+
+            if plot_inline:
+                plt.show()
+            plt.close(fig_overlay)
+
+    print(
+        f"[avg population activity] completed for {len(sessions)} sessions; "
+        f"saved {len(saved_paths)} figure(s) under {output_root}; "
+        f"signal={signal_source}, baseline={baseline_tag}",
+        flush=True,
+    )
+
+    return {
+        "output_root": output_root,
+        "saved_files": saved_paths,
+        "normalize": normalize,
+        "signal_source": signal_source,
+        "dff_baseline_method": dff_baseline_method,
+        "dff_baseline_percentile": dff_baseline_percentile,
+        "dff_rolling_window_s": dff_rolling_window_s,
+        "dff_eps": dff_eps,
+        "baseline_tag": baseline_tag,
+        "same_y_across": same_y_across,
+        "robust_ylim_quantile": robust_ylim_quantile,
+        "group_trace_stat": group_trace_stat,
+        "paper_axes": paper_axes,
+        "paper_zoom_per_row": paper_zoom_per_row,
+        "paper_zoom_quantile": paper_zoom_quantile,
+        "paper_row_height": paper_row_height,
+        "paper_scalebar_time_value": paper_scalebar_time_value,
+        "paper_scalebar_time_unit": paper_scalebar_time_unit,
+        "paper_scalebar_amp_value": paper_scalebar_amp_value,
+        "exclude_top_percent_cells": exclude_top_percent_cells,
+        "figure_width": figure_width,
+        "trace_linewidth": trace_linewidth,
+        "overlay_groups_single_axis": overlay_groups_single_axis,
+        "overlay_alpha": overlay_alpha,
+        "plot_inline": plot_inline,
+        "shared_ylim": shared_ylim,
+        "sessions": list(sessions),
+    }
 
 
 # ---------------------------------------------------------------------------

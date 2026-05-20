@@ -1,0 +1,48 @@
+Cell-averaged population activity by session and mouse group
+
+Overview
+- This analysis summarizes population calcium activity at the mouse level.
+- For each requested session, each mouse contributes one time series computed as the mean across cells of a selected signal matrix.
+- Signal options:
+- S_raw: use deconvolved activity S directly.
+- C_dff: compute dF/F from C, then average.
+- Outputs are grouped by viral group (hM3D, hM4D, mCherry), with one figure per (session, group).
+
+Inputs
+- Session dictionaries from the loaded dataset namespace (e.g., TFC_cond, Test_B, Test_B_1wk, TFC_cond_LT1, TFC_cond_LT2).
+- Per-session objects must provide S for S_raw and C for C_dff, each with shape (n_cells, n_timepoints).
+- Group labels are read from ds.mouse_groups.
+
+Computation
+1. For each session and mouse, load the selected signal source.
+2. Optional dF/F transform when signal_source='C_dff':
+- F0 baseline methods:
+- rolling_percentile: per-cell rolling percentile baseline over time (window in seconds, converted via miniscope FPS).
+- session_percentile: single per-cell percentile baseline from the full session.
+- pre_tone: single per-cell percentile baseline from frames before first tone onset.
+- dF/F formula: (C - F0) / max(F0, eps).
+3. Optional normalization mode:
+- normalize=None: use raw S.
+- normalize='per': per mouse, z-score each cell across time.
+- normalize='across': for each session, pool all cells across all included mice and compute one global mean/std; z-score all cell values with this shared reference.
+4. Compute a mouse-level population trace as mean(signal, axis=0).
+
+Visualization
+- For each session and group, plot one subplot per mouse, vertically stacked with a shared x-axis.
+- Trace colors follow established group coding:
+- hM3D: red
+- hM4D: blue
+- mCherry: black
+- Event overlays:
+- TFC_cond: tone (blue dashed lines) and shock (red dashed lines).
+- Test_B and Test_B_1wk: tone only (blue dashed lines).
+- LT sessions: no tone/shock overlays.
+
+Output
+- Figures are saved under:
+- <PLOTS_DIR>/population_activity_avg/<session>/normalize_<mode>/
+- Filenames encode session, group, normalization mode, signal source, and baseline tag.
+
+Error handling
+- The analysis hard-fails on invalid session names, missing required fields, non-finite S values, and invalid normalization statistics.
+- No silent skipping/fallback behavior is used.
