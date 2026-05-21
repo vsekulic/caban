@@ -22,12 +22,17 @@ from typing import Tuple, Optional, Any
 
 @dataclass
 class PipelineConfig:
+    # Top-level output directory for all plots. If None, set to a unique timestamped path in __post_init__.
+    PLOTS_DIR: Optional[str] = None
     # ------------------------------------------------------------------
     # Top-level run-control switches
     # ------------------------------------------------------------------
     DEBUG: bool = False
     DEVEL_SWITCH: bool = True  # When True, dev-mode skip of bulky plot blocks
     LOCAL_DATA: bool = True
+    # Root directory for paper-ready plots. If None, loader resolves this to
+    # <PLOTS_DIR>/paper_plots on the active run.
+    PAPER_PLOTS: Optional[str] = None
 
     # ------------------------------------------------------------------
     # Behaviour / binning
@@ -181,6 +186,11 @@ class PipelineConfig:
 
     # ------------------------------------------------------------------
     def __post_init__(self) -> None:
+        import os
+        from datetime import datetime
+        if self.PLOTS_DIR is None:
+            ts = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+            self.PLOTS_DIR = os.path.join("plots", ts)
         # Resolve bin_width_frames if not set explicitly.
         if self.bin_width_frames is None:
             # Lazy import so importing caban.config doesn't drag in the

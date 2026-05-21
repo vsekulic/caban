@@ -127,11 +127,21 @@ def _resolve_plots_dir(plots_dir: Optional[str]) -> str:
     return os.path.join(base, datetime.now().strftime('%Y-%m-%d %H_%M_%S'))
 
 
-def _resolve_paper_dir(paper_dir: Optional[str]) -> str:
+def _resolve_paper_dir(
+    paper_dir: Optional[str],
+    *,
+    cfg: Optional[PipelineConfig] = None,
+    plots_dir: Optional[str] = None,
+) -> str:
     if paper_dir is not None:
         return paper_dir
-    return os.path.join('C:\\', 'Users', 'vlads', 'Dropbox',
-                        '1-McHugh postdoc', '3-PAPER', 'paper_plots')
+
+    if cfg is not None and cfg.PAPER_PLOTS is not None:
+        return cfg.PAPER_PLOTS
+
+    if plots_dir is None:
+        raise RuntimeError("Cannot resolve PAPER_DIR: plots_dir is None.")
+    return os.path.join(plots_dir, 'paper_plots')
 
 
 # ===========================================================================
@@ -363,8 +373,9 @@ def load_all_mice(
     cfg
         Pipeline configuration. If None, a default ``PipelineConfig()`` is used.
     plots_dir, paper_dir
-        Optional overrides; default to the host-aware paths used by
-        ``caban/main.py``.
+        Optional overrides. If neither ``paper_dir`` nor
+        ``cfg.PAPER_PLOTS`` is set, paper plots default to
+        ``<PLOTS_DIR>/paper_plots``.
     use_cache
         If True (default), load ``ds`` from ``cache_path`` when it exists and
         otherwise write a fresh build to ``cache_path``. If False, always
@@ -396,10 +407,11 @@ def load_all_mice(
     if use_cache and os.path.exists(cache_path):
         print('loading ds from pickle (skipping fresh build)...')
         ds, is_versioned = _load_cache_payload(cache_path)
-        # Refresh cfg in case the user edited it since the cache was written.
         ds.cfg = cfg
+        # Always use cfg.PLOTS_DIR as the single source of truth
+        cfg.PLOTS_DIR = _resolve_plots_dir(plots_dir)
+        cfg.PAPER_DIR = _resolve_paper_dir(paper_dir, cfg=cfg, plots_dir=cfg.PLOTS_DIR)
         ds.cache_format_version = CACHE_FORMAT_VERSION
-        # Back-fill NPY_SAVE_PATH for older caches that pre-date this attribute.
         if not hasattr(ds, 'NPY_SAVE_PATH'):
             ds.NPY_SAVE_PATH = NPY_SAVE_PATH  # noqa: F405
         if not is_versioned:
@@ -449,8 +461,9 @@ def _build_dataset(
     crossreg_file_6 = 'mappings_crossreg_6.csv'
     crossreg_file_7 = 'mappings_crossreg_7.csv'
 
-    PLOTS_DIR = _resolve_plots_dir(plots_dir)
-    PAPER_DIR = _resolve_paper_dir(paper_dir)
+    # Always use cfg.PLOTS_DIR as the single source of truth
+    PLOTS_DIR = cfg.PLOTS_DIR
+    PAPER_DIR = _resolve_paper_dir(paper_dir, cfg=cfg, plots_dir=cfg.PLOTS_DIR)
 
     # -----------------------------------------------------------------------
     # Mouse metadata (verbatim from caban/main.py L126-840)

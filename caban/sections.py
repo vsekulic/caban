@@ -243,8 +243,7 @@ def run_rastermap_sweep(
     """Run one Rastermap parameter combo across all mice in each requested session."""
     if not session_l:
         raise RuntimeError("session_l cannot be empty.")
-    if not hasattr(ds, "PLOTS_DIR"):
-        raise RuntimeError("Dataset object is missing PLOTS_DIR.")
+    # PLOTS_DIR is now always in cfg, not ds
     if not hasattr(ds, "mouse_groups"):
         raise RuntimeError("Dataset object is missing mouse_groups.")
 
@@ -265,7 +264,7 @@ def run_rastermap_sweep(
     if sweep_label is None:
         sweep_label = "sweep_" + "__".join(session_l)
 
-    sweep_root = os.path.join(ds.PLOTS_DIR, "rastermap", "param_sweeps", sweep_label)
+    sweep_root = os.path.join(cfg.PLOTS_DIR, "rastermap", "param_sweeps", sweep_label)
     os.makedirs(sweep_root, exist_ok=True)
     _copy_analysis_methods_template("rastermap_param_sweeps_methods.txt", sweep_root)
 
@@ -366,7 +365,7 @@ def run_sp_rates(ds, cfg):
     LT1_exp_sp_rates_mapping = ds.LT1_exp_sp_rates_mapping
     LT2_exp_activity_mapping = ds.LT2_exp_activity_mapping
     LT2_exp_sp_rates_mapping = ds.LT2_exp_sp_rates_mapping
-    PLOTS_DIR = ds.PLOTS_DIR
+    PLOTS_DIR = cfg.PLOTS_DIR
     TFC_cond = ds.TFC_cond
     Test_B_1wk_post_tone_activity_mapping = ds.Test_B_1wk_post_tone_activity_mapping
     Test_B_1wk_post_tone_sp_rates_mapping = ds.Test_B_1wk_post_tone_sp_rates_mapping
@@ -478,8 +477,8 @@ def run_binned_sp_rates(ds, cfg):
     # --- ds attributes ---
     BIN_WIDTH = ds.BIN_WIDTH
     ENGRAM_MODES = ds.ENGRAM_MODES
-    PAPER_DIR = ds.PAPER_DIR
-    PLOTS_DIR = ds.PLOTS_DIR
+    PAPER_DIR = cfg.PAPER_DIR
+    PLOTS_DIR = cfg.PLOTS_DIR
     TFC_cond = ds.TFC_cond
     TFC_cond_binned_activity_mapping = ds.TFC_cond_binned_activity_mapping
     TFC_cond_binned_activity_mapping_engram = ds.TFC_cond_binned_activity_mapping_engram
@@ -568,7 +567,7 @@ def run_ROIs(ds, cfg):
     LT1_ROI_mappings_peakval = ds.LT1_ROI_mappings_peakval
     LT2_ROI_mappings = ds.LT2_ROI_mappings
     LT2_ROI_mappings_peakval = ds.LT2_ROI_mappings_peakval
-    PLOTS_DIR = ds.PLOTS_DIR
+    PLOTS_DIR = cfg.PLOTS_DIR
     TFC_cond_ROI_mappings = ds.TFC_cond_ROI_mappings
     TFC_cond_ROI_mappings_peakval = ds.TFC_cond_ROI_mappings_peakval
     mappings_all_LT1 = ds.mappings_all_LT1
@@ -599,7 +598,7 @@ def run_proportional_activities(ds, cfg):
     if not (cfg.plot_proportional_activities and not cfg.DEVEL_SWITCH):
         return
     # --- ds attributes ---
-    PLOTS_DIR = ds.PLOTS_DIR
+    PLOTS_DIR = cfg.PLOTS_DIR
     TFC_B_B_1wk_crossreg = ds.TFC_B_B_1wk_crossreg
     TFC_cond = ds.TFC_cond
     TFC_cond_LT1 = ds.TFC_cond_LT1
@@ -635,9 +634,9 @@ def run_LT_firing_rate_changes(ds, cfg):
     """Analysis section: LT_firing_rate_changes. Originally caban/main.py L1610-1646."""
     if not (cfg.plot_LT_firing_rate_changes and not cfg.DEVEL_SWITCH):
         return
-    # --- ds attributes ---
-    PAPER_DIR = ds.PAPER_DIR
-    PLOTS_DIR = ds.PLOTS_DIR
+    # --- cfg attributes ---
+    PAPER_DIR = cfg.PAPER_DIR
+    PLOTS_DIR = cfg.PLOTS_DIR
     TFC_B_B_1wk_crossreg = ds.TFC_B_B_1wk_crossreg
     TFC_cond = ds.TFC_cond
     TFC_cond_LT1 = ds.TFC_cond_LT1
@@ -650,7 +649,6 @@ def run_LT_firing_rate_changes(ds, cfg):
     # --- cfg switches ---
     DEVEL_SWITCH = cfg.DEVEL_SWITCH
     plot_LT_firing_rate_changes = cfg.plot_LT_firing_rate_changes
-    want_sample_traces_paper = cfg.want_sample_traces_paper
 
     # ===== verbatim body from caban/main.py =====
     if plot_LT_firing_rate_changes and not DEVEL_SWITCH:
@@ -668,7 +666,15 @@ def run_LT_firing_rate_changes(ds, cfg):
         plot_firing_rate_changes(PLOTS_DIR, mice_per_group_Test_B_B_1wk, TFC_B_B_1wk_crossreg, Test_B, Test_B_1wk, mapping_TFC_cond_Test_B_Test_B_1wk, use_peakval=True)
         msg_end()
 
-    if want_sample_traces_paper and not DEVEL_SWITCH:
+
+# ---------------------------------------------------------------------------
+# Section: want sample traces for paper
+# ---------------------------------------------------------------------------
+def run_want_sample_traces_paper(ds, cfg):
+    """Analysis section: want sample traces for paper."""
+    if not (cfg.want_sample_traces_paper and not cfg.DEVEL_SWITCH):
+        return
+    if cfg.want_sample_traces_paper and not cfg.DEVEL_SWITCH:
         msg_start('*** Generating sample traces for paper (TFC_cond) (activities)')
         selections = {
             'hM3D' : [(582, 5149), (130, 23781), (735, 6450)],
@@ -685,12 +691,10 @@ def run_LT_firing_rate_changes(ds, cfg):
             'hM4D' : [(340, 17241), (371, 12186), (256, 20758)],
             'mCherry' : [(67, 3699), (512, 2752), (204, 1502)]
         }
-        paper_dir = get_paper_dir(PAPER_DIR, 'fig2')
-        plot_sample_traces(PLOTS_DIR, {'hM3D':'G10', 'hM4D':'G14', 'mCherry':'G17'}, TFC_cond, paper_dir=paper_dir, selections=selections3, len_trace=1200)
-        #plot_sample_traces(PLOTS_DIR, {'hM3D':'G10', 'hM4D':'G14', 'mCherry':'G17'}, TFC_cond, paper_dir=paper_dir, selection_mode=True, len_trace=1000)
+        paper_dir = get_paper_dir(cfg.PAPER_DIR, 'fig2')
+        plot_sample_traces(cfg.PLOTS_DIR, {'hM3D':'G10', 'hM4D':'G14', 'mCherry':'G17'}, ds.TFC_cond, paper_dir=paper_dir, selections=selections3, len_trace=1200)
+        #plot_sample_traces(cfg.PLOTS_DIR, {'hM3D':'G10', 'hM4D':'G14', 'mCherry':'G17'}, cfg.TFC_cond, paper_dir=paper_dir, selection_mode=True, len_trace=1000)
         msg_end()
-
-    # ===== end verbatim body =====
 
 
 # ---------------------------------------------------------------------------
@@ -701,7 +705,7 @@ def run_PSTH(ds, cfg):
     if not (cfg.plot_PSTH and not cfg.DEVEL_SWITCH):
         return
     # --- ds attributes ---
-    PLOTS_DIR = ds.PLOTS_DIR
+    PLOTS_DIR = cfg.PLOTS_DIR
     TFC_cond = ds.TFC_cond
     TFC_cond_crossreg = ds.TFC_cond_crossreg
     mapping_FULL = ds.mapping_FULL
@@ -758,7 +762,7 @@ def run_pf_and_loc(ds, cfg):
         return
     # --- ds attributes ---
     BEHAVIOUR_TYPE = ds.BEHAVIOUR_TYPE
-    PLOTS_DIR = ds.PLOTS_DIR
+    PLOTS_DIR = cfg.PLOTS_DIR
     TFC_A_A_1wk_crossreg = ds.TFC_A_A_1wk_crossreg
     TFC_B_B_1wk_crossreg = ds.TFC_B_B_1wk_crossreg
     TFC_cond = ds.TFC_cond
@@ -880,7 +884,7 @@ def run_occupancy_analysis(ds, cfg):
     if not (cfg.plot_occupancy_analysis):
         return
     # --- ds attributes ---
-    PLOTS_DIR = ds.PLOTS_DIR
+    PLOTS_DIR = cfg.PLOTS_DIR
     TFC_cond = ds.TFC_cond
     TFC_cond_LT1 = ds.TFC_cond_LT1
     TFC_cond_LT2 = ds.TFC_cond_LT2
@@ -943,7 +947,7 @@ def run_LT_pfs(ds, cfg):
     if not (cfg.plot_LT_pfs):
         return
     # --- ds attributes ---
-    PLOTS_DIR = ds.PLOTS_DIR
+    PLOTS_DIR = cfg.PLOTS_DIR
     TFC_cond_LT1 = ds.TFC_cond_LT1
     TFC_cond_LT2 = ds.TFC_cond_LT2
     mice_per_group = ds.mice_per_group
@@ -1247,7 +1251,7 @@ def run_LT_decoding(ds, cfg):
     if not (cfg.plot_LT_decoding):
         return
     # --- ds attributes ---
-    PLOTS_DIR = ds.PLOTS_DIR
+    PLOTS_DIR = cfg.PLOTS_DIR
     TFC_cond_LT1 = ds.TFC_cond_LT1
     TFC_cond_LT2 = ds.TFC_cond_LT2
     mouse_groups = ds.mouse_groups
@@ -2070,7 +2074,7 @@ def run_zone_crossreg(ds, cfg, *, lt_cont_pvt=None, use_PCT_error=None):
     if not (cfg.plot_LT_decoding and cfg.enable_zone_crossreg_analysis):
         return
     # --- ds attributes ---
-    PLOTS_DIR = ds.PLOTS_DIR
+    PLOTS_DIR = cfg.PLOTS_DIR
     TFC_cond = ds.TFC_cond
     TFC_cond_LT1 = ds.TFC_cond_LT1
     TFC_cond_LT2 = ds.TFC_cond_LT2
@@ -2250,7 +2254,7 @@ def run_continuity_and_paramsets(ds, cfg):
     if not (True):
         return
     # --- ds attributes ---
-    PLOTS_DIR = ds.PLOTS_DIR
+    PLOTS_DIR = cfg.PLOTS_DIR
     TFC_cond = ds.TFC_cond
     Test_A = ds.Test_A
     Test_A_1wk = ds.Test_A_1wk
@@ -2449,7 +2453,7 @@ def run_optimize_raw_decoder(ds, cfg):
     if not (cfg.optimize_parameters and cfg.plot_TFC_2D_decoding):
         return
     # --- ds attributes ---
-    PLOTS_DIR = ds.PLOTS_DIR
+    PLOTS_DIR = cfg.PLOTS_DIR
     TFC_cond = ds.TFC_cond
     mouse_groups = ds.mouse_groups
     # --- cfg switches ---
@@ -2548,7 +2552,7 @@ def run_optimize_pf_decoder(ds, cfg):
     if not (cfg.optimize_pf_parameters and cfg.plot_TFC_2D_decoding):
         return
     # --- ds attributes ---
-    PLOTS_DIR = ds.PLOTS_DIR
+    PLOTS_DIR = cfg.PLOTS_DIR
     TFC_cond = ds.TFC_cond
     mouse_groups = ds.mouse_groups
     # --- cfg switches ---
@@ -2828,7 +2832,7 @@ def run_paradigm_A(ds, cfg, *, raw_params=None, pf_params=None):
     if not (cfg.plot_TFC_2D_decoding):
         return
     # --- ds attributes ---
-    PLOTS_DIR = ds.PLOTS_DIR
+    PLOTS_DIR = cfg.PLOTS_DIR
     TFC_cond = ds.TFC_cond
     Test_A = ds.Test_A
     Test_A_1wk = ds.Test_A_1wk
@@ -3109,7 +3113,7 @@ def run_paradigm_B(ds, cfg, *, raw_params=None, pf_params=None):
     if not (cfg.plot_TFC_2D_decoding):
         return
     # --- ds attributes ---
-    PLOTS_DIR = ds.PLOTS_DIR
+    PLOTS_DIR = cfg.PLOTS_DIR
     TFC_cond = ds.TFC_cond
     Test_A = ds.Test_A
     Test_A_1wk = ds.Test_A_1wk
@@ -3310,7 +3314,7 @@ def run_paradigm_C(ds, cfg, *, raw_params=None, pf_params=None):
     if not (cfg.plot_TFC_2D_decoding):
         return
     # --- ds attributes ---
-    PLOTS_DIR = ds.PLOTS_DIR
+    PLOTS_DIR = cfg.PLOTS_DIR
     TFC_cond = ds.TFC_cond
     Test_A = ds.Test_A
     Test_A_1wk = ds.Test_A_1wk
@@ -3512,7 +3516,7 @@ def run_paradigm_D1(ds, cfg, *, raw_params=None, pf_params=None):
     if not (cfg.plot_TFC_2D_decoding):
         return
     # --- ds attributes ---
-    PLOTS_DIR = ds.PLOTS_DIR
+    PLOTS_DIR = cfg.PLOTS_DIR
     TFC_cond = ds.TFC_cond
     Test_A = ds.Test_A
     Test_A_1wk = ds.Test_A_1wk
@@ -3705,7 +3709,7 @@ def run_paradigm_D2(ds, cfg, *, raw_params=None, pf_params=None):
     if not (cfg.plot_TFC_2D_decoding):
         return
     # --- ds attributes ---
-    PLOTS_DIR = ds.PLOTS_DIR
+    PLOTS_DIR = cfg.PLOTS_DIR
     TFC_cond = ds.TFC_cond
     Test_A = ds.Test_A
     Test_A_1wk = ds.Test_A_1wk
@@ -3898,7 +3902,7 @@ def run_paradigm_E1(ds, cfg, *, raw_params=None, pf_params=None):
     if not (cfg.plot_TFC_2D_decoding):
         return
     # --- ds attributes ---
-    PLOTS_DIR = ds.PLOTS_DIR
+    PLOTS_DIR = cfg.PLOTS_DIR
     TFC_cond = ds.TFC_cond
     Test_B = ds.Test_B
     Test_B_1wk = ds.Test_B_1wk
@@ -4089,7 +4093,7 @@ def run_paradigm_E2(ds, cfg, *, raw_params=None, pf_params=None):
     if not (cfg.plot_TFC_2D_decoding):
         return
     # --- ds attributes ---
-    PLOTS_DIR = ds.PLOTS_DIR
+    PLOTS_DIR = cfg.PLOTS_DIR
     TFC_cond = ds.TFC_cond
     Test_B = ds.Test_B
     Test_B_1wk = ds.Test_B_1wk
@@ -4281,7 +4285,7 @@ def run_paradigm_F(ds, cfg, *, raw_params=None, pf_params=None):
     if not (cfg.plot_TFC_2D_decoding):
         return
     # --- ds attributes ---
-    PLOTS_DIR = ds.PLOTS_DIR
+    PLOTS_DIR = cfg.PLOTS_DIR
     TFC_cond = ds.TFC_cond
     Test_A = ds.Test_A
     Test_A_1wk = ds.Test_A_1wk
@@ -4530,7 +4534,7 @@ def run_mixedlm_cross_vs_within(ds, cfg, *, mt_A_results_2D=None, mt_B_results_2
     if not (cfg.plot_TFC_2D_decoding):
         return
     # --- ds attributes ---
-    PLOTS_DIR = ds.PLOTS_DIR
+    PLOTS_DIR = cfg.PLOTS_DIR
     mouse_groups = ds.mouse_groups
     # --- cfg switches ---
     encoder_period = cfg.encoder_period
@@ -4592,7 +4596,7 @@ def run_mixedlm_vs_tfc_cond(ds, cfg, *, mt_A_results_2D=None, mt_B_results_2D=No
     if not (cfg.plot_TFC_2D_decoding):
         return
     # --- ds attributes ---
-    PLOTS_DIR = ds.PLOTS_DIR
+    PLOTS_DIR = cfg.PLOTS_DIR
     mouse_groups = ds.mouse_groups
     # --- cfg switches ---
     encoder_period = cfg.encoder_period
@@ -4652,7 +4656,7 @@ def run_pv_correlation_2d(ds, cfg, *, raw_params=None, pf_params=None):
     if not (cfg.plot_TFC_2D_decoding):
         return
     # --- ds attributes ---
-    PLOTS_DIR = ds.PLOTS_DIR
+    PLOTS_DIR = cfg.PLOTS_DIR
     TFC_cond = ds.TFC_cond
     Test_A = ds.Test_A
     Test_A_1wk = ds.Test_A_1wk
@@ -5067,7 +5071,7 @@ def run_epoch_pv_within(ds, cfg):
     if not (cfg.plot_epoch_pv_analysis):
         return
     # --- ds attributes ---
-    PLOTS_DIR = ds.PLOTS_DIR
+    PLOTS_DIR = cfg.PLOTS_DIR
     TFC_cond = ds.TFC_cond
     TFC_cond_crossreg = ds.TFC_cond_crossreg
     mapping_FULL = ds.mapping_FULL
@@ -5156,7 +5160,7 @@ def run_epoch_pv_cross(ds, cfg):
     if not (cfg.plot_cross_session_epoch_pv_analysis):
         return
     # --- ds attributes ---
-    PLOTS_DIR = ds.PLOTS_DIR
+    PLOTS_DIR = cfg.PLOTS_DIR
     TFC_AB_48hr_1wk_crossreg = ds.TFC_AB_48hr_1wk_crossreg
     TFC_A_A_1wk_crossreg = ds.TFC_A_A_1wk_crossreg
     TFC_B_B_1wk_crossreg = ds.TFC_B_B_1wk_crossreg
@@ -5263,7 +5267,7 @@ def run_population_pca(ds, cfg):
     # --- ds attributes ---
     ENGRAM_MODES = ds.ENGRAM_MODES
     NPY_SAVE_PATH = ds.NPY_SAVE_PATH
-    PLOTS_DIR = ds.PLOTS_DIR
+    PLOTS_DIR = cfg.PLOTS_DIR
     TFC_B_B_1wk_crossreg = ds.TFC_B_B_1wk_crossreg
     TFC_cond = ds.TFC_cond
     Test_B = ds.Test_B
@@ -5442,7 +5446,7 @@ def run_isomap(ds, cfg):
     if not (True):
         return
     # --- ds attributes ---
-    PLOTS_DIR = ds.PLOTS_DIR
+    PLOTS_DIR = cfg.PLOTS_DIR
     TFC_B_B_1wk_crossreg = ds.TFC_B_B_1wk_crossreg
     TFC_cond = ds.TFC_cond
     Test_B = ds.Test_B
@@ -5484,7 +5488,7 @@ def run_population_vectors(ds, cfg):
     if not (cfg.plot_population_vectors):
         return
     # --- ds attributes ---
-    PLOTS_DIR = ds.PLOTS_DIR
+    PLOTS_DIR = cfg.PLOTS_DIR
     TFC_B_B_1wk_crossreg = ds.TFC_B_B_1wk_crossreg
     TFC_cond = ds.TFC_cond
     Test_B = ds.Test_B
@@ -5565,7 +5569,7 @@ def run_umap(ds, cfg):
     import matplotlib.pyplot as plt
     from umap import UMAP
     from mpl_toolkits.mplot3d import Axes3D
-    PLOTS_DIR = ds.PLOTS_DIR
+    PLOTS_DIR = cfg.PLOTS_DIR
     TFC_B_B_1wk_crossreg = ds.TFC_B_B_1wk_crossreg
     TFC_cond = ds.TFC_cond
     Test_B = ds.Test_B
@@ -5829,7 +5833,7 @@ def run_crossreg_pca_umap(
     if fit_sess not in valid_sessions:
         raise ValueError(f"fit_sess must be one of {sorted(valid_sessions)}, got {fit_sess!r}")
 
-    PLOTS_DIR = ds.PLOTS_DIR
+    PLOTS_DIR = cfg.PLOTS_DIR
     mouse_groups = ds.mouse_groups
     TFC_cond = ds.TFC_cond
     Test_B = ds.Test_B
@@ -6264,7 +6268,7 @@ def run_population_vector_distances(ds, cfg):
     if not (cfg.plot_population_vector_distances):
         return
     # --- ds attributes ---
-    PLOTS_DIR = ds.PLOTS_DIR
+    PLOTS_DIR = cfg.PLOTS_DIR
     TFC_B_B_1wk_crossreg = ds.TFC_B_B_1wk_crossreg
     TFC_cond = ds.TFC_cond
     Test_B = ds.Test_B
@@ -6926,7 +6930,7 @@ def run_avg_population_activity(
     if not isinstance(plot_inline, bool) or not isinstance(save_plot, bool):
         raise RuntimeError("plot_inline and save_plot must both be bool values.")
 
-    output_root = os.path.join(ds.PLOTS_DIR, "population_activity_avg")
+    output_root = os.path.join(cfg.PLOTS_DIR, "population_activity_avg")
     os.makedirs(output_root, exist_ok=True)
     _copy_analysis_methods_template("population_activity_session_group_methods.txt", output_root)
 

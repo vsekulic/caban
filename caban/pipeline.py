@@ -82,7 +82,7 @@ def resolve_continuity_params(ds: SimpleNamespace, cfg: PipelineConfig,
     every other preset, returns the canonical preset constants.
 
     Side effects: when ``save_plot=True`` the velocity histogram figure is
-    written to ``ds.PLOTS_DIR/TFC_2D_decoding/`` (matching main.py).
+    written to ``cfg.PLOTS_DIR/TFC_2D_decoding/`` (matching main.py).
 
     Returns
     -------
@@ -92,7 +92,7 @@ def resolve_continuity_params(ds: SimpleNamespace, cfg: PipelineConfig,
         ``continuity_sigma_max``, ``continuity_sigma_default``,
         plus ``vel_stats_TFC`` (the raw velocity stats dict for downstream use).
     """
-    out_dir = os.path.join(ds.PLOTS_DIR, "TFC_2D_decoding")
+    out_dir = os.path.join(cfg.PLOTS_DIR, "TFC_2D_decoding")
     os.makedirs(out_dir, exist_ok=True)
 
     vel_session_dicts = []
@@ -194,7 +194,7 @@ def engram_idx_by_mouse(ds: SimpleNamespace, cfg: PipelineConfig,
 def run_engram_sanity_plots(ds: SimpleNamespace, cfg: PipelineConfig,
                              *, save_root: Optional[str] = None) -> None:
     """Generate the engram-sanity panels under ``PLOTS_DIR/engram_plots``."""
-    save_root = save_root or os.path.join(ds.PLOTS_DIR, "engram_plots")
+    save_root = save_root or os.path.join(cfg.PLOTS_DIR, "engram_plots")
     print(f"*** Engram sanity plots -> {save_root}", flush=True)
     plot_engram_sanity(
         engram_id=ds.engram_id,
@@ -286,7 +286,7 @@ def run_population_pca_all_modes(ds: SimpleNamespace, cfg: PipelineConfig
     Returns a dict with the various results dicts keyed by variant.
     """
     msg_start('*** Population PCA Trajectory Analysis')
-    PLOTS_DIR = ds.PLOTS_DIR
+    PLOTS_DIR = cfg.PLOTS_DIR
 
     out: dict = {}
     out['crossreg'] = run_population_pca(
@@ -328,7 +328,7 @@ def run_isomap(ds: SimpleNamespace, cfg: PipelineConfig, *,
                exclude_mice: tuple = ("G07", "G15")) -> dict:
     """Run the Isomap manifold pipeline (main.py L5863)."""
     msg_start('*** Isomap Manifold Analysis')
-    plots_dir = os.path.join(ds.PLOTS_DIR, plots_subdir)
+    plots_dir = os.path.join(cfg.PLOTS_DIR, plots_subdir)
     iso_groups = {m: g for m, g in ds.mouse_groups.items()
                   if m not in exclude_mice}
     res = run_isomap_pipeline(
@@ -371,7 +371,7 @@ def run_epoch_pv(ds: SimpleNamespace, cfg: PipelineConfig, *,
         for dm in data_modes:
             for mob in mobility_filters:
                 run_epoch_analysis_all_mice(
-                    PLOTS_DIR=ds.PLOTS_DIR,
+                    PLOTS_DIR=cfg.PLOTS_DIR,
                     mice_per_group=ds.mice_per_group,
                     TFC_cond=ds.TFC_cond,
                     TFC_cond_crossreg=ds.TFC_cond_crossreg,
@@ -433,7 +433,7 @@ def run_cross_session_epoch_pv(ds: SimpleNamespace, cfg: PipelineConfig, *,
             for dm in data_modes:
                 for mob in mobility_filters:
                     run_cross_session_epoch_analysis_all_mice(
-                        PLOTS_DIR=ds.PLOTS_DIR,
+                        PLOTS_DIR=cfg.PLOTS_DIR,
                         mice_per_group=ds.mice_per_group,
                         TFC_cond=ds.TFC_cond,
                         recall_sessions=sessions,
@@ -467,7 +467,7 @@ def run_cross_session_epoch_pv(ds: SimpleNamespace, cfg: PipelineConfig, *,
 #     from caban.pipeline import build_raw_paramset, run_2D_decoder
 #     raw_params = build_raw_paramset(cfg, continuity)
 #     run_2D_decoder(cfg, raw_params, train, test,
-#                    train_label=..., session_str=..., PLOTS_DIR=ds.PLOTS_DIR)
+#                    train_label=..., session_str=..., PLOTS_DIR=cfg.PLOTS_DIR)
 #
 # Notebook decoder paradigm cells should reach for these.
 
