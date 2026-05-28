@@ -111,6 +111,203 @@ def _make_paradigm_ABC_mapping(ds):
     }
 
 
+def dump_behaviour_params(ds, cfg=None, filename='behaviour_params.py',
+                          matlab_filename='behaviour_params.m'):
+    """Print and save per-mouse behaviour timing parameters.
+
+    Two files are written into ``cfg.PLOTS_DIR``:
+      * ``filename``         — Python-literal form (default ``behaviour_params.py``)
+      * ``matlab_filename``  — MATLAB script form  (default ``behaviour_params.m``)
+
+    Contents (in both files):
+      1. ``<session>_miniscope_exp_frames``: experiment start/stop in MINISCOPE
+         camera frames (i.e. ``sess.miniscope_exp_fnum``) for TFC_cond, LT1,
+         LT2, Test_A, Test_B, Test_B_1wk. The behavcam->miniscope conversion
+         is done in ``BehaviourSession.find_exp_boundaries`` (caban/sessions.py)
+         by matching behavcam timestamps at ``session_bounds[start/stop]``
+         to the closest miniscope timestamps (within ``tstamp_tol = 70 ms``).
+      2. Tone / shock onsets / offsets in SECONDS for TFC_cond, Test_B,
+         Test_B_1wk, in two reference frames:
+           * ``*_rel_exp_s``: relative to start of experiment (light on)
+           * ``*_rel_rec_s``: relative to start of raw recording
+             (i.e. ``rel_exp_s + miniscope_exp_fnum[0] / MINISCOPE_FPS``)
+         Per-mouse exceptions (G09 ``period_override``, G21 Test_B override,
+         missing G07/G15 sessions, etc.) are already baked in.
+      3. Original hard-coded ``*_def`` arrays (no exceptions applied) for
+         cross-checking.
+    """
+    fps = float(MINISCOPE_FPS)  # noqa: F405 — from caban.utilities star-import
+
+    # -------------------------------------------------------------------
+    # Gather all data as plain Python containers, then emit in Py + MATLAB.
+    # -------------------------------------------------------------------
+    def _miniscope_frames_dict(sess_dict):
+        out = {}
+        for m, s in sess_dict.items():
+            fnum = getattr(s, 'miniscope_exp_fnum', None)
+            if not fnum:
+                continue
+            out[m] = [int(fnum[0]), int(fnum[1])]
+        return out
+
+    def _seconds_dict(sess_dict, attr, *, add_offset):
+        out = {}
+        for m, s in sess_dict.items():
+            vals = getattr(s, attr, None)
+            if vals is None or len(vals) == 0:
+                continue
+            offset_frames = int(s.miniscope_exp_fnum[s.start_idx]) if add_offset else 0
+            out[m] = [round((int(v) + offset_frames) / fps, 3) for v in vals]
+        return out
+
+    def _first_session(sess_dict):
+        for s in sess_dict.values():
+            return s
+        return None
+
+    session_groups = [
+        ('TFC_cond',   ds.TFC_cond),
+        ('LT1',        ds.TFC_cond_LT1),
+        ('LT2',        ds.TFC_cond_LT2),
+        ('Test_A',     ds.Test_A),
+        ('Test_B',     ds.Test_B),
+        ('Test_B_1wk', ds.Test_B_1wk),
+    ]
+    timed_groups = [
+        ('TFC_cond',   ds.TFC_cond,   ('tone_onsets', 'tone_offsets',
+                                       'shock_onsets', 'shock_offsets')),
+        ('Test_B',     ds.Test_B,     ('tone_onsets', 'tone_offsets')),
+        ('Test_B_1wk', ds.Test_B_1wk, ('tone_onsets', 'tone_offsets')),
+    ]
+
+    # records: list of ('comment', text) | ('dict', name, dict[mouse]->list)
+    #                  | ('list', name, list, optional_comment)
+    records = []
+    records.append(('comment', '============================================================'))
+    records.append(('comment', 'Behaviour parameters per mouse'))
+    records.append(('comment', '============================================================'))
+    records.append(('comment', ''))
+    records.append(('comment', 'Behavcam <-> Miniscope frame interpolation:'))
+    records.append(('comment', '  See caban/sessions.py :: BehaviourSession.find_exp_boundaries.'))
+    records.append(('comment', '  session_bounds (behavcam frames) -> behavcam timestamps ->'))
+    records.append(('comment', '  nearest miniscope timestamps (|dt| < tstamp_tol = 70 ms) ->'))
+    records.append(('comment', '  miniscope frame indices stored in self.miniscope_exp_fnum.'))
+    records.append(('comment', f'MINISCOPE_FPS = {MINISCOPE_FPS}  (BEHAVCAM_FPS = {BEHAVCAM_FPS})'))  # noqa: F405
+    records.append(('blank',))
+
+    records.append(('comment', '------------------------------------------------------------'))
+    records.append(('comment', 'Experiment bounds in MINISCOPE camera frames'))
+    records.append(('comment', '(= sess.miniscope_exp_fnum, [start_frame, stop_frame])'))
+    records.append(('comment', '------------------------------------------------------------'))
+    for label, sd in session_groups:
+        records.append(('dict', f'{label}_miniscope_exp_frames', _miniscope_frames_dict(sd), None))
+    records.append(('blank',))
+
+    records.append(('comment', '------------------------------------------------------------'))
+    records.append(('comment', 'Tone / shock onset & offset times (SECONDS)'))
+    records.append(('comment', '  *_rel_exp_s : relative to start of experiment (light on)'))
+    records.append(('comment', '  *_rel_rec_s : relative to start of raw recording'))
+    records.append(('comment', 'Per-mouse exceptions (period_override, G21 Test_B override, etc.)'))
+    records.append(('comment', 'are already reflected since values come from the live session objs.'))
+    records.append(('comment', '------------------------------------------------------------'))
+    for label, sd, fields in timed_groups:
+        for field in fields:
+            records.append(('dict', f'{label}_{field}_rel_exp_s',
+                            _seconds_dict(sd, field, add_offset=False), None))
+        for field in fields:
+            records.append(('dict', f'{label}_{field}_rel_rec_s',
+                            _seconds_dict(sd, field, add_offset=True), None))
+        records.append(('blank',))
+
+    records.append(('comment', '------------------------------------------------------------'))
+    records.append(('comment', 'Original hard-coded onsets/offsets (SECONDS, experiment-relative)'))
+    records.append(('comment', 'Source: session-class *_def arrays + *_duration. No exceptions.'))
+    records.append(('comment', '------------------------------------------------------------'))
+    tfc_ref = _first_session(ds.TFC_cond)
+    if tfc_ref is not None:
+        tone_on  = [int(x) for x in tfc_ref.tone_onsets_def]
+        tone_off = [int(x) + int(tfc_ref.tone_duration) for x in tfc_ref.tone_onsets_def]
+        shock_on  = [int(x) for x in tfc_ref.shock_onsets_def]
+        shock_off = [int(x) + int(tfc_ref.shock_duration) for x in tfc_ref.shock_onsets_def]
+        records.append(('list', 'TFC_cond_tone_onsets_def_s',   tone_on,   None))
+        records.append(('list', 'TFC_cond_tone_offsets_def_s',  tone_off,  f'tone_duration = {int(tfc_ref.tone_duration)} s'))
+        records.append(('list', 'TFC_cond_shock_onsets_def_s',  shock_on,  None))
+        records.append(('list', 'TFC_cond_shock_offsets_def_s', shock_off, f'shock_duration = {int(tfc_ref.shock_duration)} s'))
+        records.append(('blank',))
+    for label, sess_dict in [('Test_B', ds.Test_B), ('Test_B_1wk', ds.Test_B_1wk)]:
+        ref = _first_session(sess_dict)
+        if ref is None:
+            continue
+        tone_on  = [int(x) for x in ref.tone_onsets_def]
+        tone_off = [int(x) + int(ref.tone_duration) for x in ref.tone_onsets_def]
+        records.append(('list', f'{label}_tone_onsets_def_s',  tone_on,  None))
+        records.append(('list', f'{label}_tone_offsets_def_s', tone_off, f'tone_duration = {int(ref.tone_duration)} s'))
+        records.append(('blank',))
+
+    # -------------------------------------------------------------------
+    # Format as Python (also printed to stdout) and MATLAB.
+    # -------------------------------------------------------------------
+    def _fmt_py(records):
+        out = []
+        for rec in records:
+            if rec[0] == 'comment':
+                out.append(f'# {rec[1]}' if rec[1] else '#')
+            elif rec[0] == 'blank':
+                out.append('')
+            elif rec[0] == 'dict':
+                _, name, d, _ = rec
+                out.append(f'{name} = {d!r}')
+            elif rec[0] == 'list':
+                _, name, lst, trailing = rec
+                line = f'{name} = {lst!r}'
+                if trailing:
+                    line += f'    # {trailing}'
+                out.append(line)
+        return out
+
+    def _fmt_matlab(records):
+        # MATLAB: comments with %, per-mouse dicts as struct.<mouse> = [...].
+        out = []
+        for rec in records:
+            if rec[0] == 'comment':
+                out.append(f'% {rec[1]}' if rec[1] else '%')
+            elif rec[0] == 'blank':
+                out.append('')
+            elif rec[0] == 'dict':
+                _, name, d, _ = rec
+                if not d:
+                    out.append(f'{name} = struct();')
+                    continue
+                out.append(f'{name} = struct();')
+                for mouse, vals in d.items():
+                    vec = ', '.join(repr(v) for v in vals)
+                    out.append(f'{name}.{mouse} = [{vec}];')
+            elif rec[0] == 'list':
+                _, name, lst, trailing = rec
+                vec = ', '.join(repr(v) for v in lst)
+                line = f'{name} = [{vec}];'
+                if trailing:
+                    line += f'    % {trailing}'
+                out.append(line)
+        return out
+
+    py_lines = _fmt_py(records)
+    for line in py_lines:
+        print(line)
+
+    if cfg is not None:
+        plots_dir = cfg.PLOTS_DIR
+        os.makedirs(plots_dir, exist_ok=True)
+        py_path = os.path.join(plots_dir, filename)
+        with open(py_path, 'w') as f:
+            f.write('\n'.join(py_lines) + '\n')
+        m_path = os.path.join(plots_dir, matlab_filename)
+        with open(m_path, 'w') as f:
+            f.write('\n'.join(_fmt_matlab(records)) + '\n')
+        print(f'\n[behaviour_params] wrote: {py_path}')
+        print(f'[behaviour_params] wrote: {m_path}')
+
+
 def run_rastermap_single_mouse(
     ds,
     m,
@@ -670,7 +867,7 @@ def run_LT_firing_rate_changes(ds, cfg):
 # ---------------------------------------------------------------------------
 # Section: want sample traces for paper
 # ---------------------------------------------------------------------------
-def run_want_sample_traces_paper(ds, cfg):
+def run_want_sample_traces_paper(ds, cfg, selection_mode=False, len_trace=1200):
     """Analysis section: want sample traces for paper."""
     if not (cfg.want_sample_traces_paper and not cfg.DEVEL_SWITCH):
         return
@@ -692,8 +889,20 @@ def run_want_sample_traces_paper(ds, cfg):
             'mCherry' : [(67, 3699), (512, 2752), (204, 1502)]
         }
         paper_dir = get_paper_dir(cfg.PAPER_DIR, 'fig2')
-        plot_sample_traces(cfg.PLOTS_DIR, {'hM3D':'G10', 'hM4D':'G14', 'mCherry':'G17'}, ds.TFC_cond, paper_dir=paper_dir, selections=selections3, len_trace=1200)
-        #plot_sample_traces(cfg.PLOTS_DIR, {'hM3D':'G10', 'hM4D':'G14', 'mCherry':'G17'}, cfg.TFC_cond, paper_dir=paper_dir, selection_mode=True, len_trace=1000)
+        selections_paper = {
+            'hM3D' : [(567, 15724), (79, 7702), (152, 16930)],
+            'hM4D' : [(258, 8226), (139, 4057), (65, 7174)],
+            'mCherry' : [(303, 7941), (425, 11698), (209, 18078)], # 580, 18603
+        }
+        if selection_mode:
+            selections = plot_sample_traces2(cfg.PLOTS_DIR, {'hM3D':'G10', 'hM4D':'G14', 'mCherry':'G17'}, ds.TFC_cond, paper_dir=paper_dir, selection_mode=True, len_trace=len_trace)
+            plot_sample_traces2(cfg.PLOTS_DIR, {'hM3D':'G10', 'hM4D':'G14', 'mCherry':'G17'}, ds.TFC_cond, paper_dir=paper_dir, selections=selections, len_trace=len_trace, \
+                use_global_max_val=True)
+        else:
+            plot_sample_traces2(cfg.PLOTS_DIR, {'hM3D':'G10', 'hM4D':'G14', 'mCherry':'G17'}, ds.TFC_cond, paper_dir=paper_dir, selections=selections_paper, len_trace=len_trace)
+            plot_sample_traces2(cfg.PLOTS_DIR, {'hM3D':'G10', 'hM4D':'G14', 'mCherry':'G17'}, ds.TFC_cond, paper_dir=paper_dir, selections=selections_paper, len_trace=len_trace, \
+                use_global_max_val=True)
+
         msg_end()
 
 

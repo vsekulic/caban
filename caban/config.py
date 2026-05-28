@@ -24,6 +24,7 @@ from typing import Tuple, Optional, Any
 class PipelineConfig:
     # Top-level output directory for all plots. If None, set to a unique timestamped path in __post_init__.
     PLOTS_DIR: Optional[str] = None
+    PLOTS_DIR_SINGULAR: bool = False  # If True, all plot types go in the same dir instead of by date/time
     # ------------------------------------------------------------------
     # Top-level run-control switches
     # ------------------------------------------------------------------

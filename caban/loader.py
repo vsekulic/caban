@@ -115,8 +115,39 @@ def add_significance_bars(ax, comparisons, p_values, y_max,
         ax.set_ylim(y_low, max(y_high, top_needed))
 
 
+def _apply_test_b_tone_onset_override(sess, tone_onsets_frames):
+    """Apply a manual Test_B tone-onset correction and rebuild dependent windows."""
+    if not tone_onsets_frames:
+        return
+
+    # Test_B tones are fixed to 20 seconds.
+    tone_duration_frames = int(20 * MINISCOPE_FPS)
+
+    sess.tone_onsets = [int(x) for x in tone_onsets_frames]
+    exp_stop = int(sess.miniscope_exp_fnum[sess.stop_idx])
+    sess.tone_offsets = [min(int(on) + tone_duration_frames, exp_stop) for on in sess.tone_onsets]
+
+    sess.post_tone_onsets = []
+    sess.post_tone_offsets = []
+    sess.tone_post_tone_onsets = []
+    sess.tone_post_tone_offsets = []
+    for i in range(len(sess.tone_onsets)):
+        sess.post_tone_onsets.append(sess.tone_offsets[i])
+        sess.tone_post_tone_onsets.append(sess.tone_onsets[i])
+        if i == len(sess.tone_onsets) - 1:
+            sess.post_tone_offsets.append(exp_stop)
+            sess.tone_post_tone_offsets.append(exp_stop)
+        else:
+            sess.post_tone_offsets.append(sess.tone_onsets[i + 1])
+            sess.tone_post_tone_offsets.append(sess.tone_onsets[i + 1])
+
+    # Rebuild labels/bounds to keep downstream epoch helpers consistent.
+    sess.period_bounds = []
+    sess.find_period_bounds()
+
+
 # ---------------------------------------------------------------------------
-def _resolve_plots_dir(plots_dir: Optional[str]) -> str:
+def _resolve_plots_dir(plots_dir: Optional[str], plots_dir_singular: bool = False) -> str:
     """Mirror caban/main.py's host-aware PLOTS_DIR choice."""
     if plots_dir is not None:
         return plots_dir
@@ -124,6 +155,8 @@ def _resolve_plots_dir(plots_dir: Optional[str]) -> str:
         base = '/Users/vsekulic/data/vsekulic/OF_test/plots'
     else:
         base = MAIN_DRIVE + '\\data\\vsekulic\\OF_test\\plots'  # noqa: F405
+    if plots_dir_singular:
+        return os.path.join(base, 'CURRENT')
     return os.path.join(base, datetime.now().strftime('%Y-%m-%d %H_%M_%S'))
 
 
@@ -141,7 +174,7 @@ def _resolve_paper_dir(
 
     if plots_dir is None:
         raise RuntimeError("Cannot resolve PAPER_DIR: plots_dir is None.")
-    return os.path.join(plots_dir, 'paper_plots')
+    return os.path.join(plots_dir, '0-PAPER_PLOTS')
 
 
 # ===========================================================================
@@ -409,8 +442,10 @@ def load_all_mice(
         ds, is_versioned = _load_cache_payload(cache_path)
         ds.cfg = cfg
         # Always use cfg.PLOTS_DIR as the single source of truth
-        cfg.PLOTS_DIR = _resolve_plots_dir(plots_dir)
+        cfg.PLOTS_DIR = _resolve_plots_dir(plots_dir, plots_dir_singular=cfg.PLOTS_DIR_SINGULAR)
         cfg.PAPER_DIR = _resolve_paper_dir(paper_dir, cfg=cfg, plots_dir=cfg.PLOTS_DIR)
+        print(f'*** PLOTS_DIR: {cfg.PLOTS_DIR}')
+        print(f'*** PAPER_DIR: {cfg.PAPER_DIR}')
         ds.cache_format_version = CACHE_FORMAT_VERSION
         if not hasattr(ds, 'NPY_SAVE_PATH'):
             ds.NPY_SAVE_PATH = NPY_SAVE_PATH  # noqa: F405
@@ -646,6 +681,7 @@ def _build_dataset(
 
     test_unit_id = {'G05': 22, 'G06': 413}
     period_overrides = {'G09': [0, 1, 2, 3]}
+    test_b_tone_onset_overrides = {'G21': [3600, 8400, 11793]}
 
     # ---- Test_A / Test_A_1wk -------------------------------------------
     dpath_Test_A_day = {
@@ -1206,6 +1242,9 @@ def _build_dataset(
                 )
                 Test_B[mouse].crossreg_full = TFC_AB_48hr_1wk_crossreg[mouse]
                 B = Test_B[mouse]
+                _tb_onsets_override = test_b_tone_onset_overrides.get(mouse)
+                if _tb_onsets_override:
+                    _apply_test_b_tone_onset_override(B, _tb_onsets_override)
                 mappings_all_list = mappings_all_Test_B_G15 if mouse == 'G15' else mappings_all_Test_B
                 for mapping in mappings_all_list:
                     B.process_avg_sp_rates_mapping(mapping)
@@ -1446,6 +1485,7 @@ def _build_dataset(
         dpath_mouse=dpath_mouse,
         test_unit_id=test_unit_id,
         period_overrides=period_overrides,
+        test_b_tone_onset_overrides=test_b_tone_onset_overrides,
         # dpath / exp_frames dicts (post-join, absolute)
         dpath_TFC_cond_day=dpath_TFC_cond_day,
         dpath_TFC_cond=dpath_TFC_cond,
