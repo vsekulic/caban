@@ -544,17 +544,107 @@ def do_anova1_plot(group_hM3D, group_hM4D, group_mCherry, ax, heights, annotate=
                 barplot_annotate_brackets(ax, first, second, pval_str, range(3), heights, barh=0, dh=tot_dh)
             tot_dh += tot_dh_incr # was 0.1 ! NB!
 
+def _annotate_triplet_posthoc(ax, group_hM3D, group_hM4D, group_mCherry, x_positions, heights, fs=12.5):
+    f_oneway = stats.f_oneway(group_hM3D, group_hM4D, group_mCherry)
+    if np.any(f_oneway.pvalue < PVALS):
+        mc_fracs = np.concatenate((group_hM3D, group_hM4D, group_mCherry), dtype='float64')
+        mc_groups = np.concatenate((['hM3D'] * len(group_hM3D), ['hM4D'] * len(group_hM4D), ['mCherry'] * len(group_mCherry)))
+        df = pd.DataFrame({'groups': mc_groups, 'fracs': mc_fracs})
+        comp = mc.MultiComparison(df['fracs'], df['groups'])
+        post_hoc_res = comp.tukeyhsd()
+        pairs = [[0, 1], [0, 2], [1, 2]]
+        tot_dh = 0.015
+        for p in np.where(post_hoc_res.reject == True)[0]:
+            first = pairs[p][0]
+            second = pairs[p][1]
+            pval_str = get_pval_str(post_hoc_res.pvalues[p])
+            barplot_annotate_brackets(ax, first, second, pval_str, x_positions, heights, barh=0.002, dh=tot_dh, fs=fs)
+            tot_dh += 0.05
+
+def _save_proportional_mappings_paper_svg(fracs_per_group, session_names, paper_fig2_dir, output_filename):
+    group_order = ['hM3D', 'hM4D', 'mCherry']
+    group_colours = {'hM3D': 'r', 'hM4D': 'b', 'mCherry': '0.25'}
+    paper_font_size = 12.5
+    num_sessions = len(session_names)
+
+    fig, ax = plt.subplots(1, 1, figsize=(max(14, num_sessions * 1.9), 4.2))
+    rng = np.random.default_rng(0)
+
+    x_ticks = []
+    x_tick_labels = []
+    session_centers = []
+    max_y = 0.0
+
+    for sess_i, sess_name in enumerate(session_names):
+        base = sess_i * 4 + 1
+        x_positions = [base, base + 1, base + 2]
+        session_centers.append((x_positions[0] + x_positions[-1]) / 2)
+
+        for x_pos, group, x_label in zip(x_positions, group_order, ['Exc', 'Inh', 'Ctl']):
+            vals = fracs_per_group[group][:, sess_i]
+            max_y = max(max_y, float(np.max(vals)))
+
+            violin = ax.violinplot([vals], positions=[x_pos], widths=0.8, showmeans=False, showmedians=True, showextrema=False)
+            body = violin['bodies'][0]
+            body.set_facecolor(group_colours[group])
+            body.set_edgecolor(group_colours[group])
+            body.set_alpha(0.35)
+            if 'cmedians' in violin:
+                violin['cmedians'].set_color('black')
+
+            jitter = rng.uniform(-0.08, 0.08, size=len(vals))
+            ax.scatter(np.full(len(vals), x_pos) + jitter, vals, s=20, color=group_colours[group], edgecolors='none', alpha=0.9, zorder=3)
+
+            x_ticks.append(x_pos)
+            x_tick_labels.append(x_label)
+
+        heights = np.array([np.max(fracs_per_group[group][:, sess_i]) + 0.02 for group in group_order])
+        _annotate_triplet_posthoc(
+            ax,
+            fracs_per_group['hM3D'][:, sess_i],
+            fracs_per_group['hM4D'][:, sess_i],
+            fracs_per_group['mCherry'][:, sess_i],
+            x_positions,
+            heights,
+            fs=paper_font_size,
+        )
+
+    ax.set_xlim(0.2, (num_sessions - 1) * 4 + 3.8)
+    ax.set_ylim([0, max(max_y + 0.11, 0.3)])
+    ax.set_xticks(x_ticks)
+    ax.set_xticklabels(x_tick_labels, size=paper_font_size)
+    ax.tick_params(axis='y', labelsize=paper_font_size)
+
+    y_top = ax.get_ylim()[1]
+    for center, sess_name in zip(session_centers, session_names):
+        ax.text(center, y_top + 0.01, sess_name, ha='center', va='bottom', fontsize=paper_font_size, clip_on=False)
+
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    fig.subplots_adjust(left=0.055, bottom=0.16, right=0.995, top=0.92)
+
+    os.makedirs(paper_fig2_dir, exist_ok=True)
+    fig.savefig(os.path.join(paper_fig2_dir, output_filename), format='svg')
+    plt.close(fig)
+
 def proportional_activities_helper(PLOTS_DIR, mice_per_group, first, second, third, sessions=[], session_names=[], \
-    figsize=(10,4), title_str='', filename='', auto_close=True):
+    figsize=(10,4), title_str='', filename='', auto_close=True, plot_type='boxplot', debug_labels=False, paper_fig2_dir=None):
     session_strs = dict()
     for i in range(len(session_names)):
         session_strs[i] = session_names[i]
     num_comparisons = len(session_names)
+    group_order = ['hM3D', 'hM4D', 'mCherry']
+    group_colours = {'hM3D':'r', 'hM4D':'b', 'mCherry':'0.25'}
+
+    if debug_labels and plot_type != 'violin':
+        raise ValueError("debug_labels=True is only supported with plot_type='violin'.")
 
     active_cells = dict()
     group_totals = dict()
     fracs_per_group = dict()
+    mouse_names_per_group = dict()
     for group, mice in mice_per_group.items():
+        mouse_names_per_group[group] = list(mice)
 
         active_cells[group] = np.zeros((len(mice), num_comparisons)) 
         for m in range(len(mice)):
@@ -587,7 +677,7 @@ def proportional_activities_helper(PLOTS_DIR, mice_per_group, first, second, thi
         group_totals[group] = np.sum(active_cells[group],0) # Summate along all mice, resulting in 3-tuple
 
     fig, axs = plt.subplots(1,num_comparisons, figsize=figsize, sharey='row')
-    group_totals_l = list(group_totals)
+    group_totals_l = group_order
     max_y = 0
     num_groups = len(group_totals)   
 
@@ -598,7 +688,7 @@ def proportional_activities_helper(PLOTS_DIR, mice_per_group, first, second, thi
 
     for i, ax in zip(range(num_comparisons), axs.flat):
 
-        for group in group_totals.keys():
+        for group in group_order:
             idx = group_totals_l.index(group)
 
             fracs = fracs_per_group[group][:,i]
@@ -614,9 +704,35 @@ def proportional_activities_helper(PLOTS_DIR, mice_per_group, first, second, thi
 
         print(session_strs[i], stats.f_oneway(fracs_per_group['hM3D'][:,i], fracs_per_group['hM4D'][:,i], fracs_per_group['mCherry'][:,i]))
 
-        ax.bar(x, means, yerr=errbars, label=session_strs[i], color=group_colours.values())
+        if plot_type == 'boxplot':
+            ax.bar(x, means, yerr=errbars, label=session_strs[i], color=[group_colours[group] for group in group_order])
+        elif plot_type == 'violin':
+            group_data = [fracs_per_group[group][:, i] for group in group_order]
+            max_y = max(max_y, max(np.max(data) for data in group_data) + 0.01)
+            violin_parts = ax.violinplot(group_data, positions=list(x), widths=0.75, showmeans=False, showmedians=True, showextrema=False)
+            for body, group in zip(violin_parts['bodies'], group_order):
+                body.set_facecolor(group_colours[group])
+                body.set_edgecolor(group_colours[group])
+                body.set_alpha(0.35)
+            if 'cmedians' in violin_parts:
+                violin_parts['cmedians'].set_color('black')
+            rng = np.random.default_rng(0)
+            for xpos, group in zip(x, group_order):
+                fracs = fracs_per_group[group][:, i]
+                jitter = rng.uniform(-0.08, 0.08, size=len(fracs))
+                x_positions = np.full(len(fracs), xpos) + jitter
+                ax.scatter(x_positions, fracs, s=18, color=group_colours[group], edgecolors='none', alpha=0.9, zorder=3)
+                if debug_labels:
+                    for mouse_name, x_pos, y_pos in zip(mouse_names_per_group[group], x_positions, fracs):
+                        ax.text(x_pos + 0.03, y_pos, mouse_name, fontsize=5.5, color=group_colours[group], va='center', ha='left', zorder=4)
+        else:
+            raise ValueError(f"Unknown plot_type '{plot_type}'. Expected 'boxplot' or 'violin'.")
 
-        do_anova1_plot(fracs_per_group['hM3D'][:,i], fracs_per_group['hM4D'][:,i], fracs_per_group['mCherry'][:,i], ax, means+stds)
+        if plot_type == 'violin':
+            heights = np.array([np.max(fracs_per_group[group][:, i]) + 0.02 for group in group_order])
+            do_anova1_plot(fracs_per_group['hM3D'][:,i], fracs_per_group['hM4D'][:,i], fracs_per_group['mCherry'][:,i], ax, heights)
+        else:
+            do_anova1_plot(fracs_per_group['hM3D'][:,i], fracs_per_group['hM4D'][:,i], fracs_per_group['mCherry'][:,i], ax, means+stds)
         
         ax.set_xticks(range(3))
         ax.set_ylim([0,max(max_y, 0.3)])
@@ -625,11 +741,25 @@ def proportional_activities_helper(PLOTS_DIR, mice_per_group, first, second, thi
     plt.suptitle(title_str)
     plt.subplots_adjust(left=0.07, bottom=0.08, right=0.97, top=0.84, wspace=0.21)
     os.makedirs(os.path.join(PLOTS_DIR, 'proportional_activities'), exist_ok=True)
-    plt.savefig(os.path.join(PLOTS_DIR, 'proportional_activities', filename), format='png', dpi=300)
+    filename_root, filename_ext = os.path.splitext(filename)
+    if debug_labels:
+        filename = f'{filename_root}-debug{filename_ext}'
+    output_path = os.path.join(PLOTS_DIR, 'proportional_activities', filename)
+    plt.savefig(output_path, format='png', dpi=300)
+    plt.savefig(os.path.splitext(output_path)[0] + '.svg', format='svg')
+
+    if paper_fig2_dir and not debug_labels and plot_type == 'violin':
+        paper_exports = {
+            'frac-active-mappings.png': 'frac-active-mappings.svg',
+            'frac-active-mappings-TFC_B_B_1wk.png': 'frac-active-mappings-TFC_B_B_1wk.svg',
+        }
+        if filename in paper_exports:
+            _save_proportional_mappings_paper_svg(fracs_per_group, session_names, paper_fig2_dir, paper_exports[filename])
+
     if auto_close:
         plt.close()
 
-def proportional_activities(PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond_LT2):
+def proportional_activities(PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond_LT2, plot_type='boxplot', debug_labels=False, paper_fig2_dir=None):
     '''
     Plot two ways. First is fraction of each of LT1, LT2, TFC_cond cells wrt all others, regardless of cross-registration. This
     means cells may be counted twice or three times depending on whether they are active in the other sessions. But gives overall sense of
@@ -642,29 +772,57 @@ def proportional_activities(PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, T
     session_names = ['LT1', 'LT2', 'TFC']
     proportional_activities_helper(PLOTS_DIR, mice_per_group, TFC_cond_LT1, TFC_cond_LT2, TFC_cond, \
         sessions=sessions, session_names=session_names, \
-        figsize=(6,4), title_str='Fraction of active cells across sessions', filename='frac-active-sessions.png')
+        figsize=(6,4), title_str='Fraction of active cells across sessions', filename='frac-active-sessions.png', plot_type=plot_type, debug_labels=debug_labels, paper_fig2_dir=paper_fig2_dir)
 
     sessions = ['LT1', 'LT2', 'LT1+LT2', 'LT1+TFC_cond', 'LT2+TFC_cond', 'LT1+LT2+TFC_cond', 'TFC_cond']
     session_names = ['LT1', 'LT2', 'LT1+LT2', 'LT1+TFC', 'LT2+TFC', 'LT1+LT2+TFC', 'TFC']
     proportional_activities_helper(PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond_LT2, \
             sessions=sessions, session_names=session_names, \
-            figsize=(10,4), title_str='Fraction of active cells across mappings', filename='frac-active-mappings.png')
+            figsize=(10,4), title_str='Fraction of active cells across mappings', filename='frac-active-mappings.png', plot_type=plot_type, debug_labels=debug_labels, paper_fig2_dir=paper_fig2_dir)
 
-def proportional_activities_TFC_B_B_1wk(PLOTS_DIR, mice_per_group, TFC_cond, Test_B, Test_B_1wk):
+def proportional_activities_TFC_B_B_1wk(PLOTS_DIR, mice_per_group, TFC_cond, Test_B, Test_B_1wk, crossreg_to_use=None, plot_type='boxplot', debug_labels=False, paper_fig2_dir=None):
     '''
     See proportional_activities(). 
     '''
+    if crossreg_to_use is None:
+        raise ValueError('crossreg_to_use is required for proportional_activities_TFC_B_B_1wk().')
+
+    required_mapping = 'TFC_cond+Test_B+Test_B_1wk'
+    filtered_mice_per_group = {}
+    excluded_mice_per_group = {}
+    for group, mice in mice_per_group.items():
+        keep_mice = []
+        excluded_mice = []
+        for mouse in mice:
+            if mouse not in TFC_cond or mouse not in Test_B or mouse not in Test_B_1wk:
+                excluded_mice.append(mouse)
+                continue
+            try:
+                TFC_cond[mouse].get_S_mapping(required_mapping, with_crossreg=crossreg_to_use[mouse])
+            except Exception:
+                excluded_mice.append(mouse)
+            else:
+                keep_mice.append(mouse)
+
+        filtered_mice_per_group[group] = keep_mice
+        excluded_mice_per_group[group] = excluded_mice
+        if excluded_mice:
+            print(f"[proportional_activities_TFC_B_B_1wk] excluding mice without {required_mapping} for {group}: {excluded_mice}")
+
+    if all(len(mice) == 0 for mice in filtered_mice_per_group.values()):
+        raise RuntimeError(f"No mice remain after filtering for {required_mapping}.")
+
     sessions = ['TFC_cond', 'Test_B', 'Test_B_1wk']
     session_names = ['TFC', '48hr', '1wk']
-    proportional_activities_helper(PLOTS_DIR, mice_per_group, TFC_cond, Test_B, Test_B_1wk, \
+    proportional_activities_helper(PLOTS_DIR, filtered_mice_per_group, TFC_cond, Test_B, Test_B_1wk, \
         sessions=sessions, session_names=session_names, \
-        figsize=(6,4), title_str='Fraction of active cells across sessions', filename='frac-active-sessions-TFC_B_B_1wk.png')
+        figsize=(6,4), title_str='Fraction of active cells across sessions', filename='frac-active-sessions-TFC_B_B_1wk.png', plot_type=plot_type, debug_labels=debug_labels, paper_fig2_dir=paper_fig2_dir)
     
     sessions = ['TFC_cond', 'Test_B', 'Test_B_1wk', 'TFC_cond+Test_B', 'TFC_cond+Test_B_1wk', 'Test_B+Test_B_1wk', 'TFC_cond+Test_B+Test_B_1wk']
     session_names = ['TFC', '48hr', '1wk', 'TFC+48hr', 'TFC+1wk', '48hr+1wk', 'TFC+48hr+1wk']
-    proportional_activities_helper(PLOTS_DIR, mice_per_group, TFC_cond, Test_B, Test_B_1wk, \
-            sessions=sessions, session_names=session_names, \
-            figsize=(10,4), title_str='Fraction of active cells across mappings', filename='frac-active-mappings-TFC_B_B_1wk.png')
+    proportional_activities_helper(PLOTS_DIR, filtered_mice_per_group, TFC_cond, Test_B, Test_B_1wk, \
+        sessions=sessions, session_names=session_names, \
+        figsize=(10,4), title_str='Fraction of active cells across mappings', filename='frac-active-mappings-TFC_B_B_1wk.png', plot_type=plot_type, debug_labels=debug_labels, paper_fig2_dir=paper_fig2_dir)
 
 def proportional_activities_donut(PLOTS_DIR, mouse_groups, first, second, third, session_names, crossreg_type='TFC_cond', crossreg_to_use=None):
     '''

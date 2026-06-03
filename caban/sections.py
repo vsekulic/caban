@@ -795,6 +795,7 @@ def run_proportional_activities(ds, cfg):
     if not (cfg.plot_proportional_activities and not cfg.DEVEL_SWITCH):
         return
     # --- ds attributes ---
+    PAPER_DIR = cfg.PAPER_DIR
     PLOTS_DIR = cfg.PLOTS_DIR
     TFC_B_B_1wk_crossreg = ds.TFC_B_B_1wk_crossreg
     TFC_cond = ds.TFC_cond
@@ -812,8 +813,10 @@ def run_proportional_activities(ds, cfg):
     # ===== verbatim body from caban/main.py =====
     if plot_proportional_activities and not DEVEL_SWITCH:
         msg_start('*** Generating proportional activities plots')
-        proportional_activities(PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond_LT2)
-        proportional_activities_TFC_B_B_1wk(PLOTS_DIR, mice_per_group, TFC_cond, Test_B, Test_B_1wk)
+        for debug_switch in [True, False]:
+            paper_fig2_dir = os.path.join(PAPER_DIR, 'fig2') if not debug_switch else None
+            proportional_activities(PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond_LT2, plot_type='violin', debug_labels=debug_switch, paper_fig2_dir=paper_fig2_dir)
+            proportional_activities_TFC_B_B_1wk(PLOTS_DIR, mice_per_group, TFC_cond, Test_B, Test_B_1wk, crossreg_to_use=TFC_B_B_1wk_crossreg, plot_type='violin', debug_labels=debug_switch, paper_fig2_dir=paper_fig2_dir)
 
         proportional_activities_donut(PLOTS_DIR, mouse_groups, TFC_cond, TFC_cond_LT1, TFC_cond_LT2, ['TFC_cond','TFC_cond_LT1','TFC_cond_LT2'], crossreg_type='TFC_cond', \
             crossreg_to_use=TFC_cond_crossreg)
