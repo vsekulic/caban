@@ -627,8 +627,67 @@ def _save_proportional_mappings_paper_svg(fracs_per_group, session_names, paper_
     fig.savefig(os.path.join(paper_fig2_dir, output_filename), format='svg')
     plt.close(fig)
 
+def _get_proportional_activity_value(session_obj, session_str, value_mode):
+    try:
+        [S, S_spikes, S_peakval, S_idx] = session_obj.get_S_mapping(
+            session_str,
+            want_peakval=(value_mode == 'amplitudes'),
+        )
+    except Exception:
+        if value_mode == 'fraction_active':
+            return 0
+        return 0.0
+
+    active_cells = [cell for cell, spikes in S_spikes.items() if len(spikes) > 0]
+    if value_mode == 'fraction_active':
+        return len(active_cells)
+
+    if len(active_cells) == 0:
+        return 0.0
+
+    if value_mode == 'event_rate':
+        duration_s = S.shape[1] / float(MINISCOPE_FPS)
+        if duration_s <= 0:
+            raise RuntimeError(f'Encountered non-positive session duration for mapping {session_str}: S shape={S.shape}')
+        rates = [len(S_spikes[cell]) / duration_s for cell in active_cells]
+        return float(np.mean(rates))
+
+    if value_mode == 'amplitudes':
+        mean_peakvals = [float(np.mean(S_peakval[cell])) for cell in active_cells]
+        return float(np.mean(mean_peakvals))
+
+    raise ValueError(f"Unknown proportional activity value_mode '{value_mode}'.")
+
+
+def _filter_mice_with_required_mapping(mice_per_group, first, second, third, crossreg_to_use, required_mapping, log_prefix):
+    filtered_mice_per_group = {}
+    for group, mice in mice_per_group.items():
+        keep_mice = []
+        excluded_mice = []
+        for mouse in mice:
+            if mouse not in first or mouse not in second or mouse not in third:
+                excluded_mice.append(mouse)
+                continue
+            try:
+                first[mouse].get_S_mapping(required_mapping, with_crossreg=crossreg_to_use[mouse])
+            except Exception:
+                excluded_mice.append(mouse)
+            else:
+                keep_mice.append(mouse)
+
+        filtered_mice_per_group[group] = keep_mice
+        if excluded_mice:
+            print(f'[{log_prefix}] excluding mice without {required_mapping} for {group}: {excluded_mice}')
+
+    if all(len(mice) == 0 for mice in filtered_mice_per_group.values()):
+        raise RuntimeError(f'No mice remain after filtering for {required_mapping}.')
+
+    return filtered_mice_per_group
+
+
 def proportional_activities_helper(PLOTS_DIR, mice_per_group, first, second, third, sessions=[], session_names=[], \
-    figsize=(10,4), title_str='', filename='', auto_close=True, plot_type='boxplot', debug_labels=False, paper_fig2_dir=None):
+    figsize=(10,4), title_str='', filename='', auto_close=True, plot_type='boxplot', debug_labels=False, paper_fig2_dir=None,
+    value_mode='fraction_active'):
     session_strs = dict()
     for i in range(len(session_names)):
         session_strs[i] = session_names[i]
@@ -639,47 +698,40 @@ def proportional_activities_helper(PLOTS_DIR, mice_per_group, first, second, thi
     if debug_labels and plot_type != 'violin':
         raise ValueError("debug_labels=True is only supported with plot_type='violin'.")
 
-    active_cells = dict()
-    group_totals = dict()
-    fracs_per_group = dict()
+    values_per_group = dict()
     mouse_names_per_group = dict()
     for group, mice in mice_per_group.items():
         mouse_names_per_group[group] = list(mice)
 
-        active_cells[group] = np.zeros((len(mice), num_comparisons)) 
+        values_per_group[group] = np.zeros((len(mice), num_comparisons))
         for m in range(len(mice)):
             mouse = mice[m]
             if sessions:
                 for i in range(len(sessions)):
-                    try:
-                        session_str = sessions[i]
-                        session_obj = None
-                        if first[mouse].session_type in session_str:
-                            session_obj = first[mouse]
-                        if second[mouse].session_type in session_str:
-                            session_obj = second[mouse]
-                        if third[mouse].session_type in session_str:
-                            session_obj = third[mouse]
-                        [S, S_spikes, S_peakval, S_idx] = session_obj.get_S_mapping(session_str)
-                    except:
-                        S_spikes = []
-                    active_cells[group][m, i] += len(S_spikes)
-                    #active_cells[group][m, i] += len(np.where(np.mean(zscore(S,1),1)>0)[0])
-        
-        fracs_per_group[group] = np.zeros((len(mice), num_comparisons))
-        for m in range(len(mice)):
-            for i in range(num_comparisons):
-                active_cells_sum = np.sum(active_cells[group][m,:])
-                if active_cells_sum > 0:
-                    fracs_per_group[group][m,i] = active_cells[group][m,i] / np.sum(active_cells[group][m,:])
-                else:
-                    fracs_per_group[group][m,i] = active_cells[group][m,i]
-        group_totals[group] = np.sum(active_cells[group],0) # Summate along all mice, resulting in 3-tuple
+                    session_str = sessions[i]
+                    session_obj = None
+                    if first[mouse].session_type in session_str:
+                        session_obj = first[mouse]
+                    if second[mouse].session_type in session_str:
+                        session_obj = second[mouse]
+                    if third[mouse].session_type in session_str:
+                        session_obj = third[mouse]
+                    values_per_group[group][m, i] = _get_proportional_activity_value(session_obj, session_str, value_mode)
+
+        if value_mode == 'fraction_active':
+            normalized_values = np.zeros((len(mice), num_comparisons))
+            for m in range(len(mice)):
+                active_cells_sum = np.sum(values_per_group[group][m,:])
+                for i in range(num_comparisons):
+                    if active_cells_sum > 0:
+                        normalized_values[m, i] = values_per_group[group][m, i] / active_cells_sum
+                    else:
+                        normalized_values[m, i] = values_per_group[group][m, i]
+            values_per_group[group] = normalized_values
 
     fig, axs = plt.subplots(1,num_comparisons, figsize=figsize, sharey='row')
-    group_totals_l = group_order
     max_y = 0
-    num_groups = len(group_totals)   
+    num_groups = len(group_order)
 
     x = range(num_groups)
     means = np.zeros(num_groups)
@@ -689,25 +741,22 @@ def proportional_activities_helper(PLOTS_DIR, mice_per_group, first, second, thi
     for i, ax in zip(range(num_comparisons), axs.flat):
 
         for group in group_order:
-            idx = group_totals_l.index(group)
+            idx = group_order.index(group)
 
-            fracs = fracs_per_group[group][:,i]
-            means[idx] = np.mean(fracs)
-            stds[idx] = np.std(fracs)
-            #errbar = np.zeros((2,1))
+            values = values_per_group[group][:,i]
+            means[idx] = np.mean(values)
+            stds[idx] = np.std(values)
             errbars[1,idx] = stds[idx]
 
             if means[idx]+stds[idx] > max_y:
                 max_y = means[idx]+stds[idx]+0.01
-            #ax.bar(group_totals_l.index(group), mean, yerr=errbars, label=group, color=group_colours[group])
-            #print(i, group, group_totals_l.index(group), frac)
 
-        print(session_strs[i], stats.f_oneway(fracs_per_group['hM3D'][:,i], fracs_per_group['hM4D'][:,i], fracs_per_group['mCherry'][:,i]))
+        print(session_strs[i], stats.f_oneway(values_per_group['hM3D'][:,i], values_per_group['hM4D'][:,i], values_per_group['mCherry'][:,i]))
 
         if plot_type == 'boxplot':
             ax.bar(x, means, yerr=errbars, label=session_strs[i], color=[group_colours[group] for group in group_order])
         elif plot_type == 'violin':
-            group_data = [fracs_per_group[group][:, i] for group in group_order]
+            group_data = [values_per_group[group][:, i] for group in group_order]
             max_y = max(max_y, max(np.max(data) for data in group_data) + 0.01)
             violin_parts = ax.violinplot(group_data, positions=list(x), widths=0.75, showmeans=False, showmedians=True, showextrema=False)
             for body, group in zip(violin_parts['bodies'], group_order):
@@ -718,22 +767,22 @@ def proportional_activities_helper(PLOTS_DIR, mice_per_group, first, second, thi
                 violin_parts['cmedians'].set_color('black')
             rng = np.random.default_rng(0)
             for xpos, group in zip(x, group_order):
-                fracs = fracs_per_group[group][:, i]
-                jitter = rng.uniform(-0.08, 0.08, size=len(fracs))
-                x_positions = np.full(len(fracs), xpos) + jitter
-                ax.scatter(x_positions, fracs, s=18, color=group_colours[group], edgecolors='none', alpha=0.9, zorder=3)
+                values = values_per_group[group][:, i]
+                jitter = rng.uniform(-0.08, 0.08, size=len(values))
+                x_positions = np.full(len(values), xpos) + jitter
+                ax.scatter(x_positions, values, s=18, color=group_colours[group], edgecolors='none', alpha=0.9, zorder=3)
                 if debug_labels:
-                    for mouse_name, x_pos, y_pos in zip(mouse_names_per_group[group], x_positions, fracs):
+                    for mouse_name, x_pos, y_pos in zip(mouse_names_per_group[group], x_positions, values):
                         ax.text(x_pos + 0.03, y_pos, mouse_name, fontsize=5.5, color=group_colours[group], va='center', ha='left', zorder=4)
         else:
             raise ValueError(f"Unknown plot_type '{plot_type}'. Expected 'boxplot' or 'violin'.")
 
         if plot_type == 'violin':
-            heights = np.array([np.max(fracs_per_group[group][:, i]) + 0.02 for group in group_order])
-            do_anova1_plot(fracs_per_group['hM3D'][:,i], fracs_per_group['hM4D'][:,i], fracs_per_group['mCherry'][:,i], ax, heights)
+            heights = np.array([np.max(values_per_group[group][:, i]) + 0.02 for group in group_order])
+            do_anova1_plot(values_per_group['hM3D'][:,i], values_per_group['hM4D'][:,i], values_per_group['mCherry'][:,i], ax, heights)
         else:
-            do_anova1_plot(fracs_per_group['hM3D'][:,i], fracs_per_group['hM4D'][:,i], fracs_per_group['mCherry'][:,i], ax, means+stds)
-        
+            do_anova1_plot(values_per_group['hM3D'][:,i], values_per_group['hM4D'][:,i], values_per_group['mCherry'][:,i], ax, means+stds)
+
         ax.set_xticks(range(3))
         ax.set_ylim([0,max(max_y, 0.3)])
         ax.set_xticklabels(['Exc', 'Inh', 'Ctl'], size='medium')
@@ -752,12 +801,17 @@ def proportional_activities_helper(PLOTS_DIR, mice_per_group, first, second, thi
         paper_exports = {
             'frac-active-mappings.png': 'frac-active-mappings.svg',
             'frac-active-mappings-TFC_B_B_1wk.png': 'frac-active-mappings-TFC_B_B_1wk.svg',
+            'event-rate-mappings.png': 'event-rate-mappings.svg',
+            'event-rate-mappings-TFC_B_B_1wk.png': 'event-rate-mappings-TFC_B_B_1wk.svg',
+            'amplitudes-mappings.png': 'amplitudes-mappings.svg',
+            'amplitudes-mappings-TFC_B_B_1wk.png': 'amplitudes-mappings-TFC_B_B_1wk.svg',
         }
         if filename in paper_exports:
-            _save_proportional_mappings_paper_svg(fracs_per_group, session_names, paper_fig2_dir, paper_exports[filename])
+            _save_proportional_mappings_paper_svg(values_per_group, session_names, paper_fig2_dir, paper_exports[filename])
 
     if auto_close:
         plt.close()
+
 
 def proportional_activities(PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond_LT2, plot_type='boxplot', debug_labels=False, paper_fig2_dir=None):
     '''
@@ -772,57 +826,140 @@ def proportional_activities(PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, T
     session_names = ['LT1', 'LT2', 'TFC']
     proportional_activities_helper(PLOTS_DIR, mice_per_group, TFC_cond_LT1, TFC_cond_LT2, TFC_cond, \
         sessions=sessions, session_names=session_names, \
-        figsize=(6,4), title_str='Fraction of active cells across sessions', filename='frac-active-sessions.png', plot_type=plot_type, debug_labels=debug_labels, paper_fig2_dir=paper_fig2_dir)
+        figsize=(6,4), title_str='Fraction of active cells across sessions', filename='frac-active-sessions.png', plot_type=plot_type, debug_labels=debug_labels, paper_fig2_dir=paper_fig2_dir,
+        value_mode='fraction_active')
 
     sessions = ['LT1', 'LT2', 'LT1+LT2', 'LT1+TFC_cond', 'LT2+TFC_cond', 'LT1+LT2+TFC_cond', 'TFC_cond']
     session_names = ['LT1', 'LT2', 'LT1+LT2', 'LT1+TFC', 'LT2+TFC', 'LT1+LT2+TFC', 'TFC']
     proportional_activities_helper(PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond_LT2, \
             sessions=sessions, session_names=session_names, \
-            figsize=(10,4), title_str='Fraction of active cells across mappings', filename='frac-active-mappings.png', plot_type=plot_type, debug_labels=debug_labels, paper_fig2_dir=paper_fig2_dir)
+            figsize=(10,4), title_str='Fraction of active cells across mappings', filename='frac-active-mappings.png', plot_type=plot_type, debug_labels=debug_labels, paper_fig2_dir=paper_fig2_dir,
+            value_mode='fraction_active')
+
 
 def proportional_activities_TFC_B_B_1wk(PLOTS_DIR, mice_per_group, TFC_cond, Test_B, Test_B_1wk, crossreg_to_use=None, plot_type='boxplot', debug_labels=False, paper_fig2_dir=None):
     '''
-    See proportional_activities(). 
+    See proportional_activities().
     '''
     if crossreg_to_use is None:
         raise ValueError('crossreg_to_use is required for proportional_activities_TFC_B_B_1wk().')
 
     required_mapping = 'TFC_cond+Test_B+Test_B_1wk'
-    filtered_mice_per_group = {}
-    excluded_mice_per_group = {}
-    for group, mice in mice_per_group.items():
-        keep_mice = []
-        excluded_mice = []
-        for mouse in mice:
-            if mouse not in TFC_cond or mouse not in Test_B or mouse not in Test_B_1wk:
-                excluded_mice.append(mouse)
-                continue
-            try:
-                TFC_cond[mouse].get_S_mapping(required_mapping, with_crossreg=crossreg_to_use[mouse])
-            except Exception:
-                excluded_mice.append(mouse)
-            else:
-                keep_mice.append(mouse)
-
-        filtered_mice_per_group[group] = keep_mice
-        excluded_mice_per_group[group] = excluded_mice
-        if excluded_mice:
-            print(f"[proportional_activities_TFC_B_B_1wk] excluding mice without {required_mapping} for {group}: {excluded_mice}")
-
-    if all(len(mice) == 0 for mice in filtered_mice_per_group.values()):
-        raise RuntimeError(f"No mice remain after filtering for {required_mapping}.")
+    filtered_mice_per_group = _filter_mice_with_required_mapping(
+        mice_per_group,
+        TFC_cond,
+        Test_B,
+        Test_B_1wk,
+        crossreg_to_use,
+        required_mapping,
+        'proportional_activities_TFC_B_B_1wk',
+    )
 
     sessions = ['TFC_cond', 'Test_B', 'Test_B_1wk']
     session_names = ['TFC', '48hr', '1wk']
     proportional_activities_helper(PLOTS_DIR, filtered_mice_per_group, TFC_cond, Test_B, Test_B_1wk, \
         sessions=sessions, session_names=session_names, \
-        figsize=(6,4), title_str='Fraction of active cells across sessions', filename='frac-active-sessions-TFC_B_B_1wk.png', plot_type=plot_type, debug_labels=debug_labels, paper_fig2_dir=paper_fig2_dir)
-    
+        figsize=(6,4), title_str='Fraction of active cells across sessions', filename='frac-active-sessions-TFC_B_B_1wk.png', plot_type=plot_type, debug_labels=debug_labels, paper_fig2_dir=paper_fig2_dir,
+        value_mode='fraction_active')
+
     sessions = ['TFC_cond', 'Test_B', 'Test_B_1wk', 'TFC_cond+Test_B', 'TFC_cond+Test_B_1wk', 'Test_B+Test_B_1wk', 'TFC_cond+Test_B+Test_B_1wk']
     session_names = ['TFC', '48hr', '1wk', 'TFC+48hr', 'TFC+1wk', '48hr+1wk', 'TFC+48hr+1wk']
     proportional_activities_helper(PLOTS_DIR, filtered_mice_per_group, TFC_cond, Test_B, Test_B_1wk, \
         sessions=sessions, session_names=session_names, \
-        figsize=(10,4), title_str='Fraction of active cells across mappings', filename='frac-active-mappings-TFC_B_B_1wk.png', plot_type=plot_type, debug_labels=debug_labels, paper_fig2_dir=paper_fig2_dir)
+        figsize=(10,4), title_str='Fraction of active cells across mappings', filename='frac-active-mappings-TFC_B_B_1wk.png', plot_type=plot_type, debug_labels=debug_labels, paper_fig2_dir=paper_fig2_dir,
+        value_mode='fraction_active')
+
+
+def proportional_activities_event_rate(PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond_LT2, plot_type='boxplot', debug_labels=False, paper_fig2_dir=None):
+    sessions = ['LT1', 'LT2', 'TFC_cond']
+    session_names = ['LT1', 'LT2', 'TFC']
+    proportional_activities_helper(PLOTS_DIR, mice_per_group, TFC_cond_LT1, TFC_cond_LT2, TFC_cond, \
+        sessions=sessions, session_names=session_names, \
+        figsize=(6,4), title_str='Event rate among active cells across sessions', filename='event-rate-sessions.png', plot_type=plot_type, debug_labels=debug_labels, paper_fig2_dir=paper_fig2_dir,
+        value_mode='event_rate')
+
+    sessions = ['LT1', 'LT2', 'LT1+LT2', 'LT1+TFC_cond', 'LT2+TFC_cond', 'LT1+LT2+TFC_cond', 'TFC_cond']
+    session_names = ['LT1', 'LT2', 'LT1+LT2', 'LT1+TFC', 'LT2+TFC', 'LT1+LT2+TFC', 'TFC']
+    proportional_activities_helper(PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond_LT2, \
+        sessions=sessions, session_names=session_names, \
+        figsize=(10,4), title_str='Event rate among active cells across mappings', filename='event-rate-mappings.png', plot_type=plot_type, debug_labels=debug_labels, paper_fig2_dir=paper_fig2_dir,
+        value_mode='event_rate')
+
+
+def proportional_activities_event_rate_TFC_B_B_1wk(PLOTS_DIR, mice_per_group, TFC_cond, Test_B, Test_B_1wk, crossreg_to_use=None, plot_type='boxplot', debug_labels=False, paper_fig2_dir=None):
+    if crossreg_to_use is None:
+        raise ValueError('crossreg_to_use is required for proportional_activities_event_rate_TFC_B_B_1wk().')
+
+    required_mapping = 'TFC_cond+Test_B+Test_B_1wk'
+    filtered_mice_per_group = _filter_mice_with_required_mapping(
+        mice_per_group,
+        TFC_cond,
+        Test_B,
+        Test_B_1wk,
+        crossreg_to_use,
+        required_mapping,
+        'proportional_activities_event_rate_TFC_B_B_1wk',
+    )
+
+    sessions = ['TFC_cond', 'Test_B', 'Test_B_1wk']
+    session_names = ['TFC', '48hr', '1wk']
+    proportional_activities_helper(PLOTS_DIR, filtered_mice_per_group, TFC_cond, Test_B, Test_B_1wk, \
+        sessions=sessions, session_names=session_names, \
+        figsize=(6,4), title_str='Event rate among active cells across sessions', filename='event-rate-sessions-TFC_B_B_1wk.png', plot_type=plot_type, debug_labels=debug_labels, paper_fig2_dir=paper_fig2_dir,
+        value_mode='event_rate')
+
+    sessions = ['TFC_cond', 'Test_B', 'Test_B_1wk', 'TFC_cond+Test_B', 'TFC_cond+Test_B_1wk', 'Test_B+Test_B_1wk', 'TFC_cond+Test_B+Test_B_1wk']
+    session_names = ['TFC', '48hr', '1wk', 'TFC+48hr', 'TFC+1wk', '48hr+1wk', 'TFC+48hr+1wk']
+    proportional_activities_helper(PLOTS_DIR, filtered_mice_per_group, TFC_cond, Test_B, Test_B_1wk, \
+        sessions=sessions, session_names=session_names, \
+        figsize=(10,4), title_str='Event rate among active cells across mappings', filename='event-rate-mappings-TFC_B_B_1wk.png', plot_type=plot_type, debug_labels=debug_labels, paper_fig2_dir=paper_fig2_dir,
+        value_mode='event_rate')
+
+
+def proportional_activities_amplitudes(PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond_LT2, plot_type='boxplot', debug_labels=False, paper_fig2_dir=None):
+    sessions = ['LT1', 'LT2', 'TFC_cond']
+    session_names = ['LT1', 'LT2', 'TFC']
+    proportional_activities_helper(PLOTS_DIR, mice_per_group, TFC_cond_LT1, TFC_cond_LT2, TFC_cond, \
+        sessions=sessions, session_names=session_names, \
+        figsize=(6,4), title_str='Mean event amplitude among active cells across sessions', filename='amplitudes-sessions.png', plot_type=plot_type, debug_labels=debug_labels, paper_fig2_dir=paper_fig2_dir,
+        value_mode='amplitudes')
+
+    sessions = ['LT1', 'LT2', 'LT1+LT2', 'LT1+TFC_cond', 'LT2+TFC_cond', 'LT1+LT2+TFC_cond', 'TFC_cond']
+    session_names = ['LT1', 'LT2', 'LT1+LT2', 'LT1+TFC', 'LT2+TFC', 'LT1+LT2+TFC', 'TFC']
+    proportional_activities_helper(PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond_LT2, \
+        sessions=sessions, session_names=session_names, \
+        figsize=(10,4), title_str='Mean event amplitude among active cells across mappings', filename='amplitudes-mappings.png', plot_type=plot_type, debug_labels=debug_labels, paper_fig2_dir=paper_fig2_dir,
+        value_mode='amplitudes')
+
+
+def proportional_activities_amplitudes_TFC_B_B_1wk(PLOTS_DIR, mice_per_group, TFC_cond, Test_B, Test_B_1wk, crossreg_to_use=None, plot_type='boxplot', debug_labels=False, paper_fig2_dir=None):
+    if crossreg_to_use is None:
+        raise ValueError('crossreg_to_use is required for proportional_activities_amplitudes_TFC_B_B_1wk().')
+
+    required_mapping = 'TFC_cond+Test_B+Test_B_1wk'
+    filtered_mice_per_group = _filter_mice_with_required_mapping(
+        mice_per_group,
+        TFC_cond,
+        Test_B,
+        Test_B_1wk,
+        crossreg_to_use,
+        required_mapping,
+        'proportional_activities_amplitudes_TFC_B_B_1wk',
+    )
+
+    sessions = ['TFC_cond', 'Test_B', 'Test_B_1wk']
+    session_names = ['TFC', '48hr', '1wk']
+    proportional_activities_helper(PLOTS_DIR, filtered_mice_per_group, TFC_cond, Test_B, Test_B_1wk, \
+        sessions=sessions, session_names=session_names, \
+        figsize=(6,4), title_str='Mean event amplitude among active cells across sessions', filename='amplitudes-sessions-TFC_B_B_1wk.png', plot_type=plot_type, debug_labels=debug_labels, paper_fig2_dir=paper_fig2_dir,
+        value_mode='amplitudes')
+
+    sessions = ['TFC_cond', 'Test_B', 'Test_B_1wk', 'TFC_cond+Test_B', 'TFC_cond+Test_B_1wk', 'Test_B+Test_B_1wk', 'TFC_cond+Test_B+Test_B_1wk']
+    session_names = ['TFC', '48hr', '1wk', 'TFC+48hr', 'TFC+1wk', '48hr+1wk', 'TFC+48hr+1wk']
+    proportional_activities_helper(PLOTS_DIR, filtered_mice_per_group, TFC_cond, Test_B, Test_B_1wk, \
+        sessions=sessions, session_names=session_names, \
+        figsize=(10,4), title_str='Mean event amplitude among active cells across mappings', filename='amplitudes-mappings-TFC_B_B_1wk.png', plot_type=plot_type, debug_labels=debug_labels, paper_fig2_dir=paper_fig2_dir,
+        value_mode='amplitudes')
 
 def proportional_activities_donut(PLOTS_DIR, mouse_groups, first, second, third, session_names, crossreg_type='TFC_cond', crossreg_to_use=None):
     '''
@@ -1135,7 +1272,7 @@ def plot_sample_traces(PLOTS_DIR, mice_to_use, session, paper_dir=None, selectio
                 while not_satisfied:
                     cell_random = random.randrange(sess.C.shape[0])
                     sample_t = True
-                    print(f'cell_random: {cell_random}; sampling times: ', end='')
+                    print(f'[mouse={m}, group={group}] cell_random: {cell_random}; sampling times: ', end='')
                     kill_num_max = 20
                     kill_num = 0                    
                     while sample_t:
@@ -1263,7 +1400,7 @@ def plot_sample_traces2(PLOTS_DIR, mice_to_use, session, paper_dir=None, selecti
                 while not_satisfied:
                     cell_random = random.randrange(sess.C.shape[0])
                     sample_t = True
-                    print(f'cell_random: {cell_random}; sampling times: ', end='')
+                    print(f'[mouse={m}, group={group}] cell_random: {cell_random}; sampling times: ', end='')
                     kill_num_max = 20
                     kill_num = 0                    
                     while sample_t:
@@ -1307,7 +1444,15 @@ def plot_sample_traces2(PLOTS_DIR, mice_to_use, session, paper_dir=None, selecti
                     ax.plot(delta_YrA/np.max(delta_YrA),'grey', alpha=0.5)
                     print(f'[delta_YrA/F0_median..] ', end='')
                     #ax.plot(sess.YrA[cell_random, t_idx_random:t_idx_random+len_trace],'grey')
-                    plt.show()
+
+                    fig = ax.figure
+                    # Force the figure to be rendered into the notebook output immediately,
+                    # before VS Code opens the input prompt.
+                    display(fig)
+                    # Prevent duplicate rendering later at the end of the cell.
+                    plt.close(fig)
+
+                    #plt.show()
 
                     x=input('good? (y/n/q) ')
                     if x == 'y':
@@ -12318,3 +12463,4 @@ def run_occupancy_analysis_pipeline(
     print(f"[Occupancy] Stats CSV   : {os.path.join(base_dir, 'occupancy_stats.csv')}")
 
     return df, df_stats, occ_all
+

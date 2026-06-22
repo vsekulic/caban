@@ -35,6 +35,7 @@ from caban.population import run_population_pca_pipeline, run_pca_state_metrics_
 from caban.isomap import run_isomap_pipeline
 from caban.epoch_analysis import run_epoch_analysis_all_mice, run_cross_session_epoch_analysis_all_mice
 from caban.engram_sanity import plot_engram_sanity
+from caban.roi import plot_session_A_matrix
 
 import statsmodels.api as sm  # noqa: F401
 from statsmodels.regression.mixed_linear_model import MixedLM as mixedlm  # noqa: F401
@@ -765,6 +766,8 @@ def run_ROIs(ds, cfg):
     LT2_ROI_mappings = ds.LT2_ROI_mappings
     LT2_ROI_mappings_peakval = ds.LT2_ROI_mappings_peakval
     PLOTS_DIR = cfg.PLOTS_DIR
+    PAPER_PLOTS = cfg.PAPER_PLOTS
+    TFC_cond = ds.TFC_cond
     TFC_cond_ROI_mappings = ds.TFC_cond_ROI_mappings
     TFC_cond_ROI_mappings_peakval = ds.TFC_cond_ROI_mappings_peakval
     mappings_all_LT1 = ds.mappings_all_LT1
@@ -782,6 +785,14 @@ def run_ROIs(ds, cfg):
         plot_ROI_mappings(PLOTS_DIR, mouse_groups, TFC_cond_ROI_mappings_peakval, mappings_all_TFC_cond, \
             LT1_ROI_mappings_peakval, mappings_all_LT1, LT2_ROI_mappings_peakval, mappings_all_LT2, \
                 want_peakval=True)
+        paper_plots_dir = PAPER_PLOTS if PAPER_PLOTS is not None else os.path.join(PLOTS_DIR, '0-PAPER_PLOTS')
+        plot_session_A_matrix(
+            TFC_cond,
+            mouse='G10',
+            plots_dir=PLOTS_DIR,
+            paper_plots_dir=paper_plots_dir,
+            session_label='TFC_cond',
+        )
         msg_end()
 
     # ===== end verbatim body =====
@@ -817,6 +828,10 @@ def run_proportional_activities(ds, cfg):
             paper_fig2_dir = os.path.join(PAPER_DIR, 'fig2') if not debug_switch else None
             proportional_activities(PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond_LT2, plot_type='violin', debug_labels=debug_switch, paper_fig2_dir=paper_fig2_dir)
             proportional_activities_TFC_B_B_1wk(PLOTS_DIR, mice_per_group, TFC_cond, Test_B, Test_B_1wk, crossreg_to_use=TFC_B_B_1wk_crossreg, plot_type='violin', debug_labels=debug_switch, paper_fig2_dir=paper_fig2_dir)
+            proportional_activities_event_rate(PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond_LT2, plot_type='violin', debug_labels=debug_switch, paper_fig2_dir=paper_fig2_dir)
+            proportional_activities_event_rate_TFC_B_B_1wk(PLOTS_DIR, mice_per_group, TFC_cond, Test_B, Test_B_1wk, crossreg_to_use=TFC_B_B_1wk_crossreg, plot_type='violin', debug_labels=debug_switch, paper_fig2_dir=paper_fig2_dir)
+            proportional_activities_amplitudes(PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond_LT2, plot_type='violin', debug_labels=debug_switch, paper_fig2_dir=paper_fig2_dir)
+            proportional_activities_amplitudes_TFC_B_B_1wk(PLOTS_DIR, mice_per_group, TFC_cond, Test_B, Test_B_1wk, crossreg_to_use=TFC_B_B_1wk_crossreg, plot_type='violin', debug_labels=debug_switch, paper_fig2_dir=paper_fig2_dir)
 
         proportional_activities_donut(PLOTS_DIR, mouse_groups, TFC_cond, TFC_cond_LT1, TFC_cond_LT2, ['TFC_cond','TFC_cond_LT1','TFC_cond_LT2'], crossreg_type='TFC_cond', \
             crossreg_to_use=TFC_cond_crossreg)
@@ -879,7 +894,7 @@ def run_want_sample_traces_paper(ds, cfg, selection_mode=False, len_trace=1200):
         selections = {
             'hM3D' : [(582, 5149), (130, 23781), (735, 6450)],
             'hM4D' : [(154, 23413), (208, 6672), (271, 14012)],
-            'mCherry' : [(319, 18272), (230, 7538), (370, 4138)]
+            'mCherry' : [(319, 18272), (230, 7538), (370, 4138)],
         }
         selections2 = {
             'hM3D' : [(737, 18410), (49, 4657), (434, 9302)],
@@ -895,15 +910,16 @@ def run_want_sample_traces_paper(ds, cfg, selection_mode=False, len_trace=1200):
         selections_paper = {
             'hM3D' : [(567, 15724), (79, 7702), (152, 16930)],
             'hM4D' : [(258, 8226), (139, 4057), (65, 7174)],
-            'mCherry' : [(303, 7941), (425, 11698), (209, 18078)], # 580, 18603
+            #'mCherry' : [(303, 7941), (425, 11698), (209, 18078)], # 580, 18603
+            'mCherry' : [(455, 24043), (600, 13579), (122, 15588)], # 151, 5597
         }
         if selection_mode:
-            selections = plot_sample_traces2(cfg.PLOTS_DIR, {'hM3D':'G10', 'hM4D':'G14', 'mCherry':'G17'}, ds.TFC_cond, paper_dir=paper_dir, selection_mode=True, len_trace=len_trace)
-            plot_sample_traces2(cfg.PLOTS_DIR, {'hM3D':'G10', 'hM4D':'G14', 'mCherry':'G17'}, ds.TFC_cond, paper_dir=paper_dir, selections=selections, len_trace=len_trace, \
+            selections = plot_sample_traces2(cfg.PLOTS_DIR, {'hM3D':'G10', 'hM4D':'G14', 'mCherry':'G16'}, ds.TFC_cond, paper_dir=paper_dir, selection_mode=True, len_trace=len_trace)
+            plot_sample_traces2(cfg.PLOTS_DIR, {'hM3D':'G10', 'hM4D':'G14', 'mCherry':'G16'}, ds.TFC_cond, paper_dir=paper_dir, selections=selections, len_trace=len_trace, \
                 use_global_max_val=True)
         else:
-            plot_sample_traces2(cfg.PLOTS_DIR, {'hM3D':'G10', 'hM4D':'G14', 'mCherry':'G17'}, ds.TFC_cond, paper_dir=paper_dir, selections=selections_paper, len_trace=len_trace)
-            plot_sample_traces2(cfg.PLOTS_DIR, {'hM3D':'G10', 'hM4D':'G14', 'mCherry':'G17'}, ds.TFC_cond, paper_dir=paper_dir, selections=selections_paper, len_trace=len_trace, \
+            plot_sample_traces2(cfg.PLOTS_DIR, {'hM3D':'G10', 'hM4D':'G14', 'mCherry':'G16'}, ds.TFC_cond, paper_dir=paper_dir, selections=selections_paper, len_trace=len_trace)
+            plot_sample_traces2(cfg.PLOTS_DIR, {'hM3D':'G10', 'hM4D':'G14', 'mCherry':'G16'}, ds.TFC_cond, paper_dir=paper_dir, selections=selections_paper, len_trace=len_trace, \
                 use_global_max_val=True)
 
         msg_end()
