@@ -23,6 +23,7 @@
 
 - **All imports at the top of the file.** NEVER use lazy/inline imports inside function bodies.
 - This applies to both standard-library and project-internal imports.
+- **Resolve circular imports by ordering top-level definitions, never with lazy/in-function imports.** If module A needs a name from module B and B imports A back, define/expose that name in B *before* B's import of A (see the deferred cross-module import block in `caban/decoder.py`). Do not paper over a cycle with a function-body import.
 
 ## Code Deduplication
 
@@ -36,6 +37,14 @@
 - Every major analysis must have a METHODS text file in `analysis_methods_templates/` describing the statistical approach.
 - The analysis code must copy its METHODS template into the plots subdirectory at runtime using `_copy_analysis_methods_template(filename, save_dir)`.
 - This ensures each output directory is self-documenting with a co-located METHODS description.
+
+## DREADD Comparison Plots
+
+- All DREADD comparison plots should use the same visual standard unless there is a strong analysis-specific reason not to.
+- Use the established pastel box-and-strip style for categorical comparisons: pastel box fill, darker matching points, `alpha=0.85`, black point edges, `linewidth=0.3`, and black median lines.
+- Keep the group order consistent as `mCherry`, `hM3D`, `hM4D` unless the analysis requires a different order.
+- Save separate per-panel files for multi-panel DREADD figures when practical so panels can be recombined manually.
+- Reuse the existing group color conventions already present in the codebase instead of introducing a new palette.
 
 ## Reload Snippet After Code Changes
 

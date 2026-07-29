@@ -50,6 +50,14 @@ from caban.engram import (
     ENGRAM_REFERENCE,
 )
 
+from caban.roi import (
+    plot_abnormal_cell_filter_roi_montage,
+    plot_abnormal_cell_filter_trace_montage,
+    emit_abnormal_cell_filter_montages,
+    emit_abnormal_cell_filter_montages_one_mouse,
+    ensure_abnormal_cell_filter_dirs,
+)
+
 from caban.config import PipelineConfig
 
 
@@ -458,6 +466,15 @@ def load_all_mice(
             report_cache_compression(ds)
         return ds
 
+    # Resolve PLOTS_DIR/PAPER_DIR up front (mirror the cache-load path above) so
+    # a fresh build writes to the same singular CURRENT location instead of the
+    # timestamped relative fallback that PipelineConfig.__post_init__ assigns
+    # when PLOTS_DIR is left at its default of None.
+    cfg.PLOTS_DIR = _resolve_plots_dir(plots_dir, plots_dir_singular=cfg.PLOTS_DIR_SINGULAR)
+    cfg.PAPER_DIR = _resolve_paper_dir(paper_dir, cfg=cfg, plots_dir=cfg.PLOTS_DIR)
+    print(f'*** PLOTS_DIR: {cfg.PLOTS_DIR}')
+    print(f'*** PAPER_DIR: {cfg.PAPER_DIR}')
+
     ds = _build_dataset(cfg, plots_dir=plots_dir, paper_dir=paper_dir)
     ds = _compact_cache_value(ds)
     ds.cache_format_version = CACHE_FORMAT_VERSION
@@ -490,6 +507,23 @@ def _build_dataset(
     ENGRAM_MODES = tuple(cfg.ENGRAM_MODES)
     plot_sample_cell = cfg.plot_sample_cell
     plot_ROIs = cfg.plot_ROIs
+
+    # Bundle the abnormal-cell QC knobs into a single dict threaded into every
+    # session constructor (consumed by BehaviourSession._run_abnormal_cell_filter).
+    cell_filter_params = {
+        'filter_abnormal_cells': cfg.filter_abnormal_cells,
+        'cell_filter_skew_enabled': cfg.cell_filter_skew_enabled,
+        'cell_filter_sparsity_enabled': cfg.cell_filter_sparsity_enabled,
+        'cell_filter_plateau_enabled': cfg.cell_filter_plateau_enabled,
+        'cell_filter_silent_enabled': cfg.cell_filter_silent_enabled,
+        'cell_filter_sphericity_enabled': cfg.cell_filter_sphericity_enabled,
+        'cell_filter_signal': cfg.cell_filter_signal,
+        'cell_filter_thre_skew': cfg.cell_filter_thre_skew,
+        'cell_filter_thre_plateau': cfg.cell_filter_thre_plateau,
+        'cell_filter_min_peaks': cfg.cell_filter_min_peaks,
+        'cell_filter_thre_sphericity': cfg.cell_filter_thre_sphericity,
+    }
+    cell_filter_plot_diagnostics = cfg.cell_filter_plot_diagnostics
     data_dir = 'minian_crossreg1'
     crossreg_file_TFC_cond = 'mappings_crossreg_1.csv'
     crossreg_file_4 = 'mappings_crossreg_4.csv'
@@ -1070,6 +1104,13 @@ def _build_dataset(
     # -----------------------------------------------------------------------
     _load_errors: list = []
 
+    # Create the abnormal-cell QC montage dirs up front (so they exist from the
+    # very start of the build) and emit each mouse's montages incrementally as
+    # it finishes inside the loop below.
+    _cf_emit = cfg.filter_abnormal_cells and cell_filter_plot_diagnostics
+    if _cf_emit:
+        _cf_trace_dir, _cf_roi_dir = ensure_abnormal_cell_filter_dirs(PLOTS_DIR)
+
     for mouse in mouse_list:
         msg_start('*** Processing mouse ' + mouse + '\n')  # noqa: F405
         try:
@@ -1104,6 +1145,7 @@ def _build_dataset(
                 plot_sample_cell=plot_sample_cell, data_dir=data_dir,
                 crossreg=TFC_cond_crossreg[mouse], savepath=TFC_cond_savepath,
                 behaviour_type=BEHAVIOUR_TYPE, behaviour_condition=mouse_groups[mouse],
+                cell_filter_params=cell_filter_params,
             )
 
             wanted_behaviour = None if mouse in mice_skip_LT else BEHAVIOUR_TYPE
@@ -1113,6 +1155,7 @@ def _build_dataset(
                 data_dir=data_dir, crossreg=TFC_cond_crossreg[mouse],
                 savepath=TFC_cond_savepath, behaviour_type=wanted_behaviour,
                 behaviour_condition=mouse_groups[mouse],
+                cell_filter_params=cell_filter_params,
             )
             TFC_cond_LT2[mouse] = LinearTrackSession(  # noqa: F405
                 mouse, dpath_TFC_cond_LT2[mouse],
@@ -1120,6 +1163,7 @@ def _build_dataset(
                 data_dir=data_dir, crossreg=TFC_cond_crossreg[mouse],
                 savepath=TFC_cond_savepath, behaviour_type=wanted_behaviour,
                 behaviour_condition=mouse_groups[mouse],
+                cell_filter_params=cell_filter_params,
             )
             TFC = TFC_cond[mouse]
             LT1 = TFC_cond_LT1[mouse]
@@ -1182,6 +1226,7 @@ def _build_dataset(
                 crossreg=TFC_A_A_1wk_crossreg[mouse], savepath=Test_A_savepath,
                 session_group=TFC_A_A_1wk_crossreg[mouse].mappings_labels['Test_A'],
                 behaviour_type=BEHAVIOUR_TYPE, behaviour_condition=mouse_groups[mouse],
+                cell_filter_params=cell_filter_params,
             )
             Test_A[mouse].crossreg_full = TFC_AB_48hr_1wk_crossreg[mouse]
             A = Test_A[mouse]
@@ -1211,6 +1256,7 @@ def _build_dataset(
                     session_group=TFC_A_A_1wk_crossreg[mouse].mappings_labels['Test_A_1wk'],
                     is_1wk=True, behaviour_type=BEHAVIOUR_TYPE,
                     behaviour_condition=mouse_groups[mouse],
+                    cell_filter_params=cell_filter_params,
                 )
                 Test_A_1wk[mouse].crossreg_full = TFC_AB_48hr_1wk_crossreg[mouse]
                 A_1wk = Test_A_1wk[mouse]
@@ -1239,6 +1285,7 @@ def _build_dataset(
                     crossreg=TFC_B_B_1wk_crossreg[mouse], savepath=Test_B_savepath,
                     session_group=TFC_B_B_1wk_crossreg[mouse].mappings_labels['Test_B'],
                     behaviour_type=BEHAVIOUR_TYPE, behaviour_condition=mouse_groups[mouse],
+                    cell_filter_params=cell_filter_params,
                 )
                 Test_B[mouse].crossreg_full = TFC_AB_48hr_1wk_crossreg[mouse]
                 B = Test_B[mouse]
@@ -1276,6 +1323,7 @@ def _build_dataset(
                     session_group=TFC_B_B_1wk_crossreg[mouse].mappings_labels['Test_B_1wk'],
                     is_1wk=True, behaviour_type=BEHAVIOUR_TYPE,
                     behaviour_condition=mouse_groups[mouse],
+                    cell_filter_params=cell_filter_params,
                 )
                 Test_B_1wk[mouse].crossreg_full = TFC_AB_48hr_1wk_crossreg[mouse]
                 B_1wk = Test_B_1wk[mouse]
@@ -1300,6 +1348,29 @@ def _build_dataset(
                             _load_errors.append((mouse, f'ROI Test_B_1wk mapping={mapping}', str(_roi_e), traceback.format_exc()))
                             print(f"  [ROI] {mouse} Test_B_1wk mapping={mapping}: {_roi_e}")
 
+            # Emit this mouse's abnormal-cell QC montages incrementally (the
+            # output dirs were created before the loop) so a long or interrupted
+            # build still yields montages for every mouse that finished.
+            if _cf_emit:
+                try:
+                    _cf_session_by_label = {
+                        'TFC_cond': TFC_cond.get(mouse),
+                        'LT1': TFC_cond_LT1.get(mouse),
+                        'LT2': TFC_cond_LT2.get(mouse),
+                        'Test_A': Test_A.get(mouse),
+                        'Test_A_1wk': Test_A_1wk.get(mouse),
+                        'Test_B': Test_B.get(mouse),
+                        'Test_B_1wk': Test_B_1wk.get(mouse),
+                    }
+                    _, _cf_errs = emit_abnormal_cell_filter_montages_one_mouse(
+                        mouse, _cf_session_by_label, _cf_trace_dir, _cf_roi_dir,
+                        cfg.cell_filter_sphericity_enabled)
+                    _load_errors.extend(_cf_errs)
+                except Exception as _cf_e:
+                    _load_errors.append((mouse, 'cell_filter_montage', str(_cf_e),
+                                         traceback.format_exc()))
+                    print(f"  [cell_filter] {mouse}: {_cf_e}")
+
             msg_end()  # noqa: F405
 
         except Exception as _e:
@@ -1320,6 +1391,11 @@ def _build_dataset(
         print("=" * 80 + "\n")
     else:
         print("\n  All mice loaded successfully.\n")
+
+    # -----------------------------------------------------------------------
+    # Abnormal-cell QC diagnostic montages were emitted incrementally inside the
+    # per-mouse loop (see above), into dirs created before the loop started.
+    # -----------------------------------------------------------------------
 
     # -----------------------------------------------------------------------
     # Unified engram identity pass

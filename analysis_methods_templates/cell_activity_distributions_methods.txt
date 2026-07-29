@@ -1,0 +1,68 @@
+Per-cell activity distributions (event rate & amplitude)
+========================================================
+
+Overview
+--------
+This analysis re-examines the same calcium event metrics as the proportional-
+activity plots (event rate and event amplitude) but WITHOUT collapsing each
+recording to a single per-mouse mean. The proportional plots draw one dot per
+mouse (mean across cells); that averaging removes the shape of the per-cell
+distribution, so a manipulation that shifts only a subpopulation of cells, or
+that fattens a tail, barely moves the mean. Here the full per-cell distribution
+is compared across the three viral groups (hM3D/Exc, hM4D/Inh, mCherry/Ctl).
+
+Neural signal definition
+-------------------------
+For each mouse, session, and cross-registration mapping:
+- Cells are resolved via session.get_S_mapping(mapping) (with an explicit
+  with_crossreg for cross-day mappings, so resolution never depends on which
+  crossreg object is attached to the session).
+- "Active" = at least one detected event in S_spikes (peaks of the deconvolved
+  trace S at threshold 2), matching the proportional-activity definition.
+- Per active cell:
+  - event rate   = number of events / session duration (frames / MINISCOPE_FPS)
+  - amplitude    = mean S peak value across that cell's events
+- These per-cell values are produced by the shared helper
+  per_cell_rate_and_amplitude(), the same computation the proportional-activity
+  per-mouse means are built from — no parallel implementation.
+
+Sessions and mappings
+----------------------
+- Within-TFC-day: LT1, LT2, TFC sessions plus the 7-mapping cross-registration
+  set (LT1, LT2, LT1+LT2, LT1+TFC, LT2+TFC, LT1+LT2+TFC, TFC).
+- Cross-day (Test_A and Test_B families): the 7-mapping set spanning
+  TFC_cond / 48hr / 1wk, restricted to mice with the full triple mapping.
+
+Visualization
+-------------
+- One row of ECDF panels per metric (event rate, amplitude); one panel per
+  session/mapping. Each panel overlays:
+  - per-mouse ECDFs (thin, low-alpha) to show within-group spread, and
+  - the pooled per-group ECDF (bold) with the cell count in the legend.
+- Standard group coding: hM3D = red (Exc), hM4D = blue (Inh), mCherry = grey (Ctl).
+
+Statistics
+----------
+For each panel, per-cell values are compared across groups with a linear mixed
+model, value ~ C(group) with a per-mouse random intercept (cell nested in
+mouse), so single-cell sample size is used without pseudoreplicating the mouse.
+The reference group is mCherry (Ctl); the group fixed-effect contrasts give the
+Exc-vs-Ctl and Inh-vs-Ctl differences. If the mixed model does not converge, a
+mouse-clustered OLS is used instead and this substitution is stated explicitly in
+the written output (a documented statistical fallback, not a silent one).
+
+Output
+------
+Saved under <PLOTS_DIR>/cell_activity_distributions/:
+- cell-dist-sessions-<metric>.png/.svg
+- cell-dist-mappings-<metric>.png/.svg
+- cell-dist-mappings-<family>-<metric>.png/.svg   (cross-day families)
+- stats/<prefix>-<metric>-<panel>.txt              (per-panel model summaries)
+
+Notes
+-----
+- Because inference is at the cell level, panels with very few cells per mouse
+  (some cross-registration mappings) are far less noisy here than in the
+  per-mouse-mean proportional plots.
+- Aggregating the per-cell values back to per-mouse means reproduces the
+  proportional-activity plots, confirming the two views share one computation.

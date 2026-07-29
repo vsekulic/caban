@@ -1,0 +1,50 @@
+Population coupling / co-activation structure
+=============================================
+
+Overview
+--------
+This analysis measures population synchrony — a correlational axis independent of
+single-cell rate — and compares it across the three viral groups (hM3D/Exc,
+hM4D/Inh, mCherry/Ctl). Even when per-cell event rates and amplitudes match, an
+excitatory/inhibitory DREADD manipulation can change how coordinated cells are.
+
+Neural signal
+-------------
+For each mouse, session, and mapping, the activity matrix for the mapping's cells —
+the denoised calcium trace C by default (deconvolved S selectable via a parameter),
+cells x frames — is binned in time by summing within fixed-width
+bins (bin width = the pipeline's bin_width_frames), giving a cells x bins matrix.
+Cells with zero variance across bins are excluded from correlations (undefined).
+
+Metrics
+-------
+1. Mean pairwise correlation (global synchrony): the mean of the upper-triangle of
+   the cell x cell Pearson correlation matrix of binned activity. One scalar per
+   mouse.
+2. Per-cell population coupling (Okun-style): for each cell, the Pearson
+   correlation of its binned activity with the leave-one-out population sum
+   (total minus that cell). A per-cell distribution per mouse.
+3. Epoch-restricted synchrony (conditioning session only): metric 1 recomputed on
+   frames restricted to each task epoch (pre_tone, tone, trace, shock; windows from
+   get_epoch_frames), to test whether coordination is event-specific.
+
+Group comparison
+----------------
+- Mean pairwise correlation: violin + per-mouse strip across groups, with significant
+  differences annotated by pairwise Welch t-tests, Holm-corrected across the three
+  contrasts (brackets + stars; not gated on an omnibus ANOVA).
+- Per-cell population coupling: group ECDF plus a cell-nested-in-mouse linear mixed
+  model (reference group mCherry/Ctl); a mouse-clustered OLS is substituted, and
+  noted, if the mixed model fails to converge.
+- Epoch-restricted synchrony: one violin panel per epoch (encoding only).
+
+Group coding: hM3D red (Exc), hM4D blue (Inh), mCherry grey (Ctl).
+
+Outputs
+-------
+Saved under <PLOTS_DIR>/population_coupling/<family>/ where <family> is encoding,
+recall_testA, or recall_testB:
+- population_coupling-<family>.png/.svg          (synchrony violin + coupling ECDF)
+- epoch_synchrony-<family>.png/.svg              (encoding only)
+- stats/population_coupling_mixed_model-<family>.txt
+- tables/per_mouse_coupling-<family>.csv

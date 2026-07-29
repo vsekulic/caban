@@ -42,11 +42,14 @@ import matplotlib.gridspec as gridspec
 import seaborn as sns
 import pandas as pd
 from itertools import combinations
+from scipy.ndimage import gaussian_filter1d
 from sklearn.covariance import LedoitWolf
 from sklearn.metrics.pairwise import cosine_similarity as sk_cosine_similarity
 from scipy.spatial.distance import mahalanobis as scipy_mahalanobis
 from statsmodels.stats.multicomp import pairwise_tukeyhsd
+from statsmodels.stats.multitest import multipletests
 import scipy.stats
+import statsmodels.formula.api as smf
 
 from caban.utilities import MINISCOPE_FPS, get_spikes_in_period
 
@@ -55,6 +58,7 @@ from caban.utilities import MINISCOPE_FPS, get_spikes_in_period
 # ─────────────────────────────────────────────────────────────────────────────
 
 EPOCH_NAMES = ['pre_tone', 'tone', 'trace', 'peri_shock', 'shock', 'post_shock']
+
 
 EPOCH_COLOURS = {
     'pre_tone':   '#888888',
@@ -70,6 +74,68 @@ GROUP_COLOURS = {
     'hM4D':    'b',
     'mCherry': 'k',
 }
+
+TFC_CONDITIONING_PANEL_STYLE_SPACIOUS = {
+    'group_order': ['hM3D', 'mCherry', 'hM4D'],
+    'group_palette_box': {
+        'hM3D': '#f4b8b8',
+        'mCherry': '#c8c8c8',
+        'hM4D': '#b8d4f0',
+    },
+    'group_palette_dot': {
+        'hM3D': '#cc4444',
+        'mCherry': '#666666',
+        'hM4D': '#3a7ec0',
+    },
+    'combined_figsize': (14.5, 8.5),
+    'single_panel_figsize': (3.5, 4.0),
+    'trace_panel_figsize': (4.0, 3.5),
+    'grid_wspace': 0.45,
+    'grid_hspace': 0.45,
+    'title_fontsize': 11,
+    'axis_label_fontsize': 10,
+    'tick_fontsize': 9,
+    'legend_fontsize': 8,
+    'box_width': 0.6,
+    'box_linewidth': 0.6,
+    'median_linewidth': 0.8,
+    'point_size_distribution': 3,
+    'point_alpha_distribution': 0.85,
+    'point_linewidth': 0.3,
+    'trace_linewidth': 1.35,
+    'trace_line_alpha': 0.85,
+    'trace_alpha': 0.18,
+    'trace_smoothing_sigma_frames': 3.0,
+    'scatter_size_trial': 18,
+    'scatter_size_mouse': 24,
+    'scatter_alpha': 0.85,
+    'scatter_edgecolors': 'none',
+    'fit_linewidth_trial': 1.5,
+    'fit_linewidth_mouse': 1.8,
+}
+
+TFC_CONDITIONING_PANEL_STYLE_COMPACT = {
+    **TFC_CONDITIONING_PANEL_STYLE_SPACIOUS,
+    'combined_figsize': (11.5, 6.8),
+    'single_panel_figsize': (2.9, 3.2),
+    'trace_panel_figsize': (3.2, 2.9),
+    'grid_wspace': 0.32,
+    'grid_hspace': 0.32,
+    'title_fontsize': 9,
+    'axis_label_fontsize': 8,
+    'tick_fontsize': 7,
+    'legend_fontsize': 7,
+    'point_size_distribution': 2.4,
+    'trace_linewidth': 1.1,
+    'trace_line_alpha': 0.8,
+    'trace_smoothing_sigma_frames': 2.0,
+    'scatter_size_trial': 14,
+    'scatter_size_mouse': 18,
+}
+
+# Backward-compatibility alias: existing code that imports this name will keep
+# using the spacious/default preset.
+TFC_CONDITIONING_PANEL_STYLE = TFC_CONDITIONING_PANEL_STYLE_SPACIOUS
 
 PVALS = [0.05, 0.01, 0.001]
 
@@ -334,7 +400,7 @@ def _mahalanobis_distance_matrix(pv_matrix):
     # LedoitWolf shrinkage for regularised covariance estimation
     try:
         lw = LedoitWolf().fit(pv_valid)
-        VI = np.linalg.inv(lw.covariance_)
+        VI = lw.precision_
     except np.linalg.LinAlgError:
         return dist_mat
 
@@ -802,17 +868,13 @@ def plot_epoch_similarity_group(PLOTS_DIR, all_mouse_results, mice_per_group,
         None
     )
     if first_mouse_result is None:
-        print(f'[epoch_analysis] No results found for metric={metric}, '
-              f'analysis_type={analysis_type}')
-        return
+        raise ValueError(f'No valid results for analysis_type={analysis_type}, metric={metric}')
 
     if keys is None:
-        keys = list(first_mouse_result[analysis_type][metric].keys())
-
+        keys = sorted(first_mouse_result[analysis_type][metric].keys(), key=str)
     n_keys = len(keys)
     if n_keys == 0:
-        return
-
+        raise ValueError('No keys found to plot.')
     ncols = min(n_keys, 4)
     nrows = (n_keys + ncols - 1) // ncols
     fig, axs = plt.subplots(nrows, ncols, figsize=(3.5 * ncols, 3.5 * nrows),
@@ -2111,4 +2173,998 @@ def run_cross_session_epoch_analysis_all_mice(
     return all_mouse_results
 
 
-print("loaded")
+# ─────────────────────────────────────────────────────────────────────────────
+# TFC conditioning summary panels (B, C, D, E1, E2, F1, F2)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _stars_from_p(p):
+    if p is None or not np.isfinite(p):
+        return None
+    if p < 0.001:
+        return '***'
+    if p < 0.01:
+        return '**'
+    if p < 0.05:
+        return '*'
+    return None
+
+
+def _safe_corr(x, y, method='pearson'):
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    keep = np.isfinite(x) & np.isfinite(y)
+    x = x[keep]
+    y = y[keep]
+    if x.size < 3:
+        return np.nan, np.nan, int(x.size)
+    if method == 'spearman':
+        r, p = stats.spearmanr(x, y)
+    else:
+        r, p = stats.pearsonr(x, y)
+    return float(r), float(p), int(x.size)
+
+
+def _welch_holm_pairs(values_by_group):
+    groups = [g for g in ['hM3D', 'mCherry', 'hM4D'] if g in values_by_group]
+    pairs = []
+    raw_ps = []
+    for i in range(len(groups)):
+        for j in range(i + 1, len(groups)):
+            a = groups[i]
+            b = groups[j]
+            va = np.asarray(values_by_group[a], dtype=float)
+            vb = np.asarray(values_by_group[b], dtype=float)
+            va = va[np.isfinite(va)]
+            vb = vb[np.isfinite(vb)]
+            if va.size < 2 or vb.size < 2:
+                p_raw = np.nan
+                t_val = np.nan
+            else:
+                t_val, p_raw = stats.ttest_ind(va, vb, equal_var=False)
+            pairs.append({
+                'a': a,
+                'b': b,
+                't': float(t_val) if np.isfinite(t_val) else np.nan,
+                'p_raw': float(p_raw) if np.isfinite(p_raw) else np.nan,
+                'n_a': int(va.size),
+                'n_b': int(vb.size),
+                'mean_diff': float(np.nanmean(va) - np.nanmean(vb)),
+            })
+            raw_ps.append(p_raw)
+
+    finite_ps = [p for p in raw_ps if p is not None and np.isfinite(p)]
+    if finite_ps:
+        _, p_holm, _, _ = multipletests(finite_ps, method='holm')
+        k = 0
+        for row in pairs:
+            if np.isfinite(row['p_raw']):
+                row['p_holm'] = float(p_holm[k])
+                k += 1
+            else:
+                row['p_holm'] = np.nan
+    else:
+        for row in pairs:
+            row['p_holm'] = np.nan
+    return pairs
+
+
+def _draw_pairwise_brackets(ax, values_by_group, pair_rows, groups_order):
+    y_vals = []
+    for g in groups_order:
+        arr = np.asarray(values_by_group.get(g, []), dtype=float)
+        arr = arr[np.isfinite(arr)]
+        if arr.size:
+            y_vals.append(np.nanmax(arr))
+    if not y_vals:
+        return
+    y_max = float(np.nanmax(y_vals))
+    y_min = float(np.nanmin(y_vals)) if y_vals else 0.0
+    y_rng = max(y_max - y_min, 1e-6)
+    base = y_max + 0.10 * y_rng
+    step = 0.11 * y_rng
+    h = 0.04 * y_rng
+
+    x_map = {g: i for i, g in enumerate(groups_order)}
+    level = 0
+    for row in pair_rows:
+        star = _stars_from_p(row.get('p_holm', np.nan))
+        if star is None:
+            continue
+        a = row['a']
+        b = row['b']
+        if a not in x_map or b not in x_map:
+            continue
+        x1 = x_map[a]
+        x2 = x_map[b]
+        if x1 > x2:
+            x1, x2 = x2, x1
+        y = base + level * step
+        ax.plot([x1, x1, x2, x2], [y, y + h, y + h, y], color='#222222', lw=1.0)
+        ax.text((x1 + x2) / 2.0, y + h + 0.01 * y_rng, star,
+                ha='center', va='bottom', fontsize=10)
+        level += 1
+
+
+def _extract_population_activity_trace(session, mapping='full', crossreg_override=None):
+    if mapping == 'full':
+        S = session.S
+        S_spikes = session.S_spikes
+        S_peakval = session.S_peakval
+    else:
+        S, S_spikes, S_peakval, _ = session.get_S_mapping(
+            mapping, want_peakval=True, with_crossreg=crossreg_override
+        )
+    n_cells, n_frames = S.shape
+    if n_cells <= 0 or n_frames <= 0:
+        raise RuntimeError(f'{session.mouse}: invalid S shape {S.shape} for mapping={mapping}.')
+
+    pop_trace = np.zeros(n_frames, dtype=float)
+    for cell in S_spikes.keys():
+        spk = np.asarray(S_spikes[cell], dtype=int)
+        if spk.size == 0:
+            continue
+        vals = np.asarray(S_peakval[cell], dtype=float)
+        keep = (spk >= 0) & (spk < n_frames)
+        if not np.any(keep):
+            continue
+        np.add.at(pop_trace, spk[keep], vals[keep])
+
+    # Convert to per-second transient amplitude rate and average across cells.
+    pop_trace = (pop_trace * MINISCOPE_FPS) / float(n_cells)
+    return pop_trace
+
+
+def _extract_peri_shock_population_trace(pop_trace, onset, offset, pre_frames,
+                                          smooth_sigma_frames=0.0):
+    """Peri-shock window of the population transient amplitude rate trace,
+    baseline-subtracted by its pre-shock segment and optionally smoothed.
+
+    Uses the SAME signal as the binned activity plot
+    (`_extract_population_activity_trace`): sum of transient amplitudes across
+    all mapped cells, normalized by total cell count, per second.
+    """
+    n_frames = len(pop_trace)
+    onset = int(max(0, onset))
+    offset = int(min(n_frames, offset))
+    if offset <= onset:
+        return None
+    if pre_frames <= 0 or (offset - onset) <= pre_frames:
+        return None
+
+    tr = np.asarray(pop_trace[onset:offset], dtype=float)
+    baseline = float(np.nanmean(tr[:pre_frames]))
+    tr = tr - baseline
+    if smooth_sigma_frames and smooth_sigma_frames > 0:
+        tr = gaussian_filter1d(tr, sigma=float(smooth_sigma_frames), mode='nearest')
+    return tr
+
+
+def _extract_active_neuron_peri_trace_DEPRECATED(session, onset, offset, pre_frames, mapping='full', crossreg_override=None,
+                                                  smooth_sigma_frames=0.0, dff_eps=1e-6):
+    if mapping == 'full':
+        C = np.asarray(session.C, dtype=float)
+        S = session.S
+        S_spikes = session.S_spikes
+    else:
+        S, S_spikes, _, cell_ids = session.get_S_mapping(
+            mapping, want_peakval=True, with_crossreg=crossreg_override
+        )
+        C_full = np.asarray(session.C, dtype=float)
+        C = C_full[np.asarray(cell_ids, dtype=int), :]
+
+    n_cells, n_frames = S.shape
+    if n_cells <= 0 or n_frames <= 0:
+        raise RuntimeError(f'{session.mouse}: invalid S shape {S.shape} for mapping={mapping}.')
+    if C.shape != S.shape:
+        raise RuntimeError(
+            f'{session.mouse}: C shape {C.shape} does not match S shape {S.shape} for mapping={mapping}.'
+        )
+
+    onset = int(max(0, onset))
+    offset = int(min(n_frames, offset))
+    if offset <= onset:
+        return None
+    if pre_frames <= 0 or (offset - onset) <= pre_frames:
+        return None
+
+    active_cell_traces = []
+    for cell in S_spikes.keys():
+        spk = np.asarray(S_spikes[cell], dtype=int)
+        if spk.size == 0:
+            continue
+        if not np.any((spk >= onset) & (spk < offset)):
+            continue
+        c_trace = np.asarray(C[cell, onset:offset], dtype=float)
+        baseline = float(np.nanmean(c_trace[:pre_frames]))
+        denom = max(baseline, dff_eps)
+        dff_trace = 100.0 * (c_trace - baseline) / denom
+        active_cell_traces.append(dff_trace)
+
+    if not active_cell_traces:
+        return None
+
+    trace = np.nanmean(np.vstack(active_cell_traces), axis=0)
+    if smooth_sigma_frames and smooth_sigma_frames > 0:
+        trace = gaussian_filter1d(trace, sigma=float(smooth_sigma_frames), mode='nearest')
+    return trace
+
+
+def _mean_in_window(vec, beg, end):
+    beg = int(max(0, beg))
+    end = int(min(len(vec), end))
+    if end <= beg:
+        return np.nan
+    chunk = np.asarray(vec[beg:end], dtype=float)
+    if chunk.size == 0:
+        return np.nan
+    return float(np.nanmean(chunk))
+
+
+def _freezing_fraction_in_window(session, beg, end, freeze_thresh_cm_s=2.0):
+    vel = getattr(session, 'velocities_miniscope_smooth', None)
+    if vel is None:
+        vel = getattr(session, 'velocities_miniscope', None)
+    if vel is None:
+        return np.nan
+
+    beg = int(max(0, beg))
+    end = int(min(len(vel), end))
+    if end <= beg:
+        return np.nan
+    chunk = np.asarray(vel[beg:end], dtype=float)
+    chunk = chunk[np.isfinite(chunk)]
+    if chunk.size == 0:
+        return np.nan
+    return float(np.mean(chunk < float(freeze_thresh_cm_s)))
+
+
+def _fit_mixed_model_or_fallback(df, formula, group_col='mouse'):
+    if df.empty:
+        return {'kind': 'empty', 'summary': 'No rows for model.', 'model': None}
+    try:
+        md = smf.mixedlm(formula, df, groups=df[group_col])
+        fit = md.fit(reml=True)
+        return {
+            'kind': 'mixedlm',
+            'summary': str(fit.summary()),
+            'model': fit,
+        }
+    except Exception as exc:
+        ols = smf.ols(formula, df).fit(
+            cov_type='cluster',
+            cov_kwds={'groups': df[group_col]}
+        )
+        return {
+            'kind': 'ols_cluster',
+            'summary': f'MixedLM failed ({exc}); fallback OLS cluster:\n\n{ols.summary()}',
+            'model': ols,
+        }
+
+
+def _build_tfc_conditioning_tables(
+    TFC_cond,
+    mouse_groups,
+    *,
+    mapping='full',
+    peri_pre_s=20.0,
+    peri_post_s=40.0,
+    baseline_pre_s=30.0,
+    post_shock_s=20.0,
+    response_pre_s=20.0,
+    pre_cs_s=35.0,
+    final_follow_s=90.0,
+    freeze_thresh_cm_s=2.0,
+    c_trace_smoothing_sigma_frames=0.0,
+):
+    trial_rows = []
+    baseline_rows = []
+    peri_traces = []
+
+    peri_pre_f = int(round(peri_pre_s * MINISCOPE_FPS))
+    peri_post_f = int(round(peri_post_s * MINISCOPE_FPS))
+    baseline_pre_f = int(round(baseline_pre_s * MINISCOPE_FPS))
+    post_shock_f = int(round(post_shock_s * MINISCOPE_FPS))
+    response_pre_f = int(round(response_pre_s * MINISCOPE_FPS))
+    pre_cs_f = int(round(pre_cs_s * MINISCOPE_FPS))
+    final_follow_f = int(round(final_follow_s * MINISCOPE_FPS))
+
+    for mouse in sorted(TFC_cond.keys()):
+        if mouse not in mouse_groups:
+            continue
+        sess = TFC_cond[mouse]
+        group = mouse_groups[mouse]
+
+        tone_on = list(getattr(sess, 'tone_onsets', []) or [])
+        shock_on = list(getattr(sess, 'shock_onsets', []) or [])
+        shock_off = list(getattr(sess, 'shock_offsets', []) or [])
+        if len(shock_on) == 0 or len(shock_off) == 0:
+            continue
+
+        n_trials = min(len(shock_on), len(shock_off))
+        if len(tone_on) > 0:
+            n_trials = min(n_trials, max(len(tone_on), n_trials))
+
+        pop_trace = _extract_population_activity_trace(sess, mapping=mapping)
+        S = sess.S if mapping == 'full' else sess.get_S_mapping(mapping, want_peakval=True)[0]
+        n_frames = S.shape[1]
+
+        if len(tone_on) > 0:
+            pre_cs_end = int(tone_on[0])
+            pre_cs_start = pre_cs_end - pre_cs_f
+            pre_cs_val = _mean_in_window(pop_trace, pre_cs_start, pre_cs_end)
+            baseline_rows.append({
+                'mouse': mouse,
+                'group': group,
+                'pre_cs_value': pre_cs_val,
+            })
+
+        for ti in range(n_trials):
+            shock_beg = int(shock_on[ti])
+            shock_end = int(shock_off[ti])
+            shock_number = int(ti + 1)
+
+            baseline_beg = shock_beg - response_pre_f
+            baseline_end = shock_beg
+            post_beg = shock_beg
+            post_end = shock_beg + post_shock_f
+
+            baseline_val = _mean_in_window(pop_trace, baseline_beg, baseline_end)
+            post_val = _mean_in_window(pop_trace, post_beg, post_end)
+            delta_val = post_val - baseline_val if np.isfinite(post_val) and np.isfinite(baseline_val) else np.nan
+
+            if ti < len(tone_on) - 1:
+                freeze_beg = shock_end
+                freeze_end = int(tone_on[ti + 1])
+                freeze_window = 'following_iti'
+            else:
+                freeze_beg = shock_end
+                freeze_end = min(n_frames, shock_end + final_follow_f)
+                freeze_window = 'post_final_shock'
+
+            freeze_frac = _freezing_fraction_in_window(
+                sess,
+                freeze_beg,
+                freeze_end,
+                freeze_thresh_cm_s=freeze_thresh_cm_s,
+            )
+
+            trial_rows.append({
+                'mouse': mouse,
+                'group': group,
+                'shock_number': shock_number,
+                'shock_window': 'early' if shock_number <= 3 else 'late',
+                'baseline_value': baseline_val,
+                'post_shock_value': post_val,
+                'post_shock_delta': delta_val,
+                'freeze_fraction': freeze_frac,
+                'freeze_percent': float(100.0 * freeze_frac) if np.isfinite(freeze_frac) else np.nan,
+                'freeze_window': freeze_window,
+            })
+
+            peri_beg = shock_beg - peri_pre_f
+            peri_end = shock_beg + peri_post_f
+            tr = _extract_peri_shock_population_trace(
+                pop_trace,
+                peri_beg,
+                peri_end,
+                peri_pre_f,
+                smooth_sigma_frames=c_trace_smoothing_sigma_frames,
+            )
+            if tr is None or tr.size != (peri_pre_f + peri_post_f):
+                continue
+            peri_traces.append({
+                'mouse': mouse,
+                'group': group,
+                'shock_number': shock_number,
+                'trace_bs': tr,
+            })
+
+    trial_df = pd.DataFrame(trial_rows)
+    baseline_df = pd.DataFrame(baseline_rows)
+    return trial_df, baseline_df, peri_traces, peri_pre_f, peri_post_f
+
+
+def plot_tfc_conditioning_summary_panels(
+    PLOTS_DIR,
+    TFC_cond,
+    mouse_groups,
+    *,
+    mapping='full',
+    peri_pre_s=20.0,
+    peri_post_s=40.0,
+    baseline_pre_s=30.0,
+    post_shock_s=20.0,
+    pre_cs_s=35.0,
+    final_follow_s=90.0,
+    freeze_thresh_cm_s=2.0,
+    paper_dir=None,
+    style=None,
+    auto_close=True,
+):
+    """Build and save the TFC conditioning summary figure (panels B-F2).
+    
+    If paper_dir is provided, copies of the PNG/PDF are saved there as well.
+    """
+    if style is None:
+        style = dict(TFC_CONDITIONING_PANEL_STYLE_SPACIOUS)
+    elif isinstance(style, str):
+        _k = style.strip().lower()
+        if _k in ('spacious', 'default', 'normal'):
+            style = dict(TFC_CONDITIONING_PANEL_STYLE_SPACIOUS)
+        elif _k in ('compact', 'paper'):
+            style = dict(TFC_CONDITIONING_PANEL_STYLE_COMPACT)
+        else:
+            raise ValueError(f'Unknown style alias for TFC conditioning summary: {style!r}')
+    else:
+        style = dict(style)
+    group_order_style = list(style['group_order'])
+    group_palette_box = style['group_palette_box']
+    group_palette_dot = style['group_palette_dot']
+
+    def _style_distribution_axis(ax):
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.tick_params(axis='both', labelsize=style['tick_fontsize'])
+
+    def _style_trace_axis(ax):
+        _style_distribution_axis(ax)
+        ax.title.set_fontsize(style['title_fontsize'])
+        ax.xaxis.label.set_size(style['axis_label_fontsize'])
+        ax.yaxis.label.set_size(style['axis_label_fontsize'])
+
+    def _style_legend(legend):
+        if legend is not None:
+            for text in legend.get_texts():
+                text.set_fontsize(style['legend_fontsize'])
+
+    def _apply_compact_style_to_existing_figure(fig_obj, compact_style):
+        fig_obj.set_size_inches(*compact_style['combined_figsize'])
+        for ax in fig_obj.axes:
+            ax.title.set_fontsize(compact_style['title_fontsize'])
+            ax.xaxis.label.set_size(compact_style['axis_label_fontsize'])
+            ax.yaxis.label.set_size(compact_style['axis_label_fontsize'])
+            ax.tick_params(axis='both', labelsize=compact_style['tick_fontsize'])
+            leg = ax.get_legend()
+            if leg is not None:
+                for txt in leg.get_texts():
+                    txt.set_fontsize(compact_style['legend_fontsize'])
+
+    def _draw_group_box_strip(ax, data_df, y_col, order, title, ylabel, pairs=None):
+        sns.violinplot(
+            data=data_df,
+            x='group',
+            y=y_col,
+            order=order,
+            palette=[group_palette_box[g] for g in order],
+            inner=None,
+            linewidth=style['box_linewidth'],
+            ax=ax,
+        )
+        sns.stripplot(
+            data=data_df,
+            x='group',
+            y=y_col,
+            order=order,
+            hue='group',
+            hue_order=order,
+            palette=group_palette_dot,
+            dodge=False,
+            size=style['point_size_distribution'],
+            alpha=style['point_alpha_distribution'],
+            edgecolor='k',
+            linewidth=style['point_linewidth'],
+            jitter=0.15,
+            ax=ax,
+        )
+        # Add median markers
+        for i, group in enumerate(order):
+            group_data = data_df.loc[data_df['group'] == group, y_col].dropna()
+            if len(group_data) > 0:
+                median_val = group_data.median()
+                ax.scatter(i, median_val, color='black', s=100, marker='_', linewidths=style['median_linewidth']*2, zorder=10)
+        
+        legend = ax.get_legend()
+        if legend is not None:
+            legend.remove()
+        ax.set_title(title)
+        ax.set_xlabel('')
+        ax.set_ylabel(ylabel)
+        _style_distribution_axis(ax)
+        if pairs is not None:
+            value_map = {
+                g: data_df.loc[data_df['group'] == g, y_col].astype(float).dropna().values
+                for g in order
+            }
+            _draw_pairwise_brackets(ax, value_map, pairs, order)
+
+    save_dir = os.path.join(PLOTS_DIR, 'tfc_conditioning_summary', mapping)
+    os.makedirs(save_dir, exist_ok=True)
+    stats_dir = os.path.join(save_dir, 'stats')
+    table_dir = os.path.join(save_dir, 'tables')
+    os.makedirs(stats_dir, exist_ok=True)
+    os.makedirs(table_dir, exist_ok=True)
+
+    trial_df, baseline_df, peri_traces, peri_pre_f, peri_post_f = _build_tfc_conditioning_tables(
+        TFC_cond,
+        mouse_groups,
+        mapping=mapping,
+        peri_pre_s=peri_pre_s,
+        peri_post_s=peri_post_s,
+        baseline_pre_s=baseline_pre_s,
+        post_shock_s=post_shock_s,
+        pre_cs_s=pre_cs_s,
+        final_follow_s=final_follow_s,
+        freeze_thresh_cm_s=freeze_thresh_cm_s,
+        c_trace_smoothing_sigma_frames=style['trace_smoothing_sigma_frames'],
+    )
+
+    if trial_df.empty:
+        raise RuntimeError('No TFC conditioning rows available for summary plotting.')
+
+    # Convert 'group' to categorical with mCherry as reference level for all stats
+    group_cat_order = ['mCherry', 'hM3D', 'hM4D']  # mCherry first = reference
+    trial_df['group'] = pd.Categorical(trial_df['group'], categories=group_cat_order, ordered=False)
+    baseline_df['group'] = pd.Categorical(baseline_df['group'], categories=group_cat_order, ordered=False)
+
+    baseline_df.to_csv(os.path.join(table_dir, 'panel_B_pre_cs_baseline.csv'), index=False)
+    trial_df.to_csv(os.path.join(table_dir, 'trial_level_calcium_freezing.csv'), index=False)
+
+    grp_order = [g for g in group_order_style if g in set(trial_df['group'])]
+    fig = plt.figure(figsize=style['combined_figsize'])
+    gs = fig.add_gridspec(2, 4, wspace=style['grid_wspace'], hspace=style['grid_hspace'])
+
+    # Panel B
+    ax_B = fig.add_subplot(gs[0, 0])
+    b_plot_df = baseline_df[['group', 'pre_cs_value']].dropna().copy()
+    b_vals = {
+        g: b_plot_df.loc[b_plot_df['group'] == g, 'pre_cs_value'].astype(float).dropna().values
+        for g in grp_order
+    }
+    _draw_group_box_strip(ax_B, b_plot_df, 'pre_cs_value', grp_order, 'B: Pre-CS baseline', 'Transient amplitude rate')
+    b_pairs = _welch_holm_pairs(b_vals)
+    _draw_pairwise_brackets(ax_B, b_vals, b_pairs, grp_order)
+
+    # Panel C (early and late shock aligned)
+    ax_Ce = fig.add_subplot(gs[0, 1])
+    ax_Cl = fig.add_subplot(gs[0, 2])
+    tvec = (np.arange(peri_pre_f + peri_post_f) - peri_pre_f) / float(MINISCOPE_FPS)
+
+    for g in grp_order:
+        col = GROUP_COLOURS.get(g, 'gray')
+        mouse_early = []
+        mouse_late = []
+        for mouse in sorted(TFC_cond.keys()):
+            if mouse_groups.get(mouse) != g:
+                continue
+            traces_mouse = [row['trace_bs'] for row in peri_traces if row['mouse'] == mouse]
+            shocks_mouse = [row['shock_number'] for row in peri_traces if row['mouse'] == mouse]
+            if not traces_mouse:
+                continue
+            early = [tr for tr, sn in zip(traces_mouse, shocks_mouse) if sn in (1, 2)]
+            late = [tr for tr, sn in zip(traces_mouse, shocks_mouse) if sn in (4, 5)]
+            if early:
+                mouse_early.append(np.nanmean(np.vstack(early), axis=0))
+            if late:
+                mouse_late.append(np.nanmean(np.vstack(late), axis=0))
+
+        if mouse_early:
+            mat = np.vstack(mouse_early)
+            mean = np.nanmean(mat, axis=0)
+            sem = np.nanstd(mat, axis=0) / np.sqrt(max(mat.shape[0], 1))
+            ax_Ce.plot(tvec, mean, color=col, lw=style['trace_linewidth'], alpha=style['trace_line_alpha'])
+            ax_Ce.fill_between(tvec, mean - sem, mean + sem, color=col, alpha=style['trace_alpha'])
+        if mouse_late:
+            mat = np.vstack(mouse_late)
+            mean = np.nanmean(mat, axis=0)
+            sem = np.nanstd(mat, axis=0) / np.sqrt(max(mat.shape[0], 1))
+            ax_Cl.plot(tvec, mean, color=col, lw=style['trace_linewidth'], alpha=style['trace_line_alpha'])
+            ax_Cl.fill_between(tvec, mean - sem, mean + sem, color=col, alpha=style['trace_alpha'])
+
+    for axc, title in [(ax_Ce, 'C: Early shocks (1-2)'), (ax_Cl, 'C: Late shocks (4-5)')]:
+        axc.axvline(0.0, color='#666666', ls='--', lw=1.0)
+        axc.set_xlim(-peri_pre_s, peri_post_s)
+        axc.set_xlabel('Time from shock (s)')
+        axc.set_ylabel('Δ activity (a.u./s)')
+        axc.set_title(title)
+        axc.spines['top'].set_visible(False)
+        axc.spines['right'].set_visible(False)
+
+    # Panel D: post-shock index across shocks
+    ax_D = fig.add_subplot(gs[0, 3])
+    d_df = trial_df[['mouse', 'group', 'shock_number', 'post_shock_delta']].dropna().copy()
+    d_mouse = (
+        d_df.groupby(['mouse', 'group', 'shock_number'], as_index=False)['post_shock_delta']
+        .mean()
+    )
+    for g in grp_order:
+        sub = d_mouse.loc[d_mouse['group'] == g]
+        if sub.empty:
+            continue
+        x = []
+        y = []
+        e = []
+        for sn in sorted(sub['shock_number'].unique()):
+            vals = sub.loc[sub['shock_number'] == sn, 'post_shock_delta'].astype(float).dropna().values
+            if vals.size == 0:
+                continue
+            x.append(sn)
+            y.append(float(np.nanmean(vals)))
+            e.append(float(np.nanstd(vals) / np.sqrt(max(vals.size, 1))))
+        if x:
+            ax_D.errorbar(x, y, yerr=e, color=GROUP_COLOURS.get(g, 'gray'), marker='o', lw=style['fit_linewidth_mouse'], label=g)
+    ax_D.set_title('D: Post-shock response index')
+    ax_D.set_xlabel('Shock number')
+    ax_D.set_ylabel('Delta amplitude rate')
+    ax_D.set_xticks([1, 2, 3, 4, 5])
+    _style_trace_axis(ax_D)
+    _style_legend(ax_D.legend(frameon=False, fontsize=style['legend_fontsize']))
+
+    # Panel E1/E2
+    ax_E1 = fig.add_subplot(gs[1, 0])
+    ax_E2 = fig.add_subplot(gs[1, 1])
+    e1_df = (
+        trial_df.loc[trial_df['shock_number'].isin([1, 2, 3]), ['mouse', 'group', 'post_shock_delta']]
+        .dropna()
+        .groupby(['mouse', 'group'], as_index=False)['post_shock_delta']
+        .mean()
+    )
+    e2_df = (
+        trial_df.loc[trial_df['shock_number'].isin([4, 5]), ['mouse', 'group', 'post_shock_delta']]
+        .dropna()
+        .groupby(['mouse', 'group'], as_index=False)['post_shock_delta']
+        .mean()
+    )
+    e1_vals = {g: e1_df.loc[e1_df['group'] == g, 'post_shock_delta'].astype(float).dropna().values for g in grp_order}
+    e2_vals = {g: e2_df.loc[e2_df['group'] == g, 'post_shock_delta'].astype(float).dropna().values for g in grp_order}
+
+    for ax_e, e_df, e_vals, title in [
+        (ax_E1, e1_df, e1_vals, 'E1: Early post-shock (1-3)'),
+        (ax_E2, e2_df, e2_vals, 'E2: Late post-shock (4-5)'),
+    ]:
+        pairs = _welch_holm_pairs(e_vals)
+        _draw_group_box_strip(ax_e, e_df, 'post_shock_delta', grp_order, title, 'Delta amplitude rate', pairs=pairs)
+
+    # Panel F1: trial-level scatter
+    ax_F1 = fig.add_subplot(gs[1, 2])
+    f1_df = trial_df[['mouse', 'group', 'shock_number', 'post_shock_delta', 'freeze_percent']].dropna().copy()
+    for g in grp_order:
+        sub = f1_df.loc[f1_df['group'] == g]
+        if sub.empty:
+            continue
+        col = GROUP_COLOURS.get(g, 'gray')
+        ax_F1.scatter(sub['post_shock_delta'], sub['freeze_percent'], color=col, s=style['scatter_size_trial'], alpha=style['scatter_alpha'], edgecolors=style['scatter_edgecolors'])
+        if sub.shape[0] >= 2:
+            x = sub['post_shock_delta'].to_numpy(dtype=float)
+            y = sub['freeze_percent'].to_numpy(dtype=float)
+            coeff = np.polyfit(x, y, 1)
+            xx = np.linspace(np.nanmin(x), np.nanmax(x), 100)
+            yy = coeff[0] * xx + coeff[1]
+            ax_F1.plot(xx, yy, color=col, lw=style['fit_linewidth_trial'])
+    ax_F1.set_title('F1: Trial-level calcium vs freezing')
+    ax_F1.set_xlabel('Post-shock delta')
+    ax_F1.set_ylabel('Subsequent freezing (%)')
+    _style_trace_axis(ax_F1)
+
+    # Panel F2: mouse-level late summary scatter
+    ax_F2 = fig.add_subplot(gs[1, 3])
+    f2_df = (
+        trial_df.loc[trial_df['shock_number'].isin([4, 5]), ['mouse', 'group', 'post_shock_delta', 'freeze_percent']]
+        .dropna()
+        .groupby(['mouse', 'group'], as_index=False)
+        .mean(numeric_only=True)
+    )
+    for g in grp_order:
+        sub = f2_df.loc[f2_df['group'] == g]
+        if sub.empty:
+            continue
+        col = GROUP_COLOURS.get(g, 'gray')
+        ax_F2.scatter(sub['post_shock_delta'], sub['freeze_percent'], color=col, s=style['scatter_size_mouse'], alpha=style['scatter_alpha'], edgecolors=style['scatter_edgecolors'])
+        if sub.shape[0] >= 2:
+            x = sub['post_shock_delta'].to_numpy(dtype=float)
+            y = sub['freeze_percent'].to_numpy(dtype=float)
+            coeff = np.polyfit(x, y, 1)
+            xx = np.linspace(np.nanmin(x), np.nanmax(x), 100)
+            yy = coeff[0] * xx + coeff[1]
+            ax_F2.plot(xx, yy, color=col, lw=style['fit_linewidth_mouse'])
+    ax_F2.set_title('F2: Late-summary calcium vs freezing')
+    ax_F2.set_xlabel('Late post-shock delta (4-5)')
+    ax_F2.set_ylabel('Late freezing (%)')
+    _style_trace_axis(ax_F2)
+
+    # Stats exports
+    with open(os.path.join(stats_dir, 'panel_B_pairwise.txt'), 'w', encoding='utf-8') as f:
+        for row in b_pairs:
+            f.write(
+                f"{row['a']} vs {row['b']}\t"
+                f"mean_diff={row['mean_diff']:.6g}\t"
+                f"p_raw={row['p_raw']:.6g}\t"
+                f"p_holm={row['p_holm']:.6g}\t"
+                f"n_a={row['n_a']}\tn_b={row['n_b']}\n"
+            )
+
+    e1_pairs = _welch_holm_pairs(e1_vals)
+    e2_pairs = _welch_holm_pairs(e2_vals)
+    with open(os.path.join(stats_dir, 'panel_E_pairwise.txt'), 'w', encoding='utf-8') as f:
+        f.write('[E1] Early shocks 1-3\n')
+        for row in e1_pairs:
+            f.write(
+                f"{row['a']} vs {row['b']}\t"
+                f"mean_diff={row['mean_diff']:.6g}\t"
+                f"p_raw={row['p_raw']:.6g}\t"
+                f"p_holm={row['p_holm']:.6g}\t"
+                f"n_a={row['n_a']}\tn_b={row['n_b']}\n"
+            )
+        f.write('\n[E2] Late shocks 4-5\n')
+        for row in e2_pairs:
+            f.write(
+                f"{row['a']} vs {row['b']}\t"
+                f"mean_diff={row['mean_diff']:.6g}\t"
+                f"p_raw={row['p_raw']:.6g}\t"
+                f"p_holm={row['p_holm']:.6g}\t"
+                f"n_a={row['n_a']}\tn_b={row['n_b']}\n"
+            )
+
+    d_model = _fit_mixed_model_or_fallback(
+        d_mouse[['mouse', 'group', 'shock_number', 'post_shock_delta']].dropna(),
+        'post_shock_delta ~ C(group) * C(shock_number)',
+        group_col='mouse',
+    )
+    with open(os.path.join(stats_dir, 'panel_D_mixed_model.txt'), 'w', encoding='utf-8') as f:
+        f.write(d_model['summary'] + '\n')
+
+    f1_model = _fit_mixed_model_or_fallback(
+        f1_df[['mouse', 'group', 'shock_number', 'post_shock_delta', 'freeze_percent']].dropna(),
+        'freeze_percent ~ C(group) * post_shock_delta + C(shock_number)',
+        group_col='mouse',
+    )
+    with open(os.path.join(stats_dir, 'panel_F1_mixed_model.txt'), 'w', encoding='utf-8') as f:
+        f.write(f1_model['summary'] + '\n')
+
+    r_p, p_p, n_p = _safe_corr(f2_df['post_shock_delta'], f2_df['freeze_percent'], method='pearson')
+    r_s, p_s, n_s = _safe_corr(f2_df['post_shock_delta'], f2_df['freeze_percent'], method='spearman')
+    with open(os.path.join(stats_dir, 'panel_F2_mouse_level_correlation.txt'), 'w', encoding='utf-8') as f:
+        f.write(f'Pearson: r={r_p:.6g}, p={p_p:.6g}, n={n_p}\n')
+        f.write(f'Spearman: r={r_s:.6g}, p={p_s:.6g}, n={n_s}\n')
+        for g in grp_order:
+            sub = f2_df.loc[f2_df['group'] == g]
+            rg, pg, ng = _safe_corr(sub['post_shock_delta'], sub['freeze_percent'], method='pearson')
+            f.write(f'{g} Pearson: r={rg:.6g}, p={pg:.6g}, n={ng}\n')
+
+    plt.tight_layout()
+    png_path = os.path.join(save_dir, 'tfc_conditioning_summary_panels_B_to_F2.png')
+    pdf_path = os.path.join(save_dir, 'tfc_conditioning_summary_panels_B_to_F2.pdf')
+    fig.savefig(png_path, dpi=300)
+    fig.savefig(pdf_path, dpi=300)
+    
+    if paper_dir is not None:
+        os.makedirs(paper_dir, exist_ok=True)
+        compact_style = dict(TFC_CONDITIONING_PANEL_STYLE_COMPACT)
+        _apply_compact_style_to_existing_figure(fig, compact_style)
+        fig.tight_layout()
+        paper_png = os.path.join(paper_dir, 'tfc_conditioning_summary_panels_B_to_F2.png')
+        paper_pdf = os.path.join(paper_dir, 'tfc_conditioning_summary_panels_B_to_F2.pdf')
+        fig.savefig(paper_png, dpi=300)
+        fig.savefig(paper_pdf, dpi=300)
+    
+    if auto_close:
+        plt.close(fig)
+
+    # Save individual panel figures
+    # Panel B
+    fig_b = plt.figure(figsize=style['single_panel_figsize'])
+    ax_b = fig_b.add_subplot(111)
+    b_plot_df = baseline_df[['group', 'pre_cs_value']].dropna().copy()
+    b_vals_i = {
+        g: baseline_df.loc[baseline_df['group'] == g, 'pre_cs_value'].astype(float).dropna().values
+        for g in grp_order
+    }
+    b_pairs_i = _welch_holm_pairs(b_vals_i)
+    _draw_group_box_strip(ax_b, b_plot_df, 'pre_cs_value', grp_order, 'B: Pre-CS baseline', 'Transient amplitude rate', pairs=b_pairs_i)
+    fig_b.tight_layout()
+    fig_b.savefig(os.path.join(save_dir, 'panel_B_pre_cs_baseline.png'), dpi=300, bbox_inches='tight')
+    fig_b.savefig(os.path.join(save_dir, 'panel_B_pre_cs_baseline.pdf'), dpi=300, bbox_inches='tight')
+    plt.close(fig_b)
+
+    # Panel C - Early
+    fig_ce = plt.figure(figsize=style['trace_panel_figsize'])
+    ax_ce = fig_ce.add_subplot(111)
+    for g in grp_order:
+        col = GROUP_COLOURS.get(g, 'gray')
+        mouse_early = []
+        for mouse in sorted(TFC_cond.keys()):
+            if mouse_groups.get(mouse) != g:
+                continue
+            traces_mouse = [row['trace_bs'] for row in peri_traces if row['mouse'] == mouse]
+            shocks_mouse = [row['shock_number'] for row in peri_traces if row['mouse'] == mouse]
+            if not traces_mouse:
+                continue
+            early = [tr for tr, sn in zip(traces_mouse, shocks_mouse) if sn in (1, 2)]
+            if early:
+                mouse_early.append(np.nanmean(np.vstack(early), axis=0))
+        if mouse_early:
+            mat = np.vstack(mouse_early)
+            mean = np.nanmean(mat, axis=0)
+            sem = np.nanstd(mat, axis=0) / np.sqrt(max(mat.shape[0], 1))
+            ax_ce.plot(tvec, mean, color=col, lw=style['trace_linewidth'], alpha=style['trace_line_alpha'], label=g)
+            ax_ce.fill_between(tvec, mean - sem, mean + sem, color=col, alpha=style['trace_alpha'])
+    ax_ce.axvline(0.0, color='#666666', ls='--', lw=1.0)
+    ax_ce.set_xlim(-peri_pre_s, peri_post_s)
+    ax_ce.set_xlabel('Time from shock (s)')
+    ax_ce.set_ylabel('Δ activity (a.u./s)')
+    ax_ce.set_title('C: Early shocks (1-2)')
+    _style_trace_axis(ax_ce)
+    _style_legend(ax_ce.legend(frameon=False))
+    fig_ce.tight_layout()
+    fig_ce.savefig(os.path.join(save_dir, 'panel_C_early_shocks_1-2.png'), dpi=300, bbox_inches='tight')
+    fig_ce.savefig(os.path.join(save_dir, 'panel_C_early_shocks_1-2.pdf'), dpi=300, bbox_inches='tight')
+    plt.close(fig_ce)
+
+    # Panel C - Late
+    fig_cl = plt.figure(figsize=style['trace_panel_figsize'])
+    ax_cl = fig_cl.add_subplot(111)
+    for g in grp_order:
+        col = GROUP_COLOURS.get(g, 'gray')
+        mouse_late = []
+        for mouse in sorted(TFC_cond.keys()):
+            if mouse_groups.get(mouse) != g:
+                continue
+            traces_mouse = [row['trace_bs'] for row in peri_traces if row['mouse'] == mouse]
+            shocks_mouse = [row['shock_number'] for row in peri_traces if row['mouse'] == mouse]
+            if not traces_mouse:
+                continue
+            late = [tr for tr, sn in zip(traces_mouse, shocks_mouse) if sn in (4, 5)]
+            if late:
+                mouse_late.append(np.nanmean(np.vstack(late), axis=0))
+        if mouse_late:
+            mat = np.vstack(mouse_late)
+            mean = np.nanmean(mat, axis=0)
+            sem = np.nanstd(mat, axis=0) / np.sqrt(max(mat.shape[0], 1))
+            ax_cl.plot(tvec, mean, color=col, lw=style['trace_linewidth'], alpha=style['trace_line_alpha'], label=g)
+            ax_cl.fill_between(tvec, mean - sem, mean + sem, color=col, alpha=style['trace_alpha'])
+    ax_cl.axvline(0.0, color='#666666', ls='--', lw=1.0)
+    ax_cl.set_xlim(-peri_pre_s, peri_post_s)
+    ax_cl.set_xlabel('Time from shock (s)')
+    ax_cl.set_ylabel('Δ activity (a.u./s)')
+    ax_cl.set_title('C: Late shocks (4-5)')
+    _style_trace_axis(ax_cl)
+    _style_legend(ax_cl.legend(frameon=False))
+    fig_cl.tight_layout()
+    fig_cl.savefig(os.path.join(save_dir, 'panel_C_late_shocks_4-5.png'), dpi=300, bbox_inches='tight')
+    fig_cl.savefig(os.path.join(save_dir, 'panel_C_late_shocks_4-5.pdf'), dpi=300, bbox_inches='tight')
+    plt.close(fig_cl)
+
+    # Panel D
+    fig_d = plt.figure(figsize=style['trace_panel_figsize'])
+    ax_d = fig_d.add_subplot(111)
+    d_mouse = (
+        trial_df[['mouse', 'group', 'shock_number', 'post_shock_delta']].dropna()
+        .groupby(['mouse', 'group', 'shock_number'], as_index=False)['post_shock_delta']
+        .mean()
+    )
+    for g in grp_order:
+        sub = d_mouse.loc[d_mouse['group'] == g]
+        if sub.empty:
+            continue
+        x = []
+        y = []
+        e = []
+        for sn in sorted(sub['shock_number'].unique()):
+            vals = sub.loc[sub['shock_number'] == sn, 'post_shock_delta'].astype(float).dropna().values
+            if vals.size == 0:
+                continue
+            x.append(sn)
+            y.append(float(np.nanmean(vals)))
+            e.append(float(np.nanstd(vals) / np.sqrt(max(vals.size, 1))))
+        if x:
+            ax_d.errorbar(x, y, yerr=e, color=GROUP_COLOURS.get(g, 'gray'), marker='o', lw=style['fit_linewidth_mouse'], label=g)
+    ax_d.set_title('D: Post-shock response index')
+    ax_d.set_xlabel('Shock number')
+    ax_d.set_ylabel('Delta amplitude rate')
+    ax_d.set_xticks([1, 2, 3, 4, 5])
+    _style_trace_axis(ax_d)
+    _style_legend(ax_d.legend(frameon=False, fontsize=style['legend_fontsize']))
+    fig_d.tight_layout()
+    fig_d.savefig(os.path.join(save_dir, 'panel_D_post_shock_index.png'), dpi=300, bbox_inches='tight')
+    fig_d.savefig(os.path.join(save_dir, 'panel_D_post_shock_index.pdf'), dpi=300, bbox_inches='tight')
+    plt.close(fig_d)
+
+    # Panel E1
+    fig_e1 = plt.figure(figsize=style['single_panel_figsize'])
+    ax_e1 = fig_e1.add_subplot(111)
+    e1_df_i = (
+        trial_df.loc[trial_df['shock_number'].isin([1, 2, 3]), ['mouse', 'group', 'post_shock_delta']]
+        .dropna()
+        .groupby(['mouse', 'group'], as_index=False)['post_shock_delta']
+        .mean()
+    )
+    e1_vals_i = {g: e1_df_i.loc[e1_df_i['group'] == g, 'post_shock_delta'].astype(float).dropna().values for g in grp_order}
+    e1_pairs_i = _welch_holm_pairs(e1_vals_i)
+    _draw_group_box_strip(ax_e1, e1_df_i, 'post_shock_delta', grp_order, 'E1: Early post-shock (1-3)', 'Delta amplitude rate', pairs=e1_pairs_i)
+    fig_e1.tight_layout()
+    fig_e1.savefig(os.path.join(save_dir, 'panel_E1_early_post_shock_1-3.png'), dpi=300, bbox_inches='tight')
+    fig_e1.savefig(os.path.join(save_dir, 'panel_E1_early_post_shock_1-3.pdf'), dpi=300, bbox_inches='tight')
+    plt.close(fig_e1)
+
+    # Panel E2
+    fig_e2 = plt.figure(figsize=style['single_panel_figsize'])
+    ax_e2 = fig_e2.add_subplot(111)
+    e2_df_i = (
+        trial_df.loc[trial_df['shock_number'].isin([4, 5]), ['mouse', 'group', 'post_shock_delta']]
+        .dropna()
+        .groupby(['mouse', 'group'], as_index=False)['post_shock_delta']
+        .mean()
+    )
+    e2_vals_i = {g: e2_df_i.loc[e2_df_i['group'] == g, 'post_shock_delta'].astype(float).dropna().values for g in grp_order}
+    e2_pairs_i = _welch_holm_pairs(e2_vals_i)
+    _draw_group_box_strip(ax_e2, e2_df_i, 'post_shock_delta', grp_order, 'E2: Late post-shock (4-5)', 'Delta amplitude rate', pairs=e2_pairs_i)
+    fig_e2.tight_layout()
+    fig_e2.savefig(os.path.join(save_dir, 'panel_E2_late_post_shock_4-5.png'), dpi=300, bbox_inches='tight')
+    fig_e2.savefig(os.path.join(save_dir, 'panel_E2_late_post_shock_4-5.pdf'), dpi=300, bbox_inches='tight')
+    plt.close(fig_e2)
+
+    # Panel F1
+    fig_f1 = plt.figure(figsize=style['trace_panel_figsize'])
+    ax_f1 = fig_f1.add_subplot(111)
+    f1_df_i = trial_df[['mouse', 'group', 'shock_number', 'post_shock_delta', 'freeze_percent']].dropna().copy()
+    for g in grp_order:
+        sub = f1_df_i.loc[f1_df_i['group'] == g]
+        if sub.empty:
+            continue
+        col = GROUP_COLOURS.get(g, 'gray')
+        ax_f1.scatter(sub['post_shock_delta'], sub['freeze_percent'], color=col, s=style['scatter_size_trial'], alpha=style['scatter_alpha'], edgecolors=style['scatter_edgecolors'], label=g)
+        if sub.shape[0] >= 2:
+            x = sub['post_shock_delta'].to_numpy(dtype=float)
+            y = sub['freeze_percent'].to_numpy(dtype=float)
+            coeff = np.polyfit(x, y, 1)
+            xx = np.linspace(np.nanmin(x), np.nanmax(x), 100)
+            yy = coeff[0] * xx + coeff[1]
+            ax_f1.plot(xx, yy, color=col, lw=style['fit_linewidth_trial'])
+    ax_f1.set_title('F1: Trial-level calcium vs freezing')
+    ax_f1.set_xlabel('Post-shock delta')
+    ax_f1.set_ylabel('Subsequent freezing (%)')
+    _style_trace_axis(ax_f1)
+    _style_legend(ax_f1.legend(frameon=False, fontsize=style['legend_fontsize']))
+    fig_f1.tight_layout()
+    fig_f1.savefig(os.path.join(save_dir, 'panel_F1_trial_level_calcium_vs_freezing.png'), dpi=300, bbox_inches='tight')
+    fig_f1.savefig(os.path.join(save_dir, 'panel_F1_trial_level_calcium_vs_freezing.pdf'), dpi=300, bbox_inches='tight')
+    plt.close(fig_f1)
+
+    # Panel F2
+    fig_f2 = plt.figure(figsize=style['trace_panel_figsize'])
+    ax_f2 = fig_f2.add_subplot(111)
+    f2_df_i = (
+        trial_df.loc[trial_df['shock_number'].isin([4, 5]), ['mouse', 'group', 'post_shock_delta', 'freeze_percent']]
+        .dropna()
+        .groupby(['mouse', 'group'], as_index=False)
+        .mean(numeric_only=True)
+    )
+    for g in grp_order:
+        sub = f2_df_i.loc[f2_df_i['group'] == g]
+        if sub.empty:
+            continue
+        col = GROUP_COLOURS.get(g, 'gray')
+        ax_f2.scatter(sub['post_shock_delta'], sub['freeze_percent'], color=col, s=style['scatter_size_mouse'], alpha=style['scatter_alpha'], edgecolors=style['scatter_edgecolors'], label=g)
+        if sub.shape[0] >= 2:
+            x = sub['post_shock_delta'].to_numpy(dtype=float)
+            y = sub['freeze_percent'].to_numpy(dtype=float)
+            coeff = np.polyfit(x, y, 1)
+            xx = np.linspace(np.nanmin(x), np.nanmax(x), 100)
+            yy = coeff[0] * xx + coeff[1]
+            ax_f2.plot(xx, yy, color=col, lw=style['fit_linewidth_mouse'])
+    ax_f2.set_title('F2: Late-summary calcium vs freezing')
+    ax_f2.set_xlabel('Late post-shock delta (4-5)')
+    ax_f2.set_ylabel('Late freezing (%)')
+    _style_trace_axis(ax_f2)
+    _style_legend(ax_f2.legend(frameon=False, fontsize=style['legend_fontsize']))
+    fig_f2.tight_layout()
+    fig_f2.savefig(os.path.join(save_dir, 'panel_F2_late_summary_calcium_vs_freezing.png'), dpi=300, bbox_inches='tight')
+    fig_f2.savefig(os.path.join(save_dir, 'panel_F2_late_summary_calcium_vs_freezing.pdf'), dpi=300, bbox_inches='tight')
+    plt.close(fig_f2)
+
+    return {
+        'trial_df': trial_df,
+        'baseline_df': baseline_df,
+        'mouse_late_df': f2_df,
+        'save_dir': save_dir,
+        'stats_dir': stats_dir,
+    }

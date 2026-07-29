@@ -7,8 +7,134 @@ from natsort import natsorted
 import pickle
 from scipy.ndimage import gaussian_filter
 from scipy import sparse as sp_sparse
+from scipy.stats import skew
+from scipy.signal import find_peaks
 
 ####################
+
+
+def filter_abnormal_cells(
+    sig_raw,
+    sig_z_score,
+    thre_skew=1.5,
+    thre_plateau=15,
+    min_peaks=3,
+    fps=MINISCOPE_FPS,
+    skew_enabled=True,
+    sparsity_enabled=True,
+    plateau_enabled=True,
+    silent_enabled=True,
+):
+    """
+    Filter abnormal cells (Gaussian noise, plateaus, interneurons, silent cells).
+
+    Each sub-check can be independently disabled; a disabled check contributes
+    an all-True mask (i.e. it never rejects a cell).
+
+    Parameters
+    ----------
+    sig_raw : np.ndarray (n_cells, n_frames)
+        Continuous signal (e.g. denoised calcium C) used for the skewness,
+        hyperactivity and plateau checks.
+    sig_z_score : np.ndarray (n_cells, n_frames)
+        Per-cell z-scored version of the signal used for the silent-cell
+        (real-spike) peak count.
+    thre_skew : float
+        Minimum right-skewness to keep a cell.
+    thre_plateau : float
+        Maximum allowed continuous-event duration in seconds.
+    min_peaks : int
+        Minimum number of z>3 peaks (real spikes) to keep a cell.
+    fps : float
+        Frames per second (defaults to MINISCOPE_FPS).
+    skew_enabled, sparsity_enabled, plateau_enabled, silent_enabled : bool
+        Per-check enable flags.
+
+    Returns
+    -------
+    good_indices : np.ndarray
+        Row indices of cells that pass all enabled checks.
+    submasks : dict[str, np.ndarray]
+        Boolean per-cell masks for each check ('is_skewed', 'is_sparse',
+        'no_plateaus', 'no_silent'); disabled checks are all-True.
+    """
+    n_cells = sig_raw.shape[0]
+    n_frames = sig_raw.shape[1]
+
+    # 1. Skewness — should be skewed to the right.
+    if skew_enabled:
+        is_skewed = skew(sig_raw, axis=1) >= thre_skew
+    else:
+        is_skewed = np.ones(n_cells, dtype=bool)
+
+    # 2. Hyperactivity / interneuron filter (vectorized).
+    medians = np.median(sig_raw, axis=1, keepdims=True)
+    stds = np.std(sig_raw, axis=1, keepdims=True)
+    is_active_mask = sig_raw > (medians + (3 * stds))
+    if sparsity_enabled:
+        active_fraction = np.sum(is_active_mask, axis=1) / n_frames
+        is_sparse = active_fraction < 0.20
+    else:
+        is_sparse = np.ones(n_cells, dtype=bool)
+
+    # 3. Plateau-artifact filter and silent-cell filter (run-length per cell).
+    max_duration_bins = int(thre_plateau * fps)
+    no_plateaus = np.ones(n_cells, dtype=bool)
+    no_silent = np.ones(n_cells, dtype=bool)
+    for i in range(n_cells):
+        # Skip per-cell work only if the cell is already rejected by the
+        # vectorized checks above.
+        if not (is_skewed[i] and is_sparse[i]):
+            continue
+
+        if plateau_enabled:
+            active_trace = is_active_mask[i].astype(int)
+            diffs = np.diff(np.hstack(([0], active_trace, [0])))
+            run_starts = np.where(diffs == 1)[0]
+            run_ends = np.where(diffs == -1)[0]
+            if len(run_starts) > 0:
+                longest_event = np.max(run_ends - run_starts)
+                if longest_event > max_duration_bins:
+                    no_plateaus[i] = False
+
+        if silent_enabled:
+            peaks, _ = find_peaks(sig_z_score[i, :], height=3, distance=10)  # z>3 = real spikes
+            if len(peaks) < min_peaks:
+                no_silent[i] = False
+
+    good_mask = is_skewed & is_sparse & no_plateaus & no_silent
+    good_indices = np.where(good_mask)[0]
+    submasks = {
+        'is_skewed': is_skewed,
+        'is_sparse': is_sparse,
+        'no_plateaus': no_plateaus,
+        'no_silent': no_silent,
+    }
+    return good_indices, submasks
+
+
+def cell_roi_sphericity(footprint):
+    """
+    Roundness of a single binary ROI footprint via the spatial-covariance
+    eigenvalue ratio lambda_min / lambda_max.
+
+    Returns a value in (0, 1]: 1 for a perfectly circular blob, approaching 0
+    for an elongated/line-like one. Returns 0.0 for empty or degenerate ROIs.
+    """
+    ys, xs = np.nonzero(footprint)
+    if ys.size < 2:
+        return 0.0
+    coords = np.vstack((ys.astype(float), xs.astype(float)))
+    cov = np.cov(coords)
+    if not np.all(np.isfinite(cov)):
+        return 0.0
+    eigvals = np.linalg.eigvalsh(cov)
+    eigvals = np.clip(eigvals, 0.0, None)
+    lam_max = eigvals[-1]
+    if lam_max <= 0:
+        return 0.0
+    return float(eigvals[0] / lam_max)
+
 
 class CrossRegMapping:
     _warned_mappings = set()   # class-level: suppress repeated debug prints
@@ -230,10 +356,13 @@ class BehaviourSession:
         'S_peakval_mov',
         'S_spikes_imm',
         'S_peakval_imm',
+        'S_filt',
+        'C_filt',
+        'YrA_filt',
     }
 
     def __init__(self, mouse, dpath, session_bounds=[], plot_sample_cell=False, data_dir='', session_group='session', crossreg='', savepath='', session_type='Behaviour',
-        behaviour_type=None, saver_prefix='', behaviour_condition=None, pyr_percentile_cutoff=90):
+        behaviour_type=None, saver_prefix='', behaviour_condition=None, pyr_percentile_cutoff=90, cell_filter_params=None):
 
         self.mouse = mouse
         self.dpath = dpath
@@ -243,6 +372,7 @@ class BehaviourSession:
         self.plot_sample_cell = plot_sample_cell
         self.data_dir = data_dir
         self.session_group = session_group
+        self.cell_filter_params = cell_filter_params  # dict of abnormal-cell QC knobs, or None to disable
         self.thres = 2
         self.crossreg = crossreg
         self.session_type = session_type
@@ -348,6 +478,21 @@ class BehaviourSession:
         if name in {'S_spikes_imm', 'S_peakval_imm'}:
             self.S_spikes_imm, self.S_peakval_imm = find_spikes_ca_S(self.S_imm, self.thres, want_peakval=True)
             return getattr(self, name)
+
+        if name in {'S_filt', 'C_filt', 'YrA_filt'}:
+            good = getattr(self, 'good_cell_indices', None)
+            if good is None:
+                # Filtering was disabled — the filtered copy does not exist.
+                setattr(self, name, None)
+                return None
+            base_name = name[:-len('_filt')]  # 'S_filt' -> 'S'
+            base = getattr(self, base_name, None)
+            if base is None:
+                setattr(self, name, None)
+                return None
+            value = base[good]
+            setattr(self, name, value)
+            return value
 
         raise AttributeError(name)
 
@@ -590,7 +735,126 @@ class BehaviourSession:
                 self.YrA_mov = self.YrA_mov[self.pyr_mask]
                 self.YrA_imm = self.YrA_imm[self.pyr_mask]
         '''
-        
+
+        # Abnormal-cell QC pass: produce filtered copies S_filt/C_filt/YrA_filt
+        # (good cells only) without touching S/C/YrA. Controlled by cell_filter_params.
+        self._run_abnormal_cell_filter()
+
+    def _run_abnormal_cell_filter(self):
+        '''
+        Quality-check pass over the loaded (session-bounded) S/C/YrA matrices.
+
+        When self.cell_filter_params enables it, computes the set of "good"
+        cells and stores NEW filtered copies (S_filt/C_filt/YrA_filt and aligned
+        *_idx_filt) alongside the untouched originals, plus good/bad cell ids and
+        diagnostic sphericity values / per-check masks. The originals S/C/YrA and
+        their _idx are never modified.
+        '''
+        params = self.cell_filter_params
+        if not params or not params.get('filter_abnormal_cells', False):
+            # Disabled — make the *_filt attributes explicitly absent.
+            self.good_cell_indices = None
+            self.bad_cell_indices = None
+            self.good_cell_ids = None
+            self.bad_cell_ids = None
+            self.cell_sphericity = None
+            self.cell_filter_submasks = None
+            self.S_filt = self.C_filt = self.YrA_filt = None
+            self.S_idx_filt = self.C_idx_filt = self.YrA_idx_filt = None
+            return
+
+        signal_name = params.get('cell_filter_signal', 'C')
+        sig_map = {'C': self.C, 'S': self.S, 'YrA': getattr(self, 'YrA', None)}
+        if signal_name not in sig_map:
+            raise ValueError(f"cell_filter_signal={signal_name!r} not one of {list(sig_map)}")
+        sig_raw = sig_map[signal_name]
+        if sig_raw is None:
+            raise ValueError(
+                f"cell_filter_signal={signal_name!r} requested but that signal is "
+                f"unavailable for {self.mouse} {self.session_type} (YrA may be absent)."
+            )
+        sig_raw = np.asarray(sig_raw, dtype=float)
+
+        # Per-cell z-score of the chosen signal (std==0 rows -> 0).
+        means = sig_raw.mean(axis=1, keepdims=True)
+        stds = sig_raw.std(axis=1, keepdims=True)
+        sig_z = np.divide(sig_raw - means, stds, out=np.zeros_like(sig_raw),
+                          where=stds > 0)
+
+        good_indices, submasks = filter_abnormal_cells(
+            sig_raw, sig_z,
+            thre_skew=params.get('cell_filter_thre_skew', 1.5),
+            thre_plateau=params.get('cell_filter_thre_plateau', 15.0),
+            min_peaks=params.get('cell_filter_min_peaks', 3),
+            skew_enabled=params.get('cell_filter_skew_enabled', True),
+            sparsity_enabled=params.get('cell_filter_sparsity_enabled', True),
+            plateau_enabled=params.get('cell_filter_plateau_enabled', True),
+            silent_enabled=params.get('cell_filter_silent_enabled', True),
+        )
+
+        n_cells = sig_raw.shape[0]
+        good_mask = np.zeros(n_cells, dtype=bool)
+        good_mask[good_indices] = True
+
+        # Sphericity (ROI shape) check, ANDed in when enabled.
+        self.cell_sphericity = None
+        if params.get('cell_filter_sphericity_enabled', True):
+            sphericity, is_round = self._compute_cell_sphericity(
+                params.get('cell_filter_thre_sphericity', 0.5))
+            self.cell_sphericity = sphericity
+            submasks['is_round'] = is_round
+            good_mask = good_mask & is_round
+
+        good_indices = np.where(good_mask)[0]
+        bad_indices = np.where(~good_mask)[0]
+
+        self.good_cell_indices = good_indices
+        self.bad_cell_indices = bad_indices
+        self.cell_filter_submasks = submasks
+        self.cell_filter_signal_name = signal_name
+
+        S_idx_arr = np.asarray(self.S_idx)
+        self.good_cell_ids = S_idx_arr[good_indices]
+        self.bad_cell_ids = S_idx_arr[bad_indices]
+
+        # Filtered copies (originals untouched).
+        self.S_filt = self.S[good_indices]
+        self.C_filt = self.C[good_indices]
+        self.S_idx_filt = S_idx_arr[good_indices]
+        self.C_idx_filt = np.asarray(self.C_idx)[good_indices]
+        if getattr(self, 'YrA', None) is not None:
+            self.YrA_filt = self.YrA[good_indices]
+            self.YrA_idx_filt = np.asarray(self.YrA_idx)[good_indices]
+        else:
+            self.YrA_filt = None
+            self.YrA_idx_filt = None
+
+        print('*** [cell filter] {} {}: kept {}/{} cells ({} rejected)'.format(
+            self.mouse, self.session_type, len(good_indices), n_cells, len(bad_indices)))
+
+    def _compute_cell_sphericity(self, thre_sphericity):
+        '''
+        Compute per-(S-row) ROI sphericity by mapping each cell's S unit_id to
+        its binary A footprint. Returns (sphericity_values, is_round_mask), both
+        aligned to the rows of self.S.
+        '''
+        A = self.A  # lazily loaded binary footprints, shape (n_A_cells, H, W)
+        A_idx = np.asarray(self.A_idx)
+        uid_to_A_row = {int(uid): i for i, uid in enumerate(A_idx)}
+
+        S_idx_arr = np.asarray(self.S_idx)
+        n_cells = len(S_idx_arr)
+        sphericity = np.zeros(n_cells, dtype=float)
+        for row, uid in enumerate(S_idx_arr):
+            a_row = uid_to_A_row.get(int(uid))
+            if a_row is None:
+                raise KeyError(
+                    f"{self.mouse} {self.session_type}: S unit_id {int(uid)} has no "
+                    f"matching A footprint (A_idx); cannot run sphericity check."
+                )
+            sphericity[row] = cell_roi_sphericity(A[a_row] > 0)
+        is_round = sphericity >= thre_sphericity
+        return sphericity, is_round
     def get_A_matrix(self):
         # Try new sparse format first
         if self.saver_A.check_exists('A_sparse') and self.saver_A.check_exists('A_idx'):
@@ -954,7 +1218,7 @@ for l in unit_id:
 
 
 class TraceFearCondSession(BehaviourSession):
-    def __init__(self, mouse, dpath, session_bounds=[], period_override=[], plot_sample_cell=False, data_dir='', crossreg='', savepath='', behaviour_type=None, behaviour_condition=None):
+    def __init__(self, mouse, dpath, session_bounds=[], period_override=[], plot_sample_cell=False, data_dir='', crossreg='', savepath='', behaviour_type=None, behaviour_condition=None, cell_filter_params=None):
         self.light_onsets = np.array([0, 1299])
         self.light_duration = 1
         self.tone_onsets_def = np.array([185, 420, 660, 900, 1140]) # alas, 185s for first tone set by accident rather than 180 but kept consistent for all mice..
@@ -1002,7 +1266,7 @@ class TraceFearCondSession(BehaviourSession):
         session_type = 'TFC_cond'
         super().__init__(mouse, dpath, session_bounds=session_bounds, plot_sample_cell=plot_sample_cell, data_dir=data_dir, \
             session_group='session.2', crossreg=crossreg, savepath=savepath, session_type=session_type, behaviour_type=behaviour_type, behaviour_condition=behaviour_condition, \
-            saver_prefix='TFC_cond')
+            saver_prefix='TFC_cond', cell_filter_params=cell_filter_params)
 
     def find_exp_boundaries(self):
         super().find_exp_boundaries()
@@ -1132,7 +1396,7 @@ class TestASession(BehaviourSession):
     activity are recorded.
     """
     def __init__(self, mouse, dpath, session_bounds=[], plot_sample_cell=False, data_dir='', crossreg='', savepath='', is_1wk=False, \
-        session_group='', behaviour_type=None, behaviour_condition=None):
+        session_group='', behaviour_type=None, behaviour_condition=None, cell_filter_params=None):
         self.is_1wk = is_1wk
         self.session_group = session_group
 
@@ -1149,7 +1413,7 @@ class TestASession(BehaviourSession):
             session_type = 'Test_A'
         super().__init__(mouse, dpath, session_bounds=session_bounds, plot_sample_cell=plot_sample_cell, data_dir=data_dir, \
             session_group=session_group, crossreg=crossreg, savepath=savepath, session_type=session_type, behaviour_type=behaviour_type, \
-            saver_prefix='Test_A', behaviour_condition=behaviour_condition)
+            saver_prefix='Test_A', behaviour_condition=behaviour_condition, cell_filter_params=cell_filter_params)
 
     def process_avg_sp_rates_mapping(self, mapping, want_peakval=False):
         '''
@@ -1205,7 +1469,7 @@ class TestASession(BehaviourSession):
 
 class TestBSession(BehaviourSession):
     def __init__(self, mouse, dpath, session_bounds=[], period_override=[], plot_sample_cell=False, data_dir='', crossreg='', savepath='', is_1wk=False, \
-        session_group='', behaviour_type=None, behaviour_condition=None):
+        session_group='', behaviour_type=None, behaviour_condition=None, cell_filter_params=None):
         self.light_onsets = np.array([0, 899])
         self.light_duration = 1
         self.tone_onsets_def = np.array([180, 420, 660])
@@ -1250,7 +1514,7 @@ class TestBSession(BehaviourSession):
             session_type = 'Test_B'
         super().__init__(mouse, dpath, session_bounds=session_bounds, plot_sample_cell=plot_sample_cell, data_dir=data_dir, \
             session_group=session_group, crossreg=crossreg, savepath=savepath, session_type=session_type, behaviour_type=behaviour_type, \
-            saver_prefix='Test_B', behaviour_condition=behaviour_condition)
+            saver_prefix='Test_B', behaviour_condition=behaviour_condition, cell_filter_params=cell_filter_params)
 
     def find_exp_boundaries(self):
         super().find_exp_boundaries()
@@ -1353,7 +1617,7 @@ class TestBSession(BehaviourSession):
         return wanted_pb
 
 class LinearTrackSession(BehaviourSession):
-    def __init__(self, mouse, dpath, session_bounds=[], plot_sample_cell=False, LT_type='', data_dir='', crossreg='', savepath='', behaviour_type=None, behaviour_condition=None):
+    def __init__(self, mouse, dpath, session_bounds=[], plot_sample_cell=False, LT_type='', data_dir='', crossreg='', savepath='', behaviour_type=None, behaviour_condition=None, cell_filter_params=None):
         if LT_type == 'LT1':
             self.LT_group = 'session'
         else:
@@ -1365,7 +1629,7 @@ class LinearTrackSession(BehaviourSession):
         session_type = LT_type
         super().__init__(mouse, dpath, session_bounds=session_bounds, plot_sample_cell=plot_sample_cell, data_dir=data_dir, \
             session_group=self.LT_group, crossreg=crossreg, savepath=savepath, session_type=session_type, behaviour_type=behaviour_type, \
-            saver_prefix=LT_type, behaviour_condition=behaviour_condition)
+            saver_prefix=LT_type, behaviour_condition=behaviour_condition, cell_filter_params=cell_filter_params)
 
         self.crop_XY()
 

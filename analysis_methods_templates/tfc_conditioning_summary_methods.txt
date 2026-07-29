@@ -1,0 +1,122 @@
+TFC Conditioning Summary Panels (B, C, D, E1, E2, F1, F2)
+===========================================================
+
+Overview
+--------
+This analysis summarizes conditioning-session calcium transient amplitude dynamics and their relationship to subsequent freezing behavior across hM3D, mCherry, and hM4D groups.
+Panel A (full-session trace) is produced elsewhere. This methods file covers the additional summary panels:
+  B  pre-CS baseline
+  C  shock-aligned responses (early shocks 1-2, late shocks 4-5)
+  D  post-shock response index across shocks 1-5
+  E1 early post-shock summary (shocks 1-3)
+  E2 late post-shock summary (shocks 4-5)
+  F1 trial-level calcium vs subsequent freezing
+  F2 mouse-level late-summary calcium vs freezing
+
+Neural Signal Definition
+------------------------
+For each mouse in TFC_cond, a population activity trace is constructed from deconvolved transient amplitudes:
+1. Use per-cell transient frame indices (S_spikes) and amplitudes (S_peakval).
+2. For each frame, sum transient amplitudes across mapped cells.
+3. Convert to per-second amplitude rate using MINISCOPE_FPS.
+4. Normalize by number of mapped cells to obtain a population-average transient amplitude rate.
+
+Unless stated otherwise, analysis is run on the selected mapping (default: full).
+
+Trial-Level Calcium Metrics
+---------------------------
+For each shock trial n:
+- Local pre-shock response window: 20 s before shock onset.
+- Post-shock response window: 0-20 s after shock onset.
+- Post-shock response index:
+  delta_n = mean(post_shock_0_20s) - mean(pre_shock_20s)
+
+This local baseline subtraction is used to separate phasic post-shock responses from tonic between-group offsets.
+
+Panel B (Pre-CS Baseline)
+-------------------------
+Per mouse, pre-CS baseline is the mean population transient-amplitude rate in a pre-tone window before tone 1 (default 35 s).
+Group differences are displayed with violin+dot plots.
+
+Panel C (Shock-Aligned Traces)
+------------------------------
+Panel C uses the SAME population transient amplitude rate signal as the binned activity figure (TFC_cond-activity_binned_sp_rates_mapping-*.png), peri-shock-aligned. This preserves both contributions to group differences: how many cells fire and how strongly they fire.
+
+Per shock:
+1. Extract the peri-shock window of the per-mouse population transient amplitude rate trace, from -20 s to +40 s around shock onset.
+2. Baseline-subtract using the mean of the pre-shock segment of that peri-window (default 20 s) so traces start near zero at shock onset.
+3. Lightly smooth over time with a small gaussian kernel (default sigma = 3 frames spacious / 2 frames compact).
+
+Aggregate per-trial peri-traces within mouse (mean across shocks in the same window), then across mice by group:
+- Early: shocks 1-2
+- Late: shocks 4-5
+Displayed as group mean with SEM shading. Y-axis is in baseline-subtracted population transient amplitude rate units (a.u./s).
+
+Note: this is intentionally the same signal as the binned activity plot, so group differences visible there (e.g. elevated hM3D activity after late shocks) are preserved in Panel C.
+
+Panel D (Across-Trial Post-Shock Index)
+---------------------------------------
+For shock numbers 1-5, plot group mean +/- SEM of mouse-level post-shock response index values.
+Inference uses repeated-measures modeling with shock number as within-mouse factor.
+
+Panel E1 and E2 (Early/Late Summary)
+------------------------------------
+Compute mouse-level summaries:
+- E1: mean(delta_n) over shocks 1-3
+- E2: mean(delta_n) over shocks 4-5
+Display per-group distributions (violin+dot) and pairwise group statistics.
+
+Behavioral Metric (Subsequent Freezing)
+---------------------------------------
+Freezing is computed from miniscope-aligned velocity traces using a threshold rule:
+  freezing frame if speed < 2 cm/s
+For each shock trial n, subsequent freezing is measured in a post-shock behavioral window:
+- Following ITI (shock offset to next tone onset), when available.
+- For the final shock, a fixed post-shock follow-up window (default 90 s), truncated to available recording.
+Freezing is expressed as fraction of frames and as percent.
+
+Panel F1 (Trial-Level Calcium-Behavior Relationship)
+----------------------------------------------------
+Each point is one mouse-trial:
+  x = post_shock_delta_n
+  y = subsequent_freezing_percent_n
+Visualization uses group-colored scatter with per-group linear fits.
+
+Inferential model:
+  freezing_percent ~ C(group) * post_shock_delta + C(shock_number) + (1|mouse)
+Mixed-effects fitting is attempted first; if it fails, clustered OLS (cluster by mouse) is used as a documented fallback.
+
+Panel F2 (Mouse-Level Late Summary Relationship)
+------------------------------------------------
+Each point is one mouse, using late-conditioning summaries (shocks 4-5):
+  x = mean late post-shock delta
+  y = mean late subsequent freezing percent
+Report global Pearson and Spearman correlations, and per-group Pearson summaries where sample size allows.
+
+Group Comparisons and Multiple Testing
+--------------------------------------
+For mouse-level summary panels (B, E1, E2), pairwise group differences are tested with Welch two-sample t-tests and Holm correction across the three pairwise contrasts.
+Significance display convention:
+  *   p < 0.05
+  **  p < 0.01
+  *** p < 0.001
+
+Outputs
+-------
+Saved under:
+  <PLOTS_DIR>/tfc_conditioning_summary/<mapping>/
+
+Main files:
+- tfc_conditioning_summary_panels_B_to_F2.png/.pdf
+- tables/panel_B_pre_cs_baseline.csv
+- tables/trial_level_calcium_freezing.csv
+- stats/panel_B_pairwise.txt
+- stats/panel_E_pairwise.txt
+- stats/panel_D_mixed_model.txt
+- stats/panel_F1_mixed_model.txt
+- stats/panel_F2_mouse_level_correlation.txt
+
+Notes
+-----
+- Inference is performed at the mouse level for B/E1/E2/F2 and with repeated-trial structure for D/F1.
+- Trial-level points in F1 are for visualization; independence is handled by the mixed model (or cluster-robust fallback).

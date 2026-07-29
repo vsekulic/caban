@@ -674,6 +674,28 @@ _LT_1D_TRUE_DISTANCE = 76.0
 _LT_1D_DISTANCE_UNIT = "cm"
 _LT_1D_CM_PER_PX = _LT_1D_TRUE_DISTANCE / _LT_1D_PX_DISTANCE
 
+# METHODS-template copy helper. Defined here (before the deferred caban.analysis
+# import below) so that caban.analysis can import it at module top without breaking
+# the decoder<->analysis circular import — analysis is imported at the deferred block
+# further down, by which point this name must already exist.
+_ANALYSIS_METHODS_TEMPLATES_DIR = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "analysis_methods_templates")
+
+
+def _copy_analysis_methods_template(template_filename: str, dest_dir: str) -> None:
+    """Copy a template from analysis_methods_templates/ into *dest_dir* (skip if already present)."""
+    dest_path = os.path.join(dest_dir, template_filename)
+    if os.path.isfile(dest_path):
+        return
+    src_path = os.path.join(_ANALYSIS_METHODS_TEMPLATES_DIR, template_filename)
+    if not os.path.isfile(src_path):
+        print(f"[METHODS] Template not found: {src_path}")
+        return
+    os.makedirs(dest_dir, exist_ok=True)
+    shutil.copy2(src_path, dest_path)
+    print(f"[METHODS] Copied {template_filename} → {dest_path}")
+
+
 # Deferred cross-module imports — placed after _LT_1D_CM_PER_PX is defined
 # to break the circular dependency with caban.analysis (which imports these
 # constants back from this module).
@@ -11273,25 +11295,6 @@ def _test_population_curve_group_interaction(
 _METHODS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "methods")
 
 # Path to the repo-level analysis_methods_templates/ directory
-_ANALYSIS_METHODS_TEMPLATES_DIR = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "..", "analysis_methods_templates")
-
-
-def _copy_analysis_methods_template(template_filename: str, dest_dir: str) -> None:
-    """Copy a template from analysis_methods_templates/ into *dest_dir* (skip if already present)."""
-    dest_path = os.path.join(dest_dir, template_filename)
-    if os.path.isfile(dest_path):
-        return
-    src_path = os.path.join(_ANALYSIS_METHODS_TEMPLATES_DIR, template_filename)
-    if not os.path.isfile(src_path):
-        print(f"[METHODS] Template not found: {src_path}")
-        return
-    import shutil
-    os.makedirs(dest_dir, exist_ok=True)
-    shutil.copy2(src_path, dest_path)
-    print(f"[METHODS] Copied {template_filename} → {dest_path}")
-
-
 def _copy_methods_txt(subfolder: str, dest_dir: str) -> None:
     """Copy methods/<subfolder>/METHODS.txt into *dest_dir* (skip if already present)."""
     dest_path = os.path.join(dest_dir, "METHODS.txt")

@@ -1,0 +1,104 @@
+Event-locked per-cell responsiveness (CS / trace / US) and peri-event heatmaps
+==============================================================================
+
+Overview
+--------
+This analysis is the single-cell successor to the "fraction of active cells"
+metric. Rather than "active = at least one event anywhere in the recording", each
+cell is tested for whether its activity in a task epoch differs from its own
+pre-tone baseline. Cells are then summarised per mouse as (a) the FRACTION of
+cells that are responsive and (b) the response MAGNITUDE among responders, and
+compared across the three viral groups (hM3D/Exc, hM4D/Inh, mCherry/Ctl). This is
+run on the conditioning session (real CS and US) and on the recall tests.
+
+Epochs
+------
+Epoch frame windows are taken from the existing accessors
+(get_epoch_frames / get_testb_epoch_frames / get_testa_epoch_frames):
+- Encoding (TFC_cond): baseline = pre_tone; response epochs = tone (CS),
+  trace (tone offset to shock onset), shock (US), post_shock.
+- Recall Test_B: baseline = pre_tone; response epochs = tone, post_tone.
+- Recall Test_A: baseline = pre_pseudo_tone; response epochs = pseudo_tone,
+  post_pseudo_tone (pseudo-tones are placed at matched times with no real CS/US).
+
+Neural signal and baseline
+--------------------------
+Per cell, the denoised calcium trace C is used as the activity signal (the
+deconvolved spike trace S carries far rarer, hard-thresholded events on which
+event-locked modulation is essentially undetectable; C is selectable via
+cfg.single_unit_signal). The reference is the pre-tone (or pre-pseudo-tone)
+baseline window; its length is configurable (cfg.single_unit_baseline_s, default
+10 s) and sits just before tone onset. Baseline subtraction removes C's DC offset.
+
+Response metrics
+----------------
+Because a phasic response (e.g. a tone-onset transient of 1-3 s) is diluted when
+averaged over a 20 s epoch, the epoch response is quantified with one or more
+configurable metrics (cfg.single_unit_response_metrics; each produces its own
+panels and table):
+- 'peak'         : the peak of the lightly gaussian-smoothed trace
+                   (cfg.single_unit_peak_smooth_s) anywhere in the full epoch,
+                   averaged across trials, minus the baseline mean. Sensitive to a
+                   phasic response at any latency within the epoch.
+- 'onset_window' : the mean over the first cfg.single_unit_onset_window_s (default
+                   5 s) of the epoch, minus the baseline mean. Targets the phasic
+                   onset response.
+- 'epoch_mean'   : the mean over the whole epoch, minus baseline (only detects
+                   sustained shifts; kept for completeness).
+The default runs both 'peak' and 'onset_window'.
+
+Per-cell responsiveness test
+----------------------------
+Significance is assessed with a circular-shift shuffle null: the whole activity
+trace is circularly shifted by a random offset (kept at least 5 s away from zero)
+and the metric is recomputed (default 1000 shuffles; for 'peak' the same windowed
+peak is taken under each shift, so the max-selection bias is matched by the null).
+This is robust to the low trial count (5 conditioning trials, 4 for one mouse, 3
+pseudo-trials at recall) — a per-trial signed-rank test cannot reach p < 0.05 at
+n = 5. Each cell's p-value is the z-scored (normal-approximation) tail probability,
+z = (observed − null_mean) / null_std, p = 2·Φ(−|z|), the null being approximately
+normal by the central limit theorem. The z-score is used instead of the raw
+empirical shuffle fraction because the empirical p is floored at 1/(n_shuffles+1),
+far too coarse for Benjamini-Hochberg FDR across hundreds of cells (rejecting the
+top cell needs p ≲ alpha/n_cells). Within each mouse, epoch, and metric, per-cell
+p-values are FDR-corrected (Benjamini-Hochberg, alpha = 0.05). A cell is
+"responsive" if it survives FDR; its direction (excited/suppressed) is the sign of
+the observed statistic.
+
+Group comparison
+----------------
+Per mouse and epoch:
+- fraction responsive = responsive cells / total cells in the mapping,
+- response magnitude   = mean |observed statistic| over responsive cells.
+Each is shown as a violin + per-mouse strip across the three groups (one panel per
+epoch). Significant group differences are annotated with brackets and stars from
+pairwise Welch two-sample t-tests, Holm-corrected across the three contrasts
+(Exc-Inh, Exc-Ctl, Inh-Ctl) — the same convention as tfc_conditioning_summary.
+This is not gated on an omnibus ANOVA, so a significant pair is shown even when the
+3-group test is not significant. Stars: * p<0.05, ** p<0.01, *** p<0.001. Group
+coding: hM3D red (Exc), hM4D blue (Inh), mCherry grey (Ctl).
+
+Peri-event heatmaps
+-------------------
+Per-cell trial-averaged activity is aligned to tone onset (window -35 s to +40 s)
+and, for encoding, to shock onset (-20 s to +40 s). Each cell is z-scored across the
+window. Cells are pooled within a group and sorted by mean post-onset response; one
+heatmap per group with a shared colour scale shows the response dynamics and
+heterogeneity that the scalar summaries hide.
+
+Outputs
+-------
+Saved under <PLOTS_DIR>/event_locked_responsiveness/<family>/ where <family> is
+encoding, recall_testA, or recall_testB (one set per response metric):
+- fraction_responsive-<metric>-<family>.png/.svg
+- response_magnitude-<metric>-<family>.png/.svg
+- heatmap-<epoch>-aligned-<family>.png/.svg   (metric-independent)
+- tables/per_mouse_responsiveness-<metric>-<family>.csv
+- stats/ (reserved for post-hoc tables)
+
+Sanity checks
+-------------
+- The shock (US) epoch, a hard-wired unconditioned stimulus, should recover the
+  largest responsive fraction at encoding.
+- A pre_tone-vs-pre_tone control (baseline split against itself) should yield about
+  the alpha-level false-positive fraction, calibrating the shuffle test.

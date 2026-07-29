@@ -1,0 +1,57 @@
+Freezing-tuned single units
+===========================
+
+Overview
+--------
+Each cell is classified as freezing-associated, movement-associated, or untuned by
+contrasting its activity during freezing frames vs moving frames. The
+fraction of freezing-preferring cells is then compared across the three viral
+groups (hM3D/Exc, hM4D/Inh, mCherry/Ctl). Because freezing is the behavioural
+readout of the fear memory, a cell-level association with freezing is a direct,
+memory-relevant single-unit measure. Run on the conditioning session and the
+recall tests (Test_A, Test_B).
+
+Freezing definition
+-------------------
+Freezing frames are imaging frames whose smoothed velocity
+(velocities_miniscope_smooth, behaviour-cam speed resampled to imaging frames) is
+below 2 cm/s — the same threshold used to build the S_mov / S_imm activity masks
+elsewhere in the codebase. Moving frames are the complement.
+
+Neural signal and per-cell test
+-------------------------------
+The activity signal is the denoised calcium trace C (denser transients than the
+rare deconvolved S spikes; S is selectable via a parameter). Per cell, the
+statistic is (mean C over freezing frames) minus (mean over moving frames).
+Significance uses the shared circular-shift shuffle contrast: the whole trace is
+circularly shifted by random offsets (>= 5 s from zero) and the freeze-minus-move
+statistic is recomputed, giving a null that preserves the trace's autocorrelation.
+Each cell's p-value is the z-scored (normal-approximation) tail of that null
+(z = (observed − null_mean)/null_std), used instead of the raw empirical shuffle
+fraction because the empirical p is too coarse (floored at 1/(n_shuffles+1)) for
+FDR across hundreds of cells. p-values are FDR-corrected (Benjamini-Hochberg,
+alpha = 0.05) across cells within a mouse. A cell is freezing-preferring if it
+survives FDR with a positive contrast, and movement-preferring if negative.
+
+Group comparison
+----------------
+Per mouse:
+- fraction freezing-preferring = freezing-preferring cells / total cells,
+- fraction movement-preferring = movement-preferring cells / total cells.
+Both are shown as violin + per-mouse strip across groups, with significant
+differences annotated by pairwise Welch t-tests, Holm-corrected across the three
+contrasts (brackets + stars; not gated on an omnibus ANOVA). The per-cell
+freeze-minus-move contrast is also compared as a group ECDF and with a
+cell-nested-in-mouse linear mixed model (reference group mCherry/Ctl); a
+mouse-clustered OLS is substituted, and noted, if the mixed model fails to
+converge.
+
+Group coding: hM3D red (Exc), hM4D blue (Inh), mCherry grey (Ctl).
+
+Outputs
+-------
+Saved under <PLOTS_DIR>/freezing_tuned_cells/<family>/ where <family> is encoding,
+recall_testA, or recall_testB:
+- freezing_tuned_cells-<family>.png/.svg
+- stats/freeze_move_contrast_mixed_model-<family>.txt
+- tables/per_mouse_freezing_tuning-<family>.csv

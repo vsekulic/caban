@@ -84,7 +84,37 @@ class PipelineConfig:
     plot_epoch_pv_analysis: bool = True
     plot_cross_session_epoch_pv_analysis: bool = True
     plot_occupancy_analysis: bool = True
+    plot_freeze_mobility_verification: bool = True
     enable_zone_crossreg_analysis: bool = True
+
+    # Single-unit response analyses (per-cell drill-downs beyond per-mouse means)
+    plot_cell_activity_distributions: bool = True
+    plot_event_locked_responsiveness: bool = True
+    plot_freezing_tuned_cells: bool = True
+    plot_population_coupling: bool = True
+
+    # --- Single-unit response analysis parameters ---
+    # Circular-shift shuffle count (higher = smoother z-scored p-values; slower).
+    single_unit_n_shuffles: int = 1000
+    single_unit_seed: int = 0
+    # Signal for the activity-trace analyses: 'C' (denoised calcium, dense
+    # transients) or 'S' (deconvolved spikes, rare).
+    single_unit_signal: str = 'C'
+    # Baseline window (seconds) immediately before each tone, used as the reference
+    # for event-locked responsiveness. Shorter than the 35 s epoch-PV baseline so it
+    # sits closer to stimulus onset.
+    single_unit_baseline_s: float = 10.0
+    # Event-locked response metrics to compute (each produces its own panels/tables):
+    #   'peak'         : peak of the (smoothed) trace anywhere in the full epoch,
+    #                    minus baseline — sensitive to phasic responses at any latency.
+    #   'onset_window' : mean over the first single_unit_onset_window_s of the epoch,
+    #                    minus baseline — targets the phasic onset response.
+    #   'epoch_mean'   : mean over the whole epoch, minus baseline (dilutes phasic
+    #                    responses; kept for completeness).
+    single_unit_response_metrics: tuple = ('peak', 'onset_window')
+    single_unit_onset_window_s: float = 5.0
+    # Gaussian smoothing (seconds) applied before peak detection in the 'peak' metric.
+    single_unit_peak_smooth_s: float = 1.0
 
     # ------------------------------------------------------------------
     # Decoder shuffle-control null model (shared by LT and TFC decoders)
@@ -180,6 +210,25 @@ class PipelineConfig:
     population_curve_load_cached: bool = True
 
     # ------------------------------------------------------------------
+    # Abnormal-cell QC filter (applied at Minian load in get_CS_matrices).
+    # Produces NEW filtered matrices S_filt/C_filt/YrA_filt (good cells only)
+    # alongside the untouched originals S/C/YrA. Each sub-check has its own
+    # enable flag; the master switch turns the whole pass on/off.
+    # ------------------------------------------------------------------
+    filter_abnormal_cells: bool = True          # master on/off
+    cell_filter_skew_enabled: bool = True        # right-skewness check
+    cell_filter_sparsity_enabled: bool = True    # hyperactivity / interneuron check
+    cell_filter_plateau_enabled: bool = True     # plateau-artifact check
+    cell_filter_silent_enabled: bool = True      # silent-cell (min-peaks) check
+    cell_filter_sphericity_enabled: bool = False  # ROI shape (sphericity) check
+    cell_filter_plot_diagnostics: bool = True    # render ROI + trace montages
+    cell_filter_signal: str = "C"                # 'C' | 'S' | 'YrA' — signal driving the QC
+    cell_filter_thre_skew: float = 1.5
+    cell_filter_thre_plateau: float = 15.0       # seconds
+    cell_filter_min_peaks: int = 3
+    cell_filter_thre_sphericity: float = 0.5     # keep cells with roundness >= threshold
+
+    # ------------------------------------------------------------------
     # Free-form extension slot for ad-hoc experimentation in the notebook
     # without having to subclass.
     # ------------------------------------------------------------------
@@ -220,6 +269,8 @@ class PipelineConfig:
                          ("median_err", "mean_err"))
         _validate_choice("population_curve_print_level", self.population_curve_print_level,
                          ("low", "medium", "high"))
+        _validate_choice("cell_filter_signal", self.cell_filter_signal,
+                         ("C", "S", "YrA"))
 
     # ------------------------------------------------------------------
     def to_dict(self) -> dict:

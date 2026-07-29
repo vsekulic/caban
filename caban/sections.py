@@ -33,9 +33,16 @@ from caban.engram import ENGRAM_REFERENCE
 from caban.population import EXCLUDE_MICE_CROSSREG as _PCA_EXCLUDE
 from caban.population import run_population_pca_pipeline, run_pca_state_metrics_from_results
 from caban.isomap import run_isomap_pipeline
-from caban.epoch_analysis import run_epoch_analysis_all_mice, run_cross_session_epoch_analysis_all_mice
+from caban.epoch_analysis import (
+    run_epoch_analysis_all_mice,
+    run_cross_session_epoch_analysis_all_mice,
+    plot_tfc_conditioning_summary_panels,
+)
 from caban.engram_sanity import plot_engram_sanity
 from caban.roi import plot_session_A_matrix
+from caban.event_locked_responsiveness import run_event_locked_responsiveness as _run_event_locked_responsiveness
+from caban.freezing_tuned_cells import run_freezing_tuned_cells as _run_freezing_tuned_cells
+from caban.population_coupling import run_population_coupling as _run_population_coupling
 
 import statsmodels.api as sm  # noqa: F401
 from statsmodels.regression.mixed_linear_model import MixedLM as mixedlm  # noqa: F401
@@ -112,11 +119,155 @@ def _make_paradigm_ABC_mapping(ds):
     }
 
 
+def _dump_behaviour_velocity_mobility(ds, cfg, mobility_thresh_cm_s=2.0,
+                                      subdir='behaviour_params_velocity'):
+    """Write one CSV per (session, mouse) with per-miniscope-frame velocity and
+    the derived mobility/immobility mask.
+
+    Velocity is ``sess.velocities_miniscope_smooth`` — behavcam-tracked speed
+    (cm/s), assigned to each miniscope frame by nearest-timestamp lookup and
+    gaussian-smoothed (see ``BehaviourSession.get_location_data`` in
+    caban/sessions.py). ``mobile``/``immobile`` threshold that velocity at
+    ``mobility_thresh_cm_s`` (same convention as ``Session.S_mov``/``S_imm``).
+
+    Two flavours are written under ``<cfg.PLOTS_DIR>/<subdir>/``:
+      * ``freeze_orig/<session>_<mouse>.csv``   — one row per experiment-window
+        miniscope frame (matches the trimmed ``sess.S``).
+      * ``freeze_padded/<session>_<mouse>.csv`` — the same rows re-inserted at their
+        raw-recording position (frames ``[start:start+n]`` of ``sess.S_full``,
+        where ``start = sess.miniscope_exp_fnum[start_idx]``), with zero-filled
+        rows before the experiment start and after its end so the row count
+        equals ``sess.S_full.shape[1]`` — the full miniscope recording, i.e. the
+        raw ``.avi`` frame count. Written for every session so external pipelines
+        (e.g. CaliAli) can line the freeze score up directly against the raw
+        miniscope videos.
+
+    Columns (both flavours): ``frame, velocity_cm_s, mobile, immobile``. In the
+    padded files ``frame`` is the raw-recording frame index and every padding row
+    is all zeros (velocity 0, mobile 0, immobile 0) — i.e. unannotated, not
+    freezing (``mobile == 0 and immobile == 0`` never occurs for a real frame, so
+    padding is trivially identifiable).
+
+    Finally, a frame-count sanity check (freeze CSV rows vs the trimmed ``sess.S``
+    and raw ``sess.S_full`` they derive from) is printed and mirrored to
+    ``<subdir>/sanity_check_frame_counts.log``.
+    """
+    session_groups = [
+        ('TFC_cond',   ds.TFC_cond),
+        ('LT1',        ds.TFC_cond_LT1),
+        ('LT2',        ds.TFC_cond_LT2),
+        ('Test_A',     ds.Test_A),
+        ('Test_A_1wk', ds.Test_A_1wk),
+        ('Test_B',     ds.Test_B),
+        ('Test_B_1wk', ds.Test_B_1wk),
+    ]
+    base_dir = os.path.join(cfg.PLOTS_DIR, subdir)
+    orig_dir = os.path.join(base_dir, 'freeze_orig')
+    padded_dir = os.path.join(base_dir, 'freeze_padded')
+    os.makedirs(orig_dir, exist_ok=True)
+    os.makedirs(padded_dir, exist_ok=True)
+
+    n_written = 0
+    n_padded = 0
+    sanity_rows = []  # (session, mouse, n_S, n_orig, n_full, n_pad_or_None)
+    for session_label, sess_dict in session_groups:
+        for mouse, sess in sess_dict.items():
+            vel = getattr(sess, 'velocities_miniscope_smooth', None)
+            tstamp = getattr(sess, 'tstamp_miniscope', None)
+            S = getattr(sess, 'S', None)
+            if vel is None or tstamp is None or S is None:
+                continue
+            n = min(len(tstamp), len(vel), S.shape[1])
+            if n == 0:
+                continue
+            n_S = int(S.shape[1])
+            n_full = int(sess.S_full.shape[1])
+            velocity = np.asarray(vel[:n], dtype=float)
+            mobile = (velocity >= mobility_thresh_cm_s).astype(int)
+            immobile = (velocity < mobility_thresh_cm_s).astype(int)
+
+            csv_path = os.path.join(orig_dir, f'{session_label}_{mouse}.csv')
+            with open(csv_path, 'w') as f:
+                f.write('frame,velocity_cm_s,mobile,immobile\n')
+                for frame_idx in range(n):
+                    f.write(f'{frame_idx},{velocity[frame_idx]:.4f},'
+                            f'{mobile[frame_idx]},{immobile[frame_idx]}\n')
+            n_written += 1
+
+            # Re-insert the experiment-window rows at their position in the
+            # full raw recording and zero-pad head/tail to S_full length so
+            # the CSV indexes 1:1 into the raw miniscope .avi frames.
+            exp_fnum = getattr(sess, 'miniscope_exp_fnum', None)
+            if exp_fnum is None:
+                raise RuntimeError(
+                    f'{session_label} {mouse}: missing miniscope_exp_fnum; '
+                    'cannot build padded freeze CSV.')
+            start = int(exp_fnum[sess.start_idx])
+            if start + n > n_full:
+                raise RuntimeError(
+                    f'{session_label} {mouse}: experiment rows '
+                    f'[{start}:{start + n}] exceed S_full length {n_full}.')
+            padded_path = os.path.join(padded_dir, f'{session_label}_{mouse}.csv')
+            with open(padded_path, 'w') as f:
+                f.write('frame,velocity_cm_s,mobile,immobile\n')
+                for frame_idx in range(n_full):
+                    exp_i = frame_idx - start
+                    if 0 <= exp_i < n:
+                        f.write(f'{frame_idx},{velocity[exp_i]:.4f},'
+                                f'{mobile[exp_i]},{immobile[exp_i]}\n')
+                    else:
+                        f.write(f'{frame_idx},0.0000,0,0\n')
+            n_pad = n_full
+            n_padded += 1
+
+            sanity_rows.append((session_label, mouse, n_S, n, n_full, n_pad))
+
+    print(f'[behaviour_params] wrote {n_written} per-mouse velocity/mobility CSVs to {orig_dir}')
+    print(f'[behaviour_params] wrote {n_padded} zero-padded (full-recording) CSVs to {padded_dir}')
+
+    # Sanity check: freeze CSV row counts vs the trimmed S / raw S_full they
+    # derive from. Printed here (during the dump) and mirrored to a log file so
+    # collaborators receive the frame-count reconciliation alongside the CSVs.
+    log_lines = []
+
+    def _emit(line=''):
+        print(line)
+        log_lines.append(line)
+
+    _emit()
+    _emit('[behaviour_params] freeze CSV frame-count sanity check')
+    _emit(f"{'session':<12}{'mouse':<7}{'S':>8}{'freeze_orig':>13}{'S_full':>9}"
+          f"{'freeze_padded':>15}{'extra':>7}  match")
+    _emit('-' * 82)
+    n_mismatch = 0
+    for label, mouse, n_S, n_orig, n_full, n_pad in sanity_rows:
+        orig_ok = (n_orig == n_S)
+        pad_ok = (n_pad is None) or (n_pad == n_full)
+        ok = orig_ok and pad_ok
+        n_mismatch += (not ok)
+        n_pad_s = '--' if n_pad is None else str(n_pad)
+        flag = 'OK' if ok else '*** MISMATCH ***'
+        _emit(f"{label:<12}{mouse:<7}{n_S:>8}{n_orig:>13}{n_full:>9}{n_pad_s:>15}"
+              f"{n_full - n_S:>7}  {flag}")
+    _emit('-' * 82)
+    _emit(f"{n_mismatch} mismatch(es). freeze_orig == trimmed S; "
+          "freeze_padded == raw S_full (all sessions).")
+    _emit("'extra' = S_full - S = miniscope 'dead time' frames "
+          "(recording started before the FreezeFrame task).")
+
+    log_path = os.path.join(base_dir, 'sanity_check_frame_counts.log')
+    with open(log_path, 'w') as f:
+        f.write('\n'.join(log_lines) + '\n')
+    print(f'[behaviour_params] wrote: {log_path}')
+
+
 def dump_behaviour_params(ds, cfg=None, filename='behaviour_params.py',
-                          matlab_filename='behaviour_params.m'):
+                          matlab_filename='behaviour_params.m',
+                          mobility_thresh_cm_s=2.0):
     """Print and save per-mouse behaviour timing parameters.
 
-    Two files are written into ``cfg.PLOTS_DIR``:
+    Two files are written into ``<cfg.PLOTS_DIR>/behaviour_params_velocity/``
+    (alongside the freeze-score CSVs):
       * ``filename``         — Python-literal form (default ``behaviour_params.py``)
       * ``matlab_filename``  — MATLAB script form  (default ``behaviour_params.m``)
 
@@ -136,6 +287,15 @@ def dump_behaviour_params(ds, cfg=None, filename='behaviour_params.py',
          missing G07/G15 sessions, etc.) are already baked in.
       3. Original hard-coded ``*_def`` arrays (no exceptions applied) for
          cross-checking.
+
+    Additionally, per-miniscope-frame velocity and the derived mobility/
+    immobility mask (behavcam velocity, threshold ``mobility_thresh_cm_s``)
+    are written as one CSV per (session, mouse) into
+    ``<cfg.PLOTS_DIR>/behaviour_params_velocity/freeze_orig/`` (experiment-window
+    rows, matching the trimmed ``sess.S``) and
+    ``<cfg.PLOTS_DIR>/behaviour_params_velocity/freeze_padded/`` (zero-padded to the
+    full raw-recording / ``.avi`` frame count, one per session) — see
+    ``_dump_behaviour_velocity_mobility``.
     """
     fps = float(MINISCOPE_FPS)  # noqa: F405 — from caban.utilities star-import
 
@@ -171,6 +331,7 @@ def dump_behaviour_params(ds, cfg=None, filename='behaviour_params.py',
         ('LT1',        ds.TFC_cond_LT1),
         ('LT2',        ds.TFC_cond_LT2),
         ('Test_A',     ds.Test_A),
+        ('Test_A_1wk', ds.Test_A_1wk),
         ('Test_B',     ds.Test_B),
         ('Test_B_1wk', ds.Test_B_1wk),
     ]
@@ -297,16 +458,18 @@ def dump_behaviour_params(ds, cfg=None, filename='behaviour_params.py',
         print(line)
 
     if cfg is not None:
-        plots_dir = cfg.PLOTS_DIR
-        os.makedirs(plots_dir, exist_ok=True)
-        py_path = os.path.join(plots_dir, filename)
+        velocity_dir = os.path.join(cfg.PLOTS_DIR, 'behaviour_params_velocity')
+        os.makedirs(velocity_dir, exist_ok=True)
+        py_path = os.path.join(velocity_dir, filename)
         with open(py_path, 'w') as f:
             f.write('\n'.join(py_lines) + '\n')
-        m_path = os.path.join(plots_dir, matlab_filename)
+        m_path = os.path.join(velocity_dir, matlab_filename)
         with open(m_path, 'w') as f:
             f.write('\n'.join(_fmt_matlab(records)) + '\n')
         print(f'\n[behaviour_params] wrote: {py_path}')
         print(f'[behaviour_params] wrote: {m_path}')
+
+        _dump_behaviour_velocity_mobility(ds, cfg, mobility_thresh_cm_s=mobility_thresh_cm_s)
 
 
 def run_rastermap_single_mouse(
@@ -750,6 +913,25 @@ def run_binned_sp_rates(ds, cfg):
 
         msg_end()
 
+        msg_start('*** Generating TFC conditioning summary panels (B-F2)')
+        summary_mapping = 'full' if 'full' in mappings_all_TFC_cond else mappings_all_TFC_cond[0]
+        summary_root = os.path.join(PLOTS_DIR, 'tfc_conditioning_summary', summary_mapping)
+        os.makedirs(summary_root, exist_ok=True)
+        _copy_analysis_methods_template(
+            'tfc_conditioning_summary_methods.txt',
+            summary_root,
+        )
+        paper_fig2_dir = get_paper_dir(PAPER_DIR, 'fig2')
+        plot_tfc_conditioning_summary_panels(
+            PLOTS_DIR,
+            TFC_cond,
+            mouse_groups,
+            mapping=summary_mapping,
+            paper_dir=paper_fig2_dir,
+            auto_close=True,
+        )
+        msg_end()
+
     # ===== end verbatim body =====
 
 
@@ -809,12 +991,15 @@ def run_proportional_activities(ds, cfg):
     PAPER_DIR = cfg.PAPER_DIR
     PLOTS_DIR = cfg.PLOTS_DIR
     TFC_B_B_1wk_crossreg = ds.TFC_B_B_1wk_crossreg
+    TFC_A_A_1wk_crossreg = ds.TFC_A_A_1wk_crossreg
     TFC_cond = ds.TFC_cond
     TFC_cond_LT1 = ds.TFC_cond_LT1
     TFC_cond_LT2 = ds.TFC_cond_LT2
     TFC_cond_crossreg = ds.TFC_cond_crossreg
     Test_B = ds.Test_B
     Test_B_1wk = ds.Test_B_1wk
+    Test_A = ds.Test_A
+    Test_A_1wk = ds.Test_A_1wk
     mice_per_group = ds.mice_per_group
     mouse_groups = ds.mouse_groups
     # --- cfg switches ---
@@ -828,18 +1013,115 @@ def run_proportional_activities(ds, cfg):
             paper_fig2_dir = os.path.join(PAPER_DIR, 'fig2') if not debug_switch else None
             proportional_activities(PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond_LT2, plot_type='violin', debug_labels=debug_switch, paper_fig2_dir=paper_fig2_dir)
             proportional_activities_TFC_B_B_1wk(PLOTS_DIR, mice_per_group, TFC_cond, Test_B, Test_B_1wk, crossreg_to_use=TFC_B_B_1wk_crossreg, plot_type='violin', debug_labels=debug_switch, paper_fig2_dir=paper_fig2_dir)
+            proportional_activities_TFC_A_A_1wk(PLOTS_DIR, mice_per_group, TFC_cond, Test_A, Test_A_1wk, crossreg_to_use=TFC_A_A_1wk_crossreg, plot_type='violin', debug_labels=debug_switch, paper_fig2_dir=paper_fig2_dir)
             proportional_activities_event_rate(PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond_LT2, plot_type='violin', debug_labels=debug_switch, paper_fig2_dir=paper_fig2_dir)
             proportional_activities_event_rate_TFC_B_B_1wk(PLOTS_DIR, mice_per_group, TFC_cond, Test_B, Test_B_1wk, crossreg_to_use=TFC_B_B_1wk_crossreg, plot_type='violin', debug_labels=debug_switch, paper_fig2_dir=paper_fig2_dir)
+            proportional_activities_event_rate_TFC_A_A_1wk(PLOTS_DIR, mice_per_group, TFC_cond, Test_A, Test_A_1wk, crossreg_to_use=TFC_A_A_1wk_crossreg, plot_type='violin', debug_labels=debug_switch, paper_fig2_dir=paper_fig2_dir)
             proportional_activities_amplitudes(PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond_LT2, plot_type='violin', debug_labels=debug_switch, paper_fig2_dir=paper_fig2_dir)
             proportional_activities_amplitudes_TFC_B_B_1wk(PLOTS_DIR, mice_per_group, TFC_cond, Test_B, Test_B_1wk, crossreg_to_use=TFC_B_B_1wk_crossreg, plot_type='violin', debug_labels=debug_switch, paper_fig2_dir=paper_fig2_dir)
+            proportional_activities_amplitudes_TFC_A_A_1wk(PLOTS_DIR, mice_per_group, TFC_cond, Test_A, Test_A_1wk, crossreg_to_use=TFC_A_A_1wk_crossreg, plot_type='violin', debug_labels=debug_switch, paper_fig2_dir=paper_fig2_dir)
 
         proportional_activities_donut(PLOTS_DIR, mouse_groups, TFC_cond, TFC_cond_LT1, TFC_cond_LT2, ['TFC_cond','TFC_cond_LT1','TFC_cond_LT2'], crossreg_type='TFC_cond', \
             crossreg_to_use=TFC_cond_crossreg)
         proportional_activities_donut(PLOTS_DIR, mouse_groups, TFC_cond, Test_B, Test_B_1wk, ['TFC_cond', 'Test_B', 'Test_B_1wk'], crossreg_type='TFC_B_B_1wk', \
             crossreg_to_use=TFC_B_B_1wk_crossreg)
+
+        paper_fig2_dir = os.path.join(PAPER_DIR, 'fig2')
+        proportional_activities_paper_main_figure(
+            PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond_LT2,
+            Test_B, Test_B_1wk, crossreg_to_use=TFC_B_B_1wk_crossreg,
+            paper_fig2_dir=paper_fig2_dir,
+            value_mode='fraction_active',
+            test_label='Test_B', file_suffix='',
+        )
+        proportional_activities_paper_main_figure(
+            PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond_LT2,
+            Test_A, Test_A_1wk, crossreg_to_use=TFC_A_A_1wk_crossreg,
+            paper_fig2_dir=paper_fig2_dir,
+            value_mode='fraction_active',
+            test_label='Test_A', file_suffix='-TestA',
+        )
+        proportional_activities_paper_supplementary_combined(
+            PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond_LT2,
+            test_b=Test_B, test_b_1wk=Test_B_1wk, crossreg_b=TFC_B_B_1wk_crossreg,
+            test_a=Test_A, test_a_1wk=Test_A_1wk, crossreg_a=TFC_A_A_1wk_crossreg,
+            paper_fig2_dir=paper_fig2_dir,
+            value_mode='fraction_active',
+        )
         msg_end()
 
     # ===== end verbatim body =====
+
+
+# ---------------------------------------------------------------------------
+# Single-unit response sections (per-cell drill-downs)
+# ---------------------------------------------------------------------------
+def run_cell_activity_distributions(ds, cfg):
+    """Per-cell event-rate/amplitude distributions (ECDF + cell-in-mouse mixed
+    model) — the single-cell counterpart of run_proportional_activities."""
+    if not (cfg.plot_cell_activity_distributions and not cfg.DEVEL_SWITCH):
+        return
+    PLOTS_DIR = cfg.PLOTS_DIR
+    mice_per_group = ds.mice_per_group
+    msg_start('*** Per-cell activity distributions (event rate & amplitude)')
+    cell_activity_distributions(PLOTS_DIR, mice_per_group, ds.TFC_cond, ds.TFC_cond_LT1, ds.TFC_cond_LT2)
+    cell_activity_distributions_TFC_B_B_1wk(PLOTS_DIR, mice_per_group, ds.TFC_cond, ds.Test_B, ds.Test_B_1wk,
+                                            crossreg_to_use=ds.TFC_B_B_1wk_crossreg)
+    cell_activity_distributions_TFC_A_A_1wk(PLOTS_DIR, mice_per_group, ds.TFC_cond, ds.Test_A, ds.Test_A_1wk,
+                                            crossreg_to_use=ds.TFC_A_A_1wk_crossreg)
+    msg_end()
+
+
+def run_event_locked_responsiveness(ds, cfg):
+    """Event-locked (CS/trace/US and recall-tone) per-cell responsiveness across
+    encoding and recall sessions."""
+    if not (cfg.plot_event_locked_responsiveness and not cfg.DEVEL_SWITCH):
+        return
+    PLOTS_DIR = cfg.PLOTS_DIR
+    mice_per_group = ds.mice_per_group
+    su_kwargs = dict(
+        signal=cfg.single_unit_signal,
+        n_shuffles=cfg.single_unit_n_shuffles,
+        seed=cfg.single_unit_seed,
+        response_metrics=cfg.single_unit_response_metrics,
+        baseline_s=cfg.single_unit_baseline_s,
+        onset_window_s=cfg.single_unit_onset_window_s,
+        peak_smooth_s=cfg.single_unit_peak_smooth_s,
+    )
+    msg_start('*** Event-locked per-cell responsiveness (encoding + recall)')
+    _run_event_locked_responsiveness(PLOTS_DIR, mice_per_group, ds.TFC_cond, 'encoding', **su_kwargs)
+    _run_event_locked_responsiveness(PLOTS_DIR, mice_per_group, ds.Test_B, 'recall_testB', **su_kwargs)
+    _run_event_locked_responsiveness(PLOTS_DIR, mice_per_group, ds.Test_A, 'recall_testA', **su_kwargs)
+    msg_end()
+
+
+def run_freezing_tuned_cells(ds, cfg):
+    """Freezing- vs movement-associated single units across encoding and recall."""
+    if not (cfg.plot_freezing_tuned_cells and not cfg.DEVEL_SWITCH):
+        return
+    PLOTS_DIR = cfg.PLOTS_DIR
+    mice_per_group = ds.mice_per_group
+    fk = dict(signal=cfg.single_unit_signal, n_shuffles=cfg.single_unit_n_shuffles, seed=cfg.single_unit_seed)
+    msg_start('*** Freezing-tuned single units (encoding + recall)')
+    _run_freezing_tuned_cells(PLOTS_DIR, mice_per_group, ds.TFC_cond, 'encoding', **fk)
+    _run_freezing_tuned_cells(PLOTS_DIR, mice_per_group, ds.Test_B, 'recall_testB', **fk)
+    _run_freezing_tuned_cells(PLOTS_DIR, mice_per_group, ds.Test_A, 'recall_testA', **fk)
+    msg_end()
+
+
+def run_population_coupling(ds, cfg):
+    """Population coupling / co-activation structure across encoding and recall."""
+    if not (cfg.plot_population_coupling and not cfg.DEVEL_SWITCH):
+        return
+    PLOTS_DIR = cfg.PLOTS_DIR
+    mice_per_group = ds.mice_per_group
+    bin_width = cfg.bin_width_frames
+    signal = cfg.single_unit_signal
+    msg_start('*** Population coupling / synchrony (encoding + recall)')
+    _run_population_coupling(PLOTS_DIR, mice_per_group, ds.TFC_cond, 'encoding', bin_width, signal=signal)
+    _run_population_coupling(PLOTS_DIR, mice_per_group, ds.Test_B, 'recall_testB', bin_width, signal=signal)
+    _run_population_coupling(PLOTS_DIR, mice_per_group, ds.Test_A, 'recall_testA', bin_width, signal=signal)
+    msg_end()
 
 
 # ---------------------------------------------------------------------------
@@ -1165,6 +1447,58 @@ def run_occupancy_analysis(ds, cfg):
         msg_end()
 
     # ===== end verbatim body =====
+
+
+# ---------------------------------------------------------------------------
+# Section: freeze_mobility_verification (QC plot, not part of caban/main.py)
+# ---------------------------------------------------------------------------
+def run_freeze_mobility_verification(ds, cfg):
+    """QC section: overlay FreezeFrame freeze % (freeze_data/TFC_miniscope.json,
+    at the repo root), per-frame velocity, and the derived mobility mask for the
+    TFC Test B 48hr and 1wk recall sessions, to visually verify binning/alignment
+    between the two independent freezing signals."""
+    if not (cfg.plot_freeze_mobility_verification):
+        return
+    # --- ds attributes ---
+    PLOTS_DIR = cfg.PLOTS_DIR
+    mouse_groups = ds.mouse_groups
+
+    msg_start('*** TFC Test B freeze / velocity / mobility verification (48hr + 1wk)')
+
+    # freeze_data/ lives at the repo root (sibling of the caban/ package dir),
+    # not inside caban/ itself.
+    _repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    freeze_data_path = os.path.join(_repo_root, 'freeze_data', 'TFC_miniscope.json')
+    with open(freeze_data_path, 'r') as f:
+        tfc_miniscope_freeze = json.load(f)
+
+    dreadd_to_json_key = {'hM3D': 'Exc', 'hM4D': 'Inh', 'mCherry': 'Ctl'}
+    # (timepoint_label, ds session dict, JSON key suffix)
+    timepoints = [
+        ('48hr', ds.Test_B, ''),
+        ('1wk', ds.Test_B_1wk, '_1wk'),
+    ]
+    save_dir = os.path.join(PLOTS_DIR, 'freeze_verification')
+
+    for timepoint_label, session_dict, key_suffix in timepoints:
+        for dreadd_group, json_key_base in dreadd_to_json_key.items():
+            json_key = json_key_base + key_suffix
+            freeze_rows = np.array(tfc_miniscope_freeze[json_key])
+            ordered_mice = [m for m, g in mouse_groups.items() if g == dreadd_group]
+            mice_with_session = [m for m in ordered_mice if m in session_dict]
+            if len(mice_with_session) != freeze_rows.shape[0]:
+                raise ValueError(
+                    f"{json_key} freeze rows ({freeze_rows.shape[0]}) != "
+                    f"{dreadd_group} mice with {timepoint_label} Test B sessions "
+                    f"({len(mice_with_session)}): {mice_with_session}"
+                )
+            mouse_session_pairs = [(m, session_dict[m]) for m in mice_with_session]
+            plot_freeze_velocity_mobility_verification(
+                dreadd_group, timepoint_label, mouse_session_pairs, freeze_rows,
+                save_dir,
+            )
+
+    msg_end()
 
 
 # ---------------------------------------------------------------------------
