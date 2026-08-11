@@ -1,0 +1,44 @@
+Proportion of place cells per animal
+
+Overview
+- Reports the percentage of recorded cells that qualify as place cells, one value per mouse per
+  session, compared across the three viral groups.
+- This is the natural denominator for the place-cell-restricted rate panels (see
+  place_cell_restricted_rates_methods.txt): a group difference in the cell-averaged rate could arise
+  either because place cells fire differently or because there are more of them. This analysis
+  addresses the second possibility directly.
+
+Inputs
+- Session dictionaries: TFC_cond, Test_A, Test_A_1wk, Test_B, Test_B_1wk, LT1, LT2.
+- Cell mappings resolved via session_obj.get_S_mapping(); the default is 'full' (all cells in the
+  session, no cross-registration constraint).
+- Place fields are read from the cached <session_type>-<mouse>-<n>cells-PlaceFields.npz files.
+  Nothing is re-fitted and no detection parameter is changed.
+
+Computation
+1. A cell is a place cell if it has at least one detected place field after merging, using the
+   place-field detection already performed by the place-field analysis: significant spatial
+   responses relative to a circular-shift null (99th percentile of 500 shifts), grouped into
+   fields by a variational Bayesian Gaussian mixture with post-hoc component merging.
+2. pct_place_cells = 100 * (place cells in the mapping) / (all cells in the mapping).
+3. The denominator is the mapping, not the full recording, so the proportion is interpretable
+   for cross-registered mappings as well as for 'full'.
+
+Statistics
+- The unit of analysis is the MOUSE. Each animal contributes one percentage, shown as a violin
+  with individual animals overlaid and labelled. Groups are compared by one-way ANOVA
+  (scipy.stats.f_oneway); only if the omnibus p < 0.05 is a Tukey HSD post-hoc test run and
+  significant pairs annotated. n = number of mice per group.
+- Groups are built from the mice actually present in each session dictionary (G07 absent from
+  Test_B; G15 absent from Test_A_1wk / Test_B_1wk).
+- Group order is hM3D, mCherry, hM4D (displayed as Exc, Ctl, Inh).
+
+Caveat on cross-session comparison
+- Place fields on LT1 / LT2 are fit at a spatial bin width of 4.5 px versus 34 px for the chamber
+  sessions. Finer bins change the number of bins a field must occupy and hence the detection
+  sensitivity, so the ABSOLUTE percentage is not comparable between LT and chamber sessions.
+  Only the within-session comparison across viral groups is valid.
+
+Outputs
+- PLOTS_DIR/navigation_aware_single_cell/place_cell_proportions/
+    place_cell_proportion-<session_type>-<mapping>.png/.svg

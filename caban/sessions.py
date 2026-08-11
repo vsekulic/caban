@@ -992,15 +992,10 @@ for l in unit_id:
         '''
 
         # Get actual cells of self's session that are mapped to the desired mapping.
-        if mapping == 'full':
-            S_spikes = self.S_spikes
-            S_peakval = self.S_peakval
-            S = self.S
-            S_idx_full = list(range(self.S.shape[0]))
-        else:
-            [S, S_spikes, S_peakval, _] = self.get_S_mapping(mapping, want_peakval=want_peakval, with_crossreg=crossreg)
-            # cells in this mapping subset, expressed as full-session row indices
-            S_idx_full = list(S_spikes.keys())
+        # get_S_mapping() resolves mapping == 'full' itself (all cells, crossreg ignored).
+        [S, S_spikes, S_peakval, _] = self.get_S_mapping(mapping, want_peakval=want_peakval, with_crossreg=crossreg)
+        # cells in this mapping subset, expressed as full-session row indices
+        S_idx_full = list(S_spikes.keys())
 
         if with_engram:
             if engram_cell_indices is None:
@@ -1033,6 +1028,48 @@ for l in unit_id:
         else:
             binned_rates = get_avg_sp_rate_in_period(S_spikes, beg_period, end_period)
         return binned_rates
+
+    def process_whole_session_sp_rates_mapping(self, mapping, want_peakval=False):
+        '''
+        Population-average spike rate (or activity) over the ENTIRE session for the given
+        mapping, i.e. the whole recording treated as a single period.
+
+        This is the session-wide counterpart of the per-behaviour-period metrics computed by
+        each subclass's process_avg_sp_rates_mapping(). Like those, the average is taken over
+        *every* cell in the mapping, including cells with zero detected events -- see
+        get_avg_sp_rate_in_period(). That is deliberate: silenced cells must count towards the
+        population mean. (Contrast caban.analysis.per_cell_rate_and_amplitude, which averages
+        only over active cells.)
+
+        The period is expressed in frames RELATIVE to self.S, which is already trimmed to the
+        experiment bounds in get_CS_matrices(); self.S_spikes is derived from that same trimmed
+        matrix. Do not use self.miniscope_exp_fnum here -- those are indices into the *untrimmed*
+        recording and mixing them in silently drops the leading frames' spikes.
+
+        Returns a 1-element list, matching the shape returned for a single period. Like
+        process_binned_sp_rates_mapping(), the result is returned rather than stored on the
+        instance -- these session objects are unpickled from the ds cache, so any attribute
+        that only __init__ creates would be missing on already-loaded sessions.
+        '''
+        [S, S_spikes, S_peakval, S_idx] = self.get_S_mapping(mapping, want_peakval=want_peakval)
+
+        n_frames = self.S.shape[1]
+        if n_frames < 2:
+            raise RuntimeError(
+                f'Cannot compute whole-session rates for {self.mouse} {self.session_type} '
+                f'mapping={mapping}: session has {n_frames} frame(s).'
+            )
+        if len(S_spikes) == 0:
+            raise RuntimeError(
+                f'Cannot compute whole-session rates for {self.mouse} {self.session_type} '
+                f'mapping={mapping}: mapping resolved to 0 cells.'
+            )
+
+        beg_period = [0]
+        end_period = [n_frames - 1]
+        if want_peakval:
+            return get_avg_activity_in_period(S_spikes, S_peakval, beg_period, end_period)
+        return get_avg_sp_rate_in_period(S_spikes, beg_period, end_period)
 
     def get_ROI_mapping(self, mapping, want_peakval=False):
         [S, S_spikes, _, S_idx] = self.get_S_mapping(mapping, want_peakval=want_peakval)
@@ -1324,20 +1361,13 @@ class TraceFearCondSession(BehaviourSession):
         placed in a separate internal variable.
         '''
 
-        # Get actual cells of self's session that are mapped to the desired mapping. (We don't need the resulting S_idx here.)
-        if mapping == 'full':
-            S_spikes = self.S_spikes
-            S_peakval = self.S_peakval
-            S_idx = self.S_idx
-        else:
-            [S, S_spikes, S_peakval, S_idx] = self.get_S_mapping(mapping, want_peakval=want_peakval) 
-
-        # Get actual cells of TFC_cond ('session.2') that are mapped to the desired mapping
-        #[S, S_idx] = self.get_S_mapping(df_mapping[self.session_group])
+        # Get actual cells of self's session that are mapped to the desired mapping.
+        # get_S_mapping() resolves mapping == 'full' itself (all cells, no crossreg).
+        [S, S_spikes, S_peakval, S_idx] = self.get_S_mapping(mapping, want_peakval=want_peakval)
 
         #s_idx = S_idx.index(test_unit_id[mouse])
         if self.plot_sample_cell:
-            s_idx = S_idx[0]
+            s_idx = 0
             find_spikes_ca(S[s_idx,:], self.thres, plotit=True)
             plt.title(self.mouse+' mapped TFC_cond cell '+str(S_idx[s_idx])+' in '+mapping)
             [plt.axvline(x, c='b', ls='--') for x in self.tone_onsets]
@@ -1402,11 +1432,6 @@ class TestASession(BehaviourSession):
 
         self.period_bounds = []
 
-        # Placeholders for calculations of spike rates during the context exposure
-        # for specified mappings
-        self.exp_sp_rates_mapping = dict()
-        self.exp_activity_mapping = dict()
-
         if self.is_1wk:
             session_type = 'Test_A_1wk'
         else:
@@ -1415,36 +1440,8 @@ class TestASession(BehaviourSession):
             session_group=session_group, crossreg=crossreg, savepath=savepath, session_type=session_type, behaviour_type=behaviour_type, \
             saver_prefix='Test_A', behaviour_condition=behaviour_condition, cell_filter_params=cell_filter_params)
 
-    def process_avg_sp_rates_mapping(self, mapping, want_peakval=False):
-        '''
-        Calculate average spike rates (or activity) for cells in TestA session for the given mapping.
-        Since Test A is a context-only test (no tones/shocks), we compute the overall activity
-        across the entire session, analogous to LinearTrackSession.
-        '''
-
-        # Get actual cells of self's session that are mapped to the desired mapping.
-        if mapping == 'full':
-            S_spikes = self.S_spikes
-            S_peakval = self.S_peakval
-            S_idx = self.S_idx
-        else:
-            [S, S_spikes, S_peakval, S_idx] = self.get_S_mapping(mapping, want_peakval=want_peakval)
-
-        if self.plot_sample_cell:
-            s_idx = S_idx[0]
-            find_spikes_ca(S[s_idx,:], self.thres, plotit=True)
-            if self.is_1wk:
-                suffix_str = ' 1wk'
-            else:
-                suffix_str = ''
-            plt.title(self.mouse+' mapped Test A{} cell '.format(suffix_str)+str(S_idx[s_idx])+' in '+mapping)
-
-        if want_peakval:
-            self.exp_activity_mapping[mapping] = get_avg_activity_in_period(S_spikes, S_peakval, \
-                [self.miniscope_exp_fnum[self.start_idx]], [self.miniscope_exp_fnum[self.stop_idx]])
-        else:
-            self.exp_sp_rates_mapping[mapping] = get_avg_sp_rate_in_period(S_spikes, \
-                [self.miniscope_exp_fnum[self.start_idx]], [self.miniscope_exp_fnum[self.stop_idx]])
+    # Test A is a context-only test (no tones/shocks), so its only meaningful spike-rate
+    # metric spans the whole session -- see BehaviourSession.process_whole_session_sp_rates_mapping().
 
     def find_period_bounds(self):
         '''
@@ -1554,20 +1551,13 @@ class TestBSession(BehaviourSession):
         placed in a separate internal variable.
         '''
 
-        # Get actual cells of self's session that are mapped to the desired mapping. (We don't need the resulting S_idx here.)
-        if mapping == 'full':
-            S_spikes = self.S_spikes
-            S_peakval = self.S_peakval
-            S_idx = self.S_idx
-        else:
-            [S, S_spikes, S_peakval, S_idx] = self.get_S_mapping(mapping, want_peakval=want_peakval) 
-
-        # Get actual cells of TFC_cond ('session.2') that are mapped to the desired mapping
-        #[S, S_idx] = self.get_S_mapping(df_mapping[self.session_group])
+        # Get actual cells of self's session that are mapped to the desired mapping.
+        # get_S_mapping() resolves mapping == 'full' itself (all cells, no crossreg).
+        [S, S_spikes, S_peakval, S_idx] = self.get_S_mapping(mapping, want_peakval=want_peakval)
 
         #s_idx = S_idx.index(test_unit_id[mouse])
         if self.plot_sample_cell:
-            s_idx = S_idx[0]
+            s_idx = 0
             find_spikes_ca(S[s_idx,:], self.thres, plotit=True)
             if self.is_1wk:
                 suffix_str = ' 1wk'
@@ -1623,8 +1613,6 @@ class LinearTrackSession(BehaviourSession):
         else:
             self.LT_group = 'session.1'
         self.LT_type = LT_type
-        self.exp_sp_rates_mapping = dict()
-        self.exp_activity_mapping = dict()
 
         session_type = LT_type
         super().__init__(mouse, dpath, session_bounds=session_bounds, plot_sample_cell=plot_sample_cell, data_dir=data_dir, \
@@ -1682,40 +1670,8 @@ class LinearTrackSession(BehaviourSession):
             f"MAX_Y: {old_max_y:.2f} -> {new_max_y:.2f}"
             )
 
-    def process_avg_sp_rates_mapping(self, mapping, want_peakval=False):
-        '''
-        Calculate average spike rates for cells in a LinearTrack session for the given mapping.
-        '''
-
-        # Get actual cells of self's session that are mapped to the desired mapping. (We don't need the resulting S_idx here.)
-        if mapping == 'full':
-            S_spikes = self.S_spikes
-            S_peakval = self.S_peakval
-            S_idx = self.S_idx
-        else:
-            [S, S_spikes, S_peakval, S_idx] = self.get_S_mapping(mapping, want_peakval=want_peakval)
-
-        # Get actual cells of LT session ('session.2') that are mapped to the desired mapping
-        #[S, S_idx] = self.get_S_exp(df_mapping[self.LT_group])
-
-        #s_idx = S_idx.index(test_unit_id[mouse])
-        if self.plot_sample_cell:
-            s_idx = S_idx[0]
-            find_spikes_ca(S[s_idx,:], self.thres, plotit=True)
-            plt.title(self.mouse+' mapped '+self.LT_type+' cell '+str(S_idx[s_idx]))
-
-        # Get all frame numbers for spikes for this session, bounded by the experiment (in the TraceFearCondSession constructor)
-        #self.f_spikes_mapping = find_spikes_ca_S(S, self.thres)
-
-        # Get spikes within tone and shock periods and calculate average firing rate for all cells across all respective periods
-        # Put beg, end periods in a list so that the get_avg_sp_rate_in_period() can iterate over them; it's also written to handle
-        # tone periods from the equivalent TraceFearCondSession function.
-        if want_peakval:
-            self.exp_activity_mapping[mapping] = get_avg_activity_in_period(S_spikes, S_peakval, \
-                [self.miniscope_exp_fnum[self.start_idx]], [self.miniscope_exp_fnum[self.stop_idx]])
-        else:
-            self.exp_sp_rates_mapping[mapping] = get_avg_sp_rate_in_period(S_spikes, \
-                [self.miniscope_exp_fnum[self.start_idx]], [self.miniscope_exp_fnum[self.stop_idx]])
+    # A linear-track run has no discrete behaviour periods, so its only meaningful spike-rate
+    # metric spans the whole session -- see BehaviourSession.process_whole_session_sp_rates_mapping().
 
 def further_process_TFC_cond():
         

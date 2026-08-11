@@ -1,0 +1,272 @@
+SPEED-BINNED ROBUSTNESS ANALYSIS OF THE CELL-AVERAGED FIRING RATE
+==================================================================
+
+PURPOSE
+-------
+The whole-session spike-rate panels (sp_rates/) average over every cell and every frame, and the
+navigation-aware panels (navigation_aware_single_cell/place_cell_rates/) split those frames with a
+BINARY 2 cm/s movement threshold. The locomotion comparison
+(navigation_aware_single_cell/locomotion_metrics/) shows that the viral groups do not differ on any
+locomotion summary in any session -- distance travelled, mean speed, mean speed while moving, or
+percentage of time moving.
+
+Hippocampal firing is nevertheless GRADED with running speed. Two groups can have identical mean
+speed while distributing their time across speeds differently, and a binary threshold cannot see
+that. This analysis closes that gap.
+
+WHY THE RATES ARE NOT SIMPLY DIVIDED BY SPEED OR DISTANCE
+---------------------------------------------------------
+Normalizing firing rate by speed or by distance travelled is not a hippocampal convention, and is
+avoided here deliberately:
+
+  * The firing-rate/speed relation has a substantial NONZERO INTERCEPT. A rate/speed ratio
+    therefore diverges as speed approaches zero and is not interpretable.
+  * It would break comparability with every published firing rate, which is reported in events or
+    spikes per second.
+  * The standard treatment of immobility in this literature is RESTRICTION, not normalization: a
+    running-speed threshold (typically 2-5 cm/s) applied identically to spike counts and to
+    occupancy. The rationale is physiological rather than statistical -- the hippocampus occupies
+    two distinct network states, theta during locomotion and large-irregular-activity/sharp-wave-
+    ripple during immobility, with qualitatively different firing statistics. Averaging across
+    them mixes two phenomena; it is not a confound to be divided out.
+
+The two approaches used here instead are the ones the literature uses when a manipulation may
+affect behaviour: speed as a covariate, and reweighting to a common speed distribution
+(direct standardization).
+
+SPEED BINS
+----------
+Frames are assigned to fixed, global speed bins with edges (cm/s):
+
+    0, 2, 4, 6, 8, 12, 16, infinity
+
+Three properties are deliberate:
+
+  * The first internal edge is the movement threshold used everywhere else in the pipeline, so
+    bin 0 is EXACTLY the existing "immobility_only" frame class and the union of bins 1+ is
+    EXACTLY "movement_only". This is asserted by exact boolean equality for every mouse and
+    session, and it is what makes this analysis nest inside the binary one rather than sit beside
+    it.
+  * Bins are not quantile-based. The speed distribution is heavily zero-inflated, so quantile bins
+    would spend most of their resolution subdividing the sub-threshold tracking noise floor.
+  * Sub-threshold speed is a single bin. Below 2 cm/s the signal is largely tracking jitter
+    convolved with the ~200 ms smoothing kernel; subdividing it would measure the smoother rather
+    than the animal. The top bin is open so no fast frames are discarded.
+
+The speed used in every fit is the OCCUPANCY-WEIGHTED MEAN SPEED REALIZED within the bin, per
+mouse, never the nominal bin centre: the top bin has no nominal centre, and within a wide bin a
+nominal centre would inject a spurious group difference if one group habitually occupies the
+bottom of a bin and another the top.
+
+BIN RETENTION
+-------------
+A bin is retained for a session only if EVERY mouse in that session occupies it for at least 3 s.
+Retention is common across mice rather than per-mouse: with a per-mouse rule the fastest point of
+a group curve could rest on three animals of one group and one of another, which is a selection
+artifact rather than a group comparison. The common rule makes the mouse-by-bin matrix complete by
+construction, so the error band at every bin is over the same animals.
+
+The retained set must be contiguous. Occupancy is not monotonic in speed in this data -- the
+observed distributions are multi-modal, with local dips around 6-8 and 12-16 cm/s -- so contiguity
+is a conservative structural guard rather than a monotonicity argument: an interior gap would mean
+an animal barely samples one speed range while sampling both the slower and the faster ranges
+around it, which warrants inspecting the velocity trace and is therefore treated as a hard error.
+Truncation at the bottom is different and
+is legitimate: on LT1 one animal (G06) never drops below 2 cm/s across the whole 612 s session
+(minimum smoothed speed 2.06 cm/s), so the immobility bin is dropped for that session and LT1 is
+analysed as a moving-bins-only session. This is the same animal and the same documented
+behavioural property recorded in place_cell_restricted_rates_methods.txt.
+
+Coverage -- the fraction of a bin set's natural universe that survives retention -- is computed
+per mouse, reported in verification.txt and in the panel titles, and gated at 0.75. The
+denominator is the universe the bin set is meant to cover (all frames for all_bins, all moving
+frames for moving_bins), so that deliberately excluding immobility is not scored as lost data.
+
+Retained bin counts differ between sessions (the chamber sessions are slower than the linear
+track), so SLOPE MAGNITUDES ARE COMPARABLE ACROSS GROUPS WITHIN A SESSION, NEVER ACROSS SESSIONS.
+
+TWO BIN SETS
+------------
+Everything below is computed twice: over all retained bins ("all_bins") and excluding the
+immobility bin ("moving_bins"). Bin 0 contains freezing, and freezing is itself an effect of the
+manipulation under study -- that is, a mediator. Standardizing over a bin set that includes it
+partially adjusts away part of the effect of interest, so the mediator-free variant is always
+reported alongside.
+
+SIGNAL AND THE DEFINITION OF "AVG. SPIKE RATE"
+----------------------------------------------
+Deconvolved calcium event times (S), giving rates in events/s.
+
+The quantity plotted on the tuning curves, and standardized in the section below, is defined for
+each mouse and speed bin b as:
+
+    rate_b = (total events across all cells of the class falling in bin b)
+             / (n_cells * seconds of occupancy in bin b)
+
+That is, it is the MEAN ACROSS CELLS of each cell's own event rate -- events per second per cell
+-- not a summed count over cells. The denominator is cell-seconds of observation.
+
+The figures label this "Avg. spike rate (events/s)". It is deliberately NOT called a "population
+rate": that phrase reads as a summed quantity over all cells, and the two differ by a factor of
+n_cells, which varies between animals.
+
+Two properties of this definition matter for reading the figures:
+
+  * SILENT CELLS REMAIN IN THE DENOMINATOR. A cell with no events in a given speed bin
+    contributes 0 to the numerator and still counts as one cell. This is deliberate and is the
+    same convention used by the whole-session sp_rates panels and by the movement-restricted
+    panels (see the Computation section of place_cell_restricted_rates_methods.txt): it is what
+    allows a silencing manipulation to appear as a reduced average rate rather than being
+    divided away by a shrinking active-cell count.
+  * IT IS THE SAME QUANTITY AS THE PANELS THIS ANALYSIS DEFENDS, restricted to a speed bin
+    instead of to a time window or a binary movement class. That commensurability is the point;
+    a robustness check denominated in a different quantity would not defend those panels. It is
+    the identical convention implemented by get_avg_sp_rate_in_frame_mask() in caban/utilities.py,
+    and the self-standardization identity check below relies on it algebraically: occupancy-
+    weighting a mouse's own per-bin rates telescopes back to its raw rate only because the
+    numerator and denominator are defined this way.
+
+For the per-cell Poisson fits the same events are used without the across-cell averaging: each
+cell's own counts and its own exposure (seconds, not cell-seconds) enter the model directly.
+
+The Poisson likelihood below requires counts. Note that the
+single-unit response analyses elsewhere in this pipeline default to the denoised trace C, for a
+reason that does not transfer here: those tests contrast a ~10 s epoch against a ~10 s baseline,
+where rare S events are too sparse to detect modulation, whereas each speed bin here pools tens to
+hundreds of seconds.
+
+MODEL: POISSON GLM WITH LOG LINK
+---------------------------------
+For each cell, and separately for each mouse's pooled cells, binned event counts are
+regressed on realized speed:
+
+    count_b ~ Poisson(mu_b),    log mu_b = alpha + beta * speed_b + log(exposure_b)
+
+where exposure_b is seconds of occupancy in bin b (times the number of cells for the pooled
+per-mouse fit).
+
+The LOG LINK is essential to the interpretation and is not a fitting convenience. The claim this
+analysis is designed to test is whether a group difference lives in the speed-independent
+component of firing or in speed modulation. On an ADDITIVE scale that question cannot be answered:
+a multiplicative gain change -- which is what a chemogenetic manipulation produces -- multiplies
+slope and intercept by the same factor, so a purely cell-intrinsic effect would appear as a slope
+difference and be misread as locomotion-driven. On the log scale, beta is the FRACTIONAL change in
+rate per cm/s, and a pure gain change moves alpha alone.
+
+The log-exposure offset weights each bin by how long the animal actually spent there. Ordinary
+least squares on binned rates would instead treat a 3 s bin and a 400 s bin as equally
+informative, which is the dominant noise source in a per-cell fit.
+
+Fitting binned counts rather than per-frame samples is not an approximation: the binned-count GLM
+with offset is the sufficient-statistic form of per-frame Poisson regression on a step function of
+speed. It is also the only defensible choice here, because the velocity trace is upsampled from a
+15 Hz behaviour camera to the 20 Hz imaging rate and Gaussian-smoothed (sigma = 4 frames, ~200
+ms). Per-frame samples are consequently around 10x oversampled, and per-frame standard errors
+would be badly anticonservative.
+
+The estimator is verified on each run by recovering a known (alpha, beta) from synthetic Poisson
+counts. This is the only check that catches a sign or scale error in the exposure offset, which
+would otherwise produce entirely plausible-looking slopes.
+
+TEST: GROUP x SPEED INTERACTION
+--------------------------------
+The primary test is a two-stage summary-statistic analysis, consistent with the rest of this
+suite and free of pseudoreplication: one Poisson slope is fit per mouse, and the slopes are
+compared across groups by one-way ANOVA gated on Tukey HSD, with n = mice. Comparing per-mouse
+slopes across groups IS the group x speed interaction test.
+
+A NULL INTERACTION IS THE DESIRED RESULT. It means the groups modulate their firing with speed
+identically, so the whole-session rate difference cannot be a graded speed effect.
+
+Because a null result from n = 5/6/6 animals is otherwise uninformative, three further quantities
+are reported for every pairwise contrast in speed_tuning_group_stats.txt:
+
+  * the 95% confidence interval (Welch) on the group difference in slope;
+  * the fractional rate difference that a slope difference at each end of that interval would
+    produce across the observed speed span, since on the log scale a slope difference d sustained
+    over a span s multiplies the rate by exp(d*s);
+  * the observed raw rate difference, so the two can be compared directly.
+
+Together these convert "p > 0.05" into a bound: at the confidence limit, graded speed modulation
+could account for at most a stated percentage of the observed rate difference.
+
+A secondary, higher-powered analysis fits the slope per cell and compares the distributions with
+a linear mixed model, slope ~ group + (1 | mouse), cell nested in mouse, mCherry as reference.
+Cells enter this model only if they have at least 10 events spread over at least 2 retained bins.
+Because a manipulation that silences cells would preferentially exclude that group's cells and
+bias the surviving distribution, the per-group inclusion fraction is reported in the same file as
+the model and must be read with it. The per-cell INTERCEPT distribution is deliberately not
+plotted, as it would duplicate the existing cell-activity-distribution analysis.
+
+Multiplicity: interaction tests across sessions and bin sets are additionally reported with
+Benjamini-Hochberg FDR q-values. The rest of this suite does not correct for multiplicity, but
+this is a null/robustness argument, where uncorrected multiplicity errs in the direction that
+would destroy it -- a single spurious interaction among many tests would undermine the defence.
+
+DIRECT STANDARDIZATION
+----------------------
+Each mouse's per-bin rates are reweighted to a common reference speed distribution:
+
+    rate_standardized = sum_b w_b * rate_b
+
+The reference w is the UNWEIGHTED MEAN ACROSS MICE of each animal's own occupancy proportions, not
+the proportions of the pooled frames -- pooling would weight the reference by session length and
+by how many animals each group happens to contribute. Every animal contributes equally to defining
+the target distribution.
+
+The estimand is the rate that would obtain if every animal distributed its time across speeds as
+the reference animal does, within the speed range that every animal samples adequately.
+
+Two references are reported: the all-mice mean, and the mCherry (control) mean, the latter being
+the conventional epidemiological choice. If a conclusion differs between the two, it is not
+robust, and reporting both makes that visible.
+
+Because retention is common across mice, every mouse has a defined rate in every weighted bin by
+construction; there is no missing-cell case to handle. Per-mouse bin gating with per-mouse
+renormalization was rejected precisely because it would silently give each animal a different
+estimand.
+
+The SHIFT from the raw rate (rate_standardized - rate_raw, as a percentage) is reported as its own
+panel and CSV column, not merely as a standardized value. Given that the groups do not differ in
+locomotion, the correction is expected to be very small, and the magnitude of the correction is
+the substantive result -- a violin of the standardized value alone would hide it.
+
+SUPPORTING FIGURES
+------------------
+Speed-occupancy distributions. Per-mouse normalized occupancy across the retained bins, as a
+per-group mean +/- SEM curve, plus a per-mouse total-variation distance from the reference
+distribution compared across groups. This tests the premise of the whole analysis -- whether the
+speed DISTRIBUTIONS differ and not merely their means, which the locomotion summaries cannot
+address. It also licenses the standardization result: if the distributions superimpose, the
+standardized rate must equal the raw rate.
+
+Speed tuning curves. Cell-averaged rate against speed bin, per group, shown both in absolute terms
+and with each mouse normalized by its own mean rate. The normalized panel separates height from
+shape, which is the intercept/slope dissociation in visual form.
+
+Cell-class tuning curves. The same curves computed separately for place and non-place cells, as a
+positive control: place cells are expected to be the more strongly speed-modulated cell class, and
+a failure of that expectation indicates a problem with the binning or the cell partition rather
+than a biological result.
+
+All error bands are the SEM ACROSS MICE at each bin, never across cells and never across frames.
+
+KNOWN LIMITATIONS
+-----------------
+Deconvolution latency. Deconvolved event times lag the underlying spikes by the calcium rise time
+plus the deconvolution onset estimate, while the velocity smoothing kernel is symmetric. During
+acceleration and deceleration this misalignment blurs the assignment of events to speed bins and
+ATTENUATES the fitted slope -- that is, it biases towards the null result this analysis hopes to
+find. The reported analysis uses zero lag; a sensitivity run shifting the speed trace by 4 frames
+(200 ms) is available via the speed_lag_frames configuration option, and the structural assertion
+tying bin 0 to the immobility frame class is necessarily skipped when a lag is applied. The
+15 Hz to 20 Hz nearest-neighbour upsampling of the behaviour-camera trace adds a further ~67 ms of
+timing quantization.
+
+Statistical power. With 5, 6 and 6 animals per group, the interaction test is not well powered.
+This is why the confidence intervals and their implied rate effects are reported, rather than the
+p-value alone.
+
+Scope. Whole-session window only. The 180 s pre-tone window used elsewhere in this suite leaves
+too little time per moving speed bin to support this analysis, and the linear-track sessions have
+no tones.

@@ -1,0 +1,123 @@
+Place-field properties with the animal as the unit of analysis
+
+Overview
+- Reports the same four place-field measures as the primary place-field analysis -- number of
+  fields, field size, field compactness, and spatial selectivity -- but collapsed to one value
+  per mouse, so the viral groups can be compared with n = animals.
+- This is an ADDITIONAL analysis, not a replacement. The primary place-field analysis pools every
+  field from every animal within a group and compares the resulting distributions with
+  Kolmogorov-Smirnov tests, i.e. n = fields. That pooled version is retained deliberately and is
+  unchanged; its outputs remain in PLOTS_DIR/place_fields_<session_type>/.
+- The two answer different questions and are expected to differ in significance:
+    pooled (n = fields):  "do the field distributions differ between groups?"
+    per-mouse (n = mice): "do animals in different groups have different average fields?"
+  Pooling fields across animals treats fields from the same animal as independent observations,
+  which they are not; the per-mouse version removes that dependence at the cost of statistical
+  power. Reporting both makes the effect of that choice explicit.
+
+Inputs
+- Session dictionaries: TFC_cond, Test_A, Test_A_1wk, Test_B, Test_B_1wk, LT1, LT2.
+- Cell mappings resolved via session_obj.get_S_mapping(); the default is 'full'.
+- Place fields are read from the cached <session_type>-<mouse>-<n>cells-PlaceFields.npz files.
+  Nothing is re-fitted and no detection parameter is changed.
+
+Measure definitions
+- These four measures are computed by the place-field fitting code (caban/spatial.py,
+  find_place_fields) and are recorded here because no other METHODS file defines them. A "field"
+  below means one set of significant spatial-response bins after the Gaussian-mixture grouping
+  and post-hoc merging.
+
+    num_pfs              Number of merged fields belonging to that place cell.
+
+    pf_size              Area of the axis-aligned BOUNDING BOX enclosing the field's significant
+                         bins: (max_y - min_y + 1) * (max_x - min_x + 1), computed in binned
+                         coordinates and then converted to cm^2 (see below). Note this is the
+                         bounding box, NOT the number of bins in the field itself, so an
+                         L-shaped or diagonal field reports a larger size than its occupied area.
+
+    pf_compactness       len(field) / pf_size -- the fraction of the bounding box actually
+                         occupied by significant bins. Bounded in (0, 1]; 1 means the field
+                         exactly fills its bounding box, small values mean a sparse, ragged or
+                         elongated field. It is a SHAPE measure and is dimensionless.
+
+    spatial_selectivity  (sum of the cell's rate map inside the field) / (sum of the cell's
+                         entire rate map) -- the fraction of that cell's total map mass falling
+                         inside the field. Bounded in [0, 1], and the values for one cell's
+                         fields sum to at most 1. NOTE this is a FRACTION OF TOTAL, not an
+                         in-field/out-of-field ratio; an in/out ratio version exists in the
+                         source but is commented out and is not what is plotted.
+
+Spatial bin calibration (pf_size in cm^2)
+- find_place_fields computes pf_size in binned coordinates, so it is converted to cm^2 by the
+  area of one spatial bin. The factor is session-type specific, because the behaviour camera was
+  positioned differently over the two rigs and a pixel therefore does not subtend the same
+  distance in each:
+
+    chamber sessions   bin_width 34 px  x (30.0 cm / 416.257 px) = 2.450 cm per bin
+                       -> 6.004 cm^2 per bin
+    linear track       bin_width 4.5 px x (76.0 cm / 120.0 px)   = 2.850 cm per bin
+                       -> 8.123 cm^2 per bin
+
+- The linear-track figure of 76 cm is a measurement ACROSS THE TRACK WIDTH, not along it: the
+  apparatus is a sideways U, two long horizontal arms joined by a vertical arm on the right, and
+  is not 76 cm long. A width measurement calibrates the image just as well as a length one, and
+  three independent checks confirm the resulting scale applies to the 2-D coordinates that
+  Location_XY bins:
+    * centerline_miniscope, which lives in the same pixel space as loc_X / loc_Y, has an arc
+      length of 698.70 px (median across all 34 linear-track sessions, coefficient of variation
+      0.65%), giving a total track path length of 442.5 cm;
+    * with a 76 cm connecting arm that implies roughly 183 cm horizontal arms, consistent with
+      the ~350 px horizontal extent of the tracked positions;
+    * the 76 cm width predicts a 120 px extent, and the measured centroid extent across the
+      track is 98 px -- 82% of it, as expected for an animal whose centre never reaches the walls.
+  The very low across-animal variability of the centerline length reflects that the recordings
+  and video analysis were performed consistently across mice.
+- The equivalent chamber check: the chamber coordinate extent is ~425 px across, which at
+  0.0721 cm/px is 30.6 cm, matching the 30.0 cm reference distance in the calibration.
+- The conversion is applied identically in the pooled place-field panels and in these per-mouse
+  panels, and the bin width recorded on each fit is asserted against this table at run time so a
+  drift between the two fails loudly rather than silently rescaling an axis.
+- Note the resulting bins are 2.45 cm and 2.85 cm on a side, not the 2 cm that a nominal design
+  figure would suggest; the values above follow the measured camera calibrations in the code.
+
+Computation
+- For each mouse, the per-field measures (pf_size, compactness, spatial selectivity) are averaged
+  over all fields of all place cells in the mapping.
+- mean_n_pfs is the mean number of fields per PLACE CELL, not per recorded cell, so it is not
+  confounded by the proportion of place cells. That proportion is reported separately (see
+  place_cell_proportion_methods.txt).
+- Every mouse present in the session dictionary is included. The primary pooled analysis skips
+  G07 and G15 unconditionally for all sessions; here they are excluded only from the sessions
+  where they genuinely have no data (G07 from Test_B; G15 from Test_A_1wk / Test_B_1wk), because
+  the per-mouse analysis has no reason to drop otherwise valid animals.
+
+Statistics
+- The unit of analysis is the MOUSE. Each animal contributes one value per measure, shown as a
+  violin with individual animals overlaid. Groups are compared by one-way ANOVA
+  (scipy.stats.f_oneway); only if the omnibus p < 0.05 is a Tukey HSD post-hoc test run and
+  significant pairs annotated. n = number of mice per group.
+- Group order is hM3D, mCherry, hM4D (displayed as Exc, Ctl, Inh).
+
+Caveat on cross-session comparison
+- pf_size is expressed in cm^2 for every session, so LT and chamber field areas are on a common
+  unit. They are still NOT equivalent measurements. The bins themselves differ in
+  size (2.45 cm versus 2.85 cm on a side), and bin size sets the granularity at which a field can
+  be resolved at all: a coarser grid cannot express a field boundary finer than one bin, so the
+  bounding box it reports is quantized differently. Field COUNT and detection sensitivity are
+  affected for the same reason.
+- pf_compactness is dimensionless but is a ratio of bin counts, so it inherits the same
+  granularity dependence and is likewise not comparable across the two rigs.
+- The safe reading remains the WITHIN-SESSION comparison across viral groups, which is unaffected
+  because every animal in a session is binned identically.
+
+Outputs
+- PLOTS_DIR/navigation_aware_single_cell/place_field_properties_per_mouse/<session_type>/
+    pf_properties_4panel-<session_type>-<mapping>.png/.svg   (all four measures in one row)
+    num_pfs-<session_type>-<mapping>.png/.svg
+    pf_size-<session_type>-<mapping>.png/.svg
+    pf_compactness-<session_type>-<mapping>.png/.svg
+    spatial_selectivity-<session_type>-<mapping>.png/.svg
+- The filename stems deliberately match those used by the pooled analysis in
+  PLOTS_DIR/place_fields_<session_type>/ so the two versions of each measure can be viewed side
+  by side. They are written to a separate directory tree; the pooled outputs are never
+  overwritten.

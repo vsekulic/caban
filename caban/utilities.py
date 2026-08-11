@@ -270,6 +270,153 @@ def get_avg_activity_in_period(S_spikes, S_peakval, beg_period, end_period):
         avg_activity_period.append(avg_activity_rate)
     return avg_activity_period
 
+def _spike_frames_checked(frames, frame_mask, cell, caller):
+    '''
+    Coerce one cell's spike frames to int and assert they all index into frame_mask. Out-of-range
+    frames mean the mask was built against a differently-trimmed S matrix; that must fail loudly
+    rather than being silently dropped.
+    '''
+    frames = np.asarray(frames, dtype=int)
+    if frames.size and (frames.min() < 0 or frames.max() >= len(frame_mask)):
+        raise RuntimeError(
+            '{}: cell {} has spike frames outside the mask range [0, {}): min={}, max={}. '
+            'The frame mask was built against a different S matrix than the spike data.'.format(
+                caller, cell, len(frame_mask), frames.min(), frames.max())
+        )
+    return frames
+
+
+def _validate_frame_mask(f_spikes, frame_mask, caller):
+    '''
+    Shared precondition check for the frame-mask rate functions below. Returns the number of
+    eligible frames. Hard-fails rather than returning a sentinel so the root cause is visible.
+    '''
+    frame_mask = np.asarray(frame_mask, dtype=bool)
+    if frame_mask.ndim != 1:
+        raise ValueError('{}: frame_mask must be 1-D, got shape {}.'.format(caller, frame_mask.shape))
+    if len(f_spikes) == 0:
+        raise RuntimeError('{}: no cells provided (empty spike dict).'.format(caller))
+    n_eligible = int(frame_mask.sum())
+    if n_eligible < MINISCOPE_FPS:
+        raise RuntimeError(
+            '{}: frame_mask selects {} frame(s) = {:.2f} s, which is under the 1 s minimum. '
+            'A rate over such a short window is not meaningful.'.format(
+                caller, n_eligible, n_eligible / MINISCOPE_FPS)
+        )
+    return frame_mask, n_eligible
+
+
+def get_per_cell_spike_count_in_frame_mask(f_spikes, frame_mask, cells=None):
+    '''
+    Per-cell event counts inside frame_mask. This is the primitive the other frame-mask count/rate
+    functions below are built on -- see the note on validation.
+
+    f_spikes   - dict of cell index : ndarray of spike frame indices, as returned by
+                 find_spikes_ca_S() / BehaviourSession.get_S_mapping().
+    frame_mask - 1-D boolean array over frames of the (trimmed) S matrix the spike frames index
+                 into.
+    cells      - explicit iterable of keys fixing the ROW ORDER of the returned counts. Pass this
+                 whenever the counts will be joined against another per-cell array (e.g. the
+                 place/non-place labels from partition_place_cells); relying on the implicit
+                 f_spikes.keys() order is how such joins get silently misaligned.
+
+    Returns (counts int ndarray over cells, cells list).
+
+    Deliberately does NOT enforce the 1 s minimum that _validate_frame_mask applies: counts are
+    well defined over any number of frames, and assert_frame_partition_additive() in
+    caban.place_cell_rates relies on counting over frame classes that can legitimately be tiny
+    (G06 has essentially no immobility on LT1). The 1 s floor belongs to the RATE wrappers, where
+    dividing by a near-zero duration is what actually becomes meaningless.
+    '''
+    frame_mask = np.asarray(frame_mask, dtype=bool)
+    if frame_mask.ndim != 1:
+        raise ValueError('get_per_cell_spike_count_in_frame_mask: frame_mask must be 1-D, '
+                         'got shape {}.'.format(frame_mask.shape))
+    cells = list(f_spikes.keys()) if cells is None else list(cells)
+    missing = [c for c in cells if c not in f_spikes]
+    if missing:
+        raise KeyError(
+            'get_per_cell_spike_count_in_frame_mask: {} requested cell(s) absent from f_spikes, '
+            'e.g. {}.'.format(len(missing), missing[:5]))
+
+    counts = np.zeros(len(cells), dtype=int)
+    for i, cell in enumerate(cells):
+        frames = _spike_frames_checked(f_spikes[cell], frame_mask, cell,
+                                       'get_per_cell_spike_count_in_frame_mask')
+        counts[i] = np.count_nonzero(frame_mask[frames])
+    return counts, cells
+
+
+def get_per_cell_sp_rate_in_frame_mask(f_spikes, frame_mask, cells=None):
+    '''
+    Per-cell spike rate (events/s) over an arbitrary set of frames -- the per-cell counterpart of
+    get_avg_sp_rate_in_frame_mask(), whose value is exactly the mean of this one.
+
+    See get_per_cell_spike_count_in_frame_mask() for the semantics of cells and why row order
+    should be pinned explicitly. Returns (rates float ndarray over cells, cells list).
+    '''
+    frame_mask, n_eligible = _validate_frame_mask(f_spikes, frame_mask,
+                                                  'get_per_cell_sp_rate_in_frame_mask')
+    counts, cells = get_per_cell_spike_count_in_frame_mask(f_spikes, frame_mask, cells=cells)
+    return counts / (n_eligible / MINISCOPE_FPS), cells
+
+
+def get_avg_sp_rate_in_frame_mask(f_spikes, frame_mask):
+    '''
+    Population-average spike rate over an arbitrary (not necessarily contiguous) set of frames.
+
+    This is the frame-mask counterpart of get_avg_sp_rate_in_period(), which can only express a
+    single contiguous [beg, end] window. Movement and immobility frames are interleaved, so they
+    cannot be described that way.
+
+    f_spikes   - dict of cell index : ndarray of spike frame indices, as returned by
+                 find_spikes_ca_S() / BehaviourSession.get_S_mapping().
+    frame_mask - 1-D boolean array over frames of the (trimmed) S matrix the spike frames index
+                 into. True = frame counts towards the rate.
+
+    Returns a single float: events per second, averaged over ALL cells in f_spikes including
+    those with zero events in the mask. Silenced cells must count towards the population mean --
+    the same deliberate convention as get_avg_sp_rate_in_period().
+    '''
+    rates, _ = get_per_cell_sp_rate_in_frame_mask(f_spikes, frame_mask)
+    return float(np.mean(rates))
+
+
+def get_avg_activity_in_frame_mask(S_spikes, S_peakval, frame_mask):
+    '''
+    Frame-mask counterpart of get_avg_activity_in_period(): uses peak deconvolved spike
+    amplitudes rather than event counts. See get_avg_sp_rate_in_frame_mask() for the semantics
+    of frame_mask and the all-cells averaging convention.
+
+    S_peakval must be keyed identically to S_spikes, with S_peakval[cell] indexable by the
+    positions of S_spikes[cell] -- i.e. the pairing produced by get_S_mapping(want_peakval=True).
+    '''
+    frame_mask, n_eligible = _validate_frame_mask(S_spikes, frame_mask, 'get_avg_activity_in_frame_mask')
+    duration_s = n_eligible / MINISCOPE_FPS
+
+    total_activity = 0.0
+    for cell in S_spikes.keys():
+        frames = _spike_frames_checked(S_spikes[cell], frame_mask, cell, 'get_avg_activity_in_frame_mask')
+        # S_peakval[cell] is indexed by POSITION within S_spikes[cell], not by frame number --
+        # the same convention get_avg_activity_in_period() relies on via get_spikes_in_period().
+        keep_positions = np.where(frame_mask[frames])[0]
+        total_activity += np.sum(S_peakval[cell][keep_positions]) / duration_s
+    return total_activity / len(S_spikes)
+
+
+def get_spike_count_in_frame_mask(f_spikes, frame_mask):
+    '''
+    Total number of events across all cells in f_spikes that fall inside frame_mask, plus the
+    number of eligible frames. Used by the frame-class partition assertion in
+    caban.place_cell_rates (event counts are additive across a disjoint frame partition, rates
+    are not).
+
+    Returns (total_events, n_eligible_frames).
+    '''
+    counts, _ = get_per_cell_spike_count_in_frame_mask(f_spikes, frame_mask)
+    return int(counts.sum()), int(np.asarray(frame_mask, dtype=bool).sum())
+
+
 def _engram_per_cell_score(S, S_spikes, S_peakval, use_peakval=True):
     """Per-cell summary statistic used to classify engram cells.
 

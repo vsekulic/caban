@@ -674,6 +674,97 @@ _LT_1D_TRUE_DISTANCE = 76.0
 _LT_1D_DISTANCE_UNIT = "cm"
 _LT_1D_CM_PER_PX = _LT_1D_TRUE_DISTANCE / _LT_1D_PX_DISTANCE
 
+# --- Place-field spatial-bin calibration -------------------------------------------------
+# Spatial bin width (px) used to fit place fields for each session type: run_pf_and_loc passes
+# bin_width=34 for the chamber sessions, run_LT_pfs passes bin_width=4.5 for the linear track.
+# The two differ because the behaviour camera was positioned differently for the two rigs, so a
+# pixel does not mean the same distance in each -- which is exactly why place-field areas cannot
+# be compared across chamber and LT sessions without this conversion.
+#: Spatial bin width (px) used to fit place fields, per session type. Both spellings of the
+#: linear-track sessions appear in the codebase: BehaviourSession.session_type is "LT1"/"LT2",
+#: while plot_pf_analyses is called with the ds attribute name "TFC_cond_LT1"/"TFC_cond_LT2".
+_PF_MAP_BIN_WIDTH_PX = {
+    "TFC_cond": 34.0, "Test_A": 34.0, "Test_A_1wk": 34.0, "Test_B": 34.0, "Test_B_1wk": 34.0,
+    "LT1": 4.5, "LT2": 4.5, "TFC_cond_LT1": 4.5, "TFC_cond_LT2": 4.5,
+}
+
+_PF_MAP_LT_SESSIONS = ("LT1", "LT2", "TFC_cond_LT1", "TFC_cond_LT2")
+
+#: cm per pixel in the 2-D loc_X / loc_Y space that Location_XY bins, per session type.
+#:
+#: Chambers use _TFC_TEST_2D_CM_PER_PX, defined for exactly these session types
+#: (_TFC_TEST_2D_SESSION_TYPES) and passed by the decoder as position_scale when decoding 2-D
+#: position from the same coordinates. Cross-check: the chamber coordinate extent is ~425 px in
+#: Y, which at this scale is 30.6 cm -- matching _TFC_TEST_2D_TRUE_DISTANCE = 30.0 cm.
+#:
+#: The linear track uses _LT_1D_CM_PER_PX. That constant is built from a 120 px / 76 cm pair
+#: measured ACROSS THE TRACK WIDTH (the track is a sideways U -- two long horizontal arms joined
+#: by a vertical arm on the right -- and is not 76 cm long), but a width measurement calibrates
+#: the image just as well as a length one, and it is already used as the cm/px of this very pixel
+#: space by _arclength_to_2d_on_centerline() below. Three checks agree:
+#:
+#:   * centerline_miniscope, which lives in the same pixel space as loc_X / loc_Y, has an arc
+#:     length of 698.70 px (median over all 34 LT sessions, CV 0.65% -- the tracking is highly
+#:     consistent across animals), giving a total track path of 442.5 cm;
+#:   * with a 76 cm connector that implies ~183 cm arms, consistent with the ~350 px X extent;
+#:   * the 76 cm width predicts a 120 px extent, and the measured centroid Y extent is 98 px --
+#:     82% of it, as expected for an animal whose centre never reaches the walls.
+_PF_MAP_CM_PER_PX = {
+    "TFC_cond": _TFC_TEST_2D_CM_PER_PX, "Test_A": _TFC_TEST_2D_CM_PER_PX,
+    "Test_A_1wk": _TFC_TEST_2D_CM_PER_PX, "Test_B": _TFC_TEST_2D_CM_PER_PX,
+    "Test_B_1wk": _TFC_TEST_2D_CM_PER_PX,
+    "LT1": _LT_1D_CM_PER_PX, "LT2": _LT_1D_CM_PER_PX,
+    "TFC_cond_LT1": _LT_1D_CM_PER_PX, "TFC_cond_LT2": _LT_1D_CM_PER_PX,
+}
+
+
+def pf_bin_side_cm(session_type):
+    """Side length in cm of one place-field spatial bin, for *session_type*.
+
+    Chamber sessions: 34 px * (30.0 cm / 416.257 px) = 2.450 cm.
+
+    Raises for the linear track, whose 2-D pixel scale is not calibrated (see
+    _PF_MAP_CM_PER_PX), and for any unknown session type. Guessing a scale here would put a wrong
+    unit on a published axis, which is worse than having no cm axis at all.
+    """
+    if session_type not in _PF_MAP_BIN_WIDTH_PX:
+        raise KeyError(
+            'No place-field bin calibration for session type {!r}. Known: {}. Add its bin width '
+            'to _PF_MAP_BIN_WIDTH_PX and confirm which camera calibration applies.'.format(
+                session_type, sorted(_PF_MAP_BIN_WIDTH_PX)))
+    if session_type not in _PF_MAP_CM_PER_PX:
+        raise KeyError(
+            'No 2-D cm/px calibration for session type {!r}, so place-field areas cannot be '
+            'converted to cm^2. _LT_1D_CM_PER_PX is the 1-D linearized-coordinate scale, built '
+            'from a width measurement, and does not apply to loc_X / loc_Y. Measure the 2-D '
+            'pixel scale for that rig and add it to _PF_MAP_CM_PER_PX.'.format(session_type))
+    return _PF_MAP_BIN_WIDTH_PX[session_type] * _PF_MAP_CM_PER_PX[session_type]
+
+
+def pf_size_is_cm2(session_type):
+    """Whether pf_size can be reported in cm^2 for *session_type* (False -> bins^2)."""
+    return session_type in _PF_MAP_CM_PER_PX
+
+
+def pf_bin_area_cm2(session_type):
+    """Area in cm^2 of one place-field spatial bin -- the factor converting a pf_size in bins^2.
+
+    ``pf_size`` as computed by find_place_fields is a bounding-box area in BINNED coordinates
+    (bins^2); multiplying by this gives cm^2. Chamber 6.004 cm^2, LT 8.123 cm^2.
+    """
+    return pf_bin_side_cm(session_type) ** 2
+
+
+def assert_pf_bin_width_matches(session_type, bin_width_px):
+    """Fail loudly if a fit's actual bin width has drifted from the calibration table."""
+    expected = _PF_MAP_BIN_WIDTH_PX.get(session_type)
+    if expected is not None and not np.isclose(float(bin_width_px), expected, rtol=0, atol=1e-9):
+        raise AssertionError(
+            'Place fields for {} were fit at bin_width={} px but the cm conversion table says {} '
+            'px. The cm^2 axis would be wrong by a factor of {:.3f}; update '
+            '_PF_MAP_BIN_WIDTH_PX.'.format(session_type, bin_width_px, expected,
+                                           (float(bin_width_px) / expected) ** 2))
+
 # METHODS-template copy helper. Defined here (before the deferred caban.analysis
 # import below) so that caban.analysis can import it at module top without breaking
 # the decoder<->analysis circular import — analysis is imported at the deferred block

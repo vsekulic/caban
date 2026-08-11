@@ -1,0 +1,71 @@
+Locomotion metrics compared across viral groups
+
+Overview
+- Tests whether the three viral groups differ in how much the animals actually navigate.
+- This is the premise check for the whole navigation-aware suite. The concern motivating that
+  suite is that group differences in the cell-averaged spike rate could reflect group differences in
+  locomotion rather than a cell-intrinsic effect of the DREADD manipulation. If the groups do not
+  differ in locomotion, that explanation is ruled out directly. If they do, the movement-restricted
+  rate panels and the rate-vs-locomotion ANCOVA are what adjust for it.
+
+Inputs
+- Session dictionaries: TFC_cond, Test_A, Test_A_1wk, Test_B, Test_B_1wk, LT1, LT2.
+- Per-frame smoothed speed (velocities_miniscope_smooth, cm/s), derived from the ezTrack
+  LocationOutput behaviour-camera tracking, resampled to miniscope frames by nearest timestamp
+  and Gaussian-smoothed. This is the same trace the occupancy analysis consumes, so the numbers
+  are directly comparable with the occupancy panels.
+
+Metrics
+- distance_cm            total path length over the window, computed as sum(speed) * frame duration.
+- mean_speed_cms         mean speed over all frames in the window, including immobile frames.
+- mean_speed_moving_cms  mean speed over frames with speed >= 2 cm/s only.
+- pct_time_moving        percentage of frames in the window with speed >= 2 cm/s.
+- The last two decompose the first two: mean_speed_cms is approximately the product of how fast
+  the animal moves when it moves and how often it moves. Separating them distinguishes an animal
+  that runs fast in short bouts from one that ambles continuously, which the total distance alone
+  cannot.
+- The 2 cm/s threshold is VELOCITY_THRESHOLD, the same criterion that defines S_mov / S_imm and
+  the immobility score in the occupancy analysis.
+
+Analysis windows
+- whole_session: the entire trimmed recording, matching the whole-session spike-rate panels.
+- pretone_180s: the pre-tone period, taken as the first tone onset where tones exist and the
+  first 180 s otherwise. This is the window used by the occupancy analysis and the 2D
+  spatial-information suite. LT1 / LT2 have no tones and receive only whole_session.
+
+Statistics
+- The unit of analysis is the MOUSE. Each animal contributes one value per metric, shown as a
+  violin with individual animals overlaid. Groups are compared by one-way ANOVA
+  (scipy.stats.f_oneway); only if the omnibus p < 0.05 is a Tukey HSD post-hoc test run and
+  significant pairs annotated. n = number of mice per group.
+- Groups are built from the mice actually present in each session dictionary (G07 absent from
+  Test_B; G15 absent from Test_A_1wk / Test_B_1wk).
+- Group order is hM3D, mCherry, hM4D (displayed as Exc, Ctl, Inh).
+- A non-significant omnibus test here is evidence of absence only to the extent the design is
+  powered to detect a difference; the accompanying per-mouse table reports the group means and
+  the full per-animal values so the effect size can be judged rather than inferred from p alone.
+
+Why these metrics are reported separately rather than divided out of the firing rates
+- Firing rates elsewhere in this suite are NOT normalized by speed or by distance travelled. That
+  is deliberate. The rate/speed relation has a substantial nonzero intercept, so a rate/speed
+  ratio diverges as speed approaches zero and is uninterpretable, and it would break comparability
+  with every published firing rate. The standard treatment of immobility in the hippocampal
+  literature is RESTRICTION -- a running-speed threshold applied identically to spike counts and
+  to occupancy -- not normalization, because the hippocampus occupies two distinct network states
+  (theta during locomotion, large-irregular-activity/sharp-wave-ripple during immobility) with
+  qualitatively different firing statistics. Averaging across them mixes two phenomena rather than
+  averaging out a confound.
+- This figure is therefore a PREMISE CHECK, not a correction: it establishes whether there is any
+  locomotion difference for the firing-rate comparisons to be confounded by. The movement-
+  restricted panels in place_cell_rates/ are the restriction, and rate_vs_locomotion/ is the
+  covariate adjustment.
+- The metrics here are group MEANS. Two groups can share a mean speed while distributing their
+  time across speeds differently, and this figure cannot see that. The speed-binned analysis in
+  navigation_aware_single_cell/speed_tuning/ tests the distributions directly, and reweights the
+  rates to a common speed distribution (direct standardization) rather than dividing by speed.
+
+Outputs
+- PLOTS_DIR/navigation_aware_single_cell/locomotion_metrics/<window>/
+    locomotion_group_comparison-<session_type>.png/.svg
+    locomotion_summary.csv        (tidy per-mouse table: mouse, group, session, all metrics)
+    locomotion_group_stats.txt    (per-session, per-metric ANOVA F and p, with group means)

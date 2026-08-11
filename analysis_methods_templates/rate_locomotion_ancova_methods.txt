@@ -1,0 +1,62 @@
+Cell-averaged spike rate versus locomotion: ANCOVA adjustment
+
+Overview
+- Asks whether the viral-group difference in the whole-session cell-averaged spike rate survives
+  statistical adjustment for how much each animal navigated.
+- This complements the two other ways the same question is approached in this suite:
+    - locomotion_group_comparison: is there a locomotion difference to adjust for at all?
+    - place_cell_rates (movement_only): does the difference survive normalising rate by seconds
+      of locomotion rather than seconds of session?
+  The ANCOVA is the covariate-adjustment version: it keeps every frame in the rate but removes
+  the linear contribution of locomotion before testing the group term.
+
+Inputs
+- One row per mouse per session, carrying:
+    rate            whole-session cell-averaged spike rate or amplitude-weighted activity, computed
+                    over all cells in the mapping (the same quantity as the whole-session
+                    sp_rates panel).
+    group           hM3D / hM4D / mCherry.
+    locomotion      distance_cm or mean_speed_cms from the locomotion analysis, over the matching
+                    window.
+- Both metrics (event rate and amplitude-weighted activity) and both locomotion covariates are
+  run, giving four models per session per window.
+
+Model
+- Full model:     rate ~ locomotion + C(group)      (ordinary least squares, statsmodels)
+- Reduced model:  rate ~ locomotion
+- Group-only:     rate ~ C(group)
+- The reported group effect is the nested F-test of the full model against the reduced model
+  (statsmodels.stats.anova_lm), i.e. the variance in rate explained by group OVER AND ABOVE
+  locomotion. The group-only model is reported alongside it so the change produced by the
+  adjustment is visible rather than implied.
+- The fitted locomotion slope and its p-value are reported, since a covariate that does not
+  predict rate cannot be confounding the group comparison in the first place.
+- Pearson correlations between rate and locomotion are reported pooled and within each group.
+  The within-group correlations matter because ANCOVA assumes a common slope; markedly different
+  within-group slopes indicate a group-by-locomotion interaction that the additive model does not
+  capture, and the pooled correlation would then be misleading.
+
+Assumptions and their limits
+- n is the number of animals (at most 17, fewer per group), so these models are low-powered and
+  sensitive to individual animals. The scatter plots show every animal so leverage points are
+  visible.
+- The model assumes a linear rate-locomotion relationship and a common slope across groups.
+  Neither is tested formally at this sample size; both are inspected visually via the per-group
+  regression lines drawn on the scatter.
+- Adjustment for a covariate that is itself affected by the manipulation removes part of the
+  effect of interest. If the DREADD manipulation changes locomotion, the adjusted group effect is
+  a conservative lower bound on the total effect, not an unbiased estimate of a direct effect.
+
+Statistics reported
+- Group effect after adjustment: F and p from the nested model comparison.
+- Group effect without adjustment: F and p from the group-only model.
+- Locomotion slope and p-value from the full model.
+- Pooled and within-group Pearson r with p-values.
+- The complete statsmodels summary of the full model.
+
+Outputs
+- PLOTS_DIR/navigation_aware_single_cell/rate_vs_locomotion/<session_type>[-activity]/<window>/
+    rate_vs_distance_cm-<session_type>-<mapping>.png/.svg
+    rate_vs_mean_speed_cms-<session_type>-<mapping>.png/.svg
+    ancova-<locomotion_metric>-<session_type>-<mapping>.txt
+- <session_type> is suffixed with '-activity' for the amplitude-weighted variant.

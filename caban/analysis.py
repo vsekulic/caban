@@ -30,7 +30,8 @@ from sklearn.metrics.pairwise import cosine_similarity
 from scipy.spatial.distance import jaccard
 import pickle
 from pathlib import Path
-from caban.decoder import _LT_1D_CM_PER_PX, _LT_1D_DISTANCE_UNIT, _copy_analysis_methods_template
+from caban.decoder import (_LT_1D_CM_PER_PX, _LT_1D_DISTANCE_UNIT, _copy_analysis_methods_template,
+                           assert_pf_bin_width_matches, pf_bin_area_cm2)
 from caban.single_unit_common import (
     GROUP_ORDER as _SU_GROUP_ORDER,
     ecdf_panel, build_cell_records, fit_group_mixed_model,
@@ -185,48 +186,76 @@ def plot_session_sp_rates(PLOTS_DIR, mouse_groups, sp_rates, session_type, title
     plt.savefig(os.path.join(PLOTS_DIR, 'sp_rates', '{}_sp_rates'.format(session_type), '{}_sp_rates-'.format(session_type)+title_str+'-avg.png'), format='png', dpi=300)
     plt.close()
 
-def plot_LT_sp_rates(PLOTS_DIR, mouse_groups, sp_rates, title_str, figsize=(8,8), want_peakval=False):
-    
-    # Pre-allocate groups dict placeholders for average firing rates per group
-    groups_avg = dict()
-    mice_per_group = dict()
-    for mouse in mouse_groups.keys():
-        group = mouse_groups[mouse]
-        groups_avg[group] = [0]
+#: Axis labels for the cell-averaged rate/activity metrics. Single source of truth -- imported by
+#: caban.place_cell_rates, caban.locomotion and caban.speed_tuning so every panel showing this
+#: quantity is labelled identically.
+#:
+#: "Avg." and not "Population": the quantity is the MEAN ACROSS CELLS of each cell's own rate
+#: (silent cells included in the denominator), not a summed population count. "Population rate"
+#: reads as the latter, and the two differ by a factor of n_cells -- which varies by mouse.
+_WHOLE_SESSION_YLABEL = {
+    False: 'Avg. spike rate (events/s)',
+    True: 'Avg. activity (peak $S$/s)',
+}
 
-        if group not in mice_per_group:
-            mice_per_group[group] = 1
-        else:
-            mice_per_group[group] += 1
-    for group in groups_avg.keys():
-        groups_avg[group] = np.array(0.0)
 
-    mice = sp_rates.keys()
-    for m in mice:
-        mouse_group = mouse_groups[m]
-        sp_rate = np.array(sp_rates[m][0])
-        groups_avg[mouse_group] += sp_rate
+def plot_whole_session_sp_rates(PLOTS_DIR, mouse_groups, sp_rates, session_type, mapping,
+                                want_peakval=False, figsize=(2.4, 3.2), auto_close=True):
+    '''
+    Violin + per-mouse scatter of the whole-session cell-averaged rate (or activity) for one
+    cell mapping, compared across DREADD groups.
 
-    width = 0.35
+    Unlike plot_session_sp_rates()'s '-avg' panel -- which averages the behaviour periods and
+    therefore tests with n = number of periods -- this panel's unit of analysis is the MOUSE:
+    one value per animal, one-way ANOVA gated with Tukey HSD post-hoc, n = mice per group.
+
+    sp_rates    - dict of mouse : 1-element list, as produced by
+                  BehaviourSession.process_whole_session_sp_rates_mapping()
+    session_type- e.g. 'TFC_cond', 'Test_A-activity'; selects the output directory
+    mapping     - cell mapping label, e.g. 'full' or 'LT1+LT2+TFC_cond'
+    '''
+    group_order = ['hM3D', 'mCherry', 'hM4D']
+
+    # Build per-group arrays from the mice actually present in sp_rates -- not from
+    # mouse_groups -- since Test_B lacks G07 and Test_A_1wk lacks G15.
+    values_per_group = {}
+    for group in group_order:
+        mice = [m for m in sp_rates.keys() if mouse_groups[m] == group]
+        for m in mice:
+            if len(sp_rates[m]) != 1:
+                raise RuntimeError(
+                    f'plot_whole_session_sp_rates expects one value per mouse; got '
+                    f'{len(sp_rates[m])} for {m} ({session_type}, mapping={mapping}).'
+                )
+        if len(mice) < 2:
+            raise RuntimeError(
+                f'Group {group} has {len(mice)} mouse/mice with whole-session data for '
+                f'{session_type} mapping={mapping}; need >=2 for a group comparison.'
+            )
+        values_per_group[group] = np.array([[float(sp_rates[m][0])] for m in mice], dtype=float)
+
+    # _draw_violin_triplet's bracket geometry uses absolute data offsets tuned for 0-1
+    # fractions, so fix the y-range explicitly -- rates are ~0.01-0.5 and activity is O(10-100).
+    panel_max = max(np.max(values_per_group[g]) for g in group_order)
+    ylim = (0.0, panel_max * 1.35 if panel_max > 0 else 1.0)
+
     fig, ax = plt.subplots(figsize=figsize)
-    group_num = 0
-    group_tot = len(groups_avg.keys())
+    ax.spines[['right', 'top']].set_visible(False)
+    _draw_violin_triplet(ax, values_per_group, 0, group_order, group_colours,
+                         ylim=ylim, ylabel=_WHOLE_SESSION_YLABEL[want_peakval])
+    ax.set_xticks(range(len(group_order)))
+    ax.set_xticklabels(['Exc', 'Ctl', 'Inh'], size='medium')
+    ax.set_title('Whole-session ' + mapping, size='small')
+    plt.tight_layout(pad=0.5)
 
-    for group in sorted(groups_avg.keys()):
-        group_avg = groups_avg[group] 
-        #group_avg = group_avg / mice_per_group[group]
-        group_avg = group_avg / mice_per_group[group]
-        ax.bar(((group_num)*width)/group_tot, group_avg, label=group, color=group_colours[group], width=width/group_tot)
-        group_num += 1
-    ax.legend()
-    plt.title(title_str)
-    if want_peakval:
-        dir_str = 'LT_activity'
-    else:
-        dir_str = 'LT_sp_rates'
-    os.makedirs(os.path.join(PLOTS_DIR, dir_str), exist_ok=True)
-    plt.savefig(os.path.join(PLOTS_DIR, dir_str, dir_str+'-'+title_str+'.png'), format='png', dpi=300)
-    plt.close()
+    save_dir = os.path.join(PLOTS_DIR, 'sp_rates', '{}_sp_rates'.format(session_type))
+    os.makedirs(save_dir, exist_ok=True)
+    _copy_analysis_methods_template('session_spike_rates_methods.txt', save_dir)
+    filename_root = '{}_sp_rates-Whole-session '.format(session_type) + mapping
+    fig.savefig(os.path.join(save_dir, filename_root + '.png'), format='png', dpi=300)
+    fig.savefig(os.path.join(save_dir, filename_root + '.svg'), format='svg')
+    if auto_close:
+        plt.close(fig)
 
 def plot_binned_sp_rates_mapping(PLOTS_DIR, mouse_groups, binned_sp_rates, mapping, Session, session_type, bin_width, figsize=(8,3.5), want_close=True,
                                  plot_bars=True, paper_dir=None, suffix=''):
@@ -235,16 +264,28 @@ def plot_binned_sp_rates_mapping(PLOTS_DIR, mouse_groups, binned_sp_rates, mappi
         bin_lengths_set.add(len(binned_sp_rates[mouse]))
     num_bins = max(bin_lengths_set)
     
-    if session_type == 'TFC_cond' or session_type == 'TFC_cond-activity':
+    # Event-marker configuration per session family. Test_A is a context-only exposure with
+    # no tones or shocks at all, so its session objects carry no tone_onsets/tone_offsets and
+    # the marker-averaging below must not run. Unknown session types are a hard error rather
+    # than silently defaulting to a 3-tone layout.
+    if session_type in ('TFC_cond', 'TFC_cond-activity'):
+        has_tone_events = True
         want_shocks = True
         num_periods = 5
-    else:
+    elif session_type in ('Test_B', 'Test_B-activity', 'Test_B_1wk', 'Test_B_1wk-activity'):
+        has_tone_events = True
         want_shocks = False
         num_periods = 3
+    elif session_type in ('Test_A', 'Test_A-activity', 'Test_A_1wk', 'Test_A_1wk-activity'):
+        has_tone_events = False
+        want_shocks = False
+        num_periods = 0
+    else:
+        raise ValueError(
+            f"plot_binned_sp_rates_mapping: unrecognised session_type '{session_type}'. "
+            f"Add it to the event-marker allowlist."
+        )
 
-    groups_set = set()
-    for mouse in mouse_groups.keys():
-        groups_set.add(mouse_groups[mouse])
     groups_set = {'hM3D', 'mCherry', 'hM4D'}
 
     # Find average tone/shock onsets/offsets for all mice to overlay on top of histogram
@@ -253,34 +294,27 @@ def plot_binned_sp_rates_mapping(PLOTS_DIR, mouse_groups, binned_sp_rates, mappi
     if want_shocks:
         shock_onsets = np.zeros(num_periods)
         shock_offsets = np.zeros(num_periods)
-    num_mice = 0
-    for mouse in Session.keys():
-        if len(Session[mouse].tone_offsets) != num_periods:
-            continue
-        print(mouse)
-        print(Session[mouse].tone_onsets)
-        print(Session[mouse].tone_offsets)
+    if has_tone_events:
+        num_mice = 0
+        for mouse in Session.keys():
+            if len(Session[mouse].tone_offsets) != num_periods:
+                continue
+            tone_onsets += np.array(Session[mouse].tone_onsets)
+            tone_offsets += np.array(Session[mouse].tone_offsets)
+            if want_shocks:
+                shock_onsets += np.array(Session[mouse].shock_onsets)
+                shock_offsets += np.array(Session[mouse].shock_offsets)
+            num_mice += 1
+        if num_mice == 0:
+            raise RuntimeError(
+                f'plot_binned_sp_rates_mapping: no {session_type} mouse has {num_periods} '
+                f'tone periods; cannot average event markers.'
+            )
+        tone_onsets = tone_onsets / num_mice / bin_width
+        tone_offsets = tone_offsets / num_mice / bin_width
         if want_shocks:
-            print(Session[mouse].shock_onsets)
-            print(Session[mouse].shock_offsets)
-        print("---")
-        tone_onsets += np.array(Session[mouse].tone_onsets)
-        tone_offsets += np.array(Session[mouse].tone_offsets)
-        if want_shocks:
-            shock_onsets += np.array(Session[mouse].shock_onsets)
-            shock_offsets += np.array(Session[mouse].shock_offsets)
-        print(tone_onsets)
-        print(tone_offsets)
-        if want_shocks:
-            print(shock_onsets)
-            print(shock_offsets)
-        print('---')
-        num_mice += 1
-    tone_onsets = tone_onsets / num_mice / bin_width
-    tone_offsets = tone_offsets / num_mice / bin_width
-    if want_shocks:
-        shock_onsets = shock_onsets / num_mice / bin_width
-        shock_offsets = shock_offsets / num_mice / bin_width
+            shock_onsets = shock_onsets / num_mice / bin_width
+            shock_offsets = shock_offsets / num_mice / bin_width
 
     groups_bins = dict()
     mice_per_group = dict()
@@ -292,7 +326,10 @@ def plot_binned_sp_rates_mapping(PLOTS_DIR, mouse_groups, binned_sp_rates, mappi
         groups_bins[group] = np.zeros(num_bins)
         mice_per_group[group] = 0
         norm_groups[group] = 0
-        sem_bins[group] = np.zeros((list(mouse_groups.values()).count(group), num_bins))
+        # Size by the mice actually present in binned_sp_rates, NOT by every mouse assigned to
+        # the group: Test_B has no G07 and Test_A_1wk has no G15, and an unfilled all-zero row
+        # would inflate the across-mouse std used for the SEM ribbon below.
+        sem_bins[group] = np.zeros((sum(1 for m in binned_sp_rates if mouse_groups[m] == group), num_bins))
         norm_sem_vector[group] = np.zeros(num_bins)
 
     group_i = {'hM3D':0, 'hM4D':0, 'mCherry':0}
@@ -326,7 +363,19 @@ def plot_binned_sp_rates_mapping(PLOTS_DIR, mouse_groups, binned_sp_rates, mappi
         else:
             #x = range(0,len(bins))
             x = np.linspace(0, len(bins)*bin_width/20/60, num=len(bins))
-            sem_group = np.std(sem_bins[group],0) / np.sqrt(np.sum(sem_bins[group],0))
+            # SEM across mice: std / sqrt(n_mice). This previously divided by
+            # sqrt(sum of the values), whose scale tracks the data magnitude rather than the
+            # sample size -- it widened the ribbon for low-valued spike rates and narrowed it
+            # for high-valued activity, and produced nan wherever a bin summed to zero.
+            sem_group = np.std(sem_bins[group], 0) / np.sqrt(norm_groups[group])
+            _sem_group_old = np.divide(
+                np.std(sem_bins[group], 0), np.sqrt(np.sum(sem_bins[group], 0)),
+                out=np.full(num_bins, np.nan), where=np.sum(sem_bins[group], 0) > 0,
+            )
+            print('[SEM] {}{} {} {}: n={} mice, ribbon {:.4g} -> {:.4g} ({:.1f}x)'.format(
+                session_type, suffix, mapping, group, norm_groups[group],
+                np.nanmean(_sem_group_old), np.mean(sem_group),
+                np.mean(sem_group) / np.nanmean(_sem_group_old) if np.nanmean(_sem_group_old) > 0 else float('nan')))
             plt.plot(x, bins, color=group_colours[group])
             plt.fill_between(x, bins - sem_group, bins + sem_group, color=group_colours[group], alpha=0.1)
             plt.xticks(np.arange(1,np.floor(len(bins)*bin_width/20/60)+1,2))
@@ -336,11 +385,12 @@ def plot_binned_sp_rates_mapping(PLOTS_DIR, mouse_groups, binned_sp_rates, mappi
     multiplier = 1
     if not plot_bars:
         multiplier = bin_width/20/60
-    [plt.axvline(x, c='b', ls='--') for x in tone_onsets*multiplier]
-    [plt.axvline(x, c='b', ls='--') for x in tone_offsets*multiplier]
-    if want_shocks:
-        [plt.axvline(x, c='r', ls='--') for x in shock_onsets*multiplier]
-        [plt.axvline(x, c='r', ls='--') for x in shock_offsets*multiplier]
+    if has_tone_events:
+        [plt.axvline(x, c='b', ls='--') for x in tone_onsets*multiplier]
+        [plt.axvline(x, c='b', ls='--') for x in tone_offsets*multiplier]
+        if want_shocks:
+            [plt.axvline(x, c='r', ls='--') for x in shock_onsets*multiplier]
+            [plt.axvline(x, c='r', ls='--') for x in shock_offsets*multiplier]
 
     if not plot_bars:
         plt.xlim([0,len(bins)*bin_width/20/60])
@@ -4768,9 +4818,14 @@ def plot_pf_analyses(PLOTS_DIR, session, mouse_groups, session_str, crossreg=Non
         pf_size = {k:sess.fm.pf.pf_size[k] for k in pf_keys}
         meas_num_pfs[group] = np.append(meas_num_pfs[group], [len(v) for v in pf_size.values()])
 
-        # Just append all pf sizes, but have to do this list comprehension to 'flatten' (why don't you have a nice way of flattening a list of lists with 
+        # Just append all pf sizes, but have to do this list comprehension to 'flatten' (why don't you have a nice way of flattening a list of lists with
         # different length sublists, python or numpy??)
-        meas_pf_size[group] = np.append(meas_pf_size[group], [x for cell in list(pf_size.values()) for x in cell])
+        # pf_size is a bounding-box area in BINNED coordinates; scale to cm^2 so the axis label is
+        # true. The factor differs by session type because the behaviour camera sat differently
+        # over the chamber and the linear track (6.004 vs 8.123 cm^2 per bin).
+        assert_pf_bin_width_matches(session_str, sess.fm.loc.bin_width)
+        bin_area = pf_bin_area_cm2(session_str)
+        meas_pf_size[group] = np.append(meas_pf_size[group], [x * bin_area for cell in list(pf_size.values()) for x in cell])
 
         # ditto for compactness, spatial selectivity
         compactness_pf = {k:sess.fm.pf.compactness_pf[k] for k in pf_keys}

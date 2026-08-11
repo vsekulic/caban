@@ -9,6 +9,7 @@ none of them re-implements group styling, ECDF panels, the cell-nested-in-mouse
 mixed model, or false-discovery correction.
 """
 import os
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -219,14 +220,21 @@ def _ecdf(values):
     return values, y
 
 
-def ecdf_panel(ax, per_cell_by_group, per_mouse_by_group=None, xlabel='', title=''):
+def ecdf_panel(ax, per_cell_by_group, per_mouse_by_group=None, xlabel='', title='',
+               group_order=None):
     """Draw per-group pooled per-cell ECDFs (bold) with optional per-mouse ECDFs
     (thin) on one axis.
 
     per_cell_by_group  : dict group -> 1-D array of per-cell values (pooled).
     per_mouse_by_group : dict group -> {mouse: 1-D array} for the thin lines.
+    group_order        : draw/legend order; defaults to this module's GROUP_ORDER.
+                         caban.place_cell_rates and the navigation-aware suite use the
+                         CLAUDE.md order (hM3D, mCherry, hM4D), which differs from the one
+                         here; they pass their own rather than this module changing, since
+                         four existing analyses' published figures depend on the default.
+                         Affects draw order only, never values.
     """
-    for group in GROUP_ORDER:
+    for group in (GROUP_ORDER if group_order is None else group_order):
         colour = GROUP_COLOURS[group]
         if per_mouse_by_group is not None:
             for mouse_vals in per_mouse_by_group.get(group, {}).values():
@@ -264,13 +272,40 @@ def build_cell_records(per_cell_by_group_mouse, value_name='value'):
     return pd.DataFrame(rows)
 
 
+def _mixed_model_degeneracy(result, n_fixed):
+    """Reason a converged MixedLM fit is unusable, or None if it is fine.
+
+    statsmodels can *converge* onto the boundary of the parameter space with the random-effect
+    variance collapsed to zero. It then reports a singular covariance, standard errors inflated
+    by many orders of magnitude (or missing entirely), and p-values pinned at 1.000 — output that
+    is indistinguishable from a clean null unless it is checked for. That has to be caught and
+    reported, not passed through as a successful fit.
+    """
+    bse = np.asarray(result.bse[:n_fixed], dtype=float)
+    if not np.all(np.isfinite(bse)):
+        return 'the fixed-effect standard errors are not all finite'
+
+    params = np.asarray(result.params[:n_fixed], dtype=float)
+    scale = np.max(np.abs(params)) if np.max(np.abs(params)) > 0 else 1.0
+    if np.max(bse) > 1e6 * scale:
+        return ('the fixed-effect standard errors are inflated by more than 1e6 relative to the '
+                'coefficients ({:.3g} vs {:.3g})'.format(np.max(bse), scale))
+
+    group_var = float(np.asarray(result.cov_re)[0, 0])
+    if not np.isfinite(group_var) or group_var <= 0.0:
+        return 'the random-effect (mouse) variance collapsed to {:.3g}'.format(group_var)
+    return None
+
+
 def fit_group_mixed_model(df, value_col='value', reference='mCherry'):
     """Fit ``value ~ C(group)`` with a per-mouse random intercept (cell nested in
     mouse), so single-cell n is honoured without pseudoreplication.
 
     Returns (summary_text, method_used). Falls back, with an explicit note in the
-    returned text, to mouse-clustered OLS if the mixed model does not converge —
-    a documented statistical fallback, not a silent error swallow.
+    returned text, to mouse-clustered OLS if the mixed model does not converge OR
+    converges to a degenerate solution (see :func:`_mixed_model_degeneracy`) — a
+    documented statistical fallback, not a silent error swallow. Mouse-clustered OLS
+    answers the same question with the same clustering, without the variance component.
     """
     df = df[np.isfinite(df[value_col])].copy()
     if df['group'].nunique() < 2 or len(df) < 6:
@@ -280,22 +315,34 @@ def fit_group_mixed_model(df, value_col='value', reference='mCherry'):
     df['group'] = pd.Categorical(df['group'],
                                  categories=[reference] + [g for g in GROUP_ORDER if g != reference])
     formula = f'{value_col} ~ C(group, Treatment(reference="{reference}"))'
+    header = (f'Formula: {formula}\n'
+              f'N cells = {len(df)}, N mice = {df["mouse"].nunique()}\n\n')
+
+    def _clustered_ols(reason):
+        ols = smf.ols(formula, data=df).fit(
+            cov_type='cluster', cov_kwds={'groups': df['mouse']})
+        text = (f'Mixed model unusable ({reason}); using mouse-clustered OLS instead.\n'
+                f'Cluster = mouse.\n{header}{ols.summary()}\n')
+        return text, 'clustered_ols'
+
     try:
         model = smf.mixedlm(formula, data=df, groups=df['mouse'])
-        result = model.fit(reml=True, method='lbfgs')
+        with warnings.catch_warnings():
+            # statsmodels signals boundary/singular fits through warnings; they are inspected
+            # explicitly below rather than printed, so a degenerate fit is reported in the
+            # returned text where the reader will actually see it.
+            warnings.simplefilter('ignore')
+            result = model.fit(reml=True, method='lbfgs')
+        degenerate = _mixed_model_degeneracy(result, n_fixed=len(model.exog_names))
+        if degenerate is not None:
+            return _clustered_ols(degenerate)
         text = (f'Linear mixed model (cell nested in mouse), reference group = {reference}\n'
                 f'Formula: {formula} + (1 | mouse)\n'
                 f'N cells = {len(df)}, N mice = {df["mouse"].nunique()}\n\n'
                 f'{result.summary()}\n')
         return text, 'mixedlm'
     except Exception as exc:  # documented fallback: cluster-robust OLS
-        ols = smf.ols(formula, data=df).fit(
-            cov_type='cluster', cov_kwds={'groups': df['mouse']})
-        text = (f'Mixed model failed to converge ({exc}); using mouse-clustered OLS.\n'
-                f'Formula: {formula}, cluster = mouse\n'
-                f'N cells = {len(df)}, N mice = {df["mouse"].nunique()}\n\n'
-                f'{ols.summary()}\n')
-        return text, 'clustered_ols'
+        return _clustered_ols(f'it failed to converge: {exc}')
 
 
 def save_fig(fig, path_png, dpi=300):

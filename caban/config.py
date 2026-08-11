@@ -87,6 +87,21 @@ class PipelineConfig:
     plot_freeze_mobility_verification: bool = True
     enable_zone_crossreg_analysis: bool = True
 
+    # Navigation-aware single cell analyses: decompose the whole-session spike rate /
+    # activity by cell class (place vs non-place) and frame class (movement vs immobility),
+    # and test the locomotion covariate directly. All output lands under
+    # PLOTS_DIR/navigation_aware_single_cell/ and nothing existing is modified.
+    plot_locomotion_comparison: bool = True
+    plot_place_cell_properties: bool = True
+    plot_place_cell_rates: bool = True
+    plot_rate_vs_locomotion: bool = True
+    # Speed-binned robustness check on the above: movement_only is a binary 2 cm/s threshold,
+    # but hippocampal firing is graded with speed, so matched mean speed does not guarantee
+    # matched speed distributions. speed_lag_frames probes deconvolution latency (S event
+    # frames lag true spikes while the speed kernel is symmetric); 0 is the reported analysis.
+    plot_speed_tuning: bool = True
+    speed_lag_frames: int = 0
+
     # Single-unit response analyses (per-cell drill-downs beyond per-mouse means)
     plot_cell_activity_distributions: bool = True
     plot_event_locked_responsiveness: bool = True

@@ -996,10 +996,6 @@ def _build_dataset(
         TFC_cond_ROI_mappings_peakval[mapping] = {}
 
     # Test A / A_1wk
-    Test_A_exp_sp_rates_mapping: dict = {}
-    Test_A_exp_activity_mapping: dict = {}
-    Test_A_1wk_exp_sp_rates_mapping: dict = {}
-    Test_A_1wk_exp_activity_mapping: dict = {}
     Test_A_binned_sp_rates_mapping: dict = {}
     Test_A_binned_activity_mapping: dict = {}
     Test_A_binned_activity_mapping_engram = {em: {} for em in ENGRAM_MODES}
@@ -1011,8 +1007,6 @@ def _build_dataset(
     Test_A_1wk_ROI_mappings: dict = {}
     Test_A_1wk_ROI_mappings_peakval: dict = {}
     for mapping in mappings_all_Test_A:
-        Test_A_exp_sp_rates_mapping[mapping] = {}
-        Test_A_exp_activity_mapping[mapping] = {}
         Test_A_binned_sp_rates_mapping[mapping] = {}
         Test_A_binned_activity_mapping[mapping] = {}
         for _em in ENGRAM_MODES:
@@ -1020,8 +1014,6 @@ def _build_dataset(
         Test_A_ROI_mappings[mapping] = {}
         Test_A_ROI_mappings_peakval[mapping] = {}
     for mapping in mappings_all_Test_A_1wk:
-        Test_A_1wk_exp_sp_rates_mapping[mapping] = {}
-        Test_A_1wk_exp_activity_mapping[mapping] = {}
         Test_A_1wk_binned_sp_rates_mapping[mapping] = {}
         Test_A_1wk_binned_activity_mapping[mapping] = {}
         for _em in ENGRAM_MODES:
@@ -1080,22 +1072,14 @@ def _build_dataset(
         Test_B_1wk_ROI_mappings_peakval[mapping] = {}
 
     # LT1 / LT2
-    LT1_exp_sp_rates_mapping: dict = {}
-    LT2_exp_sp_rates_mapping: dict = {}
-    LT1_exp_activity_mapping: dict = {}
-    LT2_exp_activity_mapping: dict = {}
     LT1_ROI_mappings: dict = {}
     LT2_ROI_mappings: dict = {}
     LT1_ROI_mappings_peakval: dict = {}
     LT2_ROI_mappings_peakval: dict = {}
     for mapping in mappings_all_LT1:
-        LT1_exp_sp_rates_mapping[mapping] = {}
-        LT1_exp_activity_mapping[mapping] = {}
         LT1_ROI_mappings[mapping] = {}
         LT1_ROI_mappings_peakval[mapping] = {}
     for mapping in mappings_all_LT2:
-        LT2_exp_sp_rates_mapping[mapping] = {}
-        LT2_exp_activity_mapping[mapping] = {}
         LT2_ROI_mappings[mapping] = {}
         LT2_ROI_mappings_peakval[mapping] = {}
 
@@ -1191,10 +1175,6 @@ def _build_dataset(
                         print(f"  [ROI] {mouse} TFC_cond mapping={mapping}: {_roi_e}")
 
             for mapping in mappings_all_LT1:
-                LT1.process_avg_sp_rates_mapping(mapping)
-                LT1.process_avg_sp_rates_mapping(mapping, want_peakval=True)
-                LT1_exp_sp_rates_mapping[mapping][mouse] = LT1.exp_sp_rates_mapping[mapping]
-                LT1_exp_activity_mapping[mapping][mouse] = LT1.exp_activity_mapping[mapping]
                 if plot_ROIs:
                     try:
                         LT1.get_A_matrix()
@@ -1205,10 +1185,6 @@ def _build_dataset(
                         print(f"  [ROI] {mouse} LT1 mapping={mapping}: {_roi_e}")
 
             for mapping in mappings_all_LT2:
-                LT2.process_avg_sp_rates_mapping(mapping)
-                LT2.process_avg_sp_rates_mapping(mapping, want_peakval=True)
-                LT2_exp_sp_rates_mapping[mapping][mouse] = LT2.exp_sp_rates_mapping[mapping]
-                LT2_exp_activity_mapping[mapping][mouse] = LT2.exp_activity_mapping[mapping]
                 if plot_ROIs:
                     try:
                         LT2.get_A_matrix()
@@ -1231,10 +1207,6 @@ def _build_dataset(
             Test_A[mouse].crossreg_full = TFC_AB_48hr_1wk_crossreg[mouse]
             A = Test_A[mouse]
             for mapping in mappings_all_Test_A:
-                A.process_avg_sp_rates_mapping(mapping)
-                A.process_avg_sp_rates_mapping(mapping, want_peakval=True)
-                Test_A_exp_sp_rates_mapping[mapping][mouse] = A.exp_sp_rates_mapping[mapping]
-                Test_A_exp_activity_mapping[mapping][mouse] = A.exp_activity_mapping[mapping]
                 Test_A_binned_sp_rates_mapping[mapping][mouse] = A.process_binned_sp_rates_mapping(mapping, BIN_WIDTH)
                 Test_A_binned_activity_mapping[mapping][mouse] = A.process_binned_sp_rates_mapping(mapping, BIN_WIDTH, want_peakval=True)
                 if plot_ROIs:
@@ -1261,10 +1233,6 @@ def _build_dataset(
                 Test_A_1wk[mouse].crossreg_full = TFC_AB_48hr_1wk_crossreg[mouse]
                 A_1wk = Test_A_1wk[mouse]
                 for mapping in mappings_all_Test_A_1wk:
-                    A_1wk.process_avg_sp_rates_mapping(mapping)
-                    A_1wk.process_avg_sp_rates_mapping(mapping, want_peakval=True)
-                    Test_A_1wk_exp_sp_rates_mapping[mapping][mouse] = A_1wk.exp_sp_rates_mapping[mapping]
-                    Test_A_1wk_exp_activity_mapping[mapping][mouse] = A_1wk.exp_activity_mapping[mapping]
                     Test_A_1wk_binned_sp_rates_mapping[mapping][mouse] = A_1wk.process_binned_sp_rates_mapping(mapping, BIN_WIDTH)
                     Test_A_1wk_binned_activity_mapping[mapping][mouse] = A_1wk.process_binned_sp_rates_mapping(mapping, BIN_WIDTH, want_peakval=True)
                     if plot_ROIs:
@@ -1649,16 +1617,12 @@ def _build_dataset(
         TFC_cond_ROI_mappings=TFC_cond_ROI_mappings,
         TFC_cond_ROI_mappings_peakval=TFC_cond_ROI_mappings_peakval,
         # Test_A
-        Test_A_exp_sp_rates_mapping=Test_A_exp_sp_rates_mapping,
-        Test_A_exp_activity_mapping=Test_A_exp_activity_mapping,
         Test_A_binned_sp_rates_mapping=Test_A_binned_sp_rates_mapping,
         Test_A_binned_activity_mapping=Test_A_binned_activity_mapping,
         Test_A_binned_activity_mapping_engram=Test_A_binned_activity_mapping_engram,
         Test_A_ROI_mappings=Test_A_ROI_mappings,
         Test_A_ROI_mappings_peakval=Test_A_ROI_mappings_peakval,
         # Test_A_1wk
-        Test_A_1wk_exp_sp_rates_mapping=Test_A_1wk_exp_sp_rates_mapping,
-        Test_A_1wk_exp_activity_mapping=Test_A_1wk_exp_activity_mapping,
         Test_A_1wk_binned_sp_rates_mapping=Test_A_1wk_binned_sp_rates_mapping,
         Test_A_1wk_binned_activity_mapping=Test_A_1wk_binned_activity_mapping,
         Test_A_1wk_binned_activity_mapping_engram=Test_A_1wk_binned_activity_mapping_engram,
@@ -1689,10 +1653,6 @@ def _build_dataset(
         Test_B_1wk_ROI_mappings=Test_B_1wk_ROI_mappings,
         Test_B_1wk_ROI_mappings_peakval=Test_B_1wk_ROI_mappings_peakval,
         # LT
-        LT1_exp_sp_rates_mapping=LT1_exp_sp_rates_mapping,
-        LT2_exp_sp_rates_mapping=LT2_exp_sp_rates_mapping,
-        LT1_exp_activity_mapping=LT1_exp_activity_mapping,
-        LT2_exp_activity_mapping=LT2_exp_activity_mapping,
         LT1_ROI_mappings=LT1_ROI_mappings,
         LT2_ROI_mappings=LT2_ROI_mappings,
         LT1_ROI_mappings_peakval=LT1_ROI_mappings_peakval,

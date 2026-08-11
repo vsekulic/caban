@@ -1,0 +1,124 @@
+Place-cell- and locomotion-restricted cell-averaged spike rates and activity
+
+Overview
+- The whole-session spike rate / activity panels (see session_spike_rates_methods.txt) average
+  over EVERY cell in a cross-registration mapping and over EVERY frame of the recording. A viral
+  group that simply navigates more will therefore show a higher average rate for purely
+  behavioural reasons: running recruits place cells, and fewer immobile frames dilute the mean.
+- This analysis decomposes that single number along two orthogonal axes so the behavioural and
+  cell-intrinsic contributions can be separated:
+    - cell class:  place cell / non-place cell / all cells
+    - frame class: all frames / movement-only / immobility-only
+  crossed with two analysis windows and both metrics (event rate, amplitude-weighted activity).
+- It is strictly additive. The whole-session panels it decomposes are unchanged and remain the
+  intended big-picture view; these panels are the drill-down beneath them.
+
+Inputs
+- Session dictionaries: TFC_cond, Test_A, Test_A_1wk, Test_B, Test_B_1wk, LT1, LT2.
+- Cell mappings resolved via session_obj.get_S_mapping(), identical to the sp_rates analysis.
+  The default mapping is 'full' (all cells in the session, no cross-registration constraint).
+- Place fields are read from the cached <session_type>-<mouse>-<n>cells-PlaceFields.npz files
+  written by the place-field analysis (run_pf_and_loc for the chamber sessions, run_LT_pfs for
+  LT1/LT2). Nothing is re-fitted here, and no place-field parameter is changed.
+
+Cell classification
+- A cell is a PLACE CELL if it has at least one place field surviving the detection procedure
+  used by the place-field analysis: significant spatial responses relative to a circular-shift
+  null (99th percentile of 500 shifts), grouped into fields by a variational Bayesian Gaussian
+  mixture with post-hoc merging of components closer than the merge distance.
+- All other cells in the mapping are NON-PLACE CELLS. The two classes are disjoint and exhaust
+  the mapping; this is asserted at runtime.
+- Place fields were fit from S_mov (frames with speed >= 2 cm/s), so place-cell identity is
+  itself defined on movement frames. The cell classification is held fixed across all frame
+  classes: the immobility-only panel reports how the same place cells behave when the
+  animal is still, it does not redefine place cells on immobile frames.
+
+Analysis windows
+- whole_session: the entire trimmed recording. This is the window that decomposes the existing
+  whole-session sp_rates panel.
+- pretone_180s: the pre-tone period, taken as the first tone onset where tones exist and the
+  first 180 s otherwise. This is the same window used by the occupancy analysis and the 2D
+  spatial-information suite, so the panels are directly comparable with those.
+- LT1 / LT2 have no tones, so only whole_session is produced for them.
+
+Frame classes
+- all_frames:       every frame in the window.
+- movement_only:    frames with smoothed speed >= 2 cm/s (VELOCITY_THRESHOLD), the same criterion
+                    that defines S_mov.
+- immobility_only:  frames with smoothed speed < 2 cm/s.
+- Movement and immobility partition the window exactly; this is asserted at runtime on event
+  counts and frame counts (rates are not additive across the partition because the denominators
+  differ, but counts are).
+
+Computation
+1. For each (session, mouse, mapping, window, frame class, metric) the reported value is the
+   mean over cells of that cell class of (events inside the frame mask) / (seconds of eligible
+   time), where eligible time is the number of masked frames divided by MINISCOPE_FPS.
+2. As in the sp_rates analysis, the average is taken over EVERY cell of the class INCLUDING
+   cells with zero events in the mask. Silent cells contribute 0 to the numerator and still
+   count in the denominator; this is what lets a silencing manipulation show up as a reduced
+   average rate. The figures label it "Avg. spike rate (events/s)" rather than a "population
+   rate", since the latter reads as a sum over cells; the two differ by a factor of n_cells.
+3. The amplitude-weighted variant replaces the event count with the sum of deconvolved S peak
+   values of those events, per second.
+4. Frames are indexed relative to the trimmed S, the same frame of reference as S_spikes.
+5. Consistency check. With window = whole_session and frame class = all_frames, the 'all cells'
+   value reproduces the existing whole-session sp_rates number exactly, after correcting for the
+   one-frame duration convention in that analysis ([0, n-1] spans n-1 frames' worth of time
+   while the all-true frame mask spans n). A mismatch raises rather than being plotted.
+
+Statistics
+- The unit of analysis is the MOUSE: one value per animal per panel, shown as a violin with the
+  individual animals overlaid. Groups are compared by one-way ANOVA (scipy.stats.f_oneway); only
+  if the omnibus p < 0.05 is a Tukey HSD post-hoc test run and significant pairs annotated.
+  n = number of mice per group.
+- Groups are built from the mice actually present in each session dictionary, so G07 is absent
+  from Test_B and G15 from Test_A_1wk / Test_B_1wk rather than entering as missing data.
+- Group order is hM3D, mCherry, hM4D (displayed as Exc, Ctl, Inh).
+- A cell class that resolves to zero cells for any mouse raises rather than producing a NaN
+  panel, so it cannot be mistaken for a measured zero.
+- A mouse with fewer than 20 frames (1 s) in a given frame class has no defined rate for that
+  panel and is excluded from it, with the exclusion printed at run time and recorded in the CSV
+  as defined = False rather than dropped. This is a behavioural property, not missing data: on
+  LT1, G06 never falls below the 2 cm/s threshold (minimum smoothed speed 2.06 cm/s across
+  612 s), so it has no immobility period to measure. Every other session and mouse has at least
+  380 immobility frames. If such exclusions leave a group with fewer than two mice, the panel
+  raises rather than being produced from an untestable sample.
+
+Interpretation
+- If the group difference is confined to the place-cell panel and disappears from the non-place
+  panel, the effect is carried by the spatially tuned cells.
+- If the group difference survives in the movement_only panel, it is not explained by group
+  differences in how much time the animals spend locomoting, since that panel normalises by
+  seconds of locomotion rather than seconds of session.
+- These panels should be read alongside locomotion_group_comparison (does navigation differ at
+  all?) and the rate-vs-locomotion ANCOVA (does the group effect survive adjustment?).
+
+Caveat on cross-session comparison
+- Place fields on LT1 / LT2 are fit at a spatial bin width of 4.5 px versus 34 px for the chamber
+  sessions, because the linear track and the conditioning chamber differ in scale and geometry.
+  The ABSOLUTE proportion of place cells and the absolute place-cell rates are therefore not
+  comparable between LT and chamber sessions. Only the within-session comparison across viral
+  groups is valid.
+
+Restriction rather than normalization, and what the binary threshold cannot see
+- The movement / immobility split is a RESTRICTION of the frames entering the rate, not a
+  normalization of the rate by how much the animal moved. This follows the hippocampal
+  convention: a running-speed threshold is applied and the two behavioural states are analysed
+  separately, because theta (locomotion) and large-irregular-activity/sharp-wave-ripple
+  (immobility) are distinct network states with qualitatively different firing statistics.
+  Dividing rate by speed or by distance is not done -- the rate/speed relation has a nonzero
+  intercept, so such a ratio diverges at low speed and is uninterpretable.
+- The threshold is BINARY. Hippocampal firing is graded with running speed, so matched mean speed
+  between groups does not by itself guarantee that the movement_only panels are free of a speed
+  contribution. The companion analysis in navigation_aware_single_cell/speed_tuning/ addresses
+  this directly: it bins frames by graded speed (with bin 0 constructed to be exactly the
+  immobility_only class used here and bins 1+ exactly movement_only), tests a group x speed
+  interaction, and reweights each animal's rates to a common speed distribution.
+
+Outputs
+- PLOTS_DIR/navigation_aware_single_cell/place_cell_rates/
+    <session_type>[-activity]/<window>/<frame_class>/
+        <session_type>_place_cell_rate_split-<mapping>.png/.svg
+    place_cell_rates_summary.csv   (tidy per-mouse table behind every panel)
+- <session_type> is suffixed with '-activity' for the amplitude-weighted variant.

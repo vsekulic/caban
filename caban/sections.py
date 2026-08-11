@@ -16,6 +16,7 @@ import os, sys, json, time, pickle, traceback, importlib, warnings
 from typing import Optional
 
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.colors import to_rgb
 from rastermap import Rastermap
@@ -40,6 +41,11 @@ from caban.epoch_analysis import (
 )
 from caban.engram_sanity import plot_engram_sanity
 from caban.roi import plot_session_A_matrix
+# Imported as modules rather than star-imported: both define short generic names
+# (GROUP_ORDER, _save, _panel_row) that would collide with the caban.analysis namespace.
+import caban.place_cell_rates as place_cell_rates
+import caban.locomotion as locomotion
+import caban.speed_tuning as speed_tuning
 from caban.event_locked_responsiveness import run_event_locked_responsiveness as _run_event_locked_responsiveness
 from caban.freezing_tuned_cells import run_freezing_tuned_cells as _run_freezing_tuned_cells
 from caban.population_coupling import run_population_coupling as _run_population_coupling
@@ -717,17 +723,51 @@ def run_rastermap_sweep(
 # ---------------------------------------------------------------------------
 # Section: sp_rates  (caban/main.py L1474-1539)
 # ---------------------------------------------------------------------------
+def _plot_whole_session_family(PLOTS_DIR, mouse_groups, sessions, mappings, session_type,
+                               mapping_overrides=None):
+    """Compute and plot the whole-session population rate/activity for one session family.
+
+    `sessions` is a dict of mouse -> session object (e.g. ds.TFC_cond). For each mapping and
+    each of the two metrics, the value is computed fresh off the session objects via
+    BehaviourSession.process_whole_session_sp_rates_mapping() -- everything it needs (S, S_idx,
+    crossreg) survives on a cached ds, so this needs no loader rebuild and touches no raw files.
+    The '-activity' variant lands in its own top-level sp_rates directory, matching the
+    convention already used by the per-period plots.
+
+    `mapping_overrides` is an optional {mouse: [mappings]} for mice whose cross-registration
+    does not cover the whole family -- G15 has no Test_B_1wk and G07 has no Test_B, so their
+    crossreg carries no label for the missing session and asking for a mapping that names it
+    raises KeyError. A mouse contributes to a mapping's panel only if that mapping appears in
+    its own list, mirroring the per-mouse `mappings_all_list` the loader selects.
+    """
+    mapping_overrides = mapping_overrides or {}
+    for mapping in mappings:
+        for want_peakval in (False, True):
+            rates = {
+                mouse: sess.process_whole_session_sp_rates_mapping(mapping, want_peakval=want_peakval)
+                for mouse, sess in sessions.items()
+                if mapping in mapping_overrides.get(mouse, mappings)
+            }
+            plot_whole_session_sp_rates(
+                PLOTS_DIR, mouse_groups, rates,
+                session_type + '-activity' if want_peakval else session_type,
+                mapping, want_peakval=want_peakval,
+            )
+
+
 def run_sp_rates(ds, cfg):
     """Analysis section: sp_rates. Originally caban/main.py L1474-1539."""
     if not (cfg.plot_sp_rates and not cfg.DEVEL_SWITCH):
         return
     # --- ds attributes ---
-    LT1_exp_activity_mapping = ds.LT1_exp_activity_mapping
-    LT1_exp_sp_rates_mapping = ds.LT1_exp_sp_rates_mapping
-    LT2_exp_activity_mapping = ds.LT2_exp_activity_mapping
-    LT2_exp_sp_rates_mapping = ds.LT2_exp_sp_rates_mapping
     PLOTS_DIR = cfg.PLOTS_DIR
     TFC_cond = ds.TFC_cond
+    TFC_cond_LT1 = ds.TFC_cond_LT1
+    TFC_cond_LT2 = ds.TFC_cond_LT2
+    Test_A = ds.Test_A
+    Test_A_1wk = ds.Test_A_1wk
+    Test_B = ds.Test_B
+    Test_B_1wk = ds.Test_B_1wk
     Test_B_1wk_post_tone_activity_mapping = ds.Test_B_1wk_post_tone_activity_mapping
     Test_B_1wk_post_tone_sp_rates_mapping = ds.Test_B_1wk_post_tone_sp_rates_mapping
     Test_B_1wk_tone_activity_mapping = ds.Test_B_1wk_tone_activity_mapping
@@ -743,8 +783,12 @@ def run_sp_rates(ds, cfg):
     mappings_all_LT1 = ds.mappings_all_LT1
     mappings_all_LT2 = ds.mappings_all_LT2
     mappings_all_TFC_cond = ds.mappings_all_TFC_cond
+    mappings_all_Test_A = ds.mappings_all_Test_A
+    mappings_all_Test_A_1wk = ds.mappings_all_Test_A_1wk
     mappings_all_Test_B = ds.mappings_all_Test_B
+    mappings_all_Test_B_G15 = ds.mappings_all_Test_B_G15
     mappings_all_Test_B_1wk = ds.mappings_all_Test_B_1wk
+    mappings_all_Test_B_1wk_G07 = ds.mappings_all_Test_B_1wk_G07
     mouse_groups = ds.mouse_groups
     mice_per_group = ds.mice_per_group
     plot_interneuron_cutoff = ds.plot_interneuron_cutoff
@@ -780,16 +824,6 @@ def run_sp_rates(ds, cfg):
             plot_session_sp_rates(PLOTS_DIR, mouse_groups, Test_B_1wk_tone_post_tone_sp_rates_mapping[mapping], 'Test_B_1wk', 'Tones+Post-tones '+mapping)
         msg_end()
 
-        msg_start('*** Generating LT1 plots')
-        for mapping in mappings_all_LT1:
-            plot_LT_sp_rates(PLOTS_DIR, mouse_groups, LT1_exp_sp_rates_mapping[mapping], 'LT1 track '+mapping)
-        msg_end()
-
-        msg_start('*** Generating LT2 plots')
-        for mapping in mappings_all_LT2:
-            plot_LT_sp_rates(PLOTS_DIR, mouse_groups, LT2_exp_sp_rates_mapping[mapping], 'LT2 track '+mapping)
-        msg_end()
-
         ### Now activities (want_peakval)
 
         msg_start('*** Generating TFC_cond plots (activities)')
@@ -812,15 +846,24 @@ def run_sp_rates(ds, cfg):
             plot_session_sp_rates(PLOTS_DIR, mouse_groups, Test_B_1wk_tone_post_tone_activity_mapping[mapping], 'Test_B_1wk-activity', 'Tones+Post-tones '+mapping)
         msg_end()
 
-        msg_start('*** Generating LT1 plots (activities)')
-        for mapping in mappings_all_LT1:
-            plot_LT_sp_rates(PLOTS_DIR, mouse_groups, LT1_exp_activity_mapping[mapping], 'LT1 track '+mapping, want_peakval=True)
-        msg_end()
+        ### Whole-session rates/activities: the entire recording as a single period, one value
+        ### per mouse, compared across groups with n = mice (see plot_whole_session_sp_rates).
+        ### Test_A/Test_A_1wk and LT1/LT2 have no discrete behaviour periods, so this is their
+        ### only sp_rates panel; for TFC_cond/Test_B it complements the per-period panels above.
 
-        msg_start('*** Generating LT2 plots (activities)')
-        for mapping in mappings_all_LT2:
-            plot_LT_sp_rates(PLOTS_DIR, mouse_groups, LT2_exp_activity_mapping[mapping], 'LT2 track '+mapping, want_peakval=True)
-        msg_end()
+        for _session_type, _sessions, _mappings, _overrides in (
+            ('TFC_cond', TFC_cond, mappings_all_TFC_cond, None),
+            ('Test_A', Test_A, mappings_all_Test_A, None),
+            ('Test_A_1wk', Test_A_1wk, mappings_all_Test_A_1wk, None),
+            ('Test_B', Test_B, mappings_all_Test_B, {'G15': mappings_all_Test_B_G15}),
+            ('Test_B_1wk', Test_B_1wk, mappings_all_Test_B_1wk, {'G07': mappings_all_Test_B_1wk_G07}),
+            ('LT1', TFC_cond_LT1, mappings_all_LT1, None),
+            ('LT2', TFC_cond_LT2, mappings_all_LT2, None),
+        ):
+            msg_start('*** Generating {} whole-session plots'.format(_session_type))
+            _plot_whole_session_family(PLOTS_DIR, mouse_groups, _sessions, _mappings, _session_type,
+                                       mapping_overrides=_overrides)
+            msg_end()
 
         # Finally plot interneuron cutoff threshold plots
         plot_interneuron_cutoff(PLOTS_DIR, TFC_cond, mice_per_group)
@@ -844,6 +887,12 @@ def run_binned_sp_rates(ds, cfg):
     TFC_cond_binned_activity_mapping = ds.TFC_cond_binned_activity_mapping
     TFC_cond_binned_activity_mapping_engram = ds.TFC_cond_binned_activity_mapping_engram
     TFC_cond_binned_sp_rates_mapping = ds.TFC_cond_binned_sp_rates_mapping
+    Test_A = ds.Test_A
+    Test_A_1wk = ds.Test_A_1wk
+    Test_A_1wk_binned_activity_mapping = ds.Test_A_1wk_binned_activity_mapping
+    Test_A_1wk_binned_sp_rates_mapping = ds.Test_A_1wk_binned_sp_rates_mapping
+    Test_A_binned_activity_mapping = ds.Test_A_binned_activity_mapping
+    Test_A_binned_sp_rates_mapping = ds.Test_A_binned_sp_rates_mapping
     Test_B = ds.Test_B
     Test_B_1wk = ds.Test_B_1wk
     Test_B_1wk_binned_activity_mapping = ds.Test_B_1wk_binned_activity_mapping
@@ -853,6 +902,8 @@ def run_binned_sp_rates(ds, cfg):
     Test_B_binned_activity_mapping_engram = ds.Test_B_binned_activity_mapping_engram
     Test_B_binned_sp_rates_mapping = ds.Test_B_binned_sp_rates_mapping
     mappings_all_TFC_cond = ds.mappings_all_TFC_cond
+    mappings_all_Test_A = ds.mappings_all_Test_A
+    mappings_all_Test_A_1wk = ds.mappings_all_Test_A_1wk
     mappings_all_Test_B = ds.mappings_all_Test_B
     mappings_all_Test_B_1wk = ds.mappings_all_Test_B_1wk
     mouse_groups = ds.mouse_groups
@@ -876,6 +927,19 @@ def run_binned_sp_rates(ds, cfg):
         msg_start('*** Generating binned spiking Test_B_1wk plots')
         for mapping in mappings_all_Test_B_1wk:
             plot_binned_sp_rates_mapping(PLOTS_DIR, mouse_groups, Test_B_1wk_binned_sp_rates_mapping[mapping], mapping, Test_B_1wk, 'Test_B_1wk', BIN_WIDTH)
+        msg_end()
+
+        # Test_A is a context-only exposure: no tone/shock markers are overlaid, and no
+        # paper_dir/plot_bars=False variant until the line-plot SEM in plot_binned_sp_rates_mapping
+        # is corrected (it divides by sqrt(sum(values)) rather than sqrt(n)).
+        msg_start('*** Generating binned spiking Test_A plots')
+        for mapping in mappings_all_Test_A:
+            plot_binned_sp_rates_mapping(PLOTS_DIR, mouse_groups, Test_A_binned_sp_rates_mapping[mapping], mapping, Test_A, 'Test_A', BIN_WIDTH)
+        msg_end()
+
+        msg_start('*** Generating binned spiking Test_A_1wk plots')
+        for mapping in mappings_all_Test_A_1wk:
+            plot_binned_sp_rates_mapping(PLOTS_DIR, mouse_groups, Test_A_1wk_binned_sp_rates_mapping[mapping], mapping, Test_A_1wk, 'Test_A_1wk', BIN_WIDTH)
         msg_end()
 
         ### Now activities (want_peakval)
@@ -913,6 +977,16 @@ def run_binned_sp_rates(ds, cfg):
 
         msg_end()
 
+        msg_start('*** Generating binned activities Test_A plots')
+        for mapping in mappings_all_Test_A:
+            plot_binned_sp_rates_mapping(PLOTS_DIR, mouse_groups, Test_A_binned_activity_mapping[mapping], mapping, Test_A, 'Test_A-activity', BIN_WIDTH)
+        msg_end()
+
+        msg_start('*** Generating binned activities Test_A_1wk plots')
+        for mapping in mappings_all_Test_A_1wk:
+            plot_binned_sp_rates_mapping(PLOTS_DIR, mouse_groups, Test_A_1wk_binned_activity_mapping[mapping], mapping, Test_A_1wk, 'Test_A_1wk-activity', BIN_WIDTH)
+        msg_end()
+
         msg_start('*** Generating TFC conditioning summary panels (B-F2)')
         summary_mapping = 'full' if 'full' in mappings_all_TFC_cond else mappings_all_TFC_cond[0]
         summary_root = os.path.join(PLOTS_DIR, 'tfc_conditioning_summary', summary_mapping)
@@ -933,6 +1007,479 @@ def run_binned_sp_rates(ds, cfg):
         msg_end()
 
     # ===== end verbatim body =====
+
+
+# ---------------------------------------------------------------------------
+# Navigation-aware single cell analyses
+#
+# The whole-session panels produced by run_sp_rates average over every cell and every
+# frame, so a group that simply navigates more shows a higher average rate for purely
+# behavioural reasons. These four sections decompose that number by cell class (place vs
+# non-place) and frame class (movement vs immobility) and test the locomotion covariate
+# directly. Everything is additive: all output lands under
+# PLOTS_DIR/navigation_aware_single_cell/ and no existing analysis is modified.
+#
+# There is no ordering dependency on run_pf_and_loc / run_LT_pfs: place fields are read
+# from the *-PlaceFields.npz caches those sections already wrote.
+# ---------------------------------------------------------------------------
+
+def _nav_aware_families(ds):
+    """(label, session_dict) for every session carrying place fields, in reporting order."""
+    return [
+        ('TFC_cond', ds.TFC_cond),
+        ('Test_A', ds.Test_A),
+        ('Test_A_1wk', ds.Test_A_1wk),
+        ('Test_B', ds.Test_B),
+        ('Test_B_1wk', ds.Test_B_1wk),
+        ('LT1', ds.TFC_cond_LT1),
+        ('LT2', ds.TFC_cond_LT2),
+    ]
+
+
+def _nav_aware_mappings(label, mappings_per_session):
+    """Cell mappings to analyse for one session family.
+
+    Defaults to 'full' (all cells, no cross-registration constraint) for every session; pass
+    mappings_per_session={'TFC_cond': ds.mappings_all_TFC_cond, ...} to widen it.
+    """
+    if mappings_per_session is None:
+        return ['full']
+    return list(mappings_per_session.get(label, ['full']))
+
+
+def run_locomotion_comparison(ds, cfg):
+    """Navigation-aware section: do the viral groups differ in how much they navigate?
+
+    This is the premise check for the rest of the suite. If locomotion does not differ between
+    groups, the 'they just moved more' explanation for the average rate differences is ruled
+    out directly; if it does, the movement-restricted rate panels and the ANCOVA adjust for it.
+    """
+    if not cfg.plot_locomotion_comparison:
+        return
+    PLOTS_DIR = cfg.PLOTS_DIR
+    mouse_groups = ds.mouse_groups
+
+    msg_start('*** Locomotion metrics compared across groups')
+    locomotion.copy_methods_templates(PLOTS_DIR)
+
+    rows_by_window = {window: [] for window in place_cell_rates.WINDOWS}
+
+    for label, sessions in _nav_aware_families(ds):
+        for window in place_cell_rates.windows_for_session(label):
+            per_mouse = {}
+            for mouse, sess in sessions.items():
+                metrics = locomotion.compute_locomotion_metrics(sess, window=window)
+                per_mouse[mouse] = metrics
+                rows_by_window[window].append(
+                    dict(session=label, mouse=mouse, group=mouse_groups[mouse], **metrics))
+            locomotion.plot_locomotion_group_comparison(
+                PLOTS_DIR, mouse_groups, per_mouse, label, window)
+            print('  [locomotion] {} {}: {} mice'.format(label, window, len(per_mouse)), flush=True)
+
+    for window, rows in rows_by_window.items():
+        if rows:
+            print('  [locomotion] stats -> {}'.format(
+                locomotion.write_locomotion_tables(PLOTS_DIR, rows, window)), flush=True)
+
+    msg_end()
+
+
+def run_place_cell_properties(ds, cfg, mappings_per_session=None):
+    """Navigation-aware section: place-cell proportion and place-field properties, n = mice.
+
+    The proportion panel asks whether a group difference in the cell-averaged rate could come from
+    simply having more place cells. The property panels are the per-mouse companion to the
+    pooled-cell KS analysis in plot_pf_analyses, which is retained unchanged.
+    """
+    if not cfg.plot_place_cell_properties:
+        return
+    PLOTS_DIR = cfg.PLOTS_DIR
+    mouse_groups = ds.mouse_groups
+
+    msg_start('*** Place-cell proportions and place-field properties (n = mice)')
+    place_cell_rates.copy_methods_templates(PLOTS_DIR)
+
+    for label, sessions in _nav_aware_families(ds):
+        for mapping in _nav_aware_mappings(label, mappings_per_session):
+            per_mouse = {
+                mouse: place_cell_rates.pf_properties_per_mouse(sess, mouse, mapping)
+                for mouse, sess in sessions.items()
+            }
+            place_cell_rates.plot_place_cell_proportion(
+                PLOTS_DIR, mouse_groups, per_mouse, label, mapping)
+            place_cell_rates.plot_pf_properties_per_mouse(
+                PLOTS_DIR, mouse_groups, per_mouse, label, mapping)
+            pcts = [v['pct_place_cells'] for v in per_mouse.values()]
+            print('  [place cells] {} {}: {} mice, {:.1f}-{:.1f}% place cells'.format(
+                label, mapping, len(per_mouse), min(pcts), max(pcts)), flush=True)
+
+    msg_end()
+
+
+def run_place_cell_rates(ds, cfg, mappings_per_session=None, verify=True):
+    """Navigation-aware section: cell-averaged rate split by cell class and frame class.
+
+    Produces the full grid of (session x window x frame class x metric) panels, each comparing
+    place cells / non-place cells / all cells across viral groups with n = mice, plus one tidy
+    CSV holding every value behind every panel.
+
+    verify=True runs the two structural assertions described in the METHODS file: that the
+    whole-session all-cells value reproduces the existing sp_rates number, and that movement and
+    immobility frames partition each window exactly.
+    """
+    if not cfg.plot_place_cell_rates:
+        return
+    PLOTS_DIR = cfg.PLOTS_DIR
+    mouse_groups = ds.mouse_groups
+
+    msg_start('*** Place-cell / movement-restricted cell-averaged rates')
+    place_cell_rates.copy_methods_templates(PLOTS_DIR)
+
+    rows = []
+    for label, sessions in _nav_aware_families(ds):
+        for mapping in _nav_aware_mappings(label, mappings_per_session):
+
+            if verify:
+                for mouse, sess in sessions.items():
+                    place_cell_rates.assert_decomposition_consistent(sess, mouse, mapping)
+                    place_cell_rates.assert_frame_partition_additive(sess, mouse, mapping)
+                print('  [verify] {} {}: decomposition and frame partition consistent '
+                      'for {} mice'.format(label, mapping, len(sessions)), flush=True)
+
+            for want_peakval in (False, True):
+                session_label = label + '-activity' if want_peakval else label
+                for window in place_cell_rates.windows_for_session(label):
+                    for frame_class in place_cell_rates.FRAME_CLASSES:
+                        computed = {
+                            mouse: place_cell_rates.rates_by_cell_class(
+                                sess, mouse, mapping, want_peakval=want_peakval,
+                                window=window, frame_class=frame_class)
+                            for mouse, sess in sessions.items()
+                        }
+                        # A mouse with under a second of frames in this class has no defined
+                        # rate -- e.g. G06 never drops below 2 cm/s on LT1, so it has no
+                        # immobility period. Exclude it from the panel, but say so out loud and
+                        # keep the row in the CSV as an explicit NaN rather than dropping it.
+                        per_mouse = {m: v for m, v in computed.items() if v['defined']}
+                        undefined = sorted(m for m, v in computed.items() if not v['defined'])
+                        if undefined:
+                            print('  [rates] {} {} {}/{}: EXCLUDING {} from the panel -- fewer '
+                                  'than 20 frames (1 s) in this frame class'.format(
+                                      session_label, mapping, window, frame_class, undefined),
+                                  flush=True)
+
+                        place_cell_rates.plot_place_cell_rate_split(
+                            PLOTS_DIR, mouse_groups, per_mouse, session_label, mapping,
+                            window, frame_class, want_peakval=want_peakval)
+
+                        for mouse, values in computed.items():
+                            for cell_class in place_cell_rates.CELL_CLASSES:
+                                rows.append({
+                                    'session': label,
+                                    'mouse': mouse,
+                                    'group': mouse_groups[mouse],
+                                    'mapping': mapping,
+                                    'metric': 'activity' if want_peakval else 'spike_rate',
+                                    'window': window,
+                                    'frame_class': frame_class,
+                                    'cell_class': cell_class,
+                                    'value': values[cell_class],
+                                    'n_cells': values['n_' + ('total' if cell_class == 'all'
+                                                              else cell_class)],
+                                    'n_events': values['n_events_' + cell_class],
+                                    'n_frames': values['n_frames'],
+                                    'duration_s': values['duration_s'],
+                                    # False = excluded from the panel for want of eligible frames
+                                    'defined': values['defined'],
+                                })
+                    print('  [rates] {} {} {}: done'.format(session_label, mapping, window),
+                          flush=True)
+
+    csv_dir = os.path.join(PLOTS_DIR, place_cell_rates.NAV_AWARE_DIR, 'place_cell_rates')
+    os.makedirs(csv_dir, exist_ok=True)
+    csv_path = os.path.join(csv_dir, 'place_cell_rates_summary.csv')
+    pd.DataFrame(rows).to_csv(csv_path, index=False)
+    print('  [rates] {} rows -> {}'.format(len(rows), csv_path), flush=True)
+
+    msg_end()
+
+
+def run_rate_vs_locomotion(ds, cfg, mappings_per_session=None):
+    """Navigation-aware section: ANCOVA of the cell-averaged rate on locomotion, adjusted for group.
+
+    Keeps every frame in the rate (unlike the movement-restricted panels) and instead removes
+    the linear contribution of locomotion before testing the group term, so the two approaches
+    to the same question can be compared.
+    """
+    if not cfg.plot_rate_vs_locomotion:
+        return
+    PLOTS_DIR = cfg.PLOTS_DIR
+    mouse_groups = ds.mouse_groups
+
+    msg_start('*** Cell-averaged rate vs locomotion (ANCOVA)')
+    locomotion.copy_methods_templates(PLOTS_DIR)
+
+    for label, sessions in _nav_aware_families(ds):
+        for mapping in _nav_aware_mappings(label, mappings_per_session):
+            for want_peakval in (False, True):
+                session_label = label + '-activity' if want_peakval else label
+                for window in place_cell_rates.windows_for_session(label):
+                    records = []
+                    for mouse, sess in sessions.items():
+                        rate = place_cell_rates.rates_by_cell_class(
+                            sess, mouse, mapping, want_peakval=want_peakval,
+                            window=window, frame_class=place_cell_rates.FRAME_CLASS_ALL)['all']
+                        metrics = locomotion.compute_locomotion_metrics(sess, window=window)
+                        records.append({
+                            'mouse': mouse, 'group': mouse_groups[mouse], 'rate': rate,
+                            'distance_cm': metrics['distance_cm'],
+                            'mean_speed_cms': metrics['mean_speed_cms'],
+                        })
+                    df = pd.DataFrame(records)
+
+                    for locomotion_col in ('distance_cm', 'mean_speed_cms'):
+                        _, f_group, p_group = locomotion.plot_rate_vs_locomotion(
+                            PLOTS_DIR, df, session_label, window, locomotion_col,
+                            want_peakval=want_peakval, mapping=mapping)
+                        print('  [ANCOVA] {} {} {} | {}: group F={:.3f}, p={:.4g}'.format(
+                            session_label, mapping, window, locomotion_col, f_group, p_group),
+                            flush=True)
+
+    msg_end()
+
+
+def run_speed_tuning(ds, cfg, mappings_per_session=None, verify=True):
+    """Navigation-aware section: speed-binned robustness check on the rate panels.
+
+    run_place_cell_rates splits frames with a BINARY 2 cm/s threshold, and run_locomotion_comparison
+    shows the groups do not differ on any locomotion summary. Hippocampal firing is nevertheless
+    GRADED with speed, and matched mean speed does not guarantee matched speed distributions --
+    this section closes that gap, by reweighting to a common speed distribution and by testing a
+    group x speed interaction, rather than by dividing rate by speed (see the METHODS file for
+    why that is not a hippocampal convention).
+
+    verify=True runs the structural assertions: speed bin 0 must be exactly the existing
+    immobility frame class, the bins must partition each window, standardizing a mouse to its own
+    occupancy must reproduce its raw rate, and the Poisson estimator must recover a known slope
+    from synthetic counts.
+    """
+    if not cfg.plot_speed_tuning:
+        return
+    PLOTS_DIR = cfg.PLOTS_DIR
+    mouse_groups = ds.mouse_groups
+    lag_frames = cfg.speed_lag_frames
+
+    msg_start('*** Speed-binned tuning, standardization and group x speed interaction')
+    speed_tuning.copy_methods_templates(PLOTS_DIR)
+
+    log = ['Speed tuning — structural verification',
+           'Speed bin edges (cm/s): {}'.format(speed_tuning.SPEED_BIN_EDGES),
+           'Retention: a bin is kept only if EVERY mouse in the session occupies it for '
+           '>= {} s.'.format(speed_tuning.MIN_BIN_SECONDS),
+           'speed_lag_frames = {}'.format(lag_frames), '']
+
+    if verify:
+        fit = speed_tuning.assert_glm_recovers_known_tuning()
+        log.append('Poisson estimator recovers a known slope from synthetic counts: '
+                   'beta={:.5f} (true 0.06000), alpha={:.5f} (true {:.5f}).'.format(
+                       fit['beta'], fit['alpha'], np.log(0.05)))
+        log.append('')
+
+    occupancy_rows, curve_rows, cell_rows, standardized_rows = [], [], [], []
+    stats_records = []
+
+    for label, sessions in _nav_aware_families(ds):
+        for mapping in _nav_aware_mappings(label, mappings_per_session):
+            context = 'speed_tuning {} {}'.format(label, mapping)
+
+            # ---- bin every mouse, then decide the session's retained bins -------------
+            binned_all, binned_place, binned_non_place = {}, {}, {}
+            for mouse, sess in sessions.items():
+                if verify and lag_frames == 0:
+                    speed_tuning.assert_bin_zero_is_immobility(sess)
+                    speed_tuning.assert_bins_partition_window(sess, mouse, mapping)
+                binned_all[mouse] = speed_tuning.per_cell_counts_per_bin(
+                    sess, mouse, mapping, cell_class='all', lag_frames=lag_frames)
+                binned_place[mouse] = speed_tuning.per_cell_counts_per_bin(
+                    sess, mouse, mapping, cell_class='place', lag_frames=lag_frames)
+                binned_non_place[mouse] = speed_tuning.per_cell_counts_per_bin(
+                    sess, mouse, mapping, cell_class='non_place', lag_frames=lag_frames)
+
+            occupancy_per_mouse = {m: b['seconds'] for m, b in binned_all.items()}
+            retained = speed_tuning.retained_bins_for_session(occupancy_per_mouse, context)
+            retained_idx = np.flatnonzero(retained)
+            bin_sets = speed_tuning.bin_sets_for_session(retained)
+
+            log.append('=== {} ({}) ==='.format(label, mapping))
+            log.append('  retained bins: {}  ({} of {})'.format(
+                retained_idx.tolist(), len(retained_idx), speed_tuning.N_SPEED_BINS))
+            if not retained[0]:
+                log.append('  bin 0 (immobility) dropped for the whole session: at least one '
+                           'mouse never goes below {} cm/s, so all_bins and moving_bins coincide '
+                           'and only moving_bins is run.'.format(speed_tuning.VELOCITY_THRESHOLD))
+            log.append('  bin sets run: {}'.format(bin_sets))
+
+            if verify:
+                for mouse in sorted(binned_all):
+                    speed_tuning.assert_self_standardization_identity(
+                        binned_all[mouse], retained, mouse, label)
+                log.append('  self-standardization identity holds for all {} mice.'.format(
+                    len(binned_all)))
+
+            # ---- deliverable 1: does the speed DISTRIBUTION differ? ------------------
+            all_idx = speed_tuning.bin_set_indices(bin_sets[0], retained)
+            reference = speed_tuning.reference_weights(
+                occupancy_per_mouse, all_idx, speed_tuning.REFERENCE_ALL_MICE,
+                mouse_groups, context)
+            occupancy_per_mouse_props = {}
+            for mouse, binned in binned_all.items():
+                props = speed_tuning.occupancy_proportions(binned['seconds'], all_idx)
+                tv = 0.5 * float(np.sum(np.abs(props[all_idx] - reference[all_idx])))
+                occupancy_per_mouse_props[mouse] = {'proportions': props, 'tv_distance': tv}
+                occupancy_rows.append(dict(
+                    session=label, mouse=mouse, group=mouse_groups[mouse], mapping=mapping,
+                    tv_distance=tv, total_s=float(binned['seconds'].sum()),
+                    **{'frac_bin{}'.format(b): props[b] for b in range(speed_tuning.N_SPEED_BINS)},
+                    **{'speed_bin{}'.format(b): binned['speed'][b]
+                       for b in range(speed_tuning.N_SPEED_BINS)}))
+            speed_tuning.plot_speed_occupancy(
+                PLOTS_DIR, mouse_groups, occupancy_per_mouse_props, label, all_idx)
+            tvs = [v['tv_distance'] for v in occupancy_per_mouse_props.values()]
+            log.append('  total-variation distance from the reference speed distribution: '
+                       'max {:.4f}, mean {:.4f}.'.format(max(tvs), float(np.mean(tvs))))
+
+            # ---- deliverable 2: tuning curves ---------------------------------------
+            speed_tuning.plot_speed_tuning_curves(
+                PLOTS_DIR, mouse_groups, {m: b['rate'] for m, b in binned_all.items()},
+                label, mapping, all_idx)
+            speed_tuning.plot_speed_tuning_by_cell_class(
+                PLOTS_DIR, mouse_groups,
+                {'place': {m: b['rate'] for m, b in binned_place.items()},
+                 'non_place': {m: b['rate'] for m, b in binned_non_place.items()}},
+                label, mapping, all_idx)
+
+            for mouse, binned in binned_all.items():
+                for b in retained_idx:
+                    curve_rows.append(dict(
+                        session=label, mouse=mouse, group=mouse_groups[mouse], mapping=mapping,
+                        speed_bin=int(b), speed_lo=speed_tuning.SPEED_BIN_EDGES[b],
+                        speed_hi=speed_tuning.SPEED_BIN_EDGES[b + 1],
+                        realized_speed_cms=binned['speed'][b], seconds=binned['seconds'][b],
+                        n_cells=binned['n_cells'], n_events=int(binned['counts'][:, b].sum()),
+                        rate=binned['rate'][b],
+                        rate_place=binned_place[mouse]['rate'][b],
+                        rate_non_place=binned_non_place[mouse]['rate'][b]))
+
+            # ---- deliverables 3 and 4, per bin set ----------------------------------
+            for bin_set in bin_sets:
+                idx = speed_tuning.bin_set_indices(bin_set, retained)
+                universe = speed_tuning.bin_set_indices(
+                    bin_set, np.ones(speed_tuning.N_SPEED_BINS, dtype=bool))
+                # Span of the mean realized speed across mice, not of whichever mouse happens to
+                # come first in the dict -- this number scales the CI-to-rate translation in the
+                # stats report, so it must not depend on iteration order.
+                speed_span = float(np.ptp(np.mean(
+                    [b['speed'][idx] for b in binned_all.values()], axis=0)))
+
+                per_mouse_glm, per_cell_by_group, per_cell_by_group_mouse = {}, {}, {}
+                tallies, per_mouse_beta, per_mouse_rate = {}, {}, {}
+                per_mouse_std = {}
+
+                for mouse, binned in binned_all.items():
+                    group = mouse_groups[mouse]
+                    coverage = speed_tuning.coverage_fraction(binned['seconds'], idx, universe)
+                    if coverage < speed_tuning.MIN_COVERAGE_FRACTION:
+                        raise RuntimeError(
+                            '{} {}: mouse {} has coverage {:.4f} of the {} universe, below the '
+                            '{} minimum. The retained bins do not describe enough of this '
+                            "animal's time for a standardized rate to mean anything.".format(
+                                context, bin_set, mouse, coverage, bin_set,
+                                speed_tuning.MIN_COVERAGE_FRACTION))
+
+                    # Mouse-level fit: exposure is seconds x cells, so alpha is a per-cell rate.
+                    fit = speed_tuning.fit_speed_glm(
+                        binned['counts'][:, idx].sum(axis=0),
+                        binned['seconds'][idx] * binned['n_cells'],
+                        binned['speed'][idx],
+                        context='{} {} mouse {}'.format(context, bin_set, mouse))
+                    per_mouse_glm[mouse] = {'alpha': fit['alpha'], 'beta': fit['beta']}
+                    per_mouse_beta[mouse] = fit['beta']
+
+                    per_cell, tally = speed_tuning.fit_per_cell_speed_glm(
+                        binned, idx, context='{} {} {}'.format(context, bin_set, mouse))
+                    tally['coverage'] = coverage
+                    tallies.setdefault(group, {})[mouse] = tally
+                    per_cell_by_group.setdefault(group, []).extend(per_cell['beta'].tolist())
+                    per_cell_by_group_mouse.setdefault(group, {})[mouse] = per_cell['beta']
+                    for cell, a, bta, se, nev in zip(per_cell['cells'], per_cell['alpha'],
+                                                     per_cell['beta'], per_cell['se_beta'],
+                                                     per_cell['n_events']):
+                        cell_rows.append(dict(
+                            session=label, mouse=mouse, group=group, mapping=mapping,
+                            bin_set=bin_set, cell=int(cell), alpha=a, beta=bta, se_beta=se,
+                            n_events=int(nev)))
+
+                    raw = float(binned['counts'][:, idx].sum()
+                                / (binned['n_cells'] * binned['seconds'][idx].sum()))
+                    per_mouse_rate[mouse] = raw
+                    per_mouse_std[mouse] = {'coverage': coverage, 'rate_raw': raw}
+
+                # Standardize to each reference, so a conclusion that depends on the choice of
+                # reference is visible rather than assumed away.
+                for ref in speed_tuning.REFERENCES:
+                    weights = speed_tuning.reference_weights(
+                        occupancy_per_mouse, idx, ref, mouse_groups, context)
+                    per_mouse_ref = {}
+                    for mouse, binned in binned_all.items():
+                        std = speed_tuning.standardized_rate(binned['rate'], weights, idx)
+                        raw = per_mouse_std[mouse]['rate_raw']
+                        per_mouse_ref[mouse] = {
+                            'rate_standardized': std, 'rate_raw': raw,
+                            'shift_pct': 100.0 * (std - raw) / raw if raw else float('nan')}
+                        standardized_rows.append(dict(
+                            session=label, mouse=mouse, group=mouse_groups[mouse], mapping=mapping,
+                            bin_set=bin_set, reference=ref,
+                            coverage=per_mouse_std[mouse]['coverage'], **per_mouse_ref[mouse]))
+                    speed_tuning.plot_standardized_rate(
+                        PLOTS_DIR, mouse_groups, per_mouse_ref, label, mapping, bin_set, ref)
+                    shifts = [abs(v['shift_pct']) for v in per_mouse_ref.values()]
+                    log.append('  [{}] standardization shift vs raw rate, reference {}: '
+                               'max {:.3f}%, mean {:.3f}%.'.format(
+                                   bin_set, ref, max(shifts), float(np.mean(shifts))))
+
+                speed_tuning.plot_speed_glm_per_mouse(
+                    PLOTS_DIR, mouse_groups, per_mouse_glm, label, mapping, bin_set)
+                speed_tuning.plot_speed_slope_ecdf(
+                    PLOTS_DIR, {g: np.asarray(v) for g, v in per_cell_by_group.items()},
+                    per_cell_by_group_mouse, label, mapping, bin_set)
+                _, method = speed_tuning.write_slope_mixed_model(
+                    PLOTS_DIR, per_cell_by_group_mouse, tallies, label, mapping, bin_set)
+
+                fit_fracs = [t['frac_fit'] for per in tallies.values() for t in per.values()]
+                log.append('  [{}] per-cell slope model: {}; cells fit {:.1%}-{:.1%} across '
+                           'mice.'.format(bin_set, method, min(fit_fracs), max(fit_fracs)))
+
+                stats_records.append({
+                    'session': label, 'bin_set': bin_set, 'mouse_groups': mouse_groups,
+                    'per_mouse_beta': per_mouse_beta, 'per_mouse_rate': per_mouse_rate,
+                    'speed_span': speed_span})
+
+                print('  [speed] {} {} {}: {} mice, {} bins, span {:.1f} cm/s'.format(
+                    label, mapping, bin_set, len(binned_all), len(idx), speed_span), flush=True)
+            log.append('')
+
+    print('  [speed] stats -> {}'.format(
+        speed_tuning.write_group_stats(PLOTS_DIR, stats_records)), flush=True)
+    for rows, name in ((occupancy_rows, 'speed_occupancy_summary.csv'),
+                       (curve_rows, 'speed_tuning_summary.csv'),
+                       (cell_rows, 'speed_glm_cells.csv'),
+                       (standardized_rows, 'standardized_rate_summary.csv')):
+        print('  [speed] {} rows -> {}'.format(
+            len(rows), speed_tuning.write_table(PLOTS_DIR, rows, name)), flush=True)
+    print('  [speed] verification -> {}'.format(
+        speed_tuning.write_verification(PLOTS_DIR, log)), flush=True)
+
+    msg_end()
 
 
 # ---------------------------------------------------------------------------
