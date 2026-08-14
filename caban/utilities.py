@@ -20,6 +20,14 @@ SMOOTH_SIGMA = 4 # for Gaussian smoothing of velocities in caban.sessions.py
 SMOOTH_LOC_SIGMA = 4 # for smoothing of spatial bins in plot_fluorescence_maps(). 4 bins is 8 cm as per Fournier et al 2020. (given 2cm bins)
 MINISCOPE_FRAME_MS = 1000 / MINISCOPE_FPS
 
+# Single source of truth for the paper figure font. Helvetica-first per journal style; TeX Gyre
+# Heros is a freely-licensed (GUST Font License), metrically-compatible Helvetica clone installed
+# at ~/.local/share/fonts on cbp-db (2026-08-14) for machines without real Helvetica. Arial /
+# Liberation Sans (its metric-compatible clone, installed 2021) are kept as a further fallback so
+# rendering never breaks on a machine with none of the above. DejaVu Sans is matplotlib's own
+# bundled font and is always available, so it anchors the chain.
+FONT_SANS_SERIF = ['Helvetica', 'TeX Gyre Heros', 'Arial', 'Liberation Sans', 'DejaVu Sans']
+
 # Detect host: on the Riken Linux server (cbp-db.bnf.brain.riken.jp) the data
 # lives under /Users/vsekulic/data/...; otherwise default to the Windows D: drive.
 if socket.getfqdn().startswith('cbp-db') or socket.gethostname().startswith('cbp-db'):

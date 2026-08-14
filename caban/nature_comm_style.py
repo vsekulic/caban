@@ -2,6 +2,8 @@ from contextlib import contextmanager
 
 from matplotlib import pyplot as plt
 
+from caban.utilities import FONT_SANS_SERIF
+
 
 def set_rc_params(
     fontsize=8,
@@ -10,7 +12,7 @@ def set_rc_params(
 ):
     params = {
         'font.family': 'sans-serif',
-        'font.sans-serif': ['Arial', 'Liberation Sans', 'DejaVu Sans'],
+        'font.sans-serif': FONT_SANS_SERIF,
         'xtick.labelsize': fontsize,
         'ytick.labelsize': fontsize,
         'axes.labelsize': fontsize,

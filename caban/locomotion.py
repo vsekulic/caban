@@ -40,6 +40,7 @@ from caban.place_cell_rates import (
     _save,
     _values_per_group,
     build_frame_mask,
+    set_session_title,
 )
 
 LOCOMOTION_COLUMNS = ['distance_cm', 'mean_speed_cms', 'mean_speed_moving_cms', 'pct_time_moving']
@@ -92,7 +93,7 @@ def plot_locomotion_group_comparison(PLOTS_DIR, mouse_groups, per_mouse, session
 
     fig = _panel_row(values, names, LOCOMOTION_COLUMNS, LOCOMOTION_TITLES,
                      'Per-mouse value', figsize, show_mouse_names=False,
-                     suptitle='{} — {} (n = mice)'.format(session_type, window))
+                     session_title=session_type)
 
     save_dir = os.path.join(PLOTS_DIR, NAV_AWARE_DIR, 'locomotion_metrics', window)
     _save(fig, save_dir, 'locomotion_group_comparison-{}'.format(session_type), auto_close)
@@ -199,8 +200,9 @@ def plot_rate_vs_locomotion(PLOTS_DIR, df, session_type, window, locomotion_col,
 
     ax.set_xlabel(dict(zip(LOCOMOTION_COLUMNS, LOCOMOTION_TITLES))[locomotion_col])
     ax.set_ylabel(_METRIC_YLABEL[want_peakval])
-    ax.set_title('{} — group | {}: F={:.2f}, p={:.3g}'.format(
-        session_type, locomotion_col, f_group, p_group), size='x-small')
+    # The ANCOVA readout (group F, p) is written in full to the ancova-*.txt beside this figure;
+    # the title carries only the session name, per the paper-facing title convention.
+    set_session_title(ax, session_type)
     ax.legend(frameon=False, fontsize='xx-small')
     plt.tight_layout(pad=0.5)
 

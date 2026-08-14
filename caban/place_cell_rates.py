@@ -70,6 +70,65 @@ _METRIC_YLABEL = _WHOLE_SESSION_YLABEL
 #: Sessions with no tones, for which the pre-tone window is undefined.
 _SESSIONS_WITHOUT_TONES = ('LT1', 'LT2')
 
+# ---------------------------------------------------------------------------
+# Publication-facing figure titles
+#
+# Every figure in this suite is titled with only the session name -- mapping, window, frame
+# class, metric and analysis name belong in the paper's figure legend, not burned into the panel.
+# Wording is an explicit table (not a mechanical underscore-to-space substitution) so it reads the
+# way it should in print. 'TFC_cond_LT1' / 'TFC_cond_LT2' are accepted alongside 'LT1' / 'LT2'
+# because that other spelling is used elsewhere in the codebase (see the same alias problem in
+# caban.decoder's pf_size calibration table).
+# ---------------------------------------------------------------------------
+
+SESSION_DISPLAY_NAME = {
+    'TFC_cond': 'Conditioning',
+    'Test_A': 'Test A',
+    'Test_A_1wk': 'Test A (1 wk)',
+    'Test_B': 'Test B',
+    'Test_B_1wk': 'Test B (1 wk)',
+    'LT1': 'Linear track 1',
+    'LT2': 'Linear track 2',
+    'TFC_cond_LT1': 'Linear track 1',
+    'TFC_cond_LT2': 'Linear track 2',
+}
+
+SESSION_TITLE_SIZE = 'medium'
+SESSION_TITLE_WEIGHT = 'bold'
+
+
+def pretty_session_name(session_type):
+    """Publication-facing session name for a figure title.
+
+    Strips the '-activity' suffix that run_place_cell_rates / run_rate_vs_locomotion append for
+    the amplitude-weighted variant (e.g. 'TFC_cond-activity') before lookup, since that distinct
+    metric is already encoded in the output directory and filename.
+
+    Raises on an unknown session type rather than falling back to the raw string: a silent
+    fallback would put an unrecognised session label on a paper figure and nobody would notice.
+    """
+    base = session_type[:-len('-activity')] if session_type.endswith('-activity') else session_type
+    if base not in SESSION_DISPLAY_NAME:
+        raise KeyError(
+            '{!r} has no publication display name. Known session types: {}. Add it to '
+            'SESSION_DISPLAY_NAME in caban/place_cell_rates.py.'.format(
+                session_type, sorted(SESSION_DISPLAY_NAME)))
+    return SESSION_DISPLAY_NAME[base]
+
+
+def set_session_title(target, session_type):
+    """Apply the paper-facing session title to a Figure (suptitle) or an Axes (set_title).
+
+    Every figure in this suite ends up with its session name in the same place, at the same size
+    and weight, regardless of whether it is a multi-panel figure (Figure.suptitle) or a
+    single-panel one (Axes.set_title).
+    """
+    name = pretty_session_name(session_type)
+    if hasattr(target, 'suptitle'):
+        target.suptitle(name, size=SESSION_TITLE_SIZE, weight=SESSION_TITLE_WEIGHT)
+    else:
+        target.set_title(name, size=SESSION_TITLE_SIZE, weight=SESSION_TITLE_WEIGHT)
+
 
 def windows_for_session(session_type):
     """Analysis windows applicable to *session_type*.
@@ -422,12 +481,14 @@ def _panel_max(values, col_idx):
     return top if top > 0 else 1.0
 
 
-def _panel_row(values, names, columns, titles, ylabel, figsize, show_mouse_names, suptitle=None):
+def _panel_row(values, names, columns, titles, ylabel, figsize, show_mouse_names,
+               session_title=None):
     """Draw one row of violin-triplet panels sharing a y-label; returns the figure.
 
-    *suptitle* carries whatever is common to the row (session, mapping, window, frame class) so
-    the per-panel titles stay short; tight_layout is given headroom for it rather than letting
-    it land on top of the panel titles.
+    *session_title* is a raw session_type (e.g. 'TFC_cond'), rendered as the paper-facing figure
+    title via set_session_title -- mapping / window / frame class / metric belong in the figure
+    legend, not the panel. tight_layout is given headroom for it rather than letting it land on
+    top of the panel titles.
     """
     fig, axes = plt.subplots(1, len(columns), figsize=figsize)
     axes = np.atleast_1d(axes)
@@ -443,9 +504,9 @@ def _panel_row(values, names, columns, titles, ylabel, figsize, show_mouse_names
         ax.set_xticks(range(len(GROUP_ORDER)))
         ax.set_xticklabels([GROUP_LABELS[g] for g in GROUP_ORDER], size='medium')
         ax.set_title(title, size='small')
-    if suptitle is not None:
-        fig.suptitle(suptitle, size='small')
-        fig.tight_layout(pad=0.5, rect=(0.0, 0.0, 1.0, 0.94))
+    if session_title is not None:
+        set_session_title(fig, session_title)
+        fig.tight_layout(pad=0.5, rect=(0.0, 0.0, 1.0, 0.92))
     else:
         fig.tight_layout(pad=0.5)
     return fig
@@ -479,9 +540,7 @@ def plot_place_cell_rate_split(PLOTS_DIR, mouse_groups, per_mouse, session_type,
 
     titles = [CELL_CLASS_TITLES[c] for c in CELL_CLASSES]
     fig = _panel_row(values, names, CELL_CLASSES, titles, _METRIC_YLABEL[want_peakval],
-                     figsize, show_mouse_names=False,
-                     suptitle='{} — {} — {} / {}'.format(
-                         session_type, mapping, window, frame_class))
+                     figsize, show_mouse_names=False, session_title=session_type)
 
     save_dir = os.path.join(PLOTS_DIR, NAV_AWARE_DIR, 'place_cell_rates',
                             session_type, window, frame_class)
@@ -495,8 +554,9 @@ def plot_place_cell_proportion(PLOTS_DIR, mouse_groups, per_mouse, session_type,
     context = 'plot_place_cell_proportion({}, {})'.format(session_type, mapping)
     values, names = _values_per_group(per_mouse, mouse_groups, ['pct_place_cells'], context)
 
-    fig = _panel_row(values, names, ['pct_place_cells'], ['{}'.format(session_type)],
-                     'Place cells (% of mapped cells)', figsize, show_mouse_names=True)
+    fig = _panel_row(values, names, ['pct_place_cells'], [''],
+                     'Place cells (% of mapped cells)', figsize, show_mouse_names=True,
+                     session_title=session_type)
 
     save_dir = os.path.join(PLOTS_DIR, NAV_AWARE_DIR, 'place_cell_proportions')
     _save(fig, save_dir, 'place_cell_proportion-{}-{}'.format(session_type, mapping), auto_close)
@@ -527,12 +587,13 @@ def plot_pf_properties_per_mouse(PLOTS_DIR, mouse_groups, per_mouse, session_typ
     # multi-panel DREADD figures elsewhere).
     fig = _panel_row(values, names, _PF_PROPERTY_COLUMNS, _PF_PROPERTY_TITLES,
                      'Per-mouse mean', figsize, show_mouse_names=False,
-                     suptitle='{} — {} (n = mice)'.format(session_type, mapping))
+                     session_title=session_type)
     _save(fig, save_dir, 'pf_properties_4panel-{}-{}'.format(session_type, mapping), auto_close)
 
     for col_idx, (stem, title) in enumerate(zip(_PF_PROPERTY_STEMS, _PF_PROPERTY_TITLES)):
         single = {g: values[g][:, [col_idx]] for g in GROUP_ORDER}
-        fig = _panel_row(single, names, [0], [title], title, (2.6, 3.2), show_mouse_names=True)
+        fig = _panel_row(single, names, [0], [title], title, (2.6, 3.2), show_mouse_names=True,
+                         session_title=session_type)
         _save(fig, save_dir, '{}-{}-{}'.format(stem, session_type, mapping), auto_close)
 
     return save_dir

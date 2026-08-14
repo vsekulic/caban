@@ -64,6 +64,7 @@ from caban.place_cell_rates import (
     _values_per_group,
     build_frame_mask,
     partition_place_cells,
+    set_session_title,
 )
 from caban.single_unit_common import (
     bracket_ylim,
@@ -837,8 +838,8 @@ def plot_speed_occupancy(PLOTS_DIR, mouse_groups, per_mouse, session_type, idx,
                                'Total-variation distance\nfrom reference', show_mouse_names=True)
     axes[1].set_title('Distributional distance', size='small')
 
-    fig.suptitle('{} — speed-occupancy distribution (n = mice)'.format(session_type), size='small')
-    fig.tight_layout(pad=0.5, rect=(0.0, 0.0, 1.0, 0.93))
+    set_session_title(fig, session_type)
+    fig.tight_layout(pad=0.5, rect=(0.0, 0.0, 1.0, 0.92))
 
     save_dir = os.path.join(PLOTS_DIR, NAV_AWARE_DIR, SPEED_TUNING_DIR, 'speed_occupancy')
     _save(fig, save_dir, 'speed_occupancy-{}'.format(session_type), auto_close)
@@ -875,8 +876,8 @@ def plot_speed_tuning_curves(PLOTS_DIR, mouse_groups, per_mouse, session_type, m
                        ylabel='Rate / mouse mean rate')
     axes[1].set_title('Shape (each mouse normalized)', size='small')
 
-    fig.suptitle('{} — {} — speed tuning (n = mice)'.format(session_type, mapping), size='small')
-    fig.tight_layout(pad=0.5, rect=(0.0, 0.0, 1.0, 0.93))
+    set_session_title(fig, session_type)
+    fig.tight_layout(pad=0.5, rect=(0.0, 0.0, 1.0, 0.92))
 
     save_dir = os.path.join(PLOTS_DIR, NAV_AWARE_DIR, SPEED_TUNING_DIR, 'tuning_curves',
                             session_type)
@@ -903,8 +904,8 @@ def plot_speed_tuning_by_cell_class(PLOTS_DIR, mouse_groups, per_mouse_by_class,
                            ylabel=_METRIC_YLABEL[False])
         ax.set_title(titles[cell_class], size='small')
 
-    fig.suptitle('{} — {} — speed tuning by cell class'.format(session_type, mapping), size='small')
-    fig.tight_layout(pad=0.5, rect=(0.0, 0.0, 1.0, 0.93))
+    set_session_title(fig, session_type)
+    fig.tight_layout(pad=0.5, rect=(0.0, 0.0, 1.0, 0.92))
 
     save_dir = os.path.join(PLOTS_DIR, NAV_AWARE_DIR, SPEED_TUNING_DIR, 'tuning_curves',
                             session_type)
@@ -935,8 +936,8 @@ def plot_speed_glm_per_mouse(PLOTS_DIR, mouse_groups, per_mouse, session_type, m
     fig, axes = plt.subplots(1, len(_GLM_COLUMNS), figsize=figsize)
     for col_idx, (ax, title) in enumerate(zip(np.atleast_1d(axes), _GLM_TITLES)):
         _draw_violin_triplet_panel(ax, values, names, col_idx, title)
-    fig.suptitle('{} — {} — {} (n = mice)'.format(session_type, mapping, bin_set), size='small')
-    fig.tight_layout(pad=0.5, rect=(0.0, 0.0, 1.0, 0.90))
+    set_session_title(fig, session_type)
+    fig.tight_layout(pad=0.5, rect=(0.0, 0.0, 1.0, 0.88))
 
     save_dir = os.path.join(PLOTS_DIR, NAV_AWARE_DIR, SPEED_TUNING_DIR, 'speed_glm',
                             session_type, bin_set)
@@ -953,12 +954,14 @@ def plot_speed_slope_ecdf(PLOTS_DIR, per_cell_by_group, per_cell_by_group_mouse,
     """
     fig, ax = plt.subplots(figsize=figsize)
     # GROUP_ORDER threaded in explicitly: single_unit_common's own order differs, and its default
-    # must not change because four published analyses depend on it.
+    # must not change because four published analyses depend on it. title='' here (ecdf_panel
+    # only sets a panel title when truthy) -- the session name goes on the figure instead, per the
+    # paper-facing title convention.
     ecdf_panel(ax, per_cell_by_group, per_mouse_by_group=per_cell_by_group_mouse,
-               xlabel='Speed modulation (log rate per cm/s)',
-               title='{} — {} — {}'.format(session_type, mapping, bin_set),
+               xlabel='Speed modulation (log rate per cm/s)', title='',
                group_order=GROUP_ORDER)
-    fig.tight_layout(pad=0.5)
+    set_session_title(fig, session_type)
+    fig.tight_layout(pad=0.5, rect=(0.0, 0.0, 1.0, 0.90))
 
     save_dir = os.path.join(PLOTS_DIR, NAV_AWARE_DIR, SPEED_TUNING_DIR, 'speed_glm',
                             session_type, bin_set)
@@ -986,9 +989,8 @@ def plot_standardized_rate(PLOTS_DIR, mouse_groups, per_mouse, session_type, map
     fig, axes = plt.subplots(1, len(columns), figsize=figsize)
     for col_idx, (ax, title) in enumerate(zip(np.atleast_1d(axes), titles)):
         _draw_violin_triplet_panel(ax, values, names, col_idx, title)
-    fig.suptitle('{} — {} — {} — reference: {}'.format(
-        session_type, mapping, bin_set, reference), size='small')
-    fig.tight_layout(pad=0.5, rect=(0.0, 0.0, 1.0, 0.90))
+    set_session_title(fig, session_type)
+    fig.tight_layout(pad=0.5, rect=(0.0, 0.0, 1.0, 0.88))
 
     save_dir = os.path.join(PLOTS_DIR, NAV_AWARE_DIR, SPEED_TUNING_DIR, 'standardized_rate',
                             session_type, bin_set)

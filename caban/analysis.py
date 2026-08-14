@@ -44,11 +44,10 @@ group_colours = {
     'mCherry' : 'k'
 }
 plt.rcParams['font.family'] = 'sans-serif'
-# Arial preferred (paper style); fall back to metric-compatible Liberation Sans
-# and DejaVu Sans on Linux/headless servers where Arial is unavailable.
-plt.rcParams['font.sans-serif'] = ['Arial', 'Liberation Sans', 'DejaVu Sans']
-# Suppress "findfont: Generic family 'sans-serif' not found" spam when Arial
-# is missing (the fallback still renders correctly).
+# See FONT_SANS_SERIF in caban/utilities.py for the fallback chain and why each entry is there.
+plt.rcParams['font.sans-serif'] = FONT_SANS_SERIF
+# Suppress "findfont: Generic family 'sans-serif' not found" spam when neither Helvetica nor
+# Arial is installed (the fallback chain still renders correctly).
 logging.getLogger('matplotlib.font_manager').setLevel(logging.ERROR)
 
 PVALS = [0.05, 0.01, 0.001]
@@ -12634,7 +12633,7 @@ class OccupancyAnalysis:
 # Nature-style rc params shared by all occupancy plots
 _NATURE_RC = {
     'font.family': 'sans-serif',
-    'font.sans-serif': ['Arial', 'Liberation Sans', 'DejaVu Sans'],
+    'font.sans-serif': FONT_SANS_SERIF,
     'font.size': 7,
     'axes.labelsize': 7,
     'axes.titlesize': 8,

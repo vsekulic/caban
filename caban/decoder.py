@@ -15077,7 +15077,7 @@ NATURE_2COL_WIDTH_IN = 183 / 25.4    # 183 mm → ~7.205 in  (Nature double colu
 
 PLOT_RC = {
     "font.family":      "sans-serif",
-    "font.sans-serif":  ["Arial", "Helvetica", "DejaVu Sans"],
+    "font.sans-serif":  FONT_SANS_SERIF,
     "font.size":        7,
     "axes.titlesize":   8,
     "axes.labelsize":   7,
@@ -26614,7 +26614,7 @@ def _save_lt_shuffle_control_comparison(
 
         nature_style = {
             "font.family": "sans-serif",
-            "font.sans-serif": ["Arial", "Helvetica", "DejaVu Sans"],
+            "font.sans-serif": FONT_SANS_SERIF,
             "font.size": 12,
             "axes.labelsize": 12,
             "axes.titlesize": 12,
