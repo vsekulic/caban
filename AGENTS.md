@@ -25,3 +25,12 @@ Agent instructions for this repo. These apply in addition to `CLAUDE.md`.
   snippets (e.g. unit-checking a helper function, inspecting a CSV) run to sanity-check an edit
   before handing it off — those don't touch `PLOTS_DIR` and aren't a substitute for a notebook
   cell the user already has.
+
+## New METHODS files go in Markdown, not `.txt`
+
+- Any **new** file added to `analysis_methods_templates/` should be `.md`, not `.txt` —
+  headers, lists, code spans, etc. Existing `.txt` files stay as-is for now; they'll be
+  converted separately.
+- `_copy_analysis_methods_template()` (`caban/decoder.py`) is extension-agnostic — it just
+  copies whatever filename you pass it — so no code change is needed to support `.md`, just
+  update the filename string at each call site to match the template's actual extension.

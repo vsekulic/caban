@@ -1595,6 +1595,25 @@ def run_proportional_activities(ds, cfg):
             paper_fig2_dir=paper_fig2_dir,
             value_mode='fraction_active',
         )
+        proportional_activities_paper_supplementary_combined(
+            PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond_LT2,
+            test_b=Test_B, test_b_1wk=Test_B_1wk, crossreg_b=TFC_B_B_1wk_crossreg,
+            test_a=Test_A, test_a_1wk=Test_A_1wk, crossreg_a=TFC_A_A_1wk_crossreg,
+            paper_fig2_dir=paper_fig2_dir,
+            value_mode='event_rate',
+        )
+        proportional_activities_paper_supplementary_combined(
+            PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond_LT2,
+            test_b=Test_B, test_b_1wk=Test_B_1wk, crossreg_b=TFC_B_B_1wk_crossreg,
+            test_a=Test_A, test_a_1wk=Test_A_1wk, crossreg_a=TFC_A_A_1wk_crossreg,
+            paper_fig2_dir=paper_fig2_dir,
+            value_mode='amplitudes',
+        )
+        proportional_activities_main_figure_candidates(
+            PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond_LT2,
+            test_b=Test_B, test_b_1wk=Test_B_1wk, crossreg_b=TFC_B_B_1wk_crossreg,
+            test_a=Test_A, test_a_1wk=Test_A_1wk, crossreg_a=TFC_A_A_1wk_crossreg,
+        )
         msg_end()
 
     # ===== end verbatim body =====

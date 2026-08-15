@@ -522,7 +522,7 @@ def _save(fig, save_dir, stem, auto_close=True):
 
 def plot_place_cell_rate_split(PLOTS_DIR, mouse_groups, per_mouse, session_type, mapping,
                                window, frame_class, want_peakval=False,
-                               figsize=(7.2, 3.2), auto_close=True):
+                               figsize=(6.0, 3.2), auto_close=True):
     """Place / non-place / all cell-averaged rate, one value per mouse, compared across groups.
 
     Unit of analysis is the MOUSE: one-way ANOVA gated with Tukey HSD, n = mice -- the same
@@ -570,7 +570,7 @@ _PF_PROPERTY_STEMS = ['num_pfs', 'pf_size', 'pf_compactness', 'spatial_selectivi
 
 
 def plot_pf_properties_per_mouse(PLOTS_DIR, mouse_groups, per_mouse, session_type, mapping,
-                                 figsize=(9.0, 3.2), auto_close=True):
+                                 figsize=(7.0, 3.2), auto_close=True):
     """Per-mouse (n = mice) companion to ``plot_pf_analyses``'s pooled-cell CDFs and KS tests.
 
     Emits the same four measures under the same filename stems, so the two versions can be read

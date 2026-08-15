@@ -83,7 +83,7 @@ def compute_locomotion_metrics(sess, *, window=WINDOW_WHOLE_SESSION,
 
 
 def plot_locomotion_group_comparison(PLOTS_DIR, mouse_groups, per_mouse, session_type, window,
-                                     figsize=(9.0, 3.2), auto_close=True):
+                                     figsize=(7.0, 3.2), auto_close=True):
     """Four-metric violin triplet across DREADD groups, n = mice.
 
     This is the figure that establishes whether there is a navigation difference to adjust for.

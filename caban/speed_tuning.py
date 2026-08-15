@@ -814,7 +814,7 @@ def _draw_violin_triplet_panel(ax, values, names, col_idx, ylabel, show_mouse_na
 
 
 def plot_speed_occupancy(PLOTS_DIR, mouse_groups, per_mouse, session_type, idx,
-                         figsize=(7.2, 3.2), auto_close=True):
+                         figsize=(5.0, 3.2), auto_close=True):
     """Deliverable 1: do the speed DISTRIBUTIONS differ, not merely the means?
 
     This is the premise the rest of the suite rests on and nothing else in the codebase tests it:
@@ -847,7 +847,7 @@ def plot_speed_occupancy(PLOTS_DIR, mouse_groups, per_mouse, session_type, idx,
 
 
 def plot_speed_tuning_curves(PLOTS_DIR, mouse_groups, per_mouse, session_type, mapping, idx,
-                             figsize=(7.2, 3.2), auto_close=True):
+                             figsize=(5.0, 3.2), auto_close=True):
     """Deliverable 2: cell-averaged rate vs speed bin, absolute and shape-normalized.
 
     The second panel divides each mouse's curve by its own mean rate over the bin set, which
@@ -886,7 +886,7 @@ def plot_speed_tuning_curves(PLOTS_DIR, mouse_groups, per_mouse, session_type, m
 
 
 def plot_speed_tuning_by_cell_class(PLOTS_DIR, mouse_groups, per_mouse_by_class, session_type,
-                                    mapping, idx, figsize=(7.2, 3.2), auto_close=True):
+                                    mapping, idx, figsize=(5.0, 3.2), auto_close=True):
     """Positive control: place cells should be the most strongly speed-modulated cell class.
 
     If place cells do not show stronger speed modulation than non-place cells, the binning or the
@@ -920,7 +920,7 @@ _GLM_TITLES = ['Speed-independent rate\n(log events/s at 0 cm/s)',
 
 
 def plot_speed_glm_per_mouse(PLOTS_DIR, mouse_groups, per_mouse, session_type, mapping, bin_set,
-                             figsize=(5.4, 3.2), auto_close=True):
+                             figsize=(5.0, 3.2), auto_close=True):
     """Deliverable 3, mouse level: the group x speed interaction, with n = mice.
 
     Comparing the per-mouse slope across groups **is** the interaction test, done as a two-stage
@@ -970,7 +970,7 @@ def plot_speed_slope_ecdf(PLOTS_DIR, per_cell_by_group, per_cell_by_group_mouse,
 
 
 def plot_standardized_rate(PLOTS_DIR, mouse_groups, per_mouse, session_type, mapping, bin_set,
-                           reference, figsize=(5.4, 3.2), auto_close=True):
+                           reference, figsize=(5.0, 3.2), auto_close=True):
     """Deliverable 4: the speed-standardized rate, and -- as its own panel -- the SHIFT.
 
     The shift panel is the point. Given that the groups do not differ in locomotion, the
