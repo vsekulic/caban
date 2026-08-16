@@ -1,7 +1,7 @@
 Place-cell- and locomotion-restricted cell-averaged spike rates and activity
 
 Overview
-- The whole-session spike rate / activity panels (see session_spike_rates_methods.txt) average
+- The whole-session spike rate / activity panels (see session_spike_rates_methods.md) average
   over EVERY cell in a cross-registration mapping and over EVERY frame of the recording. A viral
   group that simply navigates more will therefore show a higher average rate for purely
   behavioural reasons: running recruits place cells, and fewer immobile frames dilute the mean.

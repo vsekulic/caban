@@ -830,7 +830,11 @@ def run_sp_rates(ds, cfg):
         for mapping in mappings_all_TFC_cond:
             plot_session_sp_rates(PLOTS_DIR, mouse_groups, tone_activity_mapping[mapping], 'TFC_cond-activity', 'Tones '+mapping)
             plot_session_sp_rates(PLOTS_DIR, mouse_groups, shock_activity_mapping[mapping], 'TFC_cond-activity', 'Shock '+mapping)
-            plot_session_sp_rates(PLOTS_DIR, mouse_groups, post_shock_activity_mapping[mapping], 'TFC_cond-activity', 'Post-shock '+mapping, tot_dh_incr=0.25)
+            # tot_dh_incr left at its default: the 0.25 used here previously was tuned for the
+            # old bar + SD-errorbar panel, whose bracket anchors sat well below the data max.
+            # The violin panels anchor brackets at the data max and reserve headroom scaled to
+            # this increment, so 0.25 forced a 2.38x y-range and squashed the violins.
+            plot_session_sp_rates(PLOTS_DIR, mouse_groups, post_shock_activity_mapping[mapping], 'TFC_cond-activity', 'Post-shock '+mapping)
         msg_end()
 
         msg_start('*** Generating Test_B plots (activities)')

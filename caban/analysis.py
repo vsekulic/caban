@@ -29,6 +29,7 @@ from sklearn.metrics import silhouette_samples, silhouette_score
 from sklearn.metrics.pairwise import cosine_similarity
 from scipy.spatial.distance import jaccard
 import pickle
+from functools import partial
 from pathlib import Path
 from caban.decoder import (_LT_1D_CM_PER_PX, _LT_1D_DISTANCE_UNIT, _copy_analysis_methods_template,
                            assert_pf_bin_width_matches, pf_bin_area_cm2)
@@ -76,6 +77,119 @@ class PopulationVector:
         if not only_crossreg: # only compute if we did not only use crossreg..
             for label in range(len(labels_tot)):
                 self.reactivated_crossreg[label] = int(frac_labels[label] * labels_tot[label])
+
+#: Axis labels for the cell-averaged rate/activity metrics. Single source of truth -- imported by
+#: caban.place_cell_rates, caban.locomotion and caban.speed_tuning so every panel showing this
+#: quantity is labelled identically.
+#:
+#: "Avg." and not "Population": the quantity is the MEAN ACROSS CELLS of each cell's own rate
+#: (silent cells included in the denominator), not a summed population count. "Population rate"
+#: reads as the latter, and the two differ by a factor of n_cells -- which varies by mouse.
+_WHOLE_SESSION_YLABEL = {
+    False: 'Avg. spike rate (events/s)',
+    True: 'Avg. activity (peak $S$/s)',
+}
+
+
+def _sp_rates_ylabel(session_type):
+    '''
+    Axis label for a period-wise or binned sp_rates panel.
+
+    These plotters do not take want_peakval -- callers in caban/sections.py route the
+    amplitude-weighted variant by suffixing session_type with '-activity' (which also selects
+    its own sibling output directory), so that suffix is what selects the label. Same quantity
+    and same wording as the whole-session violin panels, hence the shared dict.
+
+    Both period-wise and binned values arrive from get_avg_sp_rate_in_period /
+    get_avg_activity_in_period, which divide by the period duration -- so the per-second
+    units in _WHOLE_SESSION_YLABEL are correct here too.
+    '''
+    return _WHOLE_SESSION_YLABEL[session_type.endswith('-activity')]
+
+
+#: Figure size for the sp_rates group-comparison violin panels. Deliberately identical to
+#: plot_whole_session_sp_rates' default so the period-averaged and whole-session panels are
+#: visually interchangeable when arranged side by side in a paper figure.
+_SP_RATES_VIOLIN_FIGSIZE = (2.4, 3.2)
+
+
+def _violin_ylim_with_bracket_headroom(panel_max, tot_dh_incr=0.1, barh=0.02):
+    '''
+    y-limits for a three-group violin panel, with enough headroom that the significance
+    brackets cannot run off the top of the axes.
+
+    This has to be derived rather than guessed because the two halves are coupled.
+    barplot_annotate_brackets() treats dh and barh as FRACTIONS of the axis range, and
+    do_anova1_plot() stacks up to three brackets at dh = 0.01, 0.01 + incr, 0.01 + 2*incr.
+    So the tallest possible bracket sits at
+
+        y = panel_max + (0.01 + 2*tot_dh_incr + barh + text_pad) * axis_range
+
+    and since the axis starts at 0, axis_range IS the value we are solving for. Setting
+    f to that bracketed fraction gives axis_range = panel_max / (1 - f).
+
+    A previously hardcoded 1.35 factor ignored tot_dh_incr entirely. It happened to just
+    accommodate the default incr of 0.1 (which needs ~1.39), but the post-shock activity
+    panels pass tot_dh_incr=0.25 -- needing ~2.38 -- so their second bracket was drawn past
+    the top of the axes, leaving orphaned asterisks floating over the title.
+    '''
+    text_pad = 0.05  # room for the asterisks themselves, drawn va='bottom' above the bar
+    f = 0.01 + 2 * tot_dh_incr + barh + text_pad
+    if not 0.0 < f < 0.85:
+        raise ValueError(
+            f'tot_dh_incr={tot_dh_incr} leaves no room for significance brackets '
+            f'(needs headroom fraction {f:.2f}, must stay below 0.85).'
+        )
+    if panel_max <= 0:
+        return (0.0, 1.0)
+    return (0.0, panel_max / (1.0 - f))
+
+
+def _plot_sp_rates_violin_panel(values_per_group, ylabel, title_str, save_path,
+                                tot_dh_incr=0.1, with_suptitle=False, suptitle_str=None):
+    '''
+    Violin + per-observation scatter for one sp_rates group comparison.
+
+    Goes through the same _draw_violin_triplet used by plot_whole_session_sp_rates, the
+    proportional_activities panels and the speed-tuning panels, so the styling (violin fill
+    alpha, jittered points, black median line, ANOVA-gated Tukey brackets) stays in one place.
+
+    values_per_group - {group: 1-D sequence of observations}. What one observation *is*
+                       differs by panel (a behaviour period vs a mouse); that is the caller's
+                       business -- see the two call sites in plot_session_sp_rates.
+    '''
+    group_order = ['hM3D', 'mCherry', 'hM4D']
+    arrays = {g: np.asarray(values_per_group[g], dtype=float).reshape(-1, 1) for g in group_order}
+
+    for group in group_order:
+        if arrays[group].shape[0] < 2:
+            raise RuntimeError(
+                f'sp_rates violin panel "{title_str}": group {group} has '
+                f'{arrays[group].shape[0]} observation(s); need >=2 for a group comparison.'
+            )
+
+    # Fix the y-range explicitly: _draw_violin_triplet's bracket geometry scales with the axis
+    # range, and rates are ~0.01-0.5 while activity is O(10-100). The headroom must account for
+    # how far the brackets stack, which depends on tot_dh_incr -- see the helper.
+    panel_max = max(np.max(arrays[g]) for g in group_order)
+    ylim = _violin_ylim_with_bracket_headroom(panel_max, tot_dh_incr=tot_dh_incr)
+
+    fig, ax = plt.subplots(figsize=_SP_RATES_VIOLIN_FIGSIZE)
+    ax.spines[['right', 'top']].set_visible(False)
+    # _draw_violin_triplet does not thread tot_dh_incr, so bind it onto the stat function --
+    # callers tune it per panel (e.g. 0.25 for the post-shock activity panels).
+    _draw_violin_triplet(ax, arrays, 0, group_order, group_colours,
+                         stat_fn=partial(do_anova1_plot, tot_dh_incr=tot_dh_incr),
+                         ylim=ylim, ylabel=ylabel)
+    ax.set_xticks(range(len(group_order)))
+    ax.set_xticklabels(['Exc', 'Ctl', 'Inh'], size='medium')
+    ax.set_title(title_str, size='small')
+    if with_suptitle:
+        plt.suptitle(suptitle_str)
+    plt.tight_layout(pad=0.5)
+    fig.savefig(save_path, format='png', dpi=300)
+    plt.close(fig)
+
 
 def plot_session_sp_rates(PLOTS_DIR, mouse_groups, sp_rates, session_type, title_str, figsize=(8,4), with_suptitle=False, \
     tot_dh_incr=0.1):
@@ -146,57 +260,49 @@ def plot_session_sp_rates(PLOTS_DIR, mouse_groups, sp_rates, session_type, title
         ax.bar(x + ((group_num)*width)/group_tot, group_avg[x], label=group, color=group_colours[group], width=width/group_tot)
         group_num += 1
     ax.legend()
+    ax.set_xlabel('Behaviour period')
+    ax.set_ylabel(_sp_rates_ylabel(session_type))
     plt.title(title_str)
-    os.makedirs(os.path.join(PLOTS_DIR, 'sp_rates', '{}_sp_rates'.format(session_type)), exist_ok=True)
-    plt.savefig(os.path.join(PLOTS_DIR, 'sp_rates', '{}_sp_rates'.format(session_type), '{}_sp_rates-'.format(session_type)+title_str+'.png'), format='png', dpi=300)
+    save_dir = os.path.join(PLOTS_DIR, 'sp_rates', '{}_sp_rates'.format(session_type))
+    os.makedirs(save_dir, exist_ok=True)
+    _copy_analysis_methods_template('session_spike_rates_methods.md', save_dir)
+    plt.savefig(os.path.join(save_dir, '{}_sp_rates-'.format(session_type)+title_str+'.png'), format='png', dpi=300)
     plt.close()
 
-    # Plot average rates and do anova
-    num_groups = len(groups_avg)
-    x = range(num_groups)
-    means = np.zeros(num_groups)
-    stds = np.zeros(num_groups)
-    errbars = np.zeros((2,num_groups))
-    weighted_averages = dict()
-    for group, idx in zip(['hM3D', 'hM4D', 'mCherry'], range(3)):
-        weighted_averages[group] = groups_avg[group] / period_weights[group]
-        means[idx] = np.mean(weighted_averages[group])
-        stds[idx] = np.std(weighted_averages[group])
-        errbars[1,idx] = stds[idx]
-    fig, ax = plt.subplots(figsize=(1.5,3))
-    ax.spines[['right','top']].set_visible(False)
-    ax.bar(x, means, yerr=errbars, color=group_colours.values())
-    do_anova1_plot(weighted_averages['hM3D'], weighted_averages['hM4D'], weighted_averages['mCherry'], ax, means+stds, tot_dh_incr=tot_dh_incr)
-    ax.set_xticks(range(3))
-    ax.set_xticklabels(['Exc', 'Inh', 'Ctl'], size='medium',  rotation=-45)
+    # Two group-comparison violin panels, written to separate files. They plot the same
+    # underlying quantity and differ only in what ONE POINT is:
+    #   '-avg'       one point per BEHAVIOUR PERIOD (n = 3-5). The historical unit of analysis,
+    #                kept for continuity with previously published figures.
+    #   '-avg-mice'  one point per MOUSE (n = mice). The correct across-animal comparison, and
+    #                the same unit as plot_whole_session_sp_rates.
+    # Both replace the former bar + SD-errorbar panel; no y-tick override, since these are raw
+    # events/s (or peak-S/s) and never percentages -- an earlier version pasted 0/25/50/75/100
+    # labels onto the unnormalised bars at positions computed as bare fractions of the range.
+    save_dir = os.path.join(PLOTS_DIR, 'sp_rates', '{}_sp_rates'.format(session_type))
+    os.makedirs(save_dir, exist_ok=True)
+    _copy_analysis_methods_template('session_spike_rates_methods.md', save_dir)
+    filename_root = '{}_sp_rates-'.format(session_type) + title_str
+    ylabel = _sp_rates_ylabel(session_type)
 
-    [min_y, max_y] = ax.get_ylim()
-    range_y = max_y - min_y
-    plt.yticks([min_y, range_y*0.25, range_y*0.5, range_y*0.75, range_y],[0,25,50,75,100])
-    plt.ylabel(r'Normalized $\Delta$F/F (%)')
-    plt.xlabel('Time (min)')
+    weighted_averages = {group: groups_avg[group] / period_weights[group]
+                         for group in ['hM3D', 'hM4D', 'mCherry']}
+    _plot_sp_rates_violin_panel(
+        weighted_averages, ylabel, title_str,
+        os.path.join(save_dir, filename_root + '-avg.png'),
+        tot_dh_incr=tot_dh_incr, with_suptitle=with_suptitle,
+        suptitle_str=title_str + ' avg')
 
-    if with_suptitle:
-        plt.suptitle(title_str + ' avg')
-    plt.tight_layout(pad=0.5)
-    #plt.tight_layout()
-    #fig.subplots_adjust(left=0.18, right=0.98, top=0.98, bottom=0.12)
-    os.makedirs(os.path.join(PLOTS_DIR, 'sp_rates', '{}_sp_rates'.format(session_type)), exist_ok=True)
-    plt.savefig(os.path.join(PLOTS_DIR, 'sp_rates', '{}_sp_rates'.format(session_type), '{}_sp_rates-'.format(session_type)+title_str+'-avg.png'), format='png', dpi=300)
-    plt.close()
-
-#: Axis labels for the cell-averaged rate/activity metrics. Single source of truth -- imported by
-#: caban.place_cell_rates, caban.locomotion and caban.speed_tuning so every panel showing this
-#: quantity is labelled identically.
-#:
-#: "Avg." and not "Population": the quantity is the MEAN ACROSS CELLS of each cell's own rate
-#: (silent cells included in the denominator), not a summed population count. "Population rate"
-#: reads as the latter, and the two differ by a factor of n_cells -- which varies by mouse.
-_WHOLE_SESSION_YLABEL = {
-    False: 'Avg. spike rate (events/s)',
-    True: 'Avg. activity (peak $S$/s)',
-}
-
+    # Per-mouse panel: average each animal over its OWN behaviour periods first, so the
+    # violin's points are animals. Built from sp_rates (keyed by mouse) rather than from
+    # groups_avg, which has already been summed across mice.
+    per_mouse = {group: [] for group in ['hM3D', 'hM4D', 'mCherry']}
+    for mouse, periods in sp_rates.items():
+        per_mouse[mouse_groups[mouse]].append(np.mean(periods))
+    _plot_sp_rates_violin_panel(
+        per_mouse, ylabel, title_str,
+        os.path.join(save_dir, filename_root + '-avg-mice.png'),
+        tot_dh_incr=tot_dh_incr, with_suptitle=with_suptitle,
+        suptitle_str=title_str + ' avg (per mouse)')
 
 def plot_whole_session_sp_rates(PLOTS_DIR, mouse_groups, sp_rates, session_type, mapping,
                                 want_peakval=False, figsize=(2.4, 3.2), auto_close=True):
@@ -233,10 +339,12 @@ def plot_whole_session_sp_rates(PLOTS_DIR, mouse_groups, sp_rates, session_type,
             )
         values_per_group[group] = np.array([[float(sp_rates[m][0])] for m in mice], dtype=float)
 
-    # _draw_violin_triplet's bracket geometry uses absolute data offsets tuned for 0-1
-    # fractions, so fix the y-range explicitly -- rates are ~0.01-0.5 and activity is O(10-100).
+    # _draw_violin_triplet's bracket geometry scales with the axis range, so fix the y-range
+    # explicitly -- rates are ~0.01-0.5 and activity is O(10-100). Shared with the
+    # period-averaged panels so all sp_rates violins reserve bracket headroom identically;
+    # the former hardcoded 1.35 was fractionally under what three stacked brackets need.
     panel_max = max(np.max(values_per_group[g]) for g in group_order)
-    ylim = (0.0, panel_max * 1.35 if panel_max > 0 else 1.0)
+    ylim = _violin_ylim_with_bracket_headroom(panel_max)
 
     fig, ax = plt.subplots(figsize=figsize)
     ax.spines[['right', 'top']].set_visible(False)
@@ -249,7 +357,7 @@ def plot_whole_session_sp_rates(PLOTS_DIR, mouse_groups, sp_rates, session_type,
 
     save_dir = os.path.join(PLOTS_DIR, 'sp_rates', '{}_sp_rates'.format(session_type))
     os.makedirs(save_dir, exist_ok=True)
-    _copy_analysis_methods_template('session_spike_rates_methods.txt', save_dir)
+    _copy_analysis_methods_template('session_spike_rates_methods.md', save_dir)
     filename_root = '{}_sp_rates-Whole-session '.format(session_type) + mapping
     fig.savefig(os.path.join(save_dir, filename_root + '.png'), format='png', dpi=300)
     fig.savefig(os.path.join(save_dir, filename_root + '.svg'), format='svg')
@@ -393,16 +501,19 @@ def plot_binned_sp_rates_mapping(PLOTS_DIR, mouse_groups, binned_sp_rates, mappi
 
     if not plot_bars:
         plt.xlim([0,len(bins)*bin_width/20/60])
-    [min_y, max_y] = plt.gca().get_ylim()
-    range_y = max_y - min_y
-    plt.yticks([min_y, range_y*0.25, range_y*0.5, range_y*0.75, range_y],[0,25,50,75,100])
-    plt.ylabel(r'Normalized $\Delta$F/F (%)')
-    plt.xlabel('Time (min)')
+    # No y-tick override: these are raw events/s (or peak-S/s) per bin, not percentages. See the
+    # matching note in plot_session_sp_rates for the fabricated 0-100 ticks this replaced.
+    plt.ylabel(_sp_rates_ylabel(session_type))
+    # The line variant builds x in elapsed minutes (see the np.linspace above); the bar variant
+    # plots against bin index, so the axis means different things in the two branches.
+    plt.xlabel('Time bin' if plot_bars else 'Time (min)')
 
     plt.tight_layout()
     filename = '{}_binned_sp_rates_mapping-'.format(session_type)+mapping+suffix+'.png'
-    os.makedirs(os.path.join(PLOTS_DIR, 'sp_rates', '{}_binned_sp_rates_mapping'.format(session_type)), exist_ok=True)
-    plt.savefig(os.path.join(PLOTS_DIR, 'sp_rates', '{}_binned_sp_rates_mapping'.format(session_type), filename), format='png', dpi=300, transparent=True)
+    save_dir = os.path.join(PLOTS_DIR, 'sp_rates', '{}_binned_sp_rates_mapping'.format(session_type))
+    os.makedirs(save_dir, exist_ok=True)
+    _copy_analysis_methods_template('session_spike_rates_methods.md', save_dir)
+    plt.savefig(os.path.join(save_dir, filename), format='png', dpi=300, transparent=True)
 
     if paper_dir:
         path_name = os.path.join(paper_dir, filename)
@@ -939,12 +1050,35 @@ def _draw_violin_triplet(ax, values_per_group, col_idx, group_order, group_colou
 
     if ylim is not None:
         ax.set_ylim(ylim)
-    heights = np.array([np.max(values_per_group[group][:, col_idx]) + 0.02 for group in group_order])
+    # Anchor every bracket at the SAME baseline -- the tallest group in the panel -- so that
+    # do_anova1_plot's increasing dh values stack the brackets evenly and monotonically.
+    # Previously each bracket was anchored at its own pair's maximum (barplot_annotate_brackets
+    # uses max(ly, ry) for adjacent pairs), so a bracket spanning two SHORT groups started far
+    # lower and could land between, or collide with, brackets drawn before it -- regardless of
+    # having a larger dh. With three unequal groups that put two brackets within one bar-height
+    # of each other.
+    panel_top = max(np.max(values_per_group[group][:, col_idx]) for group in group_order)
+    heights = np.full(len(group_order), panel_top + 0.02)
     annotator = stat_fn if stat_fn is not None else do_anova1_plot
     annotator(values_per_group['hM3D'][:, col_idx],
               values_per_group['hM4D'][:, col_idx],
               values_per_group['mCherry'][:, col_idx],
               ax, heights, barh=barh, group_order=group_order)
+
+    if ylim is None:
+        # Callers that fix ylim have already reserved bracket headroom (see
+        # _violin_ylim_with_bracket_headroom). Callers that let the axis autoscale have not:
+        # matplotlib grows the data limits to include the bracket LINES but knows nothing about
+        # the asterisk text drawn above them (va='bottom'), and text is not clipped to the axes,
+        # so the topmost stars spill over the frame and into the title. Grow the axis to cover
+        # them. Only the bracket lines live in ax.lines here -- the violin bodies are
+        # PolyCollections and the median bar is a LineCollection.
+        y0, y1 = ax.get_ylim()
+        bracket_tops = [np.max(line.get_ydata()) for line in ax.lines if len(line.get_ydata())]
+        if bracket_tops:
+            needed = max(bracket_tops) + 0.08 * (y1 - y0)
+            if needed > y1:
+                ax.set_ylim(y0, needed)
     return panel_max_y
 
 
@@ -3080,7 +3214,7 @@ def process_PSTH_shuffle(PLOTS_DIR, mice_per_group, crossreg_mice, session, mapp
         ax.set_xticklabels([0, 5, 10, 15])
         ax.set_xlabel('Time (s)')
         if not ylabel_set:
-            ax.set_ylabel('$\Delta$F/F (arbitrary units)')
+            ax.set_ylabel('Denoised fluorescence $C$ (a.u.)')
             ylabel_set = True
     plt.suptitle('PSTH for {} for mapping {}'.format(stim, mapping_type))
     filename = 'PSTH_{}_{}_{}.png'.format(stim, mapping_type, frames_lookaround)
@@ -3109,7 +3243,7 @@ def process_PSTH_shuffle(PLOTS_DIR, mice_per_group, crossreg_mice, session, mapp
         ax.set_xticklabels([0, 5, 10, 15])
         ax.set_xlabel('Time (s)')
         if not ylabel_set:
-            ax.set_ylabel('$\Delta$F/F (arbitrary units)')
+            ax.set_ylabel('Denoised fluorescence $C$ (a.u.)')
             ylabel_set = True
     plt.suptitle('PSTH (ALL) for {} for mapping {}'.format(stim, mapping_type))
     filename = 'PSTH_all_{}_{}_{}.png'.format(stim, mapping_type, frames_lookaround)
@@ -3138,7 +3272,7 @@ def process_PSTH_shuffle(PLOTS_DIR, mice_per_group, crossreg_mice, session, mapp
         ax.set_xticklabels([0, 5, 10, 15])
         ax.set_xlabel('Time (s)')
         if not ylabel_set:
-            ax.set_ylabel('$\Delta$F/F (arbitrary units)')
+            ax.set_ylabel('Denoised fluorescence $C$ (a.u.)')
             ylabel_set = True
     plt.suptitle('PSTH (SUBTRACT) for {} for mapping {}'.format(stim, mapping_type))
     filename = 'PSTH_subtract_{}_{}_{}.png'.format(stim, mapping_type, frames_lookaround)
@@ -3509,7 +3643,7 @@ def process_PSTH_shuffle1(PLOTS_DIR, mice_per_group, crossreg_mice, session, map
         ax.set_xticklabels([0, 5, 10, 15])
         ax.set_xlabel('Time (s)')
         if not ylabel_set:
-            ax.set_ylabel('$\Delta$F/F (arbitrary units)')
+            ax.set_ylabel('Residual fluorescence $YrA$ (a.u.)')
             ylabel_set = True
     plt.suptitle('PSTH for {} for mapping {}'.format(stim, mapping_type))
     filename = 'PSTH_{}_{}_{}.png'.format(stim, mapping_type, frames_lookaround)
@@ -3538,7 +3672,7 @@ def process_PSTH_shuffle1(PLOTS_DIR, mice_per_group, crossreg_mice, session, map
         ax.set_xticklabels([0, 5, 10, 15])
         ax.set_xlabel('Time (s)')
         if not ylabel_set:
-            ax.set_ylabel('$\Delta$F/F (arbitrary units)')
+            ax.set_ylabel('Residual fluorescence $YrA$ (a.u.)')
             ylabel_set = True
     plt.suptitle('PSTH (ALL) for {} for mapping {}'.format(stim, mapping_type))
     filename = 'PSTH_all_{}_{}_{}.png'.format(stim, mapping_type, frames_lookaround)
@@ -3567,7 +3701,7 @@ def process_PSTH_shuffle1(PLOTS_DIR, mice_per_group, crossreg_mice, session, map
         ax.set_xticklabels([0, 5, 10, 15])
         ax.set_xlabel('Time (s)')
         if not ylabel_set:
-            ax.set_ylabel('$\Delta$F/F (arbitrary units)')
+            ax.set_ylabel('Residual fluorescence $YrA$ (a.u.)')
             ylabel_set = True
     plt.suptitle('PSTH (SUBTRACT) for {} for mapping {}'.format(stim, mapping_type))
     filename = 'PSTH_subtract_{}_{}_{}.png'.format(stim, mapping_type, frames_lookaround)
@@ -3859,7 +3993,7 @@ def process_PSTH_shuffle_sep(PLOTS_DIR, mice_per_group, crossreg_mice, session, 
         ax.set_xticklabels([0, 5, 10, 15])
         ax.set_xlabel('Time (s)')
         if not ylabel_set:
-            ax.set_ylabel('$\Delta$F/F (arbitrary units)')
+            ax.set_ylabel('Deconvolved activity $S$ (a.u.)')
             ylabel_set = True
     plt.suptitle('PSTH for {} for mapping {}'.format(stim, mapping_type))
     filename = 'PSTH_{}_{}_{}.png'.format(stim, mapping_type, frames_lookaround)
@@ -3887,7 +4021,7 @@ def process_PSTH_shuffle_sep(PLOTS_DIR, mice_per_group, crossreg_mice, session, 
         ax.set_xticklabels([0, 5, 10, 15])
         ax.set_xlabel('Time (s)')
         if not ylabel_set:
-            ax.set_ylabel('$\Delta$F/F (arbitrary units)')
+            ax.set_ylabel('Deconvolved activity $S$ (a.u.)')
             ylabel_set = True
     plt.suptitle('PSTH (ALL) for {} for mapping {}'.format(stim, mapping_type))
     filename = 'PSTH_all_{}_{}_{}.png'.format(stim, mapping_type, frames_lookaround)
@@ -4099,7 +4233,7 @@ def process_PSTH_shuffle_sep_S(PLOTS_DIR, mice_per_group, crossreg_mice, session
         ax.set_xticklabels([0, 5, 10, 15])
         ax.set_xlabel('Time (s)')
         if not ylabel_set:
-            ax.set_ylabel('$\Delta$F/F (arbitrary units)')
+            ax.set_ylabel('Deconvolved activity $S$ (a.u.)')
             ylabel_set = True
     plt.suptitle('PSTH for {} for mapping {}'.format(stim, mapping_type))
     filename = 'PSTH_{}_{}_{}.png'.format(stim, mapping_type, frames_lookaround)
@@ -4317,7 +4451,7 @@ def process_PSTH_simple(PLOTS_DIR, mice_per_group, crossreg_mice, session, mappi
         ax.set_xticklabels([0, 5, 10, 15])
         ax.set_xlabel('Time (s)')
         if not ylabel_set:
-            ax.set_ylabel('$\Delta$F/F (arbitrary units)')
+            ax.set_ylabel('Residual fluorescence $YrA$ (a.u.)')
             ylabel_set = True
     plt.suptitle('PSTH for {} for mapping {} ({} total cells)'.format(stim, mapping_type, nonzero_cell_count))
     filename = 'PSTH_{}_{}_{}_norm{}_binary{}.png'.format(stim, mapping_type, frames_lookaround, normalize, binary_activity)
@@ -4557,7 +4691,7 @@ def process_PSTH_simple_S(PLOTS_DIR, mice_per_group, crossreg_mice, session, map
         ax.set_xticklabels([0, 5, 10, 15])
         ax.set_xlabel('Time (s)')
         if not ylabel_set:
-            ax.set_ylabel('$\Delta$F/F (arbitrary units)')
+            ax.set_ylabel('Deconvolved activity $S$ (a.u.)')
             ylabel_set = True
     plt.suptitle('PSTH for {} for mapping {} S ({} total cells)'.format(stim, mapping_type, nonzero_cell_count))
     filename = 'PSTH_{}_{}_{}_norm{}_binary{}_S.png'.format(stim, mapping_type, frames_lookaround, normalize, binary_activity)
@@ -4661,7 +4795,9 @@ def plot_PSTH_intensities(PLOTS_DIR, trapz_cells, stim, mapping):
     print('*** anova prep: {} #hM3D {} #hM4D {} #mCherry'.format(len(trapz_cells['hM3D']), len(trapz_cells['hM4D']), len(trapz_cells['mCherry'])))
     do_anova1_plot(trapz_cells['hM3D'], trapz_cells['hM4D'], trapz_cells['mCherry'], ax, means+sems)
     ax.set_xticks(range(3))
-    ax.set_ylabel(stim.capitalize()+r'-evoked CA1 PC intensity (% of max $\Delta$F/F)')
+    # trapz_cells entries are trapz(YrA snippet) / max(YrA snippet) -- a residual-fluorescence
+    # integral normalised by that cell's own peak, not a fraction of any ΔF/F.
+    ax.set_ylabel(stim.capitalize()+r'-evoked CA1 PC intensity (% of peak $YrA$)')
     ax.set_xticklabels(['Exc', 'Inh', 'Ctl'], size='medium')
     plt.suptitle(stim.capitalize()+'-evoked response strength')
     plt.subplots_adjust(left=0.19, bottom=0.09, right=0.90, top=0.90, wspace=0.20, hspace=0.20)
@@ -4690,7 +4826,7 @@ def plot_PSTH_peaks(PLOTS_DIR, PSTH_cells, max_per_cell, stim, mapping):
     print('*** anova prep: {} #hM3D {} #hM4D {} #mCherry'.format(len(data['hM3D']), len(data['hM4D']), len(data['mCherry'])))
     do_anova1_plot(data['hM3D'], data['hM4D'], data['mCherry'], ax, means+sems)
     ax.set_xticks(range(3))
-    ax.set_ylabel(r'$\Delta$F/F (arbitrary units)')
+    ax.set_ylabel(r'Peak residual fluorescence $YrA$ (a.u.)')
     ax.set_xticklabels(['Exc', 'Inh', 'Ctl'], size='medium')
     plt.suptitle('Peak '+stim.capitalize()+'-evoked response')
     plt.subplots_adjust(left=0.22, bottom=0.09, right=0.90, top=0.90, wspace=0.20, hspace=0.20)
