@@ -35,7 +35,7 @@ from itertools import combinations
 
 import numpy as np
 import pandas as pd
-from scipy.stats import f_oneway, ttest_ind, f as f_dist, bootstrap as scipy_bootstrap
+from scipy.stats import f_oneway, ttest_ind, bootstrap as scipy_bootstrap
 
 import matplotlib.pyplot as plt
 from statsmodels.stats.multitest import multipletests
@@ -52,6 +52,7 @@ from caban.spatial import (
     _pv_p_to_star,
     _pv_draw_bracket,
 )
+from caban.single_unit_common import joint_wald_test
 
 
 # ---------------------------------------------------------------------------
@@ -1102,34 +1103,14 @@ def _lmm_holm_pairs(long_df, value_col="value"):
             )
         coef_idx[g] = match[0]
 
-    # Omnibus: joint Wald restriction that all non-reference dummies = 0.
-    # Built manually so it works uniformly for MixedLM (whose `.f_test`
-    # has a param-vector-shape quirk involving the RE variance) and for
-    # the OLS+cluster fallback. Uses an F approximation with
-    # df1=q, df2=N-k_fe (denom df is approximate for MixedLM anyway).
+    # Omnibus: joint Wald restriction that all non-reference dummies = 0. Shared with every
+    # other joint mixed-model test in the codebase via caban.single_unit_common.joint_wald_test
+    # (it works uniformly for MixedLM, whose `.f_test` has a param-vector-shape quirk involving
+    # the RE variance, and for the OLS+cluster fallback).
     nonref = [g for g in grp_order if g != ref]
-    if len(nonref) >= 1:
-        Rmat = np.zeros((len(nonref), k_fe), dtype=float)
-        for k, g in enumerate(nonref):
-            Rmat[k, coef_idx[g]] = 1.0
-        beta = (np.asarray(res.fe_params) if hasattr(res, "fe_params")
-                else np.asarray(res.params)).reshape(-1)[:k_fe]
-        cov_full = np.asarray(res.cov_params())
-        if cov_full.shape[0] != k_fe:
-            cov_fe = cov_full[:k_fe, :k_fe]
-        else:
-            cov_fe = cov_full
-        Rb = Rmat @ beta
-        RVR = Rmat @ cov_fe @ Rmat.T
-        chi2_stat = float(Rb @ np.linalg.solve(RVR, Rb))
-        q = Rmat.shape[0]
-        N = int(getattr(res, "nobs", len(df)))
-        df2 = max(1, N - k_fe)
-        F = chi2_stat / q
-        p_om = float(f_dist.sf(F, q, df2))
-    else:
-        F, p_om = float("nan"), float("nan")
-    omnibus = {"F": F, "p": p_om}
+    nonref_names = [fe_names[coef_idx[g]] for g in nonref]
+    wald = joint_wald_test(res, nonref_names, n_fixed=k_fe)
+    omnibus = {"F": wald["F"], "p": wald["p"]}
 
     # Pairwise: Wald t_test on the appropriate linear restriction.
     pairs = list(combinations(range(len(grp_order)), 2))

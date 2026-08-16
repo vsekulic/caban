@@ -16,7 +16,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import statsmodels.formula.api as smf
 from statsmodels.stats.multitest import multipletests
-from scipy.stats import norm
+from scipy.stats import norm, f as f_dist
 from scipy.ndimage import gaussian_filter1d
 
 from caban.utilities import MINISCOPE_FPS
@@ -297,36 +297,36 @@ def _mixed_model_degeneracy(result, n_fixed):
     return None
 
 
-def fit_group_mixed_model(df, value_col='value', reference='mCherry'):
-    """Fit ``value ~ C(group)`` with a per-mouse random intercept (cell nested in
-    mouse), so single-cell n is honoured without pseudoreplication.
+def fit_mixed_model(df, formula, group_col='mouse', extra_header=''):
+    """Fit an arbitrary ``formula`` as a linear mixed model with a random intercept on
+    ``group_col``, falling back to ``group_col``-clustered OLS if the mixed model does not
+    converge OR converges to a degenerate solution (see :func:`_mixed_model_degeneracy`) — a
+    documented statistical fallback, not a silent error swallow.
 
-    Returns (summary_text, method_used). Falls back, with an explicit note in the
-    returned text, to mouse-clustered OLS if the mixed model does not converge OR
-    converges to a degenerate solution (see :func:`_mixed_model_degeneracy`) — a
-    documented statistical fallback, not a silent error swallow. Mouse-clustered OLS
-    answers the same question with the same clustering, without the variance component.
+    This is the general fitting/fallback primitive behind :func:`fit_group_mixed_model` (which
+    fixes ``formula`` to a plain ``value ~ C(group)`` contrast). Pass an explicit ``formula`` for
+    anything beyond that — e.g. a ``group * epoch`` interaction — so every mixed-model fit in the
+    codebase goes through the same convergence/degeneracy handling rather than a parallel copy.
+
+    ``df`` must already have any categorical columns coded (e.g. via ``pd.Categorical`` with an
+    explicit reference level) — this function does not touch column dtypes.
+
+    Returns (result, method_used, summary_text). ``result`` is the fitted statsmodels object
+    (``MixedLMResults`` or a cluster-robust ``RegressionResults``) — pass it to
+    :func:`joint_wald_test` for omnibus/interaction tests. ``method_used`` is 'mixedlm' or
+    'clustered_ols'.
     """
-    df = df[np.isfinite(df[value_col])].copy()
-    if df['group'].nunique() < 2 or len(df) < 6:
-        return (f'Insufficient data for group model: '
-                f'{len(df)} cells across {df["group"].nunique()} groups.\n'), 'none'
-
-    df['group'] = pd.Categorical(df['group'],
-                                 categories=[reference] + [g for g in GROUP_ORDER if g != reference])
-    formula = f'{value_col} ~ C(group, Treatment(reference="{reference}"))'
-    header = (f'Formula: {formula}\n'
-              f'N cells = {len(df)}, N mice = {df["mouse"].nunique()}\n\n')
+    header = f'Formula: {formula}\nN rows = {len(df)}, N {group_col} = {df[group_col].nunique()}\n\n{extra_header}'
 
     def _clustered_ols(reason):
         ols = smf.ols(formula, data=df).fit(
-            cov_type='cluster', cov_kwds={'groups': df['mouse']})
-        text = (f'Mixed model unusable ({reason}); using mouse-clustered OLS instead.\n'
-                f'Cluster = mouse.\n{header}{ols.summary()}\n')
-        return text, 'clustered_ols'
+            cov_type='cluster', cov_kwds={'groups': df[group_col]})
+        text = (f'Mixed model unusable ({reason}); using {group_col}-clustered OLS instead.\n'
+                f'Cluster = {group_col}.\n{header}{ols.summary()}\n')
+        return ols, 'clustered_ols', text
 
     try:
-        model = smf.mixedlm(formula, data=df, groups=df['mouse'])
+        model = smf.mixedlm(formula, data=df, groups=df[group_col])
         with warnings.catch_warnings():
             # statsmodels signals boundary/singular fits through warnings; they are inspected
             # explicitly below rather than printed, so a degenerate fit is reported in the
@@ -336,13 +336,87 @@ def fit_group_mixed_model(df, value_col='value', reference='mCherry'):
         degenerate = _mixed_model_degeneracy(result, n_fixed=len(model.exog_names))
         if degenerate is not None:
             return _clustered_ols(degenerate)
-        text = (f'Linear mixed model (cell nested in mouse), reference group = {reference}\n'
-                f'Formula: {formula} + (1 | mouse)\n'
-                f'N cells = {len(df)}, N mice = {df["mouse"].nunique()}\n\n'
-                f'{result.summary()}\n')
-        return text, 'mixedlm'
+        text = (f'Linear mixed model, random intercept on {group_col}\n'
+                f'Formula: {formula} + (1 | {group_col})\n{header}{result.summary()}\n')
+        return result, 'mixedlm', text
     except Exception as exc:  # documented fallback: cluster-robust OLS
         return _clustered_ols(f'it failed to converge: {exc}')
+
+
+def fit_group_mixed_model(df, value_col='value', reference='mCherry'):
+    """Fit ``value ~ C(group)`` with a per-mouse random intercept (cell nested in
+    mouse), so single-cell n is honoured without pseudoreplication.
+
+    Returns (summary_text, method_used) — a thin wrapper over :func:`fit_mixed_model` that
+    discards the raw fitted result, preserving this function's original signature for existing
+    callers. Use :func:`fit_mixed_model` directly when the raw result is needed (e.g. for
+    :func:`joint_wald_test`).
+    """
+    df = df[np.isfinite(df[value_col])].copy()
+    if df['group'].nunique() < 2 or len(df) < 6:
+        return (f'Insufficient data for group model: '
+                f'{len(df)} cells across {df["group"].nunique()} groups.\n'), 'none'
+
+    df['group'] = pd.Categorical(df['group'],
+                                 categories=[reference] + [g for g in GROUP_ORDER if g != reference])
+    formula = f'{value_col} ~ C(group, Treatment(reference="{reference}"))'
+    _result, method, text = fit_mixed_model(df, formula, group_col='mouse')
+    return text, method
+
+
+def joint_wald_test(result, param_names, n_fixed=None):
+    """Joint Wald test that every fixed-effect coefficient named in ``param_names`` equals zero.
+
+    Works uniformly for a fitted MixedLM result and a cluster-robust OLS result (the two possible
+    outcomes of :func:`fit_mixed_model`) via an explicit restriction matrix, since
+    ``MixedLMResults.f_test()`` has a param-vector-shape quirk involving the random-effect
+    variance component. This is the shared math behind the omnibus test in
+    ``caban.pca_state_metrics._lmm_holm_pairs``; every joint (multi-coefficient) mixed-model test
+    in the codebase should go through this function rather than a parallel R-matrix construction.
+
+    param_names - exact fixed-effect coefficient names to restrict to zero jointly, e.g. a subset
+                  of ``result.fe_params.index`` (MixedLM) or ``result.params.index`` (OLS). Read
+                  these names off the fitted result rather than guessing statsmodels' dummy-name
+                  format, since it depends on the formula (``C(group, Treatment(...))[T.hM3D]``,
+                  ``C(group)[T.hM3D]:C(epoch)[T.trace]``, ...).
+    n_fixed     - number of fixed-effect parameters at the head of the parameter vector (MixedLM
+                  appends variance-component parameters after them). Defaults to the number of
+                  named fixed effects on the result.
+
+    Returns dict(F=..., df1=..., df2=..., p=...). F/p are nan if param_names is empty.
+    """
+    all_names = (list(result.fe_params.index) if hasattr(result, 'fe_params')
+                else list(result.params.index))
+    if n_fixed is None:
+        n_fixed = len(all_names)
+
+    if len(param_names) == 0:
+        return {'F': float('nan'), 'df1': 0, 'df2': 0, 'p': float('nan')}
+
+    name_to_idx = {n: i for i, n in enumerate(all_names)}
+    missing = [n for n in param_names if n not in name_to_idx]
+    if missing:
+        raise ValueError(f'joint_wald_test: parameter(s) not found in fitted model: {missing}. '
+                         f'Available: {all_names}')
+
+    Rmat = np.zeros((len(param_names), n_fixed), dtype=float)
+    for k, name in enumerate(param_names):
+        Rmat[k, name_to_idx[name]] = 1.0
+
+    beta = (np.asarray(result.fe_params) if hasattr(result, 'fe_params')
+            else np.asarray(result.params)).reshape(-1)[:n_fixed]
+    cov_full = np.asarray(result.cov_params())
+    cov_fe = cov_full[:n_fixed, :n_fixed] if cov_full.shape[0] != n_fixed else cov_full
+
+    Rb = Rmat @ beta
+    RVR = Rmat @ cov_fe @ Rmat.T
+    chi2_stat = float(Rb @ np.linalg.solve(RVR, Rb))
+    q = Rmat.shape[0]
+    N = int(getattr(result, 'nobs', len(beta)))
+    df2 = max(1, N - n_fixed)
+    F = chi2_stat / q
+    p = float(f_dist.sf(F, q, df2))
+    return {'F': F, 'df1': q, 'df2': df2, 'p': p}
 
 
 def save_fig(fig, path_png, dpi=300):

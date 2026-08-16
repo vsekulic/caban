@@ -49,6 +49,7 @@ import caban.speed_tuning as speed_tuning
 from caban.event_locked_responsiveness import run_event_locked_responsiveness as _run_event_locked_responsiveness
 from caban.freezing_tuned_cells import run_freezing_tuned_cells as _run_freezing_tuned_cells
 from caban.population_coupling import run_population_coupling as _run_population_coupling
+from caban.sp_rates_lmm import run_sp_rates_lmm as _run_sp_rates_lmm
 
 import statsmodels.api as sm  # noqa: F401
 from statsmodels.regression.mixed_linear_model import MixedLM as mixedlm  # noqa: F401
@@ -1011,6 +1012,37 @@ def run_binned_sp_rates(ds, cfg):
         msg_end()
 
     # ===== end verbatim body =====
+
+
+# ---------------------------------------------------------------------------
+# Section: sp_rates_lmm
+#
+# Replaces the ~205-panel sp_rates ANOVA sweep above with a small, pre-declared confirmatory
+# family (primary trace-period amplitude, co-primary group x epoch interaction, Holm-corrected)
+# built on PER-EVENT deconvolved amplitude at the cell level, never collapsing cells to a
+# per-mouse scalar before testing. See caban.sp_rates_lmm and
+# analysis_methods_templates/sp_rates_lmm_methods.md.
+# ---------------------------------------------------------------------------
+def run_sp_rates_lmm(ds, cfg):
+    """Cell-level pyramidal event-amplitude analysis for DREADD effects on trace fear
+    conditioning: primary trace amplitude, co-primary group x epoch interaction, secondary
+    rate/fraction-active/recall endpoints, LT1->LT2 manipulation check, permutation-test
+    sensitivity, and all five figure panels."""
+    if not (cfg.plot_sp_rates_lmm and not cfg.DEVEL_SWITCH):
+        return
+    PLOTS_DIR = cfg.PLOTS_DIR
+    mice_per_group = ds.mice_per_group
+    TFC_cond = ds.TFC_cond
+    TFC_cond_LT1 = ds.TFC_cond_LT1
+    TFC_cond_LT2 = ds.TFC_cond_LT2
+    Test_B = ds.Test_B
+    Test_B_1wk = ds.Test_B_1wk
+
+    msg_start('*** Cell-level event-amplitude analysis (DREADD, trace fear conditioning)')
+    _run_sp_rates_lmm(PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond_LT2,
+                         Test_B, Test_B_1wk, n_perm=cfg.sp_rates_lmm_n_perm,
+                         seed=cfg.sp_rates_lmm_seed)
+    msg_end()
 
 
 # ---------------------------------------------------------------------------

@@ -107,6 +107,14 @@ class PipelineConfig:
     plot_event_locked_responsiveness: bool = True
     plot_freezing_tuned_cells: bool = True
     plot_population_coupling: bool = True
+    plot_sp_rates_lmm: bool = True
+
+    # --- sp_rates_lmm analysis parameters ---
+    # Number of Monte Carlo draws for the mouse-label permutation tests (see
+    # caban.sp_rates_lmm.mouse_label_permutation_test). ~5.7M distinct 5/6/6 relabellings
+    # exist for this dataset, so this is Monte Carlo, not exact enumeration.
+    sp_rates_lmm_n_perm: int = 20000
+    sp_rates_lmm_seed: int = 0
 
     # --- Single-unit response analysis parameters ---
     # Circular-shift shuffle count (higher = smoother z-scored p-values; slower).

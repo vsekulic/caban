@@ -226,6 +226,67 @@ def find_spikes_ca(trace, thres, plotit=False, want_peakval=False):
         else:
             return frameidx
 
+def find_event_runs_ca(trace, thres):
+    '''
+    Detect events as CONTIGUOUS supra-threshold runs of a single S row (deconvolved trace),
+    one event per run, rather than one event per local maximum as find_spikes_ca() does.
+
+    trace - single row from S (as numpy ndarray, output of minian).
+    thres - the arbitrary y-value unit from S.
+
+    Event amplitude is the PER-EVENT INTEGRAL, sum(trace[run]) over the whole contiguous
+    supra-threshold run -- not the peak value find_spikes_ca() returns. A wider/taller run
+    (more bursting) therefore contributes a larger amplitude even at the same peak height. See
+    analysis_methods_templates/sp_rates_lmm_methods.md for the rationale.
+
+    Returns (frameidx, amplitude, n_local_maxima), each a 1-D ndarray of the same length (one
+    entry per detected run):
+      frameidx       - argmax frame index of the run (absolute index into trace).
+      amplitude      - sum(trace[run]), the per-event integral.
+      n_local_maxima - how many of find_spikes_ca()'s peaks fall inside this run, i.e. how many
+                       separate events find_spikes_ca() would have reported for this one run.
+                       Reused from find_spikes_ca() itself rather than re-implementing peak
+                       detection, so the two functions can never disagree on what a "local
+                       maximum" is. Diagnostic only -- does not affect frameidx/amplitude.
+    '''
+    above = trace >= thres
+    if not np.any(above):
+        empty = np.array([], dtype=int)
+        return empty, np.array([], dtype=float), empty
+
+    idx = np.where(above)[0]
+    # A new run starts wherever consecutive supra-threshold frame indices are not adjacent.
+    breaks = np.where(np.diff(idx) > 1)[0]
+    run_starts = np.insert(idx[breaks + 1], 0, idx[0])
+    run_ends = np.append(idx[breaks], idx[-1])  # inclusive
+
+    legacy_peaks = find_spikes_ca(trace, thres)
+
+    frameidx = np.empty(len(run_starts), dtype=int)
+    amplitude = np.empty(len(run_starts), dtype=float)
+    n_local_maxima = np.empty(len(run_starts), dtype=int)
+    for i, (start, end) in enumerate(zip(run_starts, run_ends)):
+        run = trace[start:end + 1]
+        frameidx[i] = start + int(np.argmax(run))
+        amplitude[i] = float(np.sum(run))
+        n_local_maxima[i] = int(np.sum((legacy_peaks >= start) & (legacy_peaks <= end)))
+
+    return frameidx, amplitude, n_local_maxima
+
+
+def find_event_runs_ca_S(S, thres):
+    '''
+    Batch processing of find_event_runs_ca() over all rows of S (output of minian). Returns a
+    dict of cell row index -> (frameidx, amplitude, n_local_maxima), matching the per-cell dict
+    convention of find_spikes_ca_S().
+    '''
+    num_rows = S.shape[0]
+    events_d = dict()
+    for i in range(num_rows):
+        events_d[i] = find_event_runs_ca(S[i, :], thres)
+    return events_d
+
+
 def get_spikes_in_period(frameidx, period):
     '''
     Return subset of frames (spikes) that lie within period. frameidx is the output of the two find_spikes_ca() or
