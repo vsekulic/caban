@@ -1106,10 +1106,13 @@ def _lmm_holm_pairs(long_df, value_col="value"):
     # Omnibus: joint Wald restriction that all non-reference dummies = 0. Shared with every
     # other joint mixed-model test in the codebase via caban.single_unit_common.joint_wald_test
     # (it works uniformly for MixedLM, whose `.f_test` has a param-vector-shape quirk involving
-    # the RE variance, and for the OLS+cluster fallback).
+    # the RE variance, and for the OLS+cluster fallback). df2 = n_mice - 1 (cluster-level, not
+    # nobs - n_fixed -- see joint_wald_test's docstring for why the observation-level denominator
+    # this used to fall back to overstated precision for cell/event-nested-in-mouse data).
     nonref = [g for g in grp_order if g != ref]
     nonref_names = [fe_names[coef_idx[g]] for g in nonref]
-    wald = joint_wald_test(res, nonref_names, n_fixed=k_fe)
+    n_groups = int(df["mouse"].nunique())
+    wald = joint_wald_test(res, nonref_names, n_groups, n_fixed=k_fe)
     omnibus = {"F": wald["F"], "p": wald["p"]}
 
     # Pairwise: Wald t_test on the appropriate linear restriction.

@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python3 -c ' *)"
+      "Bash(python3 -c ' *)",
+      "Bash(/Users/vsekulic/miniforge3/envs/caban/bin/python /Users/vsekulic/.local/tmp/claude-1001/-Users-vsekulic-code-caban/e8cf86ca-6ad5-48ee-b097-6d24bd52efd9/scratchpad/test_event_amplitude_integration.py)"
     ]
   }
 }

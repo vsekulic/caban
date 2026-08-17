@@ -36,7 +36,7 @@ from caban.decoder import (_LT_1D_CM_PER_PX, _LT_1D_DISTANCE_UNIT, _copy_analysi
 from caban.single_unit_common import (
     GROUP_ORDER as _SU_GROUP_ORDER,
     ecdf_panel, build_cell_records, fit_group_mixed_model,
-    ensure_dirs, write_text, save_fig,
+    ensure_dirs, write_text, save_fig, grow_ylim_for_bracket_headroom,
 )
 
 group_colours = {
@@ -733,7 +733,8 @@ def _annotate_triplet_posthoc(ax, group_hM3D, group_hM4D, group_mCherry, x_posit
 
 
 def do_pairwise_holm_plot(group_hM3D, group_hM4D, group_mCherry, ax, heights, annotate=True,
-                          tot_dh_incr=0.12, barh=0, group_order=None, test='welch'):
+                          tot_dh_incr=0.12, barh=0, group_order=None, test='welch',
+                          holm_family='all'):
     """Pairwise group comparison with Holm correction across the three contrasts,
     drawing a bracket + significance stars for each significant pair.
 
@@ -742,14 +743,36 @@ def do_pairwise_holm_plot(group_hM3D, group_hM4D, group_mCherry, ax, heights, an
     two-sample t-test by default (matching the tfc_conditioning_summary convention);
     pass test='mannwhitney' for the non-parametric variant. Same call signature as
     do_anova1_plot so it is drop-in for _draw_violin_triplet's stat_fn. Returns the
-    Holm-corrected p-values in pair order [(Exc,Inh),(Exc,Ctl),(Inh,Ctl)]."""
+    Holm-corrected p-values in pair order [(Exc,Inh),(Exc,Ctl),(Inh,Ctl)].
+
+    holm_family : which contrasts the Holm correction is applied ACROSS.
+        'all' (default) -- all three pairwise contrasts, including Exc-vs-Inh. Every existing
+            caller relies on this and it must not change: several published figures
+            (freezing_tuned_cells and the other single-unit suites, the proportional-activity
+            panels) report p-values corrected over three.
+        'vs_control' -- correct across the two control contrasts (Exc-vs-Ctl, Inh-vs-Ctl) only,
+            and report Exc-vs-Inh uncorrected-but-still-computed alongside. Appropriate when the
+            design's inferential question is only "does each DREADD differ from its control", in
+            which case correcting over a third contrast that spends no alpha of its own is
+            needlessly conservative -- it costs power without protecting any error rate that is
+            actually at risk. That trade matters at n=5/6/6, where power is the binding
+            constraint; it is a deliberate opt-in per analysis, never a global default.
+
+    In both settings the raw p-values, and which values enter which test, are identical -- only
+    the size of the correction family differs.
+    """
     if group_order is None:
         group_order = ['hM3D', 'hM4D', 'mCherry']
+    if holm_family not in ('all', 'vs_control'):
+        raise ValueError(f"do_pairwise_holm_plot: holm_family must be 'all' or 'vs_control', "
+                         f"got {holm_family!r}")
     pos = {g: i for i, g in enumerate(group_order)}
     data = {'hM3D': np.asarray(group_hM3D, dtype=float),
             'hM4D': np.asarray(group_hM4D, dtype=float),
             'mCherry': np.asarray(group_mCherry, dtype=float)}
     pair_groups = [('hM3D', 'hM4D'), ('hM3D', 'mCherry'), ('hM4D', 'mCherry')]
+    # Index 0 is Exc-vs-Inh, the contrast excluded from the family under 'vs_control'.
+    in_family = np.array([holm_family == 'all', True, True])
 
     raw = np.full(3, np.nan)
     for k, (g1, g2) in enumerate(pair_groups):
@@ -767,10 +790,16 @@ def do_pairwise_holm_plot(group_hM3D, group_hM4D, group_mCherry, ax, heights, an
     corrected = np.full(3, np.nan)
     reject = np.zeros(3, dtype=bool)
     finite = np.isfinite(raw)
-    if finite.any():
-        rej, pc, _, _ = multipletests(raw[finite], alpha=0.05, method='holm')
-        corrected[finite] = pc
-        reject[finite] = rej
+    correctable = finite & in_family
+    if correctable.any():
+        rej, pc, _, _ = multipletests(raw[correctable], alpha=0.05, method='holm')
+        corrected[correctable] = pc
+        reject[correctable] = rej
+    # Contrasts outside the family keep their raw p-value (still reported, just not corrected
+    # across and not counted against the family's alpha).
+    outside = finite & ~in_family
+    corrected[outside] = raw[outside]
+    reject[outside] = raw[outside] < 0.05
 
     if annotate:
         tot_dh = 0.02
@@ -1067,18 +1096,10 @@ def _draw_violin_triplet(ax, values_per_group, col_idx, group_order, group_colou
 
     if ylim is None:
         # Callers that fix ylim have already reserved bracket headroom (see
-        # _violin_ylim_with_bracket_headroom). Callers that let the axis autoscale have not:
-        # matplotlib grows the data limits to include the bracket LINES but knows nothing about
-        # the asterisk text drawn above them (va='bottom'), and text is not clipped to the axes,
-        # so the topmost stars spill over the frame and into the title. Grow the axis to cover
-        # them. Only the bracket lines live in ax.lines here -- the violin bodies are
-        # PolyCollections and the median bar is a LineCollection.
-        y0, y1 = ax.get_ylim()
-        bracket_tops = [np.max(line.get_ydata()) for line in ax.lines if len(line.get_ydata())]
-        if bracket_tops:
-            needed = max(bracket_tops) + 0.08 * (y1 - y0)
-            if needed > y1:
-                ax.set_ylim(y0, needed)
+        # _violin_ylim_with_bracket_headroom). Callers that let the axis autoscale have not --
+        # grow_ylim_for_bracket_headroom (caban.single_unit_common, shared with
+        # draw_superplot_triplet) covers that case; see its docstring for why.
+        grow_ylim_for_bracket_headroom(ax)
     return panel_max_y
 
 

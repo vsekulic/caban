@@ -37,7 +37,9 @@ Project instructions for Claude Code. These mirror `.github/copilot-instructions
 ## DREADD Comparison Plots
 
 - Use the established pastel box-and-strip style for categorical comparisons: pastel box fill, darker matching points, `alpha=0.85`, black point edges, `linewidth=0.3`, and black median lines.
-- Keep group order consistent as `hM3D`, `mCherry`, `hM4D` unless the analysis requires otherwise.
+- **Group DISPLAY order is always `mCherry`, `hM3D`, `hM4D`** (control first as the reference, then excitatory, then inhibitory) — on every panel of every figure, with no per-analysis exceptions. This matches `decoder._PAPER_GROUP_ORDER`, `spatial._PV_GROUP_ORDER`, and the `_paper_group_order` locals throughout `analysis.py`. Use `caban.single_unit_common.DREADD_DISPLAY_ORDER` rather than defining another local copy.
+  - This is DISPLAY order only. `single_unit_common.GROUP_ORDER` (`hM3D`, `hM4D`, `mCherry`) is a separate thing — it drives model dummy-coding and iteration order, and must not be changed to match: existing published analyses depend on it. Plotting helpers index their inputs by group name, so display order never changes which values are compared.
+  - Older code contains two stale orders (`hM3D, mCherry, hM4D` and `hM3D, hM4D, mCherry`) in display positions. Those are wrong; fix them when touching that code.
 - Save separate per-panel files for multi-panel DREADD figures when practical.
 - Reuse existing group color conventions — do not introduce a new palette.
 
