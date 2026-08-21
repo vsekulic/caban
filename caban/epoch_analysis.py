@@ -57,7 +57,54 @@ from caban.utilities import MINISCOPE_FPS, get_spikes_in_period
 # Constants
 # ─────────────────────────────────────────────────────────────────────────────
 
-EPOCH_NAMES = ['pre_tone', 'tone', 'trace', 'peri_shock', 'shock', 'post_shock']
+# Duration of the TFC_cond trace interval, and therefore of every window that must be
+# exposure-matched to it. tone_onsets_def=[185,420,660,900,1140] with tone_duration=20 and
+# shock_onsets_def=[220,460,700,940,1180] (TraceFearCondSession.__init__) put the trace at
+# tone offset -> shock onset = 20 s on trials 2-5 (15 s on trial 1, whose tone onset was set to
+# 185 s rather than 180 s by accident and kept for consistency across mice).
+#
+# Matching matters for duration-SENSITIVE quantities only: event rate and the fraction of cells
+# with >=1 event both depend on window length at a fixed underlying rate, so comparing them
+# between a 35 s baseline and a 20 s response window would confound epoch with exposure. Mean
+# per-event amplitude does not, which is why the locked confirmatory contrasts can keep using
+# the 35 s 'pre_tone' reference.
+#
+# 20 s is independently the window Puhger et al. 2024 (iScience 27:109035) use to quantify the
+# post-shock CA1 response (42-62 s after CS onset = 0-20 s after shock offset), and it already
+# matches isomap.POST_SHOCK_SEC and population.PERIOD_FRAMES['post_shock'].
+TRACE_MATCHED_WINDOW_S = 20.0
+
+# Onset of the 'post_shock_late' window, measured from shock OFFSET. This is the DELAYED arm of
+# the early-vs-late post-shock contrast: Puhger et al. 2024 (iScience 27:109035) find that
+# silencing CA1 0-40 s after the footshock impairs memory while the same silencing delivered
+# 140 s after it does not, so a late window that behaves like baseline is the internal control
+# showing the post-shock response is time-limited rather than a session-wide shift.
+#
+# Why 90 s and not Puhger's 140 s: the choice MAXIMIZES TRIAL COVERAGE on ragged recordings. It
+# does not, as an earlier version of this comment claimed, keep all five trials -- nothing does.
+#
+# The final trial's inter-trial interval ends with the RECORDING, not a next tone onset, and its
+# real length is data-dependent and much shorter than the nominal timing suggests: observed
+# sessions stop as little as ~20.5 s after the last shock offset, which is barely 'post_shock'
+# (20 s) itself. On such a trial NO late window fits at ANY onset value, so the last trial of a
+# truncated session is lost regardless of what this constant says.
+#
+# What the constant does control is the MID-session trials, where a shorter onset can only ever
+# admit more trials than a longer one (the 90 s window is a subset of every ITI the 140 s window
+# fits in). 90 s is therefore the permissive choice while still placing the window far outside
+# the 0-20 s sustained response, and 90-110 s stays disjoint from 'pre_tone' (which begins 163 s
+# before the next tone onset) on any full-length 198 s ITI. Raising this toward Puhger's 140 s
+# buys fidelity to their protocol at the cost of trials; check the coverage line that
+# sp_rates_lmm prints before doing so.
+POST_SHOCK_LATE_ONSET_S = 90.0
+
+# The epoch set of the population-vector / RDM epoch-analysis pipeline (extract_epoch_pvs,
+# compute_rdm and the cross-session RDMs all default to it, and it fixes their axis ordering).
+# This is NOT an enumeration of every window get_epoch_frames supports: 'post_shock_late' is
+# deliberately absent, because adding it here would put a new row and column on every existing
+# RDM figure. Consumers that want a different set pass their own (see sp_rates_lmm.TFC_EPOCHS).
+EPOCH_NAMES = ['pre_tone', 'pre_tone_matched', 'tone', 'trace', 'peri_shock', 'shock',
+               'post_shock', 'iti']
 
 
 EPOCH_COLOURS = {
@@ -67,6 +114,9 @@ EPOCH_COLOURS = {
     'peri_shock': '#9467bd',
     'shock':      '#d62728',
     'post_shock': '#2ca02c',
+    'post_shock_late': '#98df8a',   # light green, keyed to 'post_shock' as its delayed arm
+    'pre_tone_matched': '#bbbbbb',
+    'iti':        '#8c564b',
 }
 
 GROUP_COLOURS = {
@@ -145,7 +195,10 @@ PVALS = [0.05, 0.01, 0.001]
 
 def get_epoch_frames(session, epoch_name, trial_idx,
                      peri_shock_pre_s=10.0, peri_shock_post_s=10.0,
-                     pre_tone_duration_s=35.0):
+                     pre_tone_duration_s=35.0,
+                     pre_tone_matched_duration_s=TRACE_MATCHED_WINDOW_S,
+                     post_shock_duration_s=TRACE_MATCHED_WINDOW_S,
+                     post_shock_late_onset_s=POST_SHOCK_LATE_ONSET_S):
     """
     Return (onset_frame, offset_frame) for a given epoch and trial.
 
@@ -156,11 +209,21 @@ def get_epoch_frames(session, epoch_name, trial_idx,
     Parameters
     ----------
     session          : TraceFearCondSession
-    epoch_name       : str  - one of EPOCH_NAMES
+    epoch_name       : str  - name of the window to compute. EPOCH_NAMES lists the PV/RDM
+                   pipeline's set; 'post_shock_late' is also supported here but is deliberately
+                   not in EPOCH_NAMES (see the comment there).
     trial_idx        : int  - 0-based trial index
     peri_shock_pre_s : float - seconds before shock onset for peri_shock epoch
     peri_shock_post_s: float - seconds after shock onset for peri_shock epoch
-    pre_tone_duration_s : float - duration of pre-tone baseline window in seconds
+    pre_tone_duration_s : float - duration of the 'pre_tone' baseline window in seconds
+    pre_tone_matched_duration_s : float - duration of the 'pre_tone_matched' baseline window
+                   in seconds. Defaults to TRACE_MATCHED_WINDOW_S so that it is exposure-matched
+                   to 'trace' and 'post_shock'; see those constants' rationale above.
+    post_shock_duration_s : float - duration of the 'post_shock' AND 'post_shock_late' windows in
+                   seconds. Defaults to TRACE_MATCHED_WINDOW_S, which is what makes the two
+                   directly comparable to each other and to 'trace'.
+    post_shock_late_onset_s : float - how long after shock OFFSET the 'post_shock_late' window
+                   begins. Defaults to POST_SHOCK_LATE_ONSET_S; see its rationale above.
     """
     fps = MINISCOPE_FPS
 
@@ -182,13 +245,75 @@ def get_epoch_frames(session, epoch_name, trial_idx,
         offset = centre + int(round(peri_shock_post_s * fps))
         onset  = max(onset, 0)
 
-    elif epoch_name == 'pre_tone':
+    elif epoch_name in ('pre_tone', 'pre_tone_matched'):
+        # Two baseline windows ending at the same tone onset, differing only in length.
+        # 'pre_tone' is the historical 35 s window that the locked confirmatory contrasts use as
+        # their reference; 'pre_tone_matched' is the exposure-matched TRACE_MATCHED_WINDOW_S one
+        # needed whenever a baseline is compared against 'trace'/'post_shock' on a
+        # duration-sensitive quantity (event rate, fraction of cells active). Sharing one branch
+        # so the two can never drift apart in anything but their duration.
+        duration_s = (pre_tone_duration_s if epoch_name == 'pre_tone'
+                      else pre_tone_matched_duration_s)
         offset = session.tone_onsets[trial_idx]
-        onset  = offset - int(round(pre_tone_duration_s * fps))
+        onset  = offset - int(round(duration_s * fps))
         if onset < 0:
             return None   # not enough baseline before first tone
 
-    elif epoch_name == 'post_shock':
+    elif epoch_name in ('post_shock', 'post_shock_late'):
+        # Two windows of the SAME length (post_shock_duration_s), differing only in how long
+        # after the shock offset they begin -- the early and delayed arms of the within-trial
+        # post-shock contrast. Sharing one branch so they can never drift apart in duration or
+        # lose the fit guard below.
+        #
+        # 'post_shock' is the standardized post-shock RESPONSE window, starting at shock offset.
+        # This is NOT the inter-trial interval -- see 'iti' below, which is what this epoch name
+        # used to mean. The distinction is the whole point of the split: CA1 activity after an
+        # aversive US is elevated for only tens of seconds (Puhger et al. 2024 iScience quantify
+        # 0-20 s after shock offset, and show that silencing CA1 140 s after the shock has no
+        # behavioural effect at all), so averaging that response over the full 198 s ITI dilutes
+        # it by roughly an order of magnitude.
+        #
+        # 'post_shock_late' begins post_shock_late_onset_s after shock offset, landing in the
+        # otherwise-unnamed gap between the two. It is the internal control for exactly that
+        # time-limited claim: an early-vs-late difference is a within-trial contrast at aligned
+        # trial indices, unlike post_shock-vs-pre_tone whose pooled reference mixes one
+        # shock-naive window (trial 1's baseline) with four post-shock ones.
+        #
+        # THE TWO DIFFER IN WHAT A NON-FITTING WINDOW MEANS, which is why the guard below is not
+        # symmetric:
+        #
+        #   'post_shock' RAISES. It is a locked confirmatory window that every trial must supply;
+        #   a trial whose recording stops inside it is a data problem the analyst has to see.
+        #
+        #   'post_shock_late' returns None -- the window genuinely DOES NOT EXIST on that trial.
+        #   Real recordings stop as little as ~20 s after the last shock offset, which is barely
+        #   'post_shock' itself, so on a truncated final trial NO late window fits at ANY onset
+        #   value. This is a definitional absence, not a swallowed error, and it is the same
+        #   thing 'pre_tone' does on trial 0 (no baseline exists before the first tone).
+        #   Callers must NOT paper over it: the early-vs-late contrast is only meaningful at
+        #   matched trial indices, so sp_rates_lmm restricts BOTH epochs to the trials where both
+        #   exist (restrict_to_shared_trials) and reports the resulting coverage.
+        is_late = epoch_name == 'post_shock_late'
+        start_offset_s = post_shock_late_onset_s if is_late else 0.0
+        onset  = session.shock_offsets[trial_idx] + int(round(start_offset_s * fps))
+        offset = onset + int(round(post_shock_duration_s * fps))
+        iti_end = session.post_shock_offsets[trial_idx]
+        if offset > iti_end:
+            if is_late:
+                return None
+            raise ValueError(
+                f'get_epoch_frames: a {post_shock_duration_s} s {epoch_name} window starting '
+                f'{start_offset_s} s after the shock offset does not fit before the end of trial '
+                f'{trial_idx} (needs {offset - session.shock_offsets[trial_idx]} frames from the '
+                f'shock offset, only {iti_end - session.shock_offsets[trial_idx]} available). '
+                f'The last trial ends with the recording, not a next tone onset, so it is the '
+                f'usual offender. Shorten post_shock_duration_s, or check the session '
+                f'boundaries.')
+
+    elif epoch_name == 'iti':
+        # The FULL inter-trial interval: shock offset to the next tone onset (or, on the last
+        # trial, to the end of the recording -- so its duration is neither fixed nor equal
+        # across trials, which is exactly why it must not be used as a response window).
         onset  = session.post_shock_onsets[trial_idx]
         offset = session.post_shock_offsets[trial_idx]
 

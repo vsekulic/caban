@@ -87,9 +87,127 @@ otherwise commits to); only the additivity-check identity itself is event-weight
 
 ## Epoch structure
 
+### The post-shock response window, and what `post_shock` used to mean
+
+`post_shock` is the **20 s window from shock offset** (`caban.epoch_analysis`,
+`TRACE_MATCHED_WINDOW_S`). It previously meant the entire inter-trial interval — shock offset to
+the next tone onset, 198 s, and on the final trial to the end of the recording, so neither fixed
+nor equal across trials. Every result computed under the old definition averaged the post-shock
+response over roughly ten times its own duration and must not be compared with results computed
+under the new one. The full ITI is still available, under the name it should always have had:
+`iti`.
+
+The redefinition is motivated, not cosmetic. Puhger et al. 2024 (*iScience* 27:109035) report in
+dorsal CA1 during trace fear conditioning: no bulk calcium response during the trace interval at
+all; a large sustained response to the footshock; that optogenetic silencing 0–40 s after the
+shock impairs both tone and context memory; and that the *same* silencing delivered 140 s after
+the shock impairs neither. There are therefore two distinct hypotheses in this literature about
+where in a TFC trial a hippocampal manipulation should act — the trace interval and the
+post-shock window — and an analysis that windows only the former answers only one of them. 20 s
+is also exactly Puhger et al.'s own post-shock quantification window (42–62 s after CS onset).
+
+Note that `pre_tone` is itself a *late* post-shock window for trials 2–5: at 35 s before a tone
+onset it begins 163 s after the preceding shock offset, past the point at which Puhger et al.
+find CA1 activity has returned to baseline and silencing is inert. That supports its use as a
+reference, and it means trial 1's baseline (genuinely shock-naive) is not the same quantity as
+trials 2–5's.
+
+### The early-versus-late post-shock contrast, and why the late window starts at 90 s
+
+Puhger et al.'s result is a **contrast** between early and delayed silencing, so reproducing it
+needs a delayed window, not just an early one. `post_shock` versus `pre_tone` is not that
+contrast: each epoch is pooled across trials *before* differencing, so the pooled reference is a
+mixture of one shock-naive baseline (trial 1's, which no shock precedes) and four windows 163 s
+after a shock, at trial indices that do not align — and trial 5's shock has no `pre_tone`
+counterpart at all, the session ending first.
+
+`post_shock_late` (`epoch_analysis.POST_SHOCK_LATE_ONSET_S`) is therefore a second
+`TRACE_MATCHED_WINDOW_S`-long window in the same trial, beginning 90 s after shock offset. The
+within-cell contrast `log_amplitude[post_shock] − log_amplitude[post_shock_late]` is then
+within-trial at aligned indices with no shock-naive window in the reference.
+
+**The late window does not exist on every trial, and both sides are trial-matched.** The final
+trial's inter-trial interval ends with the *recording*, not a next tone onset, and its real
+length is data-dependent and far shorter than the nominal protocol timing implies — observed
+sessions stop as little as **20.5 s** after the last shock offset, which is barely the 20 s
+`post_shock` window itself. On such a trial no late window fits at *any* onset value.
+`get_epoch_frames` therefore returns `None` for `post_shock_late` there (a definitional absence,
+as for `pre_tone` on trial 1, which no shock precedes) while continuing to *raise* for
+`post_shock`, which is a locked confirmatory window every trial must supply.
+
+Because the late window is missing on some trials, pooling each epoch across all its available
+trials before differencing would compare a late window over *fewer* trials against an early
+window over more — reintroducing the very trial-index misalignment this epoch exists to remove,
+now confounded with trial position (photobleaching, arousal). Both sides are therefore cut to
+the trials where **both** windows exist, per mouse
+(`caban.sp_rates_lmm.restrict_to_shared_trials`), before the within-cell delta is taken.
+Matching is per-mouse rather than global because recordings are ragged and cutting every mouse
+to the globally-shared trials would discard good data from mice whose recordings ran long; each
+cell's delta is then trial-matched within itself, which is what the within-cell contrast
+requires. The surviving per-mouse trial counts are written to
+`stats/descriptive_early_vs_late_trial_coverage.csv` and printed at run time — **this coverage
+must be reported alongside the estimate**, since it is what the contrast rests on. The same
+matching is applied to every row of the descriptive epoch-delta forest, where it is a no-op for
+the epochs present on all trials.
+
+**Why 90 s rather than Puhger et al.'s 140 s.** The choice maximizes trial coverage; it does not
+rescue the truncated final trial, which no onset value can. What the constant controls is the
+*mid*-session trials, where a shorter onset can only ever admit more trials than a longer one
+(the 90 s window fits inside every ITI the 140 s window fits in). 90 s still places the window
+far outside the 0–20 s sustained response, and 90–110 s remains disjoint from both `post_shock`
+(0–20 s) and `pre_tone` (163–198 s) on any full-length ITI. Raising it toward 140 s buys
+fidelity to Puhger's protocol at the cost of trials — consult the coverage file before doing
+so.
+
+**This contrast is descriptive.** Its role is to characterize the post-shock null, not to test a
+hypothesis: it spends no alpha, is in neither the confirmatory Holm family nor the secondary
+BH-FDR family, and is reported as an estimate with a 95% interval rather than a significance
+verdict. The confirmatory family remains exactly the three tests listed below. Note also that
+comparing the `post_shock` and `post_shock_late` decomposition figures by eye is the
+difference-of-significance fallacy — the early-versus-late claim is carried by the within-cell
+delta, not by two independently fit figures.
+
+### Exposure matching, and why there are two baselines
+
+`pre_tone_matched` is the same baseline as `pre_tone`, ending at the same tone onset, but 20 s
+long instead of 35 s. Both exist because window length matters for some endpoints and not
+others:
+
+- **Duration-sensitive**: event rate and the fraction of cells with ≥1 event. At a fixed
+  underlying rate both grow with the window, so comparing them between a 35 s baseline and a
+  20 s response window would confound epoch with exposure. These use `pre_tone_matched`, which
+  is exposure-matched to `trace`, `post_shock` and `post_shock_late` (`TFC_MATCHED_EPOCHS`).
+- **Duration-insensitive**: mean per-event amplitude, a per-event quantity. The confirmatory
+  amplitude contrasts therefore keep the 35 s `pre_tone` reference they were locked with.
+
+Neither baseline is the "right" one in general; using the wrong one for a given endpoint is what
+would be wrong.
+
+**The two baselines overlap in time and must never be modelled together.** `pre_tone_matched` is
+the last 20 s of the same window as `pre_tone`, so any model carrying both on one epoch factor
+counts 20 s of every baseline twice — inflating the baseline's apparent precision, corrupting any
+epochs-within-trial variance component, and (for the NB-GLMM) leaving the sampler on a
+near-collinear ridge. Anything with an epoch factor therefore draws its epochs from
+`TFC_DISJOINT_EPOCHS` (`pre_tone`, `tone`, `trace`, `post_shock`, `post_shock_late`), not from
+`TFC_EPOCHS`. Disjointness is necessary but not sufficient: the secondary **rate** model draws
+from the narrower `TFC_RATE_MODEL_EPOCHS` (the same four epochs it has always used), holding out
+`post_shock_late` because that window is descriptive, plays no part in the rate endpoint, and is
+absent on final trials in a model that carries `trial` as a covariate — so its epoch dummy would
+be correlated with `trial`. Empirically the fifth level also made NUTS pathological (~27 s to
+sample at four epochs versus >280 s without finishing at five, even with the fifth level
+artificially balanced), which is the plain cost of two more weakly-identified interaction
+parameters and *not* the duplicated-data ridge described above — all five windows are verified
+pairwise disjoint, across trial indices too. Holding the rate model at four epochs also means its
+reported results are the same model that produced them before `post_shock_late` existed. The
+secondary rate table enforces this at its own source rather than trusting callers. The
+decomposition figures are the exception that motivates keeping both: they are fit one epoch at a
+time, never jointly.
+
 - TFC_cond epochs used by the confirmatory model: `pre_tone` (35 s baseline window, a chosen
-  default, not protocol-derived), `tone` (20 s), `trace` (`tone_offsets[i]` to
-  `shock_onsets[i]`), `post_shock`. **Shock (2 s) is excluded**: at 0.05-0.2 Hz a 2 s window
+  default, not protocol-derived), `pre_tone_matched` (20 s baseline, see below), `tone` (20 s),
+  `trace` (`tone_offsets[i]` to `shock_onsets[i]`), `post_shock` (20 s from shock offset),
+  `post_shock_late` (20 s, beginning 90 s after shock offset; descriptive only, see above).
+  **Shock (2 s) is excluded**: at 0.05-0.2 Hz a 2 s window
   yields ~0-1 events per cell, dominated by quantization, and the window carries motion artifact.
   Handled separately elsewhere via YrA/C, not here.
 - **Trace duration is NOT constant across the five trials.** From `TraceFearCondSession`'s own
@@ -128,7 +246,7 @@ otherwise commits to); only the additivity-check identity itself is event-weight
   principle afford more power, but this codebase implements no such correction. This affects
   power, not Type I error control.
 
-### Confirmatory family (Holm-corrected across exactly these two tests)
+### Confirmatory family (Holm-corrected across exactly these three tests)
 
 - **Primary endpoint**: `log(mean per-event amplitude) ~ C(group, Treatment('mCherry'))`,
   cell-level, trace epoch pooled (summed, not averaged) across the five trials, random intercept
@@ -175,13 +293,33 @@ otherwise commits to); only the additivity-check identity itself is event-weight
     (`caban.sp_rates_lmm.fit_epoch_interaction_nested_attempt`), NOT part of the routine pipeline:
     at ~8,000+ cell levels over ~100k rows this is expected to be slow and may not converge, and
     is reported only if it converges cleanly.
-- **Holm correction is applied across exactly these two omnibus p-values** — the entire
+- **Co-primary endpoint (post-shock window)**: the identical within-cell delta contrast with
+  `post_shock` in place of `trace` — `delta_log_amplitude = log_amplitude[post_shock] -
+  log_amplitude[pre_tone]`, cells active in both. Fit, written and plotted through the *same*
+  code path as the trace delta (`caban.sp_rates_lmm.fit_and_report_epoch_delta`), so any
+  difference between the two is a difference in the data rather than in the analysis.
+
+  **This member is prespecifiable in the honest sense.** It was added *before* any
+  properly-windowed post-shock result existed: under the previous epoch definition `post_shock`
+  meant the 198 s ITI, so no post-shock response-window contrast had ever been fit or inspected.
+  The dated analysis plan must be locked before this pipeline is next run.
+
+- **Holm correction is applied across exactly these three omnibus p-values** — the entire
   confirmatory multiplicity burden of this analysis (`caban.sp_rates_lmm.holm_correct_confirmatory`).
   Everything else below is secondary (BH-FDR) or purely descriptive/sensitivity.
 
+  Why three rather than two: the absolute trace-amplitude test and the two delta tests answer
+  genuinely different questions. A manipulation that shifts amplitude uniformly across the whole
+  session is biologically real and produces *no* delta at any epoch, so a family containing only
+  the deltas would define that result out of existence — which is exactly the result this
+  dataset currently shows. The cost of the third member is that Holm's smallest threshold moves
+  from α/2 to α/3.
+
 ### The co-primary null, and the complete epoch profile (descriptive)
 
-**The co-primary within-cell trace-vs-pre_tone delta is NULL.** The hM3D amplitude effect is a
+**The co-primary within-cell trace-vs-pre_tone delta is NULL.** (This describes the *trace*
+co-primary only. The post-shock co-primary is new and its result is not yet known; nothing in
+this section may be read as anticipating it.) The hM3D amplitude effect is a
 large group MAIN effect that is present at every epoch, not an elevation specific to the trace
 interval. (The previously reported p = 1.2e-11 for a trace-specific effect was an artifact of the
 pseudoreplicating interaction fit described above and must not be cited.)
@@ -194,14 +332,21 @@ Two consequences for how this analysis is written up:
 - Because "elevated globally rather than trace-specifically" is a claim about *all* the epochs,
   the same within-cell delta contrast is computed and reported for **every** non-reference epoch
   (`caban.sp_rates_lmm.compute_all_epoch_deltas`, plotted by `plot_epoch_delta_forest`):
-  tone−pre_tone and post_shock−pre_tone alongside the confirmatory trace−pre_tone. A reader can
-  then see the flat profile directly rather than taking it on trust, and cannot mistake "no
-  trace-specific effect" for "no effect".
+  tone−pre_tone and post_shock_late−pre_tone alongside the confirmatory trace−pre_tone and
+  post_shock−pre_tone. A reader can then see the flat profile directly rather than taking it on
+  trust, and cannot mistake "no trace-specific effect" for "no effect".
+- The early-versus-late post-shock delta (post_shock−post_shock_late) is reported separately from
+  this forest, since its reference is not `pre_tone`. It goes through the same code path as the
+  confirmatory deltas (`fit_and_report_epoch_delta`, with `is_confirmatory=False`), and its
+  output is named `descriptive_*` rather than `coprimary_*` so its status is legible from the
+  filename alone.
 
 The non-confirmatory epochs are **descriptive**. They spend no alpha, are not in the confirmatory
-Holm family (which is exactly two tests), and are not in the secondary BH-FDR family either —
-their role is to characterize a null, not to test a hypothesis. Only the trace row is flagged
-`is_confirmatory` in the output table.
+Holm family (which is exactly three tests), and are not in the secondary BH-FDR family either —
+their role is to characterize a null, not to test a hypothesis. The trace **and post_shock** rows
+are flagged `is_confirmatory` in the output table; `pre_tone_matched` is excluded from the table
+entirely, since its delta against `pre_tone` is a window-length artifact rather than an epoch
+effect.
 
 ### Bursting evidence: run structure and threshold sensitivity
 
@@ -236,8 +381,8 @@ across the FREQUENTIST secondary tests only:
 
 Excluded, by declaration rather than omission:
 
-- **The two confirmatory omnibus tests.** They carry their own Holm correction over a family of
-  exactly two (`holm_correct_confirmatory`) and control a different error rate. A test placed in
+- **The three confirmatory omnibus tests.** They carry their own Holm correction over a family of
+  exactly three (`holm_correct_confirmatory`) and control a different error rate. A test placed in
   two families is corrected twice.
 - **The Bambi Negative-Binomial rate model.** It reports posterior contrasts, HDIs and an
   ELPD-LOO comparison; there is no p-value to correct. Manufacturing one so a Bayesian result can

@@ -88,6 +88,7 @@ extraction, count-model posterior-predictive/zero diagnostics, peri-shock analys
 declared BH-FDR family for the frequentist secondaries.
 """
 import os
+import shutil
 import functools
 
 import numpy as np
@@ -106,19 +107,130 @@ from caban.single_unit_common import (
     mouse_contrast_ci, annotate_contrast_ci, format_contrast_ci_lines,
     annotate_pairwise_brackets,
 )
-from caban.decoder import _copy_analysis_methods_template
+from caban.decoder import _ANALYSIS_METHODS_TEMPLATES_DIR, _copy_analysis_methods_template
 from caban.analysis import _draw_violin_triplet, do_pairwise_holm_plot
-from caban.epoch_analysis import get_epoch_frames, get_testb_epoch_frames
+from caban.epoch_analysis import (get_epoch_frames, get_testb_epoch_frames,
+                                  TRACE_MATCHED_WINDOW_S, POST_SHOCK_LATE_ONSET_S)
 
 METHODS_FILENAME = 'sp_rates_lmm_methods.md'
+# Interpretive companion to METHODS_FILENAME: the panel-by-panel reading of the decomposition
+# figure, the paper's logical flow, and the Results/legend drafts. TFC_cond only -- it is the
+# guide to the conditioning figure, and the recall sessions reuse only a single panel of it.
+FIGURE_GUIDE_FILENAME = 'sp_rates_lmm_figure_guide.md'
+
+
+def write_figure_guide(out_dir):
+    """Write the figure guide into *out_dir*, OVERWRITING any copy already there.
+
+    Deliberately not _copy_analysis_methods_template: that helper returns early when the
+    destination file exists, which is right for a locked analysis plan but wrong here. The
+    guide quotes the current result numbers, so a plots directory that already holds an older
+    version of it must be refreshed on every run, not left alone.
+    """
+    src_path = os.path.join(_ANALYSIS_METHODS_TEMPLATES_DIR, FIGURE_GUIDE_FILENAME)
+    if not os.path.isfile(src_path):
+        raise FileNotFoundError(f'Figure guide template missing: {src_path}')
+    ensure_dirs(out_dir)
+    dest_path = os.path.join(out_dir, FIGURE_GUIDE_FILENAME)
+    shutil.copy2(src_path, dest_path)
+    print(f'[METHODS] Wrote {FIGURE_GUIDE_FILENAME} → {dest_path}')
 
 # TFC_cond epochs used by the primary/co-primary confirmatory model. Shock is deliberately
 # excluded from this set: at 0.05-0.2 Hz a 2 s window yields ~0-1 events/cell, so per-cell
 # amplitude there is dominated by quantization and the window carries motion artifact. Handled
 # separately later via YrA/C, not here.
-TFC_EPOCHS = ('pre_tone', 'tone', 'trace', 'post_shock')
+TFC_EPOCHS = ('pre_tone', 'pre_tone_matched', 'tone', 'trace', 'post_shock', 'post_shock_late')
 TFC_TRACE_EPOCH = 'trace'
 TFC_REFERENCE_EPOCH = 'pre_tone'
+
+# The second confirmatory response window. CA1 pyramidal activity after an aversive US is
+# elevated for only tens of seconds, and that window -- not the trace interval -- is the one
+# whose disruption impairs trace fear memory: Puhger et al. 2024 (iScience 27:109035) find no
+# CA1 response during the trace interval at all, a large sustained post-shock response,
+# optogenetic silencing 0-40 s after the shock impairs both tone and context memory, and the
+# SAME silencing delivered 140 s after the shock does nothing. There are therefore two live
+# hypotheses in this literature about WHERE in a TFC trial a hippocampal manipulation should
+# act, and testing only the trace interval answers just one of them.
+TFC_POST_SHOCK_EPOCH = 'post_shock'
+
+# The DELAYED arm of that same window, and the internal control for its time-limited-ness: the
+# Puhger result above is a CONTRAST between silencing early and silencing late, and reproducing
+# it needs a late window, not just an early one. post_shock-vs-pre_tone is not that contrast --
+# aggregate_over_trials pools each epoch across trials BEFORE differencing, so its reference is a
+# mixture of one shock-naive baseline (trial 1's, which no shock precedes) and four windows
+# 163 s after a shock, at trial indices that do not align. post_shock-vs-post_shock_late is
+# within-trial at aligned indices with no naive window mixed in.
+#
+# DESCRIPTIVE, NOT CONFIRMATORY. It is deliberately absent from
+# TFC_CONFIRMATORY_RESPONSE_EPOCHS and from both multiplicity families (Holm and BH-FDR): its
+# job is to characterize the post-shock null, not to test a hypothesis. Report its estimate and
+# 95% interval, never a significance verdict. See epoch_analysis.POST_SHOCK_LATE_ONSET_S for
+# why the window begins 90 s and not Puhger's 140 s after shock offset.
+TFC_POST_SHOCK_LATE_EPOCH = 'post_shock_late'
+
+# Exposure-matched baseline, used ONLY for the duration-sensitive endpoints (event rate,
+# fraction of cells active) that are compared across epochs -- see epoch_analysis'
+# TRACE_MATCHED_WINDOW_S. The confirmatory amplitude contrasts keep the 35 s TFC_REFERENCE_EPOCH
+# they were locked with; mean per-event amplitude is a per-event quantity and so is not biased
+# by an unequal window, which is why both baselines can coexist without either being wrong.
+TFC_MATCHED_REFERENCE_EPOCH = 'pre_tone_matched'
+
+# The epochs whose decomposition figures are directly comparable to one another: all
+# TRACE_MATCHED_WINDOW_S long, so fraction-active and event rate mean the same thing in each.
+TFC_MATCHED_EPOCHS = (TFC_MATCHED_REFERENCE_EPOCH, TFC_TRACE_EPOCH, TFC_POST_SHOCK_EPOCH,
+                      TFC_POST_SHOCK_LATE_EPOCH)
+
+# The two response windows whose within-cell elevation over TFC_REFERENCE_EPOCH is confirmatory
+# (holm_correct_confirmatory's second and third members). Every other epoch's delta is
+# descriptive.
+TFC_CONFIRMATORY_RESPONSE_EPOCHS = (TFC_TRACE_EPOCH, TFC_POST_SHOCK_EPOCH)
+
+# ** The epochs that may be modelled JOINTLY -- i.e. treated as a set of disjoint observations
+# of one trial. ** TFC_EPOCHS is deliberately NOT that set: it carries two baselines,
+# TFC_REFERENCE_EPOCH (35 s) and TFC_MATCHED_REFERENCE_EPOCH (its last 20 s), which OVERLAP IN
+# TIME. Both are wanted -- see their constants above -- but only ever one at a time.
+#
+# Feeding both to a model with an epoch factor is not a mild inefficiency, it is a
+# duplicated-data bug: 20 s of every baseline window enters the likelihood twice, at a rate that
+# is near-identical once a log-exposure offset normalizes it. The duplicate inflates the
+# baseline's apparent precision, corrupts any epochs-within-trial variance component, and (for
+# the Bambi NB-GLMM in fit_rate_group_epoch_model) leaves NUTS on a near-collinear ridge where
+# the step size collapses -- observed as a sampler that runs for hours instead of about a
+# minute. Anything with an epoch factor must take its epochs from HERE, not from TFC_EPOCHS.
+#
+# TFC_POST_SHOCK_LATE_EPOCH DOES belong here, unlike TFC_MATCHED_REFERENCE_EPOCH, and the
+# difference is purely one of time: measured from shock offset, post_shock occupies 0-20 s,
+# post_shock_late 90-110 s, and pre_tone the last 35 s of the 198 s ITI (163-198 s). The late
+# window shares no frame with any other member, so it adds a genuine fifth level to the epoch
+# factor rather than a duplicate of an existing one.
+TFC_DISJOINT_EPOCHS = (TFC_REFERENCE_EPOCH, 'tone', TFC_TRACE_EPOCH, TFC_POST_SHOCK_EPOCH,
+                       TFC_POST_SHOCK_LATE_EPOCH)
+
+# ** The epochs the SECONDARY RATE MODEL puts on its epoch factor. ** A strict subset of
+# TFC_DISJOINT_EPOCHS: disjointness is necessary to enter a joint model, but not sufficient.
+#
+# TFC_POST_SHOCK_LATE_EPOCH is excluded for three reasons, only the last of which is about speed:
+#
+#   1. It has no role here. It is a DESCRIPTIVE window that exists to carry the within-cell
+#      early-vs-late AMPLITUDE contrast. The rate model is the prespecified secondary event-rate
+#      endpoint, and adding a descriptive epoch to it enlarges a model that makes claims without
+#      contributing to any of them.
+#   2. It is ragged in a way that matters HERE specifically. The window is absent on final trials
+#      whose recording stops early, so its rows skew toward low trial indices -- and `trial` is a
+#      continuous covariate in this very model. Its epoch dummy is therefore correlated with
+#      `trial`, which is a confound the amplitude contrasts (differenced within cell, within
+#      trial) never face.
+#   3. Empirically it makes NUTS pathological. Measured on this model: 4 epochs / 340 rows
+#      samples in ~27 s, while 5 epochs samples for >280 s WITHOUT FINISHING -- and it does so
+#      even when the fifth epoch is made artificially balanced across all trials, so the cost is
+#      the extra level in an already weakly-identified group x epoch interaction, not the
+#      raggedness. This is NOT the duplicated-data ridge described above (all five windows are
+#      verified pairwise disjoint, across trial indices too); it is the plain cost of two more
+#      interaction parameters the data cannot pin down.
+#
+# Keeping this set at four also means the reported secondary rate results are the SAME model that
+# produced them before post_shock_late existed, so they need no reinterpretation.
+TFC_RATE_MODEL_EPOCHS = (TFC_REFERENCE_EPOCH, 'tone', TFC_TRACE_EPOCH, TFC_POST_SHOCK_EPOCH)
 
 # Test_B/Test_B_1wk post-tone window pinned to 20 s -- NOT either existing default -- to match
 # the representative TFC trace duration (tone_offsets[i] to shock_onsets[i] is 20 s for trials
@@ -363,6 +475,43 @@ def build_epoch_and_run_tables(mice_per_group, sessions, epoch_names, get_frames
     return df_fine, df_runs
 
 
+def restrict_to_shared_trials(df_fine, epoch_a, epoch_b):
+    """
+    Restrict a fine event table to the (mouse, trial) cells where BOTH epochs are present.
+
+    Needed because an epoch can be genuinely ABSENT on some trials: 'post_shock_late' does not
+    exist on a final trial whose recording stops shortly after the shock (see
+    epoch_analysis.get_epoch_frames, which returns None there rather than inventing a window).
+
+    Without this, a within-cell early-vs-late delta would pool a different set of trials on each
+    side -- e.g. post_shock over trials 1-4 against post_shock_late over trials 1-3 -- which
+    reintroduces exactly the trial-index misalignment the late window exists to remove. The
+    contrast is only interpretable at matched indices, so both sides are cut to the same trials
+    here, PER MOUSE: recordings are ragged, and cutting every mouse to the globally-shared trials
+    would discard good data from the mice whose recordings ran long. Each cell's delta is then
+    trial-matched within itself, which is what the within-cell contrast actually requires.
+
+    Returns (restricted_df, coverage), where coverage is a per-mouse DataFrame of how many trials
+    survived -- callers are expected to REPORT it rather than let the restriction happen silently.
+    """
+    pair = df_fine[df_fine['epoch'].isin([epoch_a, epoch_b])]
+    if pair.empty:
+        raise RuntimeError(f'restrict_to_shared_trials: no rows for {epoch_a!r} or {epoch_b!r}.')
+    n_epochs = pair.groupby(['mouse', 'trial'])['epoch'].nunique()
+    shared = set(n_epochs[n_epochs == 2].index)
+    if not shared:
+        raise RuntimeError(
+            f'restrict_to_shared_trials: no (mouse, trial) has BOTH {epoch_a!r} and {epoch_b!r}, '
+            f'so the contrast has no trial-matched data at all. If {epoch_b!r} is a late '
+            f'post-shock window, every recording is too short for it -- lower '
+            f'epoch_analysis.POST_SHOCK_LATE_ONSET_S or drop the contrast.')
+    keep = pair[[(m, t) in shared for m, t in zip(pair['mouse'], pair['trial'])]]
+    total = df_fine.groupby('mouse')['trial'].nunique().rename('n_trials_total')
+    kept = keep.groupby('mouse')['trial'].nunique().rename('n_trials_matched')
+    coverage = pd.concat([total, kept], axis=1).fillna(0).astype(int).reset_index()
+    return keep, coverage
+
+
 def aggregate_over_trials(df, epoch):
     """
     Pool a fine (mouse, group, trial, epoch, cell) event table down to one row per
@@ -427,8 +576,20 @@ def build_mouse_trial_epoch_rate_table(df_fine):
     in one mouse-trial-epoch window shares the SAME window duration T, summing exposure_seconds
     across the n_cells rows in that window is exactly n_cells * T -- see the E_mte ==
     n_cells_in_window * window_seconds assertion this module's verification runs.
+
+    ** Restricted to TFC_RATE_MODEL_EPOCHS. ** The rate model puts every epoch on a single epoch
+    factor, so it must not see the two time-overlapping baselines at once -- see
+    TFC_DISJOINT_EPOCHS for exactly what goes wrong. It is filtered to the narrower
+    TFC_RATE_MODEL_EPOCHS rather than to TFC_DISJOINT_EPOCHS because being disjoint in time is
+    necessary but not sufficient to belong in THIS model; see that constant for why the late
+    post-shock window is held out. Filtered HERE rather than at the call site so that a future
+    caller cannot reintroduce either problem by passing df_fine straight through.
     """
-    agg = df_fine.groupby(['mouse', 'group', 'trial', 'epoch'], as_index=False).agg(
+    sub = df_fine[df_fine['epoch'].isin(TFC_RATE_MODEL_EPOCHS)]
+    if sub.empty:
+        raise RuntimeError('build_mouse_trial_epoch_rate_table: no rows for any of '
+                           f'{TFC_RATE_MODEL_EPOCHS} -- check the epoch names in df_fine.')
+    agg = sub.groupby(['mouse', 'group', 'trial', 'epoch'], as_index=False).agg(
         n_events=('n_events', 'sum'),
         exposure_seconds=('exposure_seconds', 'sum'),
     )
@@ -468,7 +629,7 @@ def compute_epoch_delta_table(df_fine, epoch, reference_epoch=TFC_REFERENCE_EPOC
 
     This REPLACES a group x epoch interaction fit directly on the cell x trial x epoch table
     (only a mouse random intercept, no cell nesting -- a cell could contribute up to 20 rows
-    there, up to 5 trials x 4 epochs, which is exactly the pseudoreplication the reviewer flagged:
+    there, up to 5 trials x 5 epochs, which is exactly the pseudoreplication the reviewer flagged:
     "a mouse random intercept alone does not represent within-cell repetition"). Differencing
     within-cell cancels each cell's own baseline level -- the dominant contaminating source -- by
     construction, the same logic already used and validated in compute_lt1_lt2_amplitude_delta().
@@ -660,8 +821,9 @@ def fit_epoch_delta_model(delta_df, reference='mCherry'):
             'formula': formula, 'n_cells': len(df), 'n_groups': n_groups}
 
 
-def compute_all_epoch_deltas(df_fine, epochs=TFC_EPOCHS, reference_epoch=TFC_REFERENCE_EPOCH,
-                             confirmatory_epoch=TFC_TRACE_EPOCH, reference_group='mCherry'):
+def compute_all_epoch_deltas(df_fine, epochs=TFC_DISJOINT_EPOCHS, reference_epoch=TFC_REFERENCE_EPOCH,
+                             confirmatory_epochs=TFC_CONFIRMATORY_RESPONSE_EPOCHS,
+                             reference_group='mCherry'):
     """
     Run the co-primary within-cell delta contrast (compute_epoch_delta_table +
     fit_epoch_delta_model) for EVERY non-reference epoch, not just the confirmatory trace one.
@@ -674,18 +836,29 @@ def compute_all_epoch_deltas(df_fine, epochs=TFC_EPOCHS, reference_epoch=TFC_REF
     lets a reader see directly that no epoch stands out, rather than taking that on trust.
 
     These extra epochs are DESCRIPTIVE. They spend no alpha, they are not in the confirmatory
-    Holm family (which is exactly two tests: the primary and the trace delta -- see
-    holm_correct_confirmatory), and they are not in the secondary BH-FDR family either
-    (build_secondary_fdr_table), because their role is to characterize a null rather than to
-    test a hypothesis. `confirmatory_epoch` is recorded per row purely so a reader of the output
-    table can tell which single row carries inferential weight.
+    Holm family (see holm_correct_confirmatory for its three members), and they are not in the
+    secondary BH-FDR family either (build_secondary_fdr_table), because their role is to
+    characterize a null rather than to test a hypothesis. `confirmatory_epochs` is recorded per
+    row purely so a reader of the output table can tell which rows carry inferential weight --
+    since the epoch split it is TWO of them, trace and post_shock.
+
+    TFC_MATCHED_REFERENCE_EPOCH is skipped: it is the same baseline as `reference_epoch`
+    measured over a shorter window, so its delta against `reference_epoch` is a window-length
+    artifact rather than an epoch effect.
 
     Returns (summary_df, fits) where summary_df has one row per (epoch, non-reference group) with
     the effect estimate and 95% interval, and fits is dict epoch -> fit_epoch_delta_model output.
     """
     rows, fits = [], {}
-    for epoch in [e for e in epochs if e != reference_epoch]:
-        delta_df = compute_epoch_delta_table(df_fine, epoch, reference_epoch)
+    for epoch in [e for e in epochs
+                  if e not in (reference_epoch, TFC_MATCHED_REFERENCE_EPOCH)]:
+        # Trial-match before differencing. A no-op for epochs present on every trial (tone,
+        # trace, post_shock), but load-bearing for post_shock_late, which is absent on final
+        # trials whose recording stops early -- without it that row would pool a late window over
+        # a SHORTER set of trials than its own pre_tone reference, confounding the epoch
+        # comparison with trial position (photobleaching, arousal) rather than isolating it.
+        matched, _coverage = restrict_to_shared_trials(df_fine, epoch, reference_epoch)
+        delta_df = compute_epoch_delta_table(matched, epoch, reference_epoch)
         fit = fit_epoch_delta_model(delta_df, reference=reference_group)
         fits[epoch] = fit
         mouse_delta = (delta_df.groupby(['mouse', 'group'], as_index=False)['delta_log_amplitude']
@@ -696,7 +869,7 @@ def compute_all_epoch_deltas(df_fine, epochs=TFC_EPOCHS, reference_epoch=TFC_REF
         for group, c in contrasts.items():
             rows.append({
                 'epoch': epoch, 'group': group, 'reference_epoch': reference_epoch,
-                'is_confirmatory': epoch == confirmatory_epoch,
+                'is_confirmatory': epoch in confirmatory_epochs,
                 'n_cells': fit['n_cells'], 'n_mice': c['n'],
                 'delta_log': c['diff'], 'delta_log_lo': c['diff_lo'], 'delta_log_hi': c['diff_hi'],
                 'ratio': c['ratio'], 'ratio_lo': c['ratio_lo'], 'ratio_hi': c['ratio_hi'],
@@ -863,21 +1036,43 @@ def compute_group_contrast_point_estimates(df_trace_amp, reference='mCherry'):
     return out
 
 
-def holm_correct_confirmatory(primary_p, coprimary_p):
+def holm_correct_confirmatory(family_pvalues):
     """
-    Holm correction across the ENTIRE confirmatory family: the primary trace-period group
-    omnibus p-value and the co-primary within-cell epoch-delta omnibus p-value
-    (fit_epoch_delta_model). This is the complete confirmatory multiplicity burden -- everything
-    else in this module is secondary (BH-FDR, see fdr_correct in caban.single_unit_common) or
-    purely descriptive/sensitivity.
+    Holm correction across the ENTIRE confirmatory family. This is the complete confirmatory
+    multiplicity burden -- everything else in this module is secondary (BH-FDR, see fdr_correct
+    in caban.single_unit_common) or purely descriptive/sensitivity.
 
-    Returns dict keyed 'trace' and 'interaction', each {p_raw, p_holm, reject} at alpha=0.05.
+    family_pvalues : ordered dict of hypothesis name -> raw omnibus p-value. The family is
+                     THREE tests (see run_sp_rates_lmm, which is the only caller):
+
+      'trace_amplitude'      absolute trace-period amplitude group omnibus. The GLOBAL
+                             hypothesis: does the manipulation change per-event amplitude during
+                             the trace interval at all? Kept as a member in its own right
+                             because a uniform shift across the whole session is biologically
+                             real and produces NO epoch delta -- making only the deltas
+                             confirmatory would define that result out of existence.
+      'trace_vs_baseline'    within-cell trace-minus-pre_tone delta group omnibus. Is the effect
+                             SPECIFIC to the trace interval?
+      'post_shock_vs_baseline'  the same within-cell delta for the post-shock response window.
+                             Is the effect specific to the post-shock window? Added because the
+                             TFC literature supports two distinct loci (TFC_POST_SHOCK_EPOCH's
+                             comment) and testing only the trace one silently picks a side.
+
+    Three tests rather than two costs almost nothing -- Holm's smallest threshold moves from
+    alpha/2 to alpha/3 -- and buys a confirmatory family that matches the actual hypotheses.
+
+    ** The post-shock member is prespecifiable in the honest sense. ** It is being added before
+    any properly-windowed post-shock result exists: until the epoch split in
+    caban.epoch_analysis, 'post_shock' meant the whole 198 s inter-trial interval, so no
+    post-shock response window has been fit or inspected. Lock this file's plan before running.
+
+    Returns dict keyed by the same names, each {p_raw, p_holm, reject} at alpha=0.05.
     """
-    reject, p_holm, _, _ = multipletests([primary_p, coprimary_p], alpha=0.05, method='holm')
-    return {
-        'trace': {'p_raw': float(primary_p), 'p_holm': float(p_holm[0]), 'reject': bool(reject[0])},
-        'interaction': {'p_raw': float(coprimary_p), 'p_holm': float(p_holm[1]), 'reject': bool(reject[1])},
-    }
+    names = list(family_pvalues)
+    reject, p_holm, _, _ = multipletests([family_pvalues[n] for n in names],
+                                         alpha=0.05, method='holm')
+    return {n: {'p_raw': float(family_pvalues[n]), 'p_holm': float(ph), 'reject': bool(rj)}
+            for n, ph, rj in zip(names, p_holm, reject)}
 
 
 def build_secondary_fdr_table(secondary_pvalues, alpha=0.05):
@@ -933,7 +1128,7 @@ def fit_rate_group_epoch_model(df_mte, reference_group='mCherry', reference_epoc
     dispersion (alpha) estimated together with the fixed and random effects.
 
     RANDOM EFFECTS: (1|mouse) + (1|mouse_trial). The mouse-trial term was added on
-    methodological review. The four epochs of a single trial are not independent replicates of
+    methodological review. The epochs of a single trial are not independent replicates of
     that mouse: they are four consecutive windows of one behavioural episode, sharing that
     trial's arousal/locomotor state, its position in the photobleaching decline, and whatever
     that trial's imaging conditions were. With only (1|mouse), all of that lands in the residual
@@ -1447,7 +1642,8 @@ def _draw_mouse_violin_panel(ax, values_per_group, ylabel, title=None,
 def _draw_cell_superplot_panel(ax, df, value_col, ylabel, panel_name, title=None,
                                group_order=DREADD_DISPLAY_ORDER, label_size='small',
                                yscale='auto', y_quantum=None, annotate='stats',
-                               ci_scale=None, ci_unit='', bracket_mode='axes'):
+                               ci_scale=None, ci_unit='', bracket_mode='axes',
+                               jitter_width=0.34):
     """Draw one CELL-level SuperPlot panel: every cell shown, coloured by mouse, per-mouse means
     overlaid as large markers, statistics computed from the mouse means only.
 
@@ -1475,6 +1671,10 @@ def _draw_cell_superplot_panel(ax, df, value_col, ylabel, panel_name, title=None
     bracket_mode : always 'axes' in practice -- annotate_pairwise_brackets positions brackets in
                 axes fractions, which is what makes them drawable on this panel's log/symlog
                 axis at all. Exposed only for symmetry with _draw_mouse_violin_panel.
+    jitter_width : passed straight through to draw_superplot_triplet -- the per-mouse x-offset
+                spread within a group's column. Narrower than the 0.34 default tightens the
+                cloud into a slimmer strip, which reads better in a multi-panel row where each
+                panel's own footprint has also been narrowed (see plot_decomposition).
     """
     if bracket_mode != 'axes':
         raise ValueError("_draw_cell_superplot_panel: bracket_mode must be 'axes' -- "
@@ -1492,7 +1692,7 @@ def _draw_cell_superplot_panel(ax, df, value_col, ylabel, panel_name, title=None
     draw_superplot_triplet(ax, cell_values, mouse_means, group_order, GROUP_COLOURS,
                            stat_fn=_panel_stat_fn(), ylabel=ylabel, yscale=yscale,
                            y_quantum=y_quantum, annotate=annotate, ci_scale=ci_scale,
-                           ci_unit=ci_unit)
+                           ci_unit=ci_unit, jitter_width=jitter_width)
     ax.set_xticks(range(len(group_order)))
     ax.set_xticklabels([GROUP_LABELS[g] for g in group_order], size=label_size)
     ax.set_title(ylabel if title is None else title, size='small')
@@ -1524,7 +1724,7 @@ def plot_primary_trace_amplitude(df_trace_pooled, save_dir, filename_root='prima
 
 
 def plot_epoch_profile(df_fine_amp, save_dir, filename_root='epoch_profile',
-                       epoch_order=TFC_EPOCHS):
+                       epoch_order=TFC_DISJOINT_EPOCHS):
     """
     Panel 2: descriptive (not model-marginal) per-mouse-per-epoch pooled mean log-amplitude,
     plotted by group across epoch order with faint per-animal trajectories behind the group
@@ -1568,7 +1768,8 @@ def plot_epoch_delta_forest(delta_summary, save_dir, filename_root='epoch_delta_
     """
     Companion to plot_epoch_profile: the WITHIN-CELL amplitude elevation over each cell's own
     pre_tone baseline, as a fold-change with a 95% interval, for every epoch
-    (compute_all_epoch_deltas). The confirmatory trace row is marked; the others are descriptive.
+    (compute_all_epoch_deltas). The confirmatory rows (TFC_CONFIRMATORY_RESPONSE_EPOCHS) are
+    marked; the others are descriptive.
 
     ** This figure exists to prevent a specific misreading. ** The confirmatory trace-vs-pre_tone
     delta is NULL, and the honest conclusion is that hM3D raises per-event amplitude across all
@@ -1599,8 +1800,8 @@ def plot_epoch_delta_forest(delta_summary, save_dir, filename_root='epoch_delta_
     ax.set_yticks(yticks)
     ax.set_yticklabels(yticklabels, size='small')
     ax.set_xlabel('Fold-change vs Ctl in within-cell amplitude elevation')
-    ax.set_title('Within-cell epoch deltas (only the trace row is confirmatory;\n'
-                'the others are descriptive context for its null)', size='small')
+    ax.set_title('Within-cell epoch deltas (confirmatory rows marked;\n'
+                'the others are descriptive context for their null)', size='small')
     ax.spines[['right', 'top']].set_visible(False)
     plt.tight_layout(pad=0.5)
     _save_panel(fig, save_dir, filename_root)
@@ -1653,6 +1854,73 @@ def plot_amplitude_p90(df_trace_pooled, save_dir, filename_root='amplitude_p90')
     _save_panel(fig, save_dir, filename_root)
 
 
+def fit_and_report_epoch_delta(df_fine, response_epoch, stats_dir, save_dir,
+                               n_trace_active_cells, reference_epoch=TFC_REFERENCE_EPOCH,
+                               is_confirmatory=True):
+    """
+    Fit, write, and plot ONE within-cell epoch-delta contrast (response_epoch minus
+    reference_epoch, per cell, pooled over trials).
+
+    Factored out of run_sp_rates_lmm when the post-shock response window joined the trace
+    interval as a co-equal confirmatory member. Both go through this single function so the two
+    can never diverge in cell selection, model specification, or what gets reported -- a
+    difference between them has to be a difference in the DATA, not in the code path.
+
+    n_trace_active_cells : denominator for the cell-selection line only (len(df_trace_amp)), so
+                           a reader can see what fraction of the primary endpoint's cells
+                           survive the "active in BOTH epochs" requirement.
+
+    is_confirmatory : whether this contrast is a member of the confirmatory Holm family. This is
+                   NOT cosmetic -- it decides what the stats file CLAIMS about the p it reports,
+                   and the same machinery serves descriptive contrasts (the early-vs-late
+                   post-shock one) whose p spends no alpha and enters no multiplicity family.
+                   Writing "CONFIRMATORY" over a descriptive estimate would be a false
+                   inferential claim in a file someone will quote, so it is a required
+                   distinction rather than a label. Descriptive output is named descriptive_*
+                   so the status is legible from the filename alone.
+
+    Output paths key on BOTH epochs whenever reference_epoch is not the default, so that two
+    contrasts sharing a response epoch cannot silently overwrite each other's files. The two
+    confirmatory calls keep their historical single-epoch names byte-identical.
+
+    Returns the fit_epoch_delta_model() output.
+    """
+    slug = (response_epoch if reference_epoch == TFC_REFERENCE_EPOCH
+            else f'{response_epoch}_vs_{reference_epoch}')
+    prefix = 'coprimary' if is_confirmatory else 'descriptive'
+    if is_confirmatory:
+        status_line = 'CONFIRMATORY: '
+        multiplicity_note = ("This omnibus p enters the three-member confirmatory Holm family; "
+                             "see confirmatory_holm_correction.txt for the adjusted value, and "
+                             "report THAT.")
+        title = f'Confirmatory {response_epoch} contrast, multiplicative scale'
+    else:
+        status_line = 'DESCRIPTIVE: '
+        multiplicity_note = ("DESCRIPTIVE -- this omnibus p spends no alpha and enters NEITHER "
+                             "multiplicity family (not the confirmatory Holm family, not the "
+                             "secondary BH-FDR family). Report the estimate and its 95% "
+                             "interval, not a significance verdict.")
+        title = (f'Descriptive {response_epoch} vs {reference_epoch} contrast, '
+                 f'multiplicative scale')
+    delta_df = compute_epoch_delta_table(df_fine, response_epoch, reference_epoch)
+    fit = fit_epoch_delta_model(delta_df)
+    write_text(os.path.join(stats_dir, f'{prefix}_epoch_delta_{slug}.txt'),
+              f"{status_line}delta_log_amplitude ~ group, within-cell "
+              f"({response_epoch} - {reference_epoch}), one row per cell active in BOTH epochs\n"
+              f"Cell selection: {fit['n_cells']} of {n_trace_active_cells} trace-active cells "
+              f"also had >=1 event in both {response_epoch} and {reference_epoch} and so "
+              f"qualify for this contrast.\n"
+              f"Omnibus (joint Wald, both non-reference groups, df2=n_mice-1): "
+              f"{fit['omnibus']}\n\n"
+              f"{multiplicity_note}\n\n"
+              f"{fit['summary_text']}")
+    plot_effect_forest(fit, save_dir, f'{prefix}_effect_forest_{slug}',
+                       xlabel=f'Fold-change in within-cell {response_epoch}-vs-{reference_epoch} '
+                              f'amplitude elevation',
+                       title=title)
+    return fit
+
+
 def plot_decomposition(df_trace_pooled_raw, save_dir, filename_root='decomposition'):
     """
     Panel 4 ("components of population calcium activity" -- plan section 6 renamed this from
@@ -1662,6 +1930,11 @@ def plot_decomposition(df_trace_pooled_raw, save_dir, filename_root='decompositi
     cells), rate among active cells, overall event rate across ALL cells (their exact product),
     mean per-event amplitude, and total S/s (= overall_rate x amplitude), left to right following
     the decomposition chain.
+
+    No in-figure title is drawn -- the panel y-labels already name each quantity and this figure
+    is always presented with its own caption stating the decomposition identity, so a redundant
+    suptitle was dropped as visual clutter (this also narrows the effective margin available for
+    the "narrow panel" look below).
 
     **Fraction active is a mouse-level violin; the other four are cell-level SuperPlots.** That
     split is not arbitrary: fraction active is a proportion computed OVER a mouse's cells, so it
@@ -1725,23 +1998,40 @@ def plot_decomposition(df_trace_pooled_raw, save_dir, filename_root='decompositi
     panels = [
         (mouse_frac_active, 'fraction_active', 'Fraction active', False, 'auto',
          None, 'difference_only', '', 1.0),
-        (active_only, 'rate_active', 'Rate among active cells (/s)', True, 'auto',
+        (active_only, 'rate_active', 'Event rate (event/s)', True, 'auto',
          rate_quantum, 'linear', '/s', 1.0),
-        (df, 'overall_rate', 'Overall event rate (/s, all cells)', True, 'auto',
+        (df, 'overall_rate', 'Event rate (events/s)', True, 'auto',
          rate_quantum, 'linear', '/s', 1.9),
-        (amp_df, 'log_amplitude', _YLABEL_LOG_AMPLITUDE, True, 'linear',
+        (amp_df, 'log_amplitude', 'Log of mean per-event amplitude', True, 'linear',
          None, 'log', '', 1.0),
-        (df, 'total_per_s', 'Total S/s', True, 'auto', None, 'linear', 'S/s', 1.0),
+        (df, 'total_per_s', 'Deconvolved amplitude rate (a.u./s)', True, 'auto', None, 'linear',
+         'S/s', 1.0),
     ]
 
-    fig, axs = plt.subplots(1, len(panels), figsize=(15.0, 3.2),
+    # Narrow per-panel footprint (figure width per unit width_ratio) + a tighter cell-cloud
+    # jitter -- a "sexy nature paper" column reads as a slim strip of points, not a wide scatter
+    # block, so both the panel's horizontal real estate and the cloud's own spread are pulled in
+    # together. No figure-level title (see the "Components..." caption removal below): each panel
+    # already carries its own title/y-label stating what it is, and this figure is always
+    # presented with its own caption, so a redundant in-figure title was purely visual clutter.
+    total_width_units = sum(p[-1] for p in panels)
+    fig, axs = plt.subplots(1, len(panels), figsize=(1.9 * total_width_units, 3.0),
                             gridspec_kw={'width_ratios': [p[-1] for p in panels]})
+    # rate_active's y-axis label is precise (units, "active cells" qualifier) but too long for a
+    # panel title at this narrow width; the title uses the shorter, title-cased phrasing instead.
+    panel_titles = {
+        'rate_active': 'Active cell event rate',
+        'overall_rate': 'All neurons event rate',
+        'log_amplitude': 'Per-event amplitude',
+        'total_per_s': 'Total event amplitude-rate',
+    }
     contrasts_by_panel = {}
     for ax, (sub, col, ylabel, cell_level, yscale, quantum, ci_scale, ci_unit, _w) in zip(axs, panels):
         if cell_level:
             _draw_cell_superplot_panel(ax, sub, col, ylabel, panel_name='plot_decomposition',
-                                       yscale=yscale, y_quantum=quantum, annotate='stats',
-                                       bracket_mode='axes')
+                                       title=panel_titles.get(col), yscale=yscale,
+                                       y_quantum=quantum, annotate='stats',
+                                       bracket_mode='axes', jitter_width=0.22)
         else:
             values_per_group = _mouse_values_per_group(sub, col, panel_name='plot_decomposition')
             _draw_mouse_violin_panel(ax, values_per_group, ylabel, title=ylabel,
@@ -1749,9 +2039,7 @@ def plot_decomposition(df_trace_pooled_raw, save_dir, filename_root='decompositi
         # The estimates/intervals go to the companion markdown rather than onto the panel.
         contrasts_by_panel[ylabel] = _panel_contrasts(sub, col, ci_scale, ci_unit)
 
-    fig.suptitle('Components of population calcium activity: fraction_active x rate_active = '
-                'overall_rate; overall_rate x amplitude = total_per_s', size='small')
-    fig.subplots_adjust(left=0.05, bottom=0.14, right=0.99, top=0.82, wspace=0.5)
+    fig.subplots_adjust(left=0.05, bottom=0.16, right=0.99, top=0.90, wspace=0.55)
     _save_panel(fig, save_dir, filename_root)
     write_decomposition_contrasts_markdown(contrasts_by_panel, save_dir,
                                            filename_root + '_contrasts.md')
@@ -2095,9 +2383,17 @@ def run_sp_rates_lmm(PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond
     stats_dir = os.path.join(out_dir, 'stats')
     ensure_dirs(out_dir, stats_dir)
     _copy_analysis_methods_template(METHODS_FILENAME, out_dir)
+    write_figure_guide(out_dir)
 
     print('[sp_rates_lmm] Building TFC_cond event table + run-structure table (single pass)...')
-    tfc_frames_fn = functools.partial(get_epoch_frames, pre_tone_duration_s=35.0)
+    # Both matched windows passed explicitly rather than left to the defaults: the 20 s
+    # post_shock response window and the 20 s matched baseline are analysis decisions of this
+    # module (see TFC_POST_SHOCK_EPOCH / TFC_MATCHED_REFERENCE_EPOCH), so they are stated here
+    # where the locked plan can be read off the call rather than inherited silently.
+    tfc_frames_fn = functools.partial(get_epoch_frames, pre_tone_duration_s=35.0,
+                                      pre_tone_matched_duration_s=TRACE_MATCHED_WINDOW_S,
+                                      post_shock_duration_s=TRACE_MATCHED_WINDOW_S,
+                                      post_shock_late_onset_s=POST_SHOCK_LATE_ONSET_S)
     # build_epoch_and_run_tables, not the two standalone builders back to back: both need the
     # same full-session per-cell event detection (find_event_runs_ca_S) over the SAME mice at the
     # SAME threshold, so building them separately would silently re-run that dominant-cost step
@@ -2136,21 +2432,38 @@ def run_sp_rates_lmm(PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond
     plot_effect_forest(primary, out_dir, 'primary_effect_forest',
                        title='Primary contrast, multiplicative scale')
 
-    # ---- Co-primary: within-cell trace-vs-pre_tone delta (plan section 2) --------------------
-    print('[sp_rates_lmm] Fitting co-primary within-cell epoch-delta model...')
-    delta_epoch_df = compute_epoch_delta_table(df_fine, TFC_TRACE_EPOCH, TFC_REFERENCE_EPOCH)
-    coprimary = fit_epoch_delta_model(delta_epoch_df)
-    write_text(os.path.join(stats_dir, 'coprimary_epoch_delta.txt'),
-              f"CO-PRIMARY: delta_log_amplitude ~ group, within-cell (trace - pre_tone), one row "
-              f"per cell active in BOTH epochs\n"
-              f"Cell selection: {coprimary['n_cells']} of {len(df_trace_amp)} trace-active cells "
-              f"also had >=1 event in pre_tone and so qualify for this contrast.\n"
-              f"Omnibus (joint Wald, both non-reference groups, df2=n_mice-1): {coprimary['omnibus']}\n\n"
-              f"{coprimary['summary_text']}")
+    # ---- Co-primary: within-cell response-vs-pre_tone deltas (plan section 2) ----------------
+    # Two response windows, ONE code path (fit_and_report_epoch_delta): the trace interval and
+    # the post-shock window are co-equal confirmatory members, so they must not be able to drift
+    # apart in cell selection, model, or reporting.
+    coprimary_fits = {}
+    for response_epoch in TFC_CONFIRMATORY_RESPONSE_EPOCHS:
+        print(f'[sp_rates_lmm] Fitting within-cell {response_epoch} epoch-delta model...')
+        coprimary_fits[response_epoch] = fit_and_report_epoch_delta(
+            df_fine, response_epoch, stats_dir, out_dir, n_trace_active_cells=len(df_trace_amp))
+
+    # ---- Descriptive: early-vs-late post-shock, WITHIN trial ---------------------------------
+    # Puhger et al.'s internal control, through the same code path as the confirmatory deltas but
+    # explicitly is_confirmatory=False: the confirmatory family stays at exactly three tests and
+    # this one spends no alpha. Its reference is the late post-shock window rather than pre_tone,
+    # so unlike post_shock_vs_baseline it contrasts two windows at ALIGNED trial indices with no
+    # shock-naive window mixed into the reference (see TFC_POST_SHOCK_LATE_EPOCH).
+    # post_shock_late does not exist on a final trial whose recording stops shortly after the
+    # shock, so both sides are cut to the trials where both windows exist before differencing.
+    print('[sp_rates_lmm] Fitting descriptive within-cell early-vs-late post-shock delta...')
+    df_early_late, late_coverage = restrict_to_shared_trials(
+        df_fine, TFC_POST_SHOCK_EPOCH, TFC_POST_SHOCK_LATE_EPOCH)
+    print(f'[sp_rates_lmm]   trial-matched coverage (of {len(late_coverage)} mice): '
+          f'{late_coverage["n_trials_matched"].min()}-{late_coverage["n_trials_matched"].max()} '
+          f'of {late_coverage["n_trials_total"].max()} trials per mouse')
+    write_text(os.path.join(stats_dir, 'descriptive_early_vs_late_trial_coverage.csv'),
+               late_coverage.to_csv(index=False))
+    fit_and_report_epoch_delta(
+        df_early_late, TFC_POST_SHOCK_EPOCH, stats_dir, out_dir,
+        n_trace_active_cells=len(df_trace_amp),
+        reference_epoch=TFC_POST_SHOCK_LATE_EPOCH, is_confirmatory=False)
+
     plot_epoch_profile(filter_amplitude_rows(df_fine), out_dir)
-    plot_effect_forest(coprimary, out_dir, 'coprimary_effect_forest',
-                       xlabel='Fold-change in within-cell trace-vs-pre_tone amplitude elevation',
-                       title='Co-primary contrast, multiplicative scale')
 
     # ---- Descriptive: the SAME within-cell delta for every other epoch ------------------------
     # Context for the co-primary null, not a test -- see compute_all_epoch_deltas' docstring.
@@ -2161,9 +2474,13 @@ def run_sp_rates_lmm(PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond
     plot_epoch_delta_forest(delta_summary, out_dir)
 
     # ---- Holm correction across the confirmatory family (the ONLY multiplicity burden here) ---
-    holm = holm_correct_confirmatory(primary['omnibus']['p'], coprimary['omnibus']['p'])
+    holm = holm_correct_confirmatory({
+        'trace_amplitude': primary['omnibus']['p'],
+        'trace_vs_baseline': coprimary_fits[TFC_TRACE_EPOCH]['omnibus']['p'],
+        'post_shock_vs_baseline': coprimary_fits[TFC_POST_SHOCK_EPOCH]['omnibus']['p'],
+    })
     write_text(os.path.join(stats_dir, 'confirmatory_holm_correction.txt'),
-              f"Holm correction across the two confirmatory omnibus tests:\n{holm}\n")
+              f"Holm correction across the three confirmatory omnibus tests:\n{holm}\n")
     print(f"[sp_rates_lmm] Confirmatory (Holm-corrected): {holm}")
 
     # ---- Amplitude distribution (tail) ----------------------------------------------------------
@@ -2171,7 +2488,23 @@ def run_sp_rates_lmm(PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond
     plot_amplitude_p90(df_trace_amp, out_dir)
 
     # ---- Decomposition (fraction active, rate|active, overall rate, amplitude, total S/s) ------
-    plot_decomposition(df_trace_raw, out_dir)
+    # One figure per exposure-matched epoch. The three windows are all TRACE_MATCHED_WINDOW_S
+    # long, which is what makes their panels comparable at all: fraction-active and event rate
+    # both scale with window length at a fixed underlying rate, so a 35 s baseline next to a
+    # 20 s response window would have shown an epoch difference that was pure exposure. The
+    # unsuffixed 'decomposition' filename stays on the trace epoch so existing references to it
+    # keep resolving to the same figure.
+    #
+    # ** These are descriptive, not a test of epoch-specificity. ** Reading "starred here, not
+    # starred there" across two of these figures is the difference-of-significance fallacy; the
+    # epoch-specificity claim is carried by the within-cell deltas above and by
+    # plot_epoch_delta_forest, which compare epochs WITHIN a cell rather than comparing two
+    # independently-fit figures by eye.
+    for epoch in TFC_MATCHED_EPOCHS:
+        filename_root = ('decomposition' if epoch == TFC_TRACE_EPOCH
+                         else f'decomposition_{epoch}')
+        plot_decomposition(aggregate_over_trials(df_fine, epoch), out_dir,
+                           filename_root=filename_root)
 
     # ---- group x trial (photobleaching control, plan section 5) --------------------------------
     print('[sp_rates_lmm] Fitting group x trial (photobleaching) model...')
@@ -2332,9 +2665,11 @@ def run_sp_rates_lmm(PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond
     write_text(os.path.join(stats_dir, 'secondary_fdr_family.txt'),
               f"Benjamini-Hochberg FDR (alpha=0.05) across the {len(fdr_table)} prespecified "
               f"FREQUENTIST secondary tests.\n"
-              f"EXCLUDED by design: the two confirmatory omnibus tests (Holm-corrected in their "
+              f"EXCLUDED by design: the three confirmatory omnibus tests (Holm-corrected in their "
               f"own family), the Bambi NB rate model (posterior/LOO, no p-value to correct), and "
-              f"all descriptive/sensitivity output. See build_secondary_fdr_table's docstring.\n\n"
+              f"all descriptive/sensitivity output -- including the early-vs-late post-shock "
+              f"delta, which spends no alpha in either family. See build_secondary_fdr_table's "
+              f"docstring.\n\n"
               f"{fdr_table.to_string(index=False)}\n")
     print(f'[sp_rates_lmm] Secondary BH-FDR family: {len(fdr_table)} tests, '
          f'{int(fdr_table["reject"].sum())} significant at q<0.05.')
