@@ -156,6 +156,7 @@ visible because the product was split.
 | `primary_trace_amplitude` | Triangulation: the primary effect at the level of the **17 animals**, not the model | Visible without the model — the requirement stated in Methods |
 | `primary_effect_forest`, `coprimary_effect_forest` | Fold-change + CI on the multiplicative scale | 1.53x [1.14, 2.05] |
 | `epoch_profile`, `epoch_delta_forest` | **Is the effect trace-specific?** Within-cell delta over each cell's own pre-tone baseline, every epoch | Co-primary is **NULL** (`F(2,16)=0.002, p=0.998`; trace 1.02x [0.87, 1.21]). The amplitude effect is a **global main effect present at every epoch**, not a trace-specific one. No claim of trace specificity may be made |
+| `decomposition_grid` | **Which component changed, and was it consistent across the session?** All four components x the matched epochs as effect estimates + 95% CI, three contrasts per panel (Exc/Ctl, Inh/Ctl, **Exc/Inh**), each row labelled with that component's BH-adjusted group x epoch q | Read the rows as a decomposition, never as four independent findings — they are one identity and their q-values are strongly dependent. This figure — not a comparison of per-epoch p-values — is what settles epoch specificity. **Use the grey Exc/Inh point** for any DREADD-vs-DREADD claim; the red and blue intervals share a reference and cannot be compared to each other by eye |
 | `amplitude_ecdf`, `amplitude_p90` | **Shape**, not just mean: bursting predicts a fattened right tail | hM3D p90 shifted +0.404, permutation p = 0.0067 — the effect is a tail shift, not only a mean shift |
 | `run_structure` | **Mechanism check**: is this genuinely burst-like, or an artifact of temporally clustered peaks merging into one run? | Run width hM3D 5.48 vs Ctl 4.87 frames (+0.61), permutation p = 0.096, BH q = 0.43. **Suggestive, not established** — report as such |
 | `threshold_sensitivity` | Is the effect a detection-threshold artifact? | Coefficient 0.429 / 0.435 / 0.408 at thres 1.5 / 2.0 / 3.0 — **stable**; run-merging at one threshold cannot be the sole explanation |
@@ -170,80 +171,45 @@ visible because the product was split.
 3. **Primary result** — hM3D enlarges per-event amplitude during conditioning (1.53x).
 4. **Where it sits in the activity budget** — the decomposition figure, and the hM3D/hM4D
    dissociation.
-5. **It is global, not trace-specific** — the co-primary null; the trace interval's privileged
-   status rests on prior anatomy and on behaviour, not on this result.
+5. **It is global, not trace-specific** — the **joint group x epoch permutation test**
+   (`secondary_epoch_interaction.txt`, visible on `decomposition_grid`), backed by the co-primary
+   null and the flat epoch profile. The trace interval's privileged status rests on prior anatomy
+   and on behaviour, not on this result.
+
+   **Do not argue this from a comparison of p-values.** "Significant in trace, not significant in
+   the epoch deltas" is the difference-of-significance fallacy and a reviewer will say so. The
+   epoch-specificity claim has exactly one supporting number per component — that component's
+   joint interaction q — and the difference-of-differences intervals beside it say what magnitude
+   of specificity the data still admit. Phrase the conclusion as "amplitude is elevated broadly
+   across epochs", never as "there is no effect during trace", which is the opposite of what the
+   primary endpoint found.
+
+   **Two more comparisons that are not licensed by looking at the grid:**
+
+   - *Across columns within a row.* An estimate that grows left-to-right (say, fraction active
+     rising toward post-shock) is not evidence of an epoch-specific effect unless that row's q
+     says so — and if the same drift appears in BOTH groups, it is an epoch main effect, i.e. a
+     property of the trial structure rather than of the manipulation.
+   - *Between the red and blue points.* They share mCherry as their reference. The DREADD-vs-DREADD
+     comparison is the grey point, and its interval is usually wider than the visual gap suggests.
 6. **Robustness** — threshold, tail statistic, permutation, run width (honestly: suggestive).
 7. **Persistence** — present at 48 h recall, absent at 1 week.
 8. **Limitation** — activity-dependent ROI inclusion, measured rather than merely acknowledged.
 
 ---
 
-## Part 2 — Results section draft (Nature style)
+## Part 2 — Results and Methods draft (Nature style)
 
-> Working draft — the prose is the deliverable here, the numbers are placeholders. Group labels
-> as in the figure (Ctl = mCherry, Exc = hM3D, Inh = hM4D). **Every statistic below must be
-> re-read off this run's `stats/` and `decomposition_contrasts.md` before it goes into a
-> manuscript**; see the warning at the top of this file.
+**Moved.** The manuscript draft lives in `docs/sp_rates_lmm.md` §11 — Methods (§11.1), Results
+(§11.2) and the list of placeholders still to resolve (§11.3).
 
-**Chemogenetic modulation of SST interneurons dissociates the size and the frequency of CA1
-pyramidal calcium events.**
+It used to be duplicated here, and the two copies diverged: this one still quoted a
+Holm-corrected *P* of 0.018 from the retired two-test confirmatory family (it is 0.027 across
+three), along with several decomposition estimates that predate the current run. That is exactly
+the failure mode a second copy produces, so there is now one draft in one place.
 
-To ask how SST-interneuron modulation reshapes dorsal CA1 pyramidal output during trace fear
-conditioning, we detected calcium events as contiguous supra-threshold runs of the deconvolved
-signal and quantified each event by its integral rather than its peak, so that a wider event is
-distinguishable from a taller one. Because summed event amplitude per second is the exact product
-of event frequency and per-event amplitude, we analysed the two factors separately and report
-their product alongside them (Fig. Xa–e). All statistics treat the mouse as the unit of inference
-(n = 5 hM3D, 6 hM4D, 6 mCherry), with cell-level observations entering mixed models carrying a
-mouse random intercept.
-
-The manipulation was effective: within cells tracked across two same-day linear-track sessions
-recorded before and after CNO, hM3D increased per-event amplitude relative to control
-(difference-in-differences +0.47 log units, F(2,16) = 13.0, P = 4.4 × 10⁻⁴), while the fraction of
-cells failing to re-register between the two sessions did not differ between hM4D and control
-(0.77 versus 0.77), arguing against activity-dependent loss of silenced cells as an explanation
-for the hM4D results below.
-
-During the trace interval of conditioning, hM3D mice showed larger individual calcium events than
-controls (1.53-fold, 95% CI 1.14–2.05; joint Wald F(2,16) = 6.44, P = 0.0089; Holm-corrected across
-the two confirmatory tests, P = 0.018; mouse-label permutation P = 0.008), whereas hM4D did not
-(1.18-fold, 95% CI 0.85–1.65). The effect was a shift of the whole amplitude distribution rather
-than of its mean alone: the 90th percentile of per-cell amplitude was elevated in hM3D
-(permutation P = 0.007), and the estimate was stable across event-detection thresholds spanning
-1.5–3.0 s.d. (coefficient 0.41–0.43), excluding a threshold artifact as its sole source.
-
-Decomposing population activity into its exact factors localized where each manipulation acted
-(Fig. Xa–e). Neither DREADD changed the fraction of cells recruited during the trace interval
-(hM3D +0.05, 95% CI −0.08 to +0.19; hM4D −0.04, 95% CI −0.18 to +0.10). hM4D instead reduced the
-overall population event rate (0.54-fold, 95% CI 0.36–0.82; −0.037 events s⁻¹, 95% CI −0.069 to
-−0.005) through a reduction in the rate of the cells that remained active (0.56-fold, 95% CI
-0.41–0.77), with per-event amplitude unchanged. hM3D showed the converse profile: enlarged events
-with a rate change in the same direction as hM4D but not resolved at this sample size (0.79-fold,
-95% CI 0.55–1.16). Net calcium output, the product of rate and amplitude, was consequently not
-distinguishable from control in either group (hM3D 1.55-fold, 95% CI 0.93–2.59; hM4D 0.74-fold,
-95% CI 0.46–1.19), although the two DREADDs differed from each other. Excitatory and inhibitory
-modulation of SST interneurons therefore acted on orthogonal factors of the same quantity: hM3D
-redistributed a comparable amount of activity into fewer, larger events, whereas hM4D reduced the
-number of events without altering their size.
-
-This amplitude effect was not specific to the trace interval. Referencing each cell to its own
-pre-tone baseline, the group difference in trace-minus-baseline amplitude was null
-(F(2,16) = 0.002, P = 0.998; hM3D 1.02-fold, 95% CI 0.87–1.21), and the same was true for tone and
-post-shock windows, indicating a tonic elevation of event size across the conditioning session
-rather than a state-specific one. Consistent with a persistent circuit change, the hM3D amplitude
-signature was still present in the post-tone window at 48-h recall (1.41-fold, 95% CI 1.05–1.91,
-P = 0.001, q = 0.009) but was no longer detectable at one week (1.11-fold, 95% CI 0.71–1.73).
-
-A burst-like origin for the larger events is suggested but not established: supra-threshold runs
-were wider in hM3D than in control (5.5 versus 4.9 frames), though this difference was not
-significant after correction (P = 0.10, q = 0.43), and the fraction of runs containing more than
-one local maximum did not differ between groups. Because temporally clustered events merge into a
-single run under this event definition, run width is the measurement that would distinguish
-genuine bursting from that merging, and at the present sample size it does not do so decisively.
-Finally, cellular analyses of this kind are conditional on the neurons that source extraction
-detects; the absence of an hM4D amplitude effect therefore cannot exclude changes in neurons that
-became undetectable, although the matched cross-session dropout reported above makes such loss
-unlikely to be large.
+What stays here is Part 3 onward: the figure legends, which belong beside the per-figure reading
+guide they describe.
 
 ---
 
@@ -273,3 +239,135 @@ across the two treatment-versus-control contrasts (hM3D vs mCherry, hM4D vs mChe
 hM3D-vs-hM4D contrast shown uncorrected; *P < 0.05, **P < 0.01. Equal-mouse-weighted effect sizes
 with 95% confidence intervals for every panel, including non-significant ones, are given in
 Supplementary Table S1.
+
+
+### Legends for the paper-lane figures
+
+> For `paper/tfc_amplitude_rate/`. These are the figures a manuscript would carry; the
+> `decomposition.png` legend above describes the internal five-panel version.
+
+**Fig. 1 | hM3D enlarges CA1 pyramidal calcium events throughout trace fear conditioning, whereas
+hM4D reduces their frequency.**
+**a**, Mean per-event amplitude (log scale) and **b**, population event rate, for each treatment
+group across the three duration-matched 20 s windows of a conditioning trial: pre-tone baseline,
+trace interval and post-shock. Small semi-transparent points are individual cells, colour-shaded
+by mouse; large black-edged markers are the per-mouse means. **Cell-level points are shown for
+distributional context only and never enter any statistic** — all comparisons are computed from
+the per-mouse means. Amplitude is the integral of the deconvolved signal over each contiguous
+supra-threshold run and is undefined for, and therefore excludes, cells with no events; rate
+panels retain those cells and carry sub-quantum vertical jitter (< ±0.4 of one event per window)
+so that discrete count levels remain legible. Analyses use exposure-matched trials, in which every
+window was present at its full 20 s. The y-axis is shared within each row, so the three windows
+are directly comparable. Ctl, mCherry (*n* = 6 mice); Exc, hM3D (*n* = 5); Inh, hM4D (*n* = 6).
+Brackets, Holm-corrected comparisons across the two treatment-versus-control contrasts;
+\*P < 0.05, \*\*P < 0.01. **Stars are corrected within a panel and are not comparable between
+panels**; whether the group effect differs between windows is tested once, and is reported in
+Fig. 2 and in the text. Effect estimates with 95% confidence intervals for every panel, including
+non-significant ones, are in Supplementary Table ⟨n⟩.
+
+**Fig. 2 | The dissociation is stable across the conditioning trial.**
+Effect estimates with 95% confidence intervals for each component of population calcium activity —
+**a**, fraction of cells active; **b**, population event rate; **c**, mean per-event amplitude —
+in each of the three matched windows, expressed as the treatment-versus-control difference
+(**a**, a bounded proportion) or fold-change (**b**, **c**, log axis, so that a halving and a
+doubling are equidistant from the reference line). Points are equal-mouse-weighted estimates;
+error bars are Welch 95% confidence intervals computed from the per-mouse means. **No significance
+stars are shown, by design**: the three components are one exact decomposition
+(population rate = fraction active × rate among active cells, with amplitude the separate
+magnitude term) rather than independent measures, and counting significant panels across the grid
+is not a valid reading of it. Each row is instead annotated with a single group × epoch
+permutation test asking whether that component's group effect changes across windows, corrected
+across the secondary family; all are null (*q* ≥ 0.72). Ctl, mCherry (*n* = 6 mice); Exc, hM3D
+(*n* = 5); Inh, hM4D (*n* = 6).
+
+---
+
+## Part 3a — `conditioning_phase_amplitude` (early vs late conditioning)
+
+Two files, both descriptive:
+
+- `conditioning_phase_amplitude.png` — per-event amplitude by group, 2 rows (pre-tone baseline
+  35 s; trace interval) x 2 columns (trials 1-2; trials 3-5), y-axis shared within each row.
+- `conditioning_phase_amplitude_forest.png` — **the panel that actually answers the question**:
+  each DREADD group's amplitude ratio vs control, computed separately in early and late trials.
+  Open markers are early, filled are late.
+
+**The question it answers.** Every other epoch contrast in this module compares windows *within*
+a trial. This one splits *across* trials, which is orthogonal: given that the amplitude effect is
+a global shift rather than trace-specific, is it **tonic** (present from trial 1, a property of
+the drug being on board) or does it **develop** as conditioning proceeds? If a group's open and
+filled points sit in the same place, it is tonic.
+
+**Read the contrast, not the level.** Absolute amplitude falls ~31% from trial 1 to trial 5, in
+every group, consistent with photobleaching. That is a main effect of trial — it moves both
+columns of the distribution figure down together and cancels in a group contrast. A drop between
+the columns is expected and means nothing about the manipulation. This is exactly why the forest
+exists alongside the distributions.
+
+**No significance stars, deliberately.** This figure spends no alpha and is in neither
+multiplicity family. The formal test of whether the group effect changes across trials already
+exists: `group_x_trial_interaction`, a member of the secondary BH-FDR family
+(`stats/secondary_fdr_family.csv`, `stats/group_trial_photobleaching.txt`). Comparing stars
+between the two columns would be the difference-of-significance fallacy, so there are none to
+compare.
+
+**Amplitude only, and that is not an omission.** The rate analog cannot be drawn honestly at this
+split: rate and fraction active are duration-sensitive and so need exposure-matched trials, which
+drops trial 1 (its trace window is 15 s, not 20 s) — reducing the early column to a single trial.
+Amplitude is a per-event quantity, needs no matching, and keeps every trial.
+
+Per-mouse trial counts behind the split are in `stats/conditioning_phase_trial_coverage.csv`;
+recordings are ragged, so report them with the estimate.
+
+---
+
+## Part 4 — The paper lane (`sp_rates_lmm/paper/tfc_amplitude_rate/`)
+
+Everything above describes the internal output. The two figures below are the manuscript-sized
+re-cut of it. They add no analysis — every number in them already exists in `TFC_cond/`. See
+§6.1 of `docs/sp_rates_lmm.md` for why the selection is what it is.
+
+### `tfc_amplitude_rate_by_epoch.png` — the distributions
+
+Two rows (per-event amplitude; population event rate) × three columns (pre-tone 20 s baseline,
+trace, post-shock 20 s), on exposure-matched trials.
+
+**Read down a column** to see how the two quantities dissociate within one window: hM3D moves
+amplitude, hM4D moves rate. **Read across a row** to see that neither effect is confined to a
+window — the columns share one y-scale precisely so that this reading is honest.
+
+Do **not** compare the asterisks between columns. A contrast being starred in one window and not
+in the next is not evidence that the effect differs between them; that is the
+difference-of-significance fallacy, and it has exactly one proper test (below).
+
+Small faint points are individual cells, colour-shaded by mouse; large black-edged markers are the
+per-mouse means. **Only the per-mouse means enter any statistic.** Brackets are Holm-corrected
+across the two treatment-versus-control contrasts. Amplitude is undefined for a cell with no
+events, so those cells are absent from the top row by definition, not by exclusion; they are
+retained in the rate row's denominator.
+
+### `tfc_decomposition_forest.png` — the effect estimates
+
+Three rows (fraction active; population event rate; per-event amplitude) × the same three windows.
+Two points per panel: hM3D-versus-control and hM4D-versus-control, with 95% confidence intervals.
+Fraction active is a bounded proportion, so its row is a difference on a linear axis centred on 0;
+the other two are fold-changes on a log axis centred on 1.
+
+**No significance stars anywhere, deliberately.** These three rows are one exact identity
+(`overall_rate = fraction_active x rate_active`, plus the amplitude term) computed over
+overlapping cells, not three independent phenotypes — counting significant cells across the grid
+is not a valid reading of it. Read the intervals.
+
+Each row label carries **one** `group x epoch` q-value: that component's joint permutation test
+for whether the group effect changes across windows. That number, not a comparison of columns, is
+the answer to temporal specificity. All are null: the dissociation is broad across the session.
+
+The direct hM3D-versus-hM4D contrast is **not** drawn here (it is on the internal grid). It is
+exploratory, uncorrected, and in no multiplicity family; the defensible sentence is that the two
+DREADDs show divergent recruitment profiles while neither differs conclusively from control.
+
+### `stats/paper_results_summary.md`
+
+Every number a Results paragraph needs, with each one's evidential tier attached to it. Quote from
+here rather than from the individual `TFC_cond/stats/` files — the tier is the part that gets lost
+in transit, and it, not the p-value, decides whether something may be called significant.

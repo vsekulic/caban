@@ -90,6 +90,7 @@ declared BH-FDR family for the frequentist secondaries.
 import os
 import shutil
 import functools
+import collections
 
 import numpy as np
 import pandas as pd
@@ -105,7 +106,7 @@ from caban.single_unit_common import (
     ensure_dirs, write_text, save_fig, ecdf_panel, fdr_correct,
     fit_mixed_model, joint_wald_test, draw_superplot_triplet, no_stat_annotation,
     mouse_contrast_ci, annotate_contrast_ci, format_contrast_ci_lines,
-    annotate_pairwise_brackets,
+    annotate_pairwise_brackets, reserve_top_fraction,
 )
 from caban.decoder import _ANALYSIS_METHODS_TEMPLATES_DIR, _copy_analysis_methods_template
 from caban.analysis import _draw_violin_triplet, do_pairwise_holm_plot
@@ -180,10 +181,80 @@ TFC_MATCHED_REFERENCE_EPOCH = 'pre_tone_matched'
 TFC_MATCHED_EPOCHS = (TFC_MATCHED_REFERENCE_EPOCH, TFC_TRACE_EPOCH, TFC_POST_SHOCK_EPOCH,
                       TFC_POST_SHOCK_LATE_EPOCH)
 
+# ** The epochs the JOINT group x epoch specificity test puts on its profile. ** A strict subset
+# of TFC_MATCHED_EPOCHS: every member is TRACE_MATCHED_WINDOW_S long AND present on every
+# non-truncated trial.
+#
+# TFC_POST_SHOCK_LATE_EPOCH is held out for the same raggedness reason it is held out of
+# TFC_RATE_MODEL_EPOCHS: it does not exist on a final trial whose recording stops shortly after
+# the shock (observed as little as 20.5 s -- see epoch_analysis.POST_SHOCK_LATE_ONSET_S), so
+# requiring it would cut the exposure-matched trial set for every mouse whose recording ran
+# short, and the joint test needs each mouse to contribute a COMPLETE profile. It stays a
+# descriptive column on the decomposition grid, where a per-column coverage note is enough.
+TFC_MATCHED_PROFILE_EPOCHS = (TFC_MATCHED_REFERENCE_EPOCH, TFC_TRACE_EPOCH, TFC_POST_SHOCK_EPOCH)
+
+# ** The four components of population calcium activity, defined ONCE. ** Consumed by both
+# plot_decomposition_grid (one row each) and build_mouse_epoch_profile / the joint epoch tests
+# (one test each), so a component cannot be defined one way on the figure and another way in the
+# test that annotates it. Ordered along the decomposition chain:
+#     overall_rate = fraction_active x rate_active
+# with per-event amplitude the separate magnitude term.
+#
+# key       : stable identifier; used in stats filenames and BH-FDR family member names.
+# frame     : which of _decomposition_grid_frames' outputs to read.
+# pairable  : whether a WITHIN-CELL profile is possible. Fraction active is a proportion computed
+#             OVER a mouse's cells, so it has no per-cell value to pair -- it is inherently a
+#             per-mouse quantity and its profile is unpaired by nature, not by choice.
+# ci_scale  : passed to mouse_contrast_ci. 'log' means the column is ALREADY log-transformed.
+_DecompComponent = collections.namedtuple(
+    '_DecompComponent', 'key label frame col ci_scale ci_unit pairable')
+
+_DECOMPOSITION_COMPONENTS = (
+    _DecompComponent('fraction_active', 'Fraction active', 'fraction_active',
+                     'fraction_active', 'difference_only', '', False),
+    _DecompComponent('rate_active', 'Rate | active', 'active_only',
+                     'rate_active', 'linear', '/s', True),
+    _DecompComponent('population_rate', 'Population event rate', 'all',
+                     'overall_rate', 'linear', '/s', True),
+    _DecompComponent('amplitude', 'Per-event amplitude', 'amplitude',
+                     'log_amplitude', 'log', '', True),
+)
+_DECOMPOSITION_COMPONENTS_BY_KEY = {c.key: c for c in _DECOMPOSITION_COMPONENTS}
+
+# The component whose joint epoch test is the one to lead with, matching the PRIMARY endpoint.
+# The other three are the decomposition of the activity budget around it.
+PRIMARY_PROFILE_COMPONENT = 'amplitude'
+
+# ** The components the PAPER-FACING figures show. ** A strict subset of the four above, resolved
+# through _DECOMPOSITION_COMPONENTS_BY_KEY so a component cannot be defined one way on the paper
+# figure and another way on the internal grid or in the test that annotates it.
+#
+# 'rate_active' and the total amplitude-rate panel are deliberately NOT here. They are diagnostics
+# of the identity overall_rate = fraction_active x rate_active -- mathematically useful, and kept
+# in full in the TFC_cond output as supplement material -- but they are not separate biological
+# claims, and putting five quantities in front of a reader to make a three-quantity point is how
+# a figure stops being read. See docs/sp_rates_lmm.md for what else is supplement.
+PAPER_COMPONENT_KEYS = ('fraction_active', 'population_rate', 'amplitude')
+
 # The two response windows whose within-cell elevation over TFC_REFERENCE_EPOCH is confirmatory
 # (holm_correct_confirmatory's second and third members). Every other epoch's delta is
 # descriptive.
 TFC_CONFIRMATORY_RESPONSE_EPOCHS = (TFC_TRACE_EPOCH, TFC_POST_SHOCK_EPOCH)
+
+# ** Early vs late conditioning. ** Splits the five tone-shock trials into the first two and the
+# last three, to ask whether a group difference is TONIC (present from the first trial, i.e. a
+# property of the drug) or DEVELOPS as conditioning proceeds.
+#
+# `trial_numbers` are 1-BASED trial numbers, which is how the protocol is described and discussed.
+# The event table's `trial` column is the session's own 0-based `trial_idx` (see
+# _iter_event_windows), so split_by_conditioning_phase converts exactly once, at its one point of
+# use, rather than leaving two conventions loose in the module.
+_ConditioningPhase = collections.namedtuple('_ConditioningPhase', 'key label trial_numbers')
+
+CONDITIONING_PHASES = (
+    _ConditioningPhase('early', 'Early conditioning\n(trials 1-2)', (1, 2)),
+    _ConditioningPhase('late', 'Late conditioning\n(trials 3-5)', (3, 4, 5)),
+)
 
 # ** The epochs that may be modelled JOINTLY -- i.e. treated as a set of disjoint observations
 # of one trial. ** TFC_EPOCHS is deliberately NOT that set: it carries two baselines,
@@ -512,6 +583,97 @@ def restrict_to_shared_trials(df_fine, epoch_a, epoch_b):
     return keep, coverage
 
 
+def split_by_conditioning_phase(df_fine, phases=CONDITIONING_PHASES):
+    """Split a fine event table into early / late conditioning sub-frames (see
+    CONDITIONING_PHASES), plus the per-mouse trial coverage behind the split.
+
+    Returns ({phase key: sub-frame}, coverage DataFrame). The coverage table is not optional
+    bookkeeping: trial counts are ragged across mice (recordings stop early), so how many trials
+    a mouse actually contributed to each phase is part of what the estimate rests on and is
+    written out beside it.
+
+    Raises if any mouse contributes zero trials to either phase -- that mouse could not appear in
+    both columns of the figure, and quietly dropping it from one would make the two columns rest
+    on different animals while looking like a within-cohort comparison.
+    """
+    trial_numbers = df_fine['trial'].to_numpy() + 1   # 0-based trial_idx -> 1-based trial number
+    frames = {phase.key: df_fine[np.isin(trial_numbers, phase.trial_numbers)] for phase in phases}
+
+    rows = []
+    for mouse, sub in df_fine.groupby('mouse'):
+        sub_numbers = sub['trial'] + 1
+        row = {'mouse': mouse, 'group': sub['group'].iloc[0],
+               'n_trials_total': int(sub['trial'].nunique())}
+        for phase in phases:
+            n = int(sub.loc[sub_numbers.isin(phase.trial_numbers), 'trial'].nunique())
+            if n == 0:
+                raise RuntimeError(
+                    f'split_by_conditioning_phase: mouse {mouse} has no trials in phase '
+                    f'{phase.key!r} (wanted 1-based trials {phase.trial_numbers}, has '
+                    f'{sorted(sub_numbers.unique())}). Both phases must be populated for every '
+                    f'mouse or the two columns rest on different cohorts.')
+            row[f'n_trials_{phase.key}'] = n
+        rows.append(row)
+    return frames, pd.DataFrame(rows)
+
+
+def restrict_to_exposure_matched_trials(df_fine, epochs, window_seconds=TRACE_MATCHED_WINDOW_S,
+                                        tol_seconds=0.5):
+    """
+    Restrict a fine event table to the (mouse, trial) cells where EVERY epoch in `epochs` is
+    present AND its window is `window_seconds` long.
+
+    TFC_MATCHED_EPOCHS are called "exposure-matched" because each is defined as
+    TRACE_MATCHED_WINDOW_S long -- but the TRACE window on TRIAL 1 is only 15 s, not 20 s
+    (tone_onsets_def[0]=185 rather than an intended 180, see TraceFearCondSession.__init__ and
+    the trace = [15, 20, 20, 20, 20] s note in docs/sp_rates_lmm.md section 2.4). Since
+    aggregate_over_trials SUMS exposure_seconds across trials, the trial-pooled comparison is
+    therefore ~95 s of trace against ~100 s of pre_tone_matched.
+
+    That 5% mismatch does not touch mean per-event AMPLITUDE, which is a per-event quantity --
+    which is why the confirmatory contrasts can and do keep the unmatched 35 s
+    TFC_REFERENCE_EPOCH. It matters for the DURATION-SENSITIVE decomposition components:
+    P(active) = 1 - exp(-lambda*T) rises with T at a fixed underlying rate, and conditioning on
+    N>0 makes rate-among-active duration-dependent too. Comparing those across epochs at unequal
+    exposure shows a difference that is partly pure window length.
+
+    ** The restriction is derived from the MEASURED exposure_seconds, never from a trial index. **
+    Hard-coding "trials 2-5" would encode the nominal protocol timing, which docs section 8
+    forbids for exactly the reason correction #14 records: session timing is data-dependent and
+    trial count varies per mouse. Testing the measured window instead drops trial 1 BECAUSE its
+    trace window is short, and drops a truncated final trial BECAUSE its window is missing, under
+    one rule that stays correct if either assumption changes.
+
+    Returns (restricted_df, coverage) in the same shape as restrict_to_shared_trials -- the
+    restricted frame carries only `epochs`' rows, and coverage is a per-mouse DataFrame the
+    caller is expected to REPORT rather than let the restriction happen silently.
+    """
+    epochs = tuple(epochs)
+    sub = df_fine[df_fine['epoch'].isin(epochs)]
+    if sub.empty:
+        raise RuntimeError(f'restrict_to_exposure_matched_trials: no rows for any of {epochs}.')
+
+    # A (mouse, trial) qualifies when it carries all len(epochs) windows and every one of them is
+    # within tol of the nominal length. Checked on the per-(mouse, trial, epoch) window duration,
+    # which every cell in that window shares, so max() is that window's own length.
+    per_window = sub.groupby(['mouse', 'trial', 'epoch'], as_index=False)['exposure_seconds'].max()
+    per_window['matched'] = (per_window['exposure_seconds'] - window_seconds).abs() <= tol_seconds
+    ok = per_window.groupby(['mouse', 'trial'])['matched'].agg(['sum', 'size'])
+    shared = set(ok[(ok['sum'] == len(epochs)) & (ok['size'] == len(epochs))].index)
+    if not shared:
+        raise RuntimeError(
+            f'restrict_to_exposure_matched_trials: no (mouse, trial) has all of {epochs} at '
+            f'{window_seconds} s (tol {tol_seconds} s), so there is no exposure-matched data at '
+            f'all. Check TRACE_MATCHED_WINDOW_S against the durations actually passed to '
+            f'get_epoch_frames.')
+
+    keep = sub[[(m, t) in shared for m, t in zip(sub['mouse'], sub['trial'])]]
+    total = df_fine.groupby('mouse')['trial'].nunique().rename('n_trials_total')
+    kept = keep.groupby('mouse')['trial'].nunique().rename('n_trials_matched')
+    coverage = pd.concat([total, kept], axis=1).fillna(0).astype(int).reset_index()
+    return keep, coverage
+
+
 def aggregate_over_trials(df, epoch):
     """
     Pool a fine (mouse, group, trial, epoch, cell) event table down to one row per
@@ -618,7 +780,8 @@ def build_mouse_trial_trace_amplitude(df_fine):
     return amp.groupby(['mouse', 'group', 'trial'], as_index=False)['log_amplitude'].mean()
 
 
-def compute_epoch_delta_table(df_fine, epoch, reference_epoch=TFC_REFERENCE_EPOCH):
+def compute_epoch_delta_table(df_fine, epoch, reference_epoch=TFC_REFERENCE_EPOCH,
+                              pair_within_trial=False):
     """
     CO-PRIMARY endpoint's cell selection + delta computation (plan section 2). For each cell,
     pool n_events/sum_amplitude/exposure_seconds across all trials separately for `epoch` and
@@ -644,19 +807,57 @@ def compute_epoch_delta_table(df_fine, epoch, reference_epoch=TFC_REFERENCE_EPOC
     Cell selection this induces: only cells active in BOTH `epoch` and `reference_epoch` qualify
     -- callers should report len(returned df) (see run_sp_rates_lmm's coprimary stats file).
 
+    pair_within_trial : False (default, and what every CONFIRMATORY caller uses) -- pool each
+        epoch across trials first, as described above, then difference. True -- difference each
+        cell against ITS OWN TRIAL's reference window, then average those per-trial deltas within
+        the cell.
+
+        Why the option exists. Pooling before differencing makes the reference a MIXTURE across
+        trial indices, which is harmless when both windows are present on the same trials and
+        misleading when they are not: post_shock exists on every trial while pre_tone does not
+        exist on trial 1, so post_shock-vs-pre_tone differences a five-trial response against a
+        four-trial baseline whose remaining members all sit 163 s after a preceding shock. The
+        within-trial pairing removes that misalignment directly, at the cost of requiring a cell
+        to be active in both windows of the SAME trial (a stricter selection -- report n_cells).
+        It is a second, independent route to the same problem TFC_POST_SHOCK_LATE_EPOCH exists to
+        solve; agreement between the two is the point of having both.
+
+        ** The per-trial deltas are averaged back down to ONE ROW PER CELL. ** That is not a
+        presentational choice. fit_epoch_delta_model carries only a mouse random intercept, so
+        handing it cell x trial rows would let a single cell contribute up to five of them and
+        would reproduce exactly the pseudoreplication that correction #4 removed from the
+        co-primary endpoint. The averaging keeps the returned table structurally identical to the
+        pooled one, so both feed the same model with the same unit of observation.
+
     Returns a tidy DataFrame: mouse, group, cell, log_amplitude_epoch, log_amplitude_reference,
-    delta_log_amplitude.
+    delta_log_amplitude. (Under pair_within_trial the two log_amplitude columns are the cell's
+    means over the trials that survived the pairing, so their difference remains exactly
+    delta_log_amplitude.)
     """
-    epoch_amp = filter_amplitude_rows(aggregate_over_trials(df_fine, epoch))[
-        ['mouse', 'group', 'cell', 'log_amplitude']]
-    ref_amp = filter_amplitude_rows(aggregate_over_trials(df_fine, reference_epoch))[
-        ['mouse', 'group', 'cell', 'log_amplitude']]
-    merged = epoch_amp.merge(ref_amp, on=['mouse', 'group', 'cell'],
-                             suffixes=('_epoch', '_reference'))
+    keys = ['mouse', 'group', 'cell'] + (['trial'] if pair_within_trial else [])
+    if pair_within_trial:
+        # No aggregate_over_trials: keep the fine table's own (mouse, trial, epoch, cell) rows so
+        # the join can match on trial. filter_amplitude_rows still applies per side, so the
+        # "active in both" rule now means active in both windows OF THE SAME TRIAL.
+        epoch_amp = filter_amplitude_rows(df_fine[df_fine['epoch'] == epoch])[keys + ['log_amplitude']]
+        ref_amp = filter_amplitude_rows(df_fine[df_fine['epoch'] == reference_epoch])[
+            keys + ['log_amplitude']]
+    else:
+        epoch_amp = filter_amplitude_rows(aggregate_over_trials(df_fine, epoch))[
+            keys + ['log_amplitude']]
+        ref_amp = filter_amplitude_rows(aggregate_over_trials(df_fine, reference_epoch))[
+            keys + ['log_amplitude']]
+    merged = epoch_amp.merge(ref_amp, on=keys, suffixes=('_epoch', '_reference'))
     if merged.empty:
         raise RuntimeError(f'compute_epoch_delta_table: no cells with >=1 event in BOTH '
-                           f'{epoch!r} and {reference_epoch!r}.')
+                           f'{epoch!r} and {reference_epoch!r}'
+                           f'{" ON THE SAME TRIAL" if pair_within_trial else ""}.')
     merged['delta_log_amplitude'] = merged['log_amplitude_epoch'] - merged['log_amplitude_reference']
+    if pair_within_trial:
+        # Collapse the per-trial deltas to one row per cell -- see the docstring; a cell
+        # contributing several rows to a mouse-intercept-only model is the bug this avoids.
+        merged = merged.groupby(['mouse', 'group', 'cell'], as_index=False)[
+            ['log_amplitude_epoch', 'log_amplitude_reference', 'delta_log_amplitude']].mean()
     return merged
 
 
@@ -1086,7 +1287,12 @@ def build_secondary_fdr_table(secondary_pvalues, alpha=0.05):
       - Test_B and Test_B_1wk post-tone amplitude omnibus tests (recall complement),
       - the group x trial photobleaching interaction,
       - the run-structure mouse-label permutation tests (width, local maxima, multi-peak
-        fraction, each group vs control).
+        fraction, each group vs control),
+      - the joint group x epoch specificity permutation tests, ONE PER DECOMPOSITION COMPONENT
+        (fit_and_report_epoch_interaction). These four are strongly DEPENDENT -- the components
+        are one exact identity computed over overlapping cells -- which BH tolerates (it is valid
+        under positive dependence) but which means their q-values describe one decomposition and
+        must not be counted as four independent findings.
 
     Deliberately EXCLUDED, and these exclusions are the substantive part of the declaration:
 
@@ -1222,6 +1428,70 @@ def fit_rate_group_epoch_model(df_mte, reference_group='mCherry', reference_epoc
             'formula_full': formula_full, 'formula_reduced': formula_reduced}
 
 
+RATE_CONTRAST_HDI_PROB = 0.94
+
+
+def summarize_rate_group_epoch_contrasts(rate_fit, epochs=(TFC_TRACE_EPOCH, TFC_POST_SHOCK_EPOCH),
+                                         reference_group='mCherry',
+                                         reference_epoch=TFC_REFERENCE_EPOCH,
+                                         hdi_prob=RATE_CONTRAST_HDI_PROB):
+    """
+    Per-epoch rate RATIOS vs control, read out of the already-fitted NB mixed model.
+
+    ** This fits nothing and tests nothing. ** fit_rate_group_epoch_model's own summary_text
+    reports the raw interaction coefficients, which are differences-of-differences against the
+    reference epoch -- not the quantity anyone writes in a Results section. What a reader wants is
+    "hM4D's event rate during trace was X times control's", and that is
+    exp(group main effect + that group x epoch interaction), formed draw by draw so the interval
+    is a genuine posterior interval on the ratio rather than a delta-method approximation of one.
+
+    The rate endpoint stays SECONDARY and stays out of both multiplicity families: there is no
+    p-value here to correct (see build_secondary_fdr_table), and reformatting a posterior does not
+    change that.
+
+    ** The baseline differs from the figures', deliberately. ** This model's epoch factor is
+    TFC_RATE_MODEL_EPOCHS, whose reference is the 35 s `pre_tone`; the paper figures use the 20 s
+    `pre_tone_matched`. `trace` and `post_shock` are the SAME windows in both -- only the epoch the
+    contrast is anchored to differs, and a group ratio computed at a given epoch is anchored to
+    that epoch, not to the baseline. The caveat is carried in the returned frame's `note` so it
+    cannot be dropped in transit.
+
+    Returns a DataFrame: group, epoch, rate_ratio (posterior median), hdi_lo, hdi_hi, hdi_prob.
+    """
+    posterior = rate_fit['idata_full'].posterior
+    group_term = f"C(group, Treatment('{reference_group}'))"
+    epoch_term = f"C(epoch, Treatment('{reference_epoch}'))"
+    interaction_term = f'{group_term}:{epoch_term}'
+    for name in (group_term, interaction_term):
+        if name not in posterior:
+            raise KeyError(
+                f"summarize_rate_group_epoch_contrasts: {name!r} is not in the posterior. The "
+                f"reference_group/reference_epoch passed here must match the ones "
+                f"fit_rate_group_epoch_model was fit with (its formula was: "
+                f"{rate_fit['formula_full']!r}).")
+
+    rows = []
+    for group in [g for g in DREADD_DISPLAY_ORDER if g != reference_group]:
+        main = posterior[group_term].sel({f'{group_term}_dim': group})
+        for epoch in epochs:
+            if epoch == reference_epoch:
+                log_ratio = main
+            else:
+                # bambi labels an interaction level 'group, epoch' (verified against the fitted
+                # model, not assumed) -- one coordinate per cell of the group x epoch table.
+                log_ratio = main + posterior[interaction_term].sel(
+                    {f'{interaction_term}_dim': f'{group}, {epoch}'})
+            draws = np.exp(log_ratio.values.ravel())
+            lo, hi = az.hdi(draws, hdi_prob=hdi_prob)
+            rows.append({'group': group, 'epoch': epoch,
+                         'rate_ratio': float(np.median(draws)),
+                         'hdi_lo': float(lo), 'hdi_hi': float(hi), 'hdi_prob': hdi_prob})
+    out = pd.DataFrame(rows)
+    out['note'] = (f'NB mixed model, epoch factor anchored to {reference_epoch!r} '
+                   f'(35 s), not to the 20 s matched baseline the figures use.')
+    return out
+
+
 def report_decomposition_additivity(rate_group_coef, amplitude_group_coef):
     """
     Consistency check: log(total S/sec) group coefficient should equal
@@ -1246,7 +1516,8 @@ def report_decomposition_additivity(rate_group_coef, amplitude_group_coef):
 # Small-n inference: mouse-label permutation
 # ─────────────────────────────────────────────────────────────────────────────
 
-def mouse_label_permutation_test(stat_fn, mice_per_group, n_perm=20000, seed=0):
+def mouse_label_permutation_test(stat_fn, mice_per_group, n_perm=20000, seed=0,
+                                 restrict_to_groups=None):
     """
     Monte Carlo permutation test: shuffle GROUP LABELS across mice (holding each mouse's own
     cell/event data fixed) and recompute stat_fn under each shuffle, building a null distribution
@@ -1273,8 +1544,44 @@ def mouse_label_permutation_test(stat_fn, mice_per_group, n_perm=20000, seed=0):
                      cell/event-level data on every call.
     seed           : RNG seed for reproducibility.
 
-    Returns dict(observed, p_two_sided, n_perm, null=ndarray of length n_perm).
+    restrict_to_groups : which groups' mice are EXCHANGEABLE under the null. None (default)
+                     means all of them, which tests the GLOBAL null "no group differs from any
+                     other". A sequence of group names restricts the shuffle to those groups'
+                     mice, testing the PAIRWISE null "these groups do not differ from each
+                     other", assuming nothing about the groups left out.
+
+                     ** These are different hypotheses and can give materially different
+                     p-values. ** For a contrast between two DREADD groups, the default lets a
+                     permuted 'hM3D' bucket contain mCherry mice -- so mCherry's between-mouse
+                     spread enters the null distribution even though mCherry appears nowhere in
+                     the statistic. When the control is the most variable group, that widens the
+                     null and makes the observed contrast look less extreme. Measured on the
+                     trace-epoch fraction-active hM3D-vs-hM4D contrast, where mCherry's
+                     between-mouse SD is 0.131 against hM3D's 0.032: the global null gives
+                     p = 0.099, the pairwise null over the 11 DREADD mice gives p = 0.026.
+
+                     Neither is wrong; they answer different questions. The default stays the
+                     global null because every existing call site was computed under it and its
+                     numbers are reported. Pass this explicitly when the claim is specifically
+                     "group A differs from group B".
+
+                     (Filtering `mice_per_group` before the call has the same effect -- the
+                     statistic factories use `.get`, so an unmapped mouse falls into neither
+                     side. This parameter exists so the choice is visible and documented at the
+                     call site rather than being an easily-missed dict comprehension.)
+
+    Returns dict(observed, p_two_sided, n_perm, n_finite, null=ndarray of length n_perm).
     """
+    if restrict_to_groups is not None:
+        restrict_to_groups = tuple(restrict_to_groups)
+        missing = [g for g in restrict_to_groups if g not in mice_per_group]
+        if missing:
+            raise KeyError(f'mouse_label_permutation_test: restrict_to_groups names {missing}, '
+                           f'absent from mice_per_group ({sorted(mice_per_group)}).')
+        if len(restrict_to_groups) < 2:
+            raise ValueError('mouse_label_permutation_test: restrict_to_groups needs >=2 groups '
+                             'to have anything to exchange.')
+        mice_per_group = {g: mice_per_group[g] for g in restrict_to_groups}
     true_assignment = {}
     for group, mice in mice_per_group.items():
         for m in mice:
@@ -1291,10 +1598,30 @@ def mouse_label_permutation_test(stat_fn, mice_per_group, n_perm=20000, seed=0):
         perm_assignment = dict(zip(mouse_list, shuffled))
         null[i] = stat_fn(perm_assignment)
 
+    # ** Non-finite draws must be removed, not compared. ** A stat_fn returns NaN for a
+    # degenerate split (see make_contrast_stat / make_group_epoch_interaction_stat), and
+    # `abs(nan) >= abs(observed)` is False -- so leaving NaNs in the null would silently count
+    # them as "not extreme" and DEFLATE the p-value toward 1/(n_perm+1). That is an
+    # anti-conservative failure that looks exactly like a real result: on a degenerate fixture it
+    # produced p <= 0.05 on 87% of true nulls. The p is therefore computed over the finite draws
+    # only, and a null that is mostly non-finite is an error rather than a small p-value.
+    if not np.isfinite(observed):
+        raise RuntimeError(
+            'mouse_label_permutation_test: the OBSERVED statistic is not finite, so no p-value '
+            'is defined. This usually means the statistic is degenerate on these data (e.g. a '
+            'quantity with no between-mouse variation at all), not that the effect is large.')
+    finite = np.isfinite(null)
+    n_finite = int(finite.sum())
+    if n_finite < 0.5 * n_perm:
+        raise RuntimeError(
+            f'mouse_label_permutation_test: only {n_finite} of {n_perm} permutations produced a '
+            f'finite statistic. The null distribution is too degenerate to test against; fix the '
+            f'statistic or drop the test rather than reporting a p-value from it.')
     # +1/+1 (conventional Monte Carlo correction) so a finite number of draws never reports p=0.
-    n_as_extreme = int(np.sum(np.abs(null) >= np.abs(observed)))
-    p_two_sided = (n_as_extreme + 1) / (n_perm + 1)
-    return {'observed': observed, 'p_two_sided': float(p_two_sided), 'n_perm': n_perm, 'null': null}
+    n_as_extreme = int(np.sum(np.abs(null[finite]) >= np.abs(observed)))
+    p_two_sided = (n_as_extreme + 1) / (n_finite + 1)
+    return {'observed': observed, 'p_two_sided': float(p_two_sided), 'n_perm': n_perm,
+            'n_finite': n_finite, 'null': null}
 
 
 def make_contrast_stat(df, value_col, group_a, group_b, reduce_fn=None, weight='cell'):
@@ -1362,6 +1689,387 @@ def make_amplitude_contrast_stat(df_amp, group_a, group_b, reduce_fn=None, weigh
     df_amp : an amplitude table already restricted to n_events > 0 and carrying 'log_amplitude'
              (output of filter_amplitude_rows())."""
     return make_contrast_stat(df_amp, 'log_amplitude', group_a, group_b, reduce_fn=reduce_fn, weight=weight)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Joint group x epoch specificity test
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# ** WHY THIS EXISTS. ** The confirmatory family answers "is there a group effect WITHIN the
+# trace window" (trace_amplitude, rejected) and "is each response window's within-cell elevation
+# over baseline group-dependent" (trace_vs_baseline p=0.998, post_shock_vs_baseline p=0.935,
+# both null). Reading those three against each other -- significant here, not significant there
+# -- and concluding the effect is or is not epoch-specific is the DIFFERENCE-OF-SIGNIFICANCE
+# FALLACY: a difference between two p-values is not itself a test of anything. The question
+# "does the group effect CHANGE across epochs" needs its own single test, which is what this is.
+#
+# It does NOT join or replace the confirmatory family. That family is locked at three members
+# (docs/sp_rates_lmm.md section 4.1), and shrinking or re-forming it now that its two epoch
+# members are known to be null would move the primary p_holm from 0.027 back toward 0.009 and
+# would rightly read as outcome-driven. This is a SECONDARY test and enters the secondary BH-FDR
+# family (build_secondary_fdr_table) alongside the run-structure permutation p-values.
+
+def build_mouse_epoch_profile(df_fine, epochs=TFC_MATCHED_PROFILE_EPOCHS,
+                              reference_epoch=TFC_MATCHED_REFERENCE_EPOCH, paired=True,
+                              component=PRIMARY_PROFILE_COMPONENT):
+    """
+    One profile row per mouse: its mean elevation of `component` over `reference_epoch` in each
+    non-reference epoch. This is the 17 x (len(epochs)-1) matrix the joint group x epoch
+    permutation test permutes group labels over.
+
+    component : a key of _DECOMPOSITION_COMPONENTS -- 'amplitude' (the default and the primary),
+        'fraction_active', 'rate_active' or 'population_rate'. The component definitions are
+        shared with plot_decomposition_grid, so the test that annotates a grid row is computed
+        from exactly the same frame and column that row is drawn from.
+
+        ** The delta is taken on the column's OWN scale ** -- a log-ratio for amplitude (whose
+        column is already logged), a raw difference in events/s for the two rates, a raw
+        difference in proportion for fraction active. Those are not commensurable with each
+        other, which does not matter: make_group_epoch_interaction_stat standardizes each epoch's
+        delta by its own pooled between-mouse SD, so the statistic is scale-free and each
+        component's test is computed in the units its own contrasts are reported in.
+
+    Differencing against the reference epoch, rather than modelling the epoch levels directly,
+    removes the epoch MAIN effect by construction and leaves only the interaction -- the thing
+    actually under test. A mouse whose amplitude is uniformly high contributes a flat profile of
+    zeros regardless of how high; only a mouse whose trace/post-shock elevation differs from
+    other mice's contributes signal.
+
+    paired : True (default) -- the delta is computed WITHIN CELL, so a cell must appear in the
+        component's frame in EVERY epoch in `epochs` to contribute. For amplitude that is
+        compute_epoch_delta_table's "active in both epochs" rule extended to a triple
+        intersection, and it cancels each cell's own baseline level the same way the co-primary
+        contrast does. The intersection is stricter than any pairwise one, so n_cells is reported
+        and is expected to be smaller.
+        False -- each epoch's per-mouse mean is taken over THAT epoch's own cells and the means
+        are differenced afterwards. This is the sensitivity variant: permutation validity never
+        depended on the cell pairing (only the 17 group labels move), so a disagreement between
+        the two is evidence that the triple intersection selects a special subpopulation, not
+        that one of them is invalid.
+
+        ** Ignored, with paired=False forced, for a component whose `pairable` is False. **
+        Fraction active is a proportion computed OVER a mouse's cells; there is no per-cell value
+        to pair, so its profile is per-mouse by construction and its "unpaired" variant is the
+        only one that exists. That is a property of the quantity, not a limitation here, and it
+        means its paired and unpaired tests are the same test rather than two.
+
+    Expects `df_fine` ALREADY restricted to exposure-matched trials -- see
+    restrict_to_exposure_matched_trials, and note this function does not apply that restriction
+    itself, because the caller must report its coverage.
+
+    Returns (profile_df, n_cells). profile_df has one row per mouse: mouse, group, and one
+    'delta_{epoch}' column per non-reference epoch.
+    """
+    epochs = tuple(epochs)
+    if reference_epoch not in epochs:
+        raise ValueError(f'build_mouse_epoch_profile: reference_epoch {reference_epoch!r} must be '
+                         f'one of epochs={epochs}.')
+    response_epochs = [e for e in epochs if e != reference_epoch]
+    if not response_epochs:
+        raise ValueError('build_mouse_epoch_profile: need at least one non-reference epoch.')
+    if component not in _DECOMPOSITION_COMPONENTS_BY_KEY:
+        raise KeyError(f'build_mouse_epoch_profile: unknown component {component!r}; expected one '
+                       f'of {sorted(_DECOMPOSITION_COMPONENTS_BY_KEY)}.')
+    spec = _DECOMPOSITION_COMPONENTS_BY_KEY[component]
+    # Not a silent fallback: a non-pairable component has no per-cell value in the first place,
+    # so there is no pairing to decline. See the docstring.
+    paired = paired and spec.pairable
+
+    # Read every epoch's frame through the SAME helper the grid draws from, so the test and the
+    # row it annotates can never diverge in how the component is defined.
+    keys = ['mouse', 'group'] + (['cell'] if spec.pairable else [])
+    per_epoch = {e: _decomposition_grid_frames(aggregate_over_trials(df_fine, e))[spec.frame]
+                 [keys + [spec.col]].rename(columns={spec.col: 'value'})
+                 for e in epochs}
+
+    if paired:
+        # Triple (or n-fold) intersection: successive inner joins on (mouse, group, cell), so a
+        # cell survives only if it appears in the component's frame in EVERY epoch.
+        merged = per_epoch[reference_epoch].rename(columns={'value': 'ref'})
+        for e in response_epochs:
+            merged = merged.merge(per_epoch[e].rename(columns={'value': f'val_{e}'}),
+                                  on=['mouse', 'group', 'cell'])
+        if merged.empty:
+            raise RuntimeError(f'build_mouse_epoch_profile: no cell appears in the {component!r} '
+                               f'frame for ALL of {epochs}, so the paired profile is empty. '
+                               f'Try paired=False.')
+        for e in response_epochs:
+            merged[f'delta_{e}'] = merged[f'val_{e}'] - merged['ref']
+        n_cells = int(len(merged))
+        # Equal-mouse weighting: collapse each mouse's cells to that mouse's mean delta. Cell
+        # count is group-correlated and itself post-treatment (docs section 4.3), so a
+        # cell-weighted profile would let hM3D's larger active-cell count set the statistic.
+        profile = merged.groupby(['mouse', 'group'], as_index=False)[
+            [f'delta_{e}' for e in response_epochs]].mean()
+    else:
+        # Unpaired: per-mouse mean over each epoch's OWN cells, differenced afterwards. For a
+        # non-pairable component the frame is already one row per mouse, so the groupby is an
+        # identity and this is simply that component's per-mouse profile.
+        means = {e: df.groupby(['mouse', 'group'], as_index=False)['value'].mean()
+                 for e, df in per_epoch.items()}
+        profile = means[reference_epoch].rename(columns={'value': 'ref'})
+        for e in response_epochs:
+            profile = profile.merge(means[e].rename(columns={'value': f'val_{e}'}),
+                                    on=['mouse', 'group'])
+        for e in response_epochs:
+            profile[f'delta_{e}'] = profile[f'val_{e}'] - profile['ref']
+        n_cells = int(sum(len(df) for df in per_epoch.values()))
+        profile = profile[['mouse', 'group'] + [f'delta_{e}' for e in response_epochs]]
+
+    if profile.empty:
+        raise RuntimeError('build_mouse_epoch_profile: no mouse has a complete epoch profile.')
+    return profile, n_cells
+
+
+def make_group_epoch_interaction_stat(profile_df, delta_cols, reference='mCherry',
+                                      groups=None):
+    """
+    stat_fn factory for mouse_label_permutation_test(): a SCALAR summary of how much the group
+    effect varies across epochs, computed from build_mouse_epoch_profile()'s per-mouse profile.
+
+    The statistic is the standardized sum of squared difference-of-differences:
+
+        T = sum over non-reference groups g, over epochs e of
+                ( ( mean_g[delta_e] - mean_ref[delta_e] ) / sd_pooled(delta_e) ) ** 2
+
+    where each term is exactly the difference-of-differences the accompanying stats file reports
+    with a confidence interval -- e.g. [hM3D - Ctl]_trace - [hM3D - Ctl]_pre_tone_matched.
+
+    ** Why standardized. ** Without dividing by that epoch's pooled between-mouse SD, whichever
+    delta happens to have the larger scale dominates the sum, and the test silently becomes a
+    test about that one epoch. The SD is recomputed under each permutation from the permuted
+    labels, so it is a function of the data being permuted, not a fixed nuisance constant.
+
+    ** Why a scalar at all. ** mouse_label_permutation_test accumulates into
+    np.empty(n_perm, dtype=float); a vector-valued statistic raises on assignment. Squaring and
+    summing is also what makes the test two-sided in every epoch at once and directionless
+    overall, which is right for an omnibus interaction: the alternative is "the profile shape
+    differs", not "it differs upward".
+
+    The permutation distribution is what carries validity here, so the choice of statistic
+    affects POWER, not correctness -- any scalar function of the labelled profile gives a valid
+    test. This one is chosen because each of its terms is separately reportable.
+
+    Returns callable(mouse_to_group: dict[str, str]) -> float, np.nan on a degenerate split.
+    """
+    delta_cols = list(delta_cols)
+    missing = [c for c in delta_cols if c not in profile_df.columns]
+    if missing:
+        raise KeyError(f'make_group_epoch_interaction_stat: profile_df lacks {missing}.')
+    if groups is None:
+        groups = [g for g in GROUP_ORDER if g in set(profile_df['group'])]
+    if reference not in set(profile_df['group']):
+        raise KeyError(f'make_group_epoch_interaction_stat: reference group {reference!r} not in '
+                       f'profile_df.')
+    non_ref = [g for g in groups if g != reference]
+    if not non_ref:
+        raise ValueError('make_group_epoch_interaction_stat: no non-reference group.')
+
+    # Hoist every pandas operation out of the closure -- the same optimization make_contrast_stat
+    # documents. A permutation changes only which group a mouse is labelled with, never which row
+    # belongs to a mouse, so the per-mouse delta matrix is fixed across all n_perm draws and the
+    # closure reduces to boolean-mask arithmetic on a 17 x len(delta_cols) array.
+    mice = profile_df['mouse'].tolist()
+    deltas = profile_df[delta_cols].to_numpy(dtype=float)  # (n_mice, n_epochs)
+    mouse_index = {m: i for i, m in enumerate(mice)}
+
+    def stat_fn(mouse_to_group):
+        idx_by_group = {}
+        for g in [reference] + non_ref:
+            rows = [mouse_index[m] for m in mice if mouse_to_group.get(m) == g]
+            if len(rows) < 2:
+                # <2 mice gives no within-group variance, so the pooled SD is undefined.
+                return np.nan
+            idx_by_group[g] = rows
+        ref_rows = deltas[idx_by_group[reference]]
+        ref_mean = ref_rows.mean(axis=0)
+
+        # Pooled between-mouse SD per epoch, over ALL groups under the current labelling.
+        ss, dof = np.zeros(deltas.shape[1]), 0
+        for g, rows in idx_by_group.items():
+            block = deltas[rows]
+            ss += ((block - block.mean(axis=0)) ** 2).sum(axis=0)
+            dof += len(rows) - 1
+        if dof <= 0:
+            return np.nan
+        sd = np.sqrt(ss / dof)
+        usable = sd > 0
+        if not np.any(usable):
+            # Every epoch is perfectly flat: no between-mouse variation anywhere, so there is
+            # nothing to standardize against and the statistic is genuinely undefined.
+            return np.nan
+
+        # An epoch with sd == 0 contributes 0, not NaN. sd is pooled over ALL groups, so sd == 0
+        # means every mouse has the identical delta there -- which forces that epoch's
+        # difference-of-differences to 0 too. Contributing 0 is therefore the correct value, and
+        # NaN-ing the whole statistic over one degenerate epoch would discard the others.
+        #
+        # ** This is not cosmetic. ** A NaN returned here propagates into
+        # mouse_label_permutation_test's null array, where `abs(null) >= abs(observed)` is False
+        # for NaN -- so NaN draws would count as "not extreme" and deflate the p-value. Measured
+        # on a deliberately degenerate fixture, that produced p <= 0.05 on 87% of true nulls.
+        total = 0.0
+        for g in non_ref:
+            did = deltas[idx_by_group[g]].mean(axis=0) - ref_mean
+            total += float(np.sum((did[usable] / sd[usable]) ** 2))
+        return total
+    return stat_fn
+
+
+def epoch_interaction_contrasts(profile_df, delta_cols, reference='mCherry', scale='log'):
+    """{delta_col: mouse_contrast_ci(...)} -- the difference-of-differences behind each term of
+    make_group_epoch_interaction_stat's statistic, as estimates with 95% intervals.
+
+    The joint test returns ONE p-value per component, which is the point: it answers
+    epoch-specificity once rather than once per cell of the grid. But a single omnibus p says
+    nothing about magnitude or direction, and at n=5/6/6 the result is expected to be null -- so
+    the per-term estimates have to be reported beside it, or the null cannot be distinguished
+    from "no effect of any size" (docs section 9).
+
+    scale : the component's own ci_scale. 'log' for amplitude, whose delta is already a
+        log-difference, so mouse_contrast_ci reports exp(diff) as the ratio without taking a
+        second log (the double-log trap of correction #7, in interval form). The rate components'
+        deltas are raw differences in events/s and the fraction-active delta is a difference in
+        proportion -- both are differences of quantities that can be negative, so they are
+        reported as 'difference_only'; a "fold-change in a difference" is not a meaningful
+        summary and would be undefined wherever the reference delta crosses zero.
+    """
+    out = {}
+    for col in delta_cols:
+        per_group = {g: sub[col].to_numpy(dtype=float)
+                     for g, sub in profile_df.groupby('group') if len(sub) >= 2}
+        if reference not in per_group:
+            raise KeyError(f'epoch_interaction_contrasts: reference {reference!r} has <2 mice.')
+        out[col] = mouse_contrast_ci(per_group, reference=reference, scale=scale)
+    return out
+
+
+# A component's DELTA is a difference of that component between two epochs. Only the amplitude
+# delta is a log-difference (hence a ratio on exponentiation); the others are differences of
+# possibly-negative quantities, for which a ratio is not defined. Not the same thing as the
+# component's own ci_scale, which describes its LEVEL.
+_PROFILE_DELTA_CI_SCALE = {'amplitude': 'log'}
+
+
+def fit_and_report_epoch_interaction(df_fine, stats_dir, mice_per_group, coverage,
+                                     epochs=TFC_MATCHED_PROFILE_EPOCHS,
+                                     reference_epoch=TFC_MATCHED_REFERENCE_EPOCH,
+                                     components=None, n_perm=20000, seed=0,
+                                     filename='secondary_epoch_interaction.txt'):
+    """
+    Run and report the joint group x epoch specificity test for EVERY decomposition component --
+    the single answer, per component, to "is this effect epoch-specific", replacing the invalid
+    practice of reading separate per-epoch p-values against each other.
+
+    One test per component rather than one overall. The four components are one exact identity
+    (overall_rate = fraction_active x rate_active, plus amplitude), so a single pooled test across
+    all of them would answer a question nobody asks -- "did ANY component's profile change" -- and
+    would be driven by whichever component has the largest between-mouse spread. Per component,
+    each test is interpretable on its own row of the grid, and each is a genuine secondary
+    hypothesis, so each is a BH-FDR family member.
+
+    ** The four p-values are strongly DEPENDENT ** -- they are computed from overlapping cells and
+    are linked by the decomposition identity. BH is valid under positive dependence, so the
+    q-values stand, but they must be read as a set describing one decomposition, never as four
+    independent findings. This is stated in the output file too.
+
+    For each component the permutation runs twice: on the within-cell PAIRED profile (primary)
+    and on the UNPAIRED one (sensitivity). For a non-pairable component (fraction active) the two
+    coincide by construction and only one is reported. See build_mouse_epoch_profile.
+
+    Returns {component key: dict(p_two_sided, observed, n_cells, n_mice, profile, contrasts,
+    unpaired)}. The caller registers each p_two_sided in the secondary BH-FDR family.
+    """
+    components = tuple(components or [c.key for c in _DECOMPOSITION_COMPONENTS])
+    response_epochs = [e for e in epochs if e != reference_epoch]
+    results, lines = {}, [
+        'SECONDARY: joint group x epoch specificity tests (mouse-label permutation).',
+        '',
+        f'Epochs: {reference_epoch} (reference) vs {", ".join(response_epochs)}. Every window is '
+        f'{TRACE_MATCHED_WINDOW_S:g} s and every contributing trial carries all of them at that '
+        f'length (restrict_to_exposure_matched_trials).',
+        f'Trial coverage per mouse: {coverage["n_trials_matched"].min()}-'
+        f'{coverage["n_trials_matched"].max()} of {coverage["n_trials_total"].max()}.',
+        '',
+        'H0 (per component): the group effect has the SAME profile across epochs, i.e. no '
+        'group x epoch interaction.',
+        'Statistic: standardized sum of squared difference-of-differences; group labels permuted '
+        'across the 17 mice, each mouse keeping its whole epoch profile. Since the statistic is '
+        'non-negative, the two-sided |null| >= |observed| rule is an upper-tail omnibus test. '
+        f'{n_perm} permutations, seed {seed}.',
+        '',
+        'ONE TEST PER COMPONENT. Each p enters the SECONDARY BH-FDR family '
+        '(secondary_fdr_family.csv) as its own member; report the FDR-adjusted value. None of '
+        'them enters the three-member confirmatory Holm family, which is locked and unchanged.',
+        '',
+        '** These four p-values are strongly DEPENDENT. ** The components are one exact '
+        'decomposition (overall_rate = fraction_active x rate_active, plus the amplitude term) '
+        'computed over overlapping cells. BH remains valid under positive dependence, so the '
+        'q-values stand -- but read them as a set describing one decomposition, never as four '
+        'independent findings, and do not count how many cross 0.05.',
+        '',
+    ]
+
+    for key in components:
+        spec = _DECOMPOSITION_COMPONENTS_BY_KEY[key]
+        delta_scale = _PROFILE_DELTA_CI_SCALE.get(key, 'difference_only')
+        profile, n_cells = build_mouse_epoch_profile(df_fine, epochs, reference_epoch,
+                                                     paired=True, component=key)
+        delta_cols = [c for c in profile.columns if c.startswith('delta_')]
+        perm = mouse_label_permutation_test(
+            make_group_epoch_interaction_stat(profile, delta_cols),
+            mice_per_group, n_perm=n_perm, seed=seed)
+        perm_unpaired = None
+        if spec.pairable:
+            unpaired_profile, _ = build_mouse_epoch_profile(df_fine, epochs, reference_epoch,
+                                                            paired=False, component=key)
+            perm_unpaired = mouse_label_permutation_test(
+                make_group_epoch_interaction_stat(unpaired_profile, delta_cols),
+                mice_per_group, n_perm=n_perm, seed=seed)
+        contrasts = epoch_interaction_contrasts(profile, delta_cols, scale=delta_scale)
+
+        unit_note = ('log units' if delta_scale == 'log' else f'{spec.col} units')
+        lines += [
+            f'## {spec.label}  [{key}]',
+            '',
+            (f'  Cells: {n_cells} present in the {key!r} frame for ALL {len(epochs)} epochs '
+             f'(within-cell paired). Mice: {len(profile)}.' if spec.pairable else
+             f'  Per-mouse quantity -- a proportion computed OVER cells, so there is no '
+             f'within-cell pairing to do and the paired/unpaired distinction does not apply. '
+             f'Mice: {len(profile)}.'),
+            '',
+            f'  PAIRED (primary):      T = {perm["observed"]:.4f}, p = {perm["p_two_sided"]:.4f}'
+            if spec.pairable else
+            f'  PROFILE:               T = {perm["observed"]:.4f}, p = {perm["p_two_sided"]:.4f}',
+        ]
+        if perm_unpaired is not None:
+            lines.append(f'  UNPAIRED (sensitivity): T = {perm_unpaired["observed"]:.4f}, '
+                         f'p = {perm_unpaired["p_two_sided"]:.4f}')
+        lines += [
+            '',
+            f'  Difference-of-differences, equal-mouse-weighted, Welch 95% intervals, in '
+            f'{unit_note} -- "trace" means [group - Ctl]_trace - [group - Ctl]_{reference_epoch}:',
+            '',
+        ]
+        for col in delta_cols:
+            lines.append(f'    {col[len("delta_"):]}:')
+            for line in format_contrast_ci_lines(contrasts[col], 'mCherry'):
+                lines.append(f'      {line}')
+        lines.append('')
+        results[key] = {'p_two_sided': perm['p_two_sided'], 'observed': perm['observed'],
+                        'n_cells': n_cells, 'n_mice': int(len(profile)), 'profile': profile,
+                        'contrasts': contrasts, 'unpaired': perm_unpaired}
+
+    lines += [
+        'INTERPRETATION. A null here does NOT mean the manipulation has no effect -- the primary '
+        'trace amplitude contrast is separately significant. It means the data do not support '
+        'the stronger claim that the effect is SPECIFIC to any one epoch, i.e. the component is '
+        'shifted broadly across TFC epochs. Read the difference-of-differences intervals for what '
+        'magnitude of epoch-specificity remains admissible; at n=5/6/6 that range is wide.',
+        '',
+    ]
+    write_text(os.path.join(stats_dir, filename), '\n'.join(lines) + '\n')
+    return results
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1548,20 +2256,56 @@ def _mouse_values_per_group(df, value_col, group_order=DREADD_DISPLAY_ORDER, pan
     return out
 
 
-def _panel_contrasts(df_or_mouse_df, value_col, ci_scale, ci_unit):
-    """{'scale', 'unit', 'contrasts'} for one panel's equal-mouse-weighted contrasts vs control.
+def _panel_contrasts(df_or_mouse_df, value_col, ci_scale, ci_unit, include_exc_vs_inh=False):
+    """{'scale', 'unit', 'contrasts', 'exc_vs_inh'} for one panel's equal-mouse-weighted
+    contrasts vs control.
 
     Kept separate from the drawing so a panel's estimates can be written to a companion file
     without being rendered onto the panel itself -- five interval blocks crowded into one figure
-    row was strictly harder to read than five asterisks (see plot_decomposition's docstring)."""
+    row was strictly harder to read than five asterisks (see plot_decomposition's docstring).
+
+    include_exc_vs_inh : also compute the DIRECT hM3D-vs-hM4D contrast, by re-running
+        mouse_contrast_ci with hM4D as the reference and keeping the hM3D entry.
+
+        ** This is not derivable from the two vs-control contrasts. ** Reading "Exc sits above
+        zero, Inh sits below it, therefore Exc exceeds Inh" compares two contrasts that share a
+        reference group, by eye, with no interval for the comparison being made -- the same
+        difference-of-significance error the grid exists to prevent, rotated ninety degrees.
+
+        The direct contrast's variance is Va/na + Vb/nb, where the vs-control ones are
+        Va/na + Vc/nc and Vb/nb + Vc/nc. It is therefore NOT systematically wider or narrower --
+        it drops the control's contribution and keeps both DREADD groups'. Which way it goes
+        depends entirely on whether the CONTROL is the noisy group. In this dataset it is: trace
+        fraction-active between-mouse SD is 0.131 for mCherry against 0.032 for hM3D, so the
+        direct contrast is frequently the TIGHTEST of the three and can exclude the null where
+        both vs-control intervals do not. That is a real feature of the comparison, not a
+        paradox -- but see the multiplicity note below before reading much into it.
+
+        ** These intervals carry no multiplicity correction and are in no declared family. **
+        Sixteen of them appear on the grid. Treat one that excludes the null as an effect
+        estimate worth following up, not as a discovery.
+
+        Off by default: PANEL_HOLM_FAMILY is 'vs_control' precisely because that is where this
+        design's question sits, and the standalone panels should not start carrying a contrast
+        that spends no alpha there. The grid turns it on because the grid is read across
+        conditions, which is exactly when someone will try to make this comparison by eye.
+    """
     per_group = _mouse_values_per_group(df_or_mouse_df, value_col, group_order=GROUP_ORDER,
                                         panel_name='panel_contrasts')
-    return {'scale': ci_scale, 'unit': ci_unit,
-            'contrasts': mouse_contrast_ci({g: v.ravel() for g, v in per_group.items()},
-                                           scale=ci_scale)}
+    vals = {g: v.ravel() for g, v in per_group.items()}
+    out = {'scale': ci_scale, 'unit': ci_unit,
+           'contrasts': mouse_contrast_ci(vals, scale=ci_scale), 'exc_vs_inh': None}
+    if include_exc_vs_inh:
+        # Keyed on 'hM3D' with reference 'hM4D', so format_contrast_ci_lines' GROUP_ORDER
+        # iteration renders exactly this one row and labels it 'Exc/Inh' -- no second formatter.
+        out['exc_vs_inh'] = {'hM3D': mouse_contrast_ci(vals, reference='hM4D',
+                                                       scale=ci_scale)['hM3D']}
+    return out
 
 
-def write_decomposition_contrasts_markdown(contrasts_by_panel, save_dir, filename):
+def write_decomposition_contrasts_markdown(contrasts_by_panel, save_dir, filename,
+                                           figure_has_stars=True, no_star_note=None,
+                                           title='Decomposition panel contrasts'):
     """Write the decomposition figure's per-panel effect estimates + 95% intervals to a markdown
     file next to the figure.
 
@@ -1569,24 +2313,52 @@ def write_decomposition_contrasts_markdown(contrasts_by_panel, save_dir, filenam
     admits, and a rate ratio needs its absolute difference beside it -- but they are reference
     material, not something to read off a panel. On the figure they competed with the data;
     here they can be read properly and quoted directly.
+
+    figure_has_stars : whether the accompanying figure carries Holm-corrected significance
+        brackets. True for plot_decomposition's per-epoch panels; False for
+        plot_decomposition_grid, which is deliberately star-free. This is not a formatting
+        detail -- the note it selects tells the reader how an interval here relates to what the
+        figure shows, and the star note would be simply FALSE next to a figure with no stars.
+    no_star_note : replaces the default `figure_has_stars=False` paragraph. That default is
+        written about the four-component DECOMPOSITION and says so explicitly ("one exact
+        decomposition, not independent phenotypes"), which is the right warning there and a
+        false description of a star-free figure whose panels are one component across epochs or
+        trial phases. A caller whose panels are not the decomposition supplies its own note
+        rather than inheriting a wrong one.
     """
     lines = [
-        '# Decomposition panel contrasts',
+        f'# {title}',
         '',
         'Equal-mouse-weighted contrasts against the mCherry control (n = 5 hM3D / 6 hM4D / '
-        '6 mCherry), Welch two-sample 95% intervals computed from the per-mouse means. The '
-        'cell-level clouds on the figure are descriptive and never enter these numbers.',
+        '6 mCherry), Welch two-sample 95% intervals computed from the per-mouse means. Only '
+        'per-mouse values enter these numbers; any cell-level display is descriptive.',
         '',
         'Ratios and absolute differences are reported together: a fold-change computed off a '
         'small base overstates the practical size of a change.',
         '',
-        '**These intervals are not multiplicity-corrected.** The asterisks on the figure are '
-        f'Holm-corrected across the family set by `PANEL_HOLM_FAMILY` (currently '
-        f'`{PANEL_HOLM_FAMILY!r}`), so a contrast whose interval excludes 1.0 here may still '
-        'carry no star. Both are reported deliberately: the interval describes the effect, the '
-        'star describes the corrected decision.',
-        '',
     ]
+    if figure_has_stars:
+        lines += [
+            '**These intervals are not multiplicity-corrected.** The asterisks on the figure are '
+            f'Holm-corrected across the family set by `PANEL_HOLM_FAMILY` (currently '
+            f'`{PANEL_HOLM_FAMILY!r}`), so a contrast whose interval excludes 1.0 here may still '
+            'carry no star. Both are reported deliberately: the interval describes the effect, '
+            'the star describes the corrected decision.',
+            '',
+        ]
+    elif no_star_note is not None:
+        lines += [no_star_note, '']
+    else:
+        lines += [
+            '**These intervals are not multiplicity-corrected, and the figure carries no '
+            'significance stars by design.** The components below are one exact decomposition '
+            '(`overall_rate = fraction_active x rate_active`, plus the amplitude term), not '
+            'independent phenotypes, so counting significant cells across this table is not a '
+            'valid reading of it -- and comparing significance BETWEEN epochs is the '
+            'difference-of-significance fallacy. Epoch specificity has exactly one test '
+            '(`secondary_epoch_interaction.txt`); read these as effect sizes.',
+            '',
+        ]
     for panel_label, payload in contrasts_by_panel.items():
         lines.append(f'## {panel_label}')
         lines.append('')
@@ -1595,6 +2367,13 @@ def write_decomposition_contrasts_markdown(contrasts_by_panel, save_dir, filenam
             lines.append('')
         for line in format_contrast_ci_lines(payload['contrasts'], 'mCherry', unit=payload['unit']):
             lines.append(f'- {line}' if not line.startswith('  ') else f'  - {line.strip()}')
+        if payload.get('exc_vs_inh'):
+            lines.append('')
+            lines.append('Direct DREADD-vs-DREADD contrast (not derivable from the two rows '
+                         'above, which share the control as their reference):')
+            for line in format_contrast_ci_lines(payload['exc_vs_inh'], 'hM4D',
+                                                 unit=payload['unit']):
+                lines.append(f'- {line}' if not line.startswith('  ') else f'  - {line.strip()}')
         lines.append('')
     ensure_dirs(save_dir)
     write_text(os.path.join(save_dir, filename), '\n'.join(lines))
@@ -1856,7 +2635,7 @@ def plot_amplitude_p90(df_trace_pooled, save_dir, filename_root='amplitude_p90')
 
 def fit_and_report_epoch_delta(df_fine, response_epoch, stats_dir, save_dir,
                                n_trace_active_cells, reference_epoch=TFC_REFERENCE_EPOCH,
-                               is_confirmatory=True):
+                               is_confirmatory=True, pair_within_trial=False):
     """
     Fit, write, and plot ONE within-cell epoch-delta contrast (response_epoch minus
     reference_epoch, per cell, pooled over trials).
@@ -1879,14 +2658,28 @@ def fit_and_report_epoch_delta(df_fine, response_epoch, stats_dir, save_dir,
                    distinction rather than a label. Descriptive output is named descriptive_*
                    so the status is legible from the filename alone.
 
+    pair_within_trial : threaded to compute_epoch_delta_table -- see its docstring. Confirmatory
+                   callers leave it False; the locked family's cell selection and pooling must
+                   not change. The filename gains a _within_trial suffix when True so a paired
+                   contrast can never overwrite its pooled counterpart.
+
     Output paths key on BOTH epochs whenever reference_epoch is not the default, so that two
     contrasts sharing a response epoch cannot silently overwrite each other's files. The two
     confirmatory calls keep their historical single-epoch names byte-identical.
 
     Returns the fit_epoch_delta_model() output.
     """
+    if pair_within_trial and is_confirmatory:
+        raise ValueError(
+            'fit_and_report_epoch_delta: pair_within_trial=True is not available to a '
+            'confirmatory contrast. The three-member Holm family is locked on the trial-POOLED '
+            'differencing it was computed with (docs/sp_rates_lmm.md section 4.1); changing a '
+            'locked member\'s cell selection after its result is known is a design change, not '
+            'a code change. Report the paired version as descriptive alongside it.')
     slug = (response_epoch if reference_epoch == TFC_REFERENCE_EPOCH
             else f'{response_epoch}_vs_{reference_epoch}')
+    if pair_within_trial:
+        slug += '_within_trial'
     prefix = 'coprimary' if is_confirmatory else 'descriptive'
     if is_confirmatory:
         status_line = 'CONFIRMATORY: '
@@ -1902,13 +2695,19 @@ def fit_and_report_epoch_delta(df_fine, response_epoch, stats_dir, save_dir,
                              "interval, not a significance verdict.")
         title = (f'Descriptive {response_epoch} vs {reference_epoch} contrast, '
                  f'multiplicative scale')
-    delta_df = compute_epoch_delta_table(df_fine, response_epoch, reference_epoch)
+    delta_df = compute_epoch_delta_table(df_fine, response_epoch, reference_epoch,
+                                         pair_within_trial=pair_within_trial)
     fit = fit_epoch_delta_model(delta_df)
+    pairing_note = (' PAIRED WITHIN TRIAL (each cell differenced against its own trial\'s '
+                    'reference window, then averaged over trials)' if pair_within_trial
+                    else ', pooled over trials')
     write_text(os.path.join(stats_dir, f'{prefix}_epoch_delta_{slug}.txt'),
               f"{status_line}delta_log_amplitude ~ group, within-cell "
-              f"({response_epoch} - {reference_epoch}), one row per cell active in BOTH epochs\n"
+              f"({response_epoch} - {reference_epoch}){pairing_note}, one row per cell active in "
+              f"BOTH epochs\n"
               f"Cell selection: {fit['n_cells']} of {n_trace_active_cells} trace-active cells "
-              f"also had >=1 event in both {response_epoch} and {reference_epoch} and so "
+              f"also had >=1 event in both {response_epoch} and {reference_epoch}"
+              f"{' ON THE SAME TRIAL' if pair_within_trial else ''} and so "
               f"qualify for this contrast.\n"
               f"Omnibus (joint Wald, both non-reference groups, df2=n_mice-1): "
               f"{fit['omnibus']}\n\n"
@@ -2043,6 +2842,780 @@ def plot_decomposition(df_trace_pooled_raw, save_dir, filename_root='decompositi
     _save_panel(fig, save_dir, filename_root)
     write_decomposition_contrasts_markdown(contrasts_by_panel, save_dir,
                                            filename_root + '_contrasts.md')
+
+
+
+
+# Candidate tick positions for a fold-change axis, in ratio units. Matplotlib's default
+# LogFormatter labels a narrow log axis (these intervals live inside 0.8-1.25) with crowded
+# minor-tick scientific notation -- '9 x 10^-1' overlapping '1.05 x 10^0' -- which is both
+# unreadable and the wrong register for a fold-change. Ticks are chosen from this list instead
+# and labelled as plain multipliers.
+_RATIO_TICKS = (0.25, 0.5, 0.67, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 2.0, 4.0)
+
+
+def _set_ratio_xaxis(ax, lo, hi, max_ticks=5):
+    """Label a log fold-change axis with plain multipliers ('0.8', '1', '1.25').
+
+    Thinned to at most `max_ticks`. _RATIO_TICKS is dense near 1.0 so that a narrow row (all
+    intervals inside 0.9-1.1) still gets several labels, but a WIDE row would then render every
+    one of them and the labels collide into an unreadable smear -- which is what the first
+    version of this figure did. Thinning keeps 1.0 (the reference line must always be labelled)
+    and drops alternate neighbours outward from it.
+    """
+    ticks = [t for t in _RATIO_TICKS if lo <= t <= hi]
+    if len(ticks) < 2:
+        ticks = [t for t in _RATIO_TICKS if lo / 1.05 <= t <= hi * 1.05] or [1.0]
+    while len(ticks) > max_ticks:
+        # Keep the endpoints and 1.0; thin what is between them.
+        keep = [t for i, t in enumerate(ticks)
+                if t == 1.0 or i in (0, len(ticks) - 1) or i % 2 == 0]
+        if len(keep) == len(ticks):
+            keep = [t for i, t in enumerate(ticks) if t == 1.0 or i % 2 == 0]
+        if len(keep) == len(ticks):
+            break
+        ticks = keep
+    ax.set_xticks(ticks)
+    ax.set_xticklabels([('1' if t == 1.0 else f'{t:g}') for t in ticks])
+    ax.xaxis.set_minor_locator(plt.NullLocator())
+
+
+def _decomposition_grid_frames(df_epoch_pooled_raw):
+    """The four row-frames plot_decomposition_grid needs for one epoch, derived from that epoch's
+    trial-pooled table BEFORE filter_amplitude_rows (zero-event cells are needed by three of the
+    four). Same derivations plot_decomposition performs, kept in one place so a component cannot
+    be defined differently on the grid than on the per-epoch panels."""
+    df = df_epoch_pooled_raw.copy()
+    df['overall_rate'] = df['n_events'] / df['exposure_seconds']
+    df['active'] = df['n_events'] > 0
+    return {
+        'fraction_active': fraction_active_table(df),
+        'active_only': df[df['active']].rename(columns={'overall_rate': 'rate_active'}),
+        'all': df,
+        'amplitude': filter_amplitude_rows(df),
+    }
+
+
+def plot_decomposition_grid(df_fine, save_dir, epochs=TFC_MATCHED_EPOCHS,
+                            filename_root='decomposition_grid', interaction_q=None,
+                            reduced_coverage_epochs=(TFC_POST_SHOCK_LATE_EPOCH,),
+                            components=_DECOMPOSITION_COMPONENTS, include_exc_vs_inh=True,
+                            epoch_labels=None):
+    """
+    The decomposition as EFFECT ESTIMATES, one row per component and one column per
+    exposure-matched epoch: hM3D/Ctl and hM4D/Ctl with 95% intervals, and no significance stars
+    anywhere on the figure.
+
+    ** This answers a different question from plot_decomposition, which is why it is a separate
+    figure rather than a restyling of it. ** Those per-epoch panels show the DISTRIBUTIONS and
+    are the right figure for "what do these cells look like". This one shows only the contrasts,
+    side by side across epochs, and answers "which component accounts for the change, and is that
+    consistent across the session".
+
+    ** Why no stars. ** The four rows are not four independent phenotypes -- they are one exact
+    identity, overall_rate = fraction_active x rate_active, plus the amplitude term. Starring
+    them separately invites a reader to count significant components as if each were fresh
+    evidence, and starring them PER EPOCH invites the difference-of-significance fallacy across
+    columns on top of that. Epoch specificity gets ONE number per row -- that component's joint
+    group x epoch test -- annotated on the row, never one per cell of the grid.
+
+    ** Three points per panel, not two. ** hM3D/Ctl, hM4D/Ctl, and the DIRECT hM3D-vs-hM4D
+    contrast in grey. The third exists because a reader looking at a row where red sits above the
+    reference line and blue below it will conclude the two DREADDs differ, and the two plotted
+    vs-control intervals do not license that: they share mCherry as a reference, and the contrast
+    between them has its own (generally wider) interval. Drawing it removes the temptation to
+    infer it. See _panel_contrasts' include_exc_vs_inh.
+
+    Two axis details that are not cosmetic:
+
+    * Fraction active is a bounded proportion, so mouse_contrast_ci reports it as a DIFFERENCE,
+      not a fold-change (scale='difference_only'). Its row therefore gets its own linear axis
+      centred on 0.0 while the other three are fold-changes on a log axis centred on 1.0.
+      Forcing one shared x-axis would either plot a difference against a ratio reference line or
+      silently drop the row.
+    * The fold-change rows use a LOG x-axis so that a halving and a doubling are the same visual
+      distance from the reference line. On a linear axis a ratio interval is asymmetric by
+      construction and hM4D's reductions would read as smaller than hM3D's increases.
+
+    interaction_q : {component key: q-value} from the joint group x epoch tests
+                    (fit_and_report_epoch_interaction), BH-adjusted within the secondary family.
+                    Annotated on each row as that component's single answer to temporal
+                    specificity. The BH-ADJUSTED value is what is drawn, matching the convention
+                    that a member of a multiplicity family is reported at its corrected value --
+                    which is also why this figure is drawn AFTER build_secondary_fdr_table rather
+                    than beside the tests themselves. A missing key omits that row's annotation
+                    rather than inventing one.
+    reduced_coverage_epochs : columns whose window is not present on every trial (post_shock_late
+                    is absent on truncated final trials), flagged in the column label so a reader
+                    does not compare their n against the others' unknowingly.
+    components    : which _DECOMPOSITION_COMPONENTS specs to draw, one row each. Defaults to all
+                    four -- the internal grid. The paper lane passes the PAPER_COMPONENT_KEYS
+                    subset; see that constant for why three rather than four.
+    include_exc_vs_inh : draw the third, grey, direct hM3D-vs-hM4D point per panel. On by default
+                    because the internal grid IS read across conditions, which is exactly when a
+                    reader tries to infer that contrast by eye from the two vs-control ones (see
+                    _panel_contrasts). Off for the paper figures: those 16 intervals are tier-3
+                    exploratory output (docs/sp_rates_lmm.md section 5.2) in no multiplicity
+                    family, and they are not this design's question.
+    epoch_labels  : {epoch key: column title}. Defaults to the raw epoch keys, which is right for
+                    the internal figure -- they are what every stats filename and every other
+                    reference to a window is keyed on. The paper lane passes readable window
+                    names, since "pre_tone_matched" tells a reader nothing and the 20 s matching
+                    is the reason the columns are comparable at all.
+    """
+    epochs = tuple(epochs)
+    epoch_labels = epoch_labels or {}
+    interaction_q = interaction_q or {}
+    rows = tuple(components)
+    contrasts = {}   # (component key, epoch) -> _panel_contrasts payload
+    for epoch in epochs:
+        frames = _decomposition_grid_frames(aggregate_over_trials(df_fine, epoch))
+        for spec in rows:
+            contrasts[(spec.key, epoch)] = _panel_contrasts(
+                frames[spec.frame], spec.col, spec.ci_scale, spec.ci_unit,
+                include_exc_vs_inh=include_exc_vs_inh)
+
+    groups = [g for g in DREADD_DISPLAY_ORDER if g != 'mCherry']
+    # The direct DREADD-vs-DREADD contrast sits below the two vs-control ones, in grey: it is a
+    # different KIND of comparison (no control involved), so it must not read as a third group.
+    _EXC_VS_INH_COLOUR = '0.45'
+    # sharex='row' is load-bearing, not tidiness: the figure exists to be read ACROSS epochs, and
+    # per-panel autoscaled x-limits would render a large effect and a small one at the same
+    # apparent distance from the reference line. One scale per row makes the columns comparable,
+    # which is the only way the "flat across epochs" reading is honest.
+    fig, axs = plt.subplots(len(rows), len(epochs), sharey=True, sharex='row',
+                            figsize=(2.3 * len(epochs), 1.5 * len(rows) + 1.0))
+    axs = np.atleast_2d(axs)
+
+    for r, spec in enumerate(rows):
+        is_ratio = spec.ci_scale != 'difference_only'
+        row_lo, row_hi = np.inf, -np.inf
+        # Row entries: the two vs-control contrasts, then the direct DREADD-vs-DREADD one.
+        entries = [(GROUP_LABELS[g], GROUP_COLOURS[g], g, 'contrasts') for g in groups]
+        if include_exc_vs_inh:
+            entries.append((f'{GROUP_LABELS["hM3D"]}/{GROUP_LABELS["hM4D"]}',
+                            _EXC_VS_INH_COLOUR, 'hM3D', 'exc_vs_inh'))
+        for c, epoch in enumerate(epochs):
+            ax = axs[r, c]
+            payload = contrasts[(spec.key, epoch)]
+            for i, (_lbl, colour, group, which) in enumerate(entries):
+                cd = payload[which][group]
+                # A ratio row falls back to the difference when mouse_contrast_ci could not form
+                # a ratio (a group mean at or below zero) -- see its scale= docs.
+                if is_ratio and cd['ratio'] is not None:
+                    est, lo, hi = cd['ratio'], cd['ratio_lo'], cd['ratio_hi']
+                else:
+                    est, lo, hi = cd['diff'], cd['diff_lo'], cd['diff_hi']
+                row_lo, row_hi = min(row_lo, lo), max(row_hi, hi)
+                ax.errorbar(est, -i, xerr=[[est - lo], [hi - est]], fmt='o',
+                            color=colour, capsize=2.5, markersize=5,
+                            markeredgecolor='k', markeredgewidth=0.3, linewidth=1.2)
+            ax.axvline(1.0 if is_ratio else 0.0, color='k', linewidth=0.8, linestyle='--')
+            if is_ratio:
+                ax.set_xscale('log')
+            ax.set_yticks([-i for i in range(len(entries))])
+            ax.set_yticklabels([e[0] for e in entries], size='x-small')
+            ax.set_ylim(-len(entries) + 0.5, 0.5)
+            ax.tick_params(axis='x', labelsize='xx-small')
+            ax.spines[['right', 'top']].set_visible(False)
+            if c == 0:
+                # The row's ONE epoch-specificity number lives on the row's own label, so it
+                # cannot be mistaken for a per-column (per-epoch) claim.
+                q = interaction_q.get(spec.key)
+                q_txt = '' if q is None else f'\ngroup x epoch q = {q:.3f}'
+                ax.set_ylabel(f'{spec.label}{q_txt}', size='x-small')
+            if r == 0:
+                flag = '\n(reduced coverage)' if epoch in reduced_coverage_epochs else ''
+                ax.set_title(f'{epoch_labels.get(epoch, epoch)}{flag}', size='x-small')
+            ax.set_xlabel('ratio' if is_ratio else 'difference', size='xx-small')
+
+        # One padded scale for the whole row, applied once the row's full extent is known.
+        pad = 1.08 if is_ratio else 0.15 * max(row_hi - row_lo, 1e-9)
+        if is_ratio:
+            axs[r, 0].set_xlim(row_lo / pad, row_hi * pad)
+            for ax in axs[r]:
+                _set_ratio_xaxis(ax, row_lo / pad, row_hi * pad)
+        else:
+            axs[r, 0].set_xlim(row_lo - pad, row_hi + pad)
+
+    title = ('Components of population calcium activity: effect estimates with 95% CI\n'
+             'Per-row group x epoch q: BH-adjusted joint permutation test for that component')
+    fig.suptitle(title, size='small')
+    fig.subplots_adjust(left=0.17, right=0.98, top=0.82, bottom=0.08, hspace=0.80, wspace=0.18)
+    _save_panel(fig, save_dir, filename_root)
+
+    # Keyed on (component, epoch) explicitly rather than on a y-label string: plot_decomposition's
+    # own dict is ylabel-keyed and two of its panels differ only by 'event/s' vs 'events/s', which
+    # is a collision waiting to happen. This grid has four rows x four columns of the same four
+    # labels, so the tuple key is required, not defensive.
+    write_decomposition_contrasts_markdown(
+        {f'{spec.label} — {epoch}': contrasts[(spec.key, epoch)]
+         for spec in rows for epoch in epochs},
+        save_dir, filename_root + '_contrasts.md', figure_has_stars=False)
+
+
+# Display names for the paper figures' epoch columns. The internal output uses the raw epoch keys
+# throughout (they are what the stats filenames and the code are keyed on); a figure going into a
+# manuscript needs the window stated in the label, since "pre_tone_matched" means nothing to a
+# reader and the 20 s matching is the reason the three columns are comparable at all.
+_PAPER_EPOCH_LABELS = {
+    TFC_MATCHED_REFERENCE_EPOCH: 'Pre-tone\n(20 s baseline)',
+    TFC_TRACE_EPOCH: 'Trace',
+    TFC_POST_SHOCK_EPOCH: 'Post-shock\n(20 s)',
+}
+
+# Per-row DISPLAY attributes for plot_paper_epoch_distributions -- deliberately NOT on
+# _DecompComponent, which defines what a component IS (frame, column, contrast scale) and is
+# shared with the joint epoch tests. Axis scale and quantization jitter are properties of how one
+# figure draws a component, not of the component.
+_PAPER_ROW_DISPLAY = {
+    # yscale='linear' because log_amplitude is ALREADY logged -- 'auto' would see all-positive
+    # values and apply a SECOND log (plotting rule 2 / correction #7).
+    'amplitude': {'yscale': 'linear', 'quantum': False,
+                  'ylabel': 'Log of mean per-event amplitude'},
+    # A per-cell rate is a small integer count over a fixed window, so without sub-quantum jitter
+    # the cloud collapses onto a few hard horizontal stripes -- real quantization, but it hides
+    # the density that is the reason for drawing cells at all.
+    'population_rate': {'yscale': 'auto', 'quantum': True,
+                        'ylabel': 'Event rate (events/s)'},
+}
+
+
+# One cell of a SuperPlot grid. `key` identifies it in error messages, `label` keys its entry in
+# the companion contrasts file. The remaining fields are exactly what _draw_cell_superplot_panel
+# and _panel_contrasts each need, so a panel carries its own display AND contrast configuration
+# and the grid driver below needs to know nothing about what is being plotted.
+_GridPanel = collections.namedtuple('_GridPanel', 'key label df col yscale quantum ci_scale ci_unit')
+
+
+def _draw_superplot_panel_grid(panels, row_ylabels, col_titles, save_dir, filename_root,
+                               panel_name, annotate='stats', figure_has_stars=True,
+                               no_star_note=None, contrasts_title='Decomposition panel contrasts',
+                               figsize_per_panel=(2.0, 3.0)):
+    """Draw a rows x columns grid of cell-level SuperPlot panels sharing one y-scale per ROW,
+    save it, and write the companion per-panel contrasts file.
+
+    Factored out of plot_paper_epoch_distributions when a second figure wanted the same grid over
+    a different pair of factors (epoch x conditioning phase rather than component x epoch). Per
+    CLAUDE.md's dedup rule this drawing logic exists once; the callers differ only in which
+    _GridPanel they put in each cell.
+
+    ** sharey='row' is load-bearing, not tidiness. ** Every figure built on this helper exists to
+    be read ACROSS its columns. Independently autoscaled panels would let a reader take a
+    difference straight off the axis limits, which is precisely the comparison these figures are
+    meant to make honestly.
+
+    ** The per-row headroom reservation must happen once, after the whole row is drawn. ** Each
+    panel's annotate_pairwise_brackets call reserves the top 20% of its axes for brackets, and
+    under sharey those reservations COMPOUND: three panels leave 0.8^3 ~ 51% of the row to the
+    data and the clouds end up squashed into the bottom half against a band of empty axis.
+    Resetting each row to its own pooled data range and reserving once fixes it. Brackets are
+    positioned in axes fractions, so they follow the new limits rather than being orphaned.
+
+    panels    : {(row, col): _GridPanel}. Every cell of the grid must be present.
+    annotate  : 'stats' for Holm-corrected vs-control brackets, 'none' for a bare distribution
+                figure whose contrasts are read off a companion forest instead.
+    figure_has_stars : passed to write_decomposition_contrasts_markdown, which selects a
+                DIFFERENT explanatory note depending on it -- the star note would be simply false
+                next to a figure drawn with annotate='none'.
+
+    Returns {panel label: _panel_contrasts payload} so a caller can reuse the exact payloads the
+    panels were drawn from rather than recomputing them and risking a disagreement.
+    """
+    n_rows, n_cols = len(row_ylabels), len(col_titles)
+    missing = [(r, c) for r in range(n_rows) for c in range(n_cols) if (r, c) not in panels]
+    if missing:
+        raise ValueError(f'{panel_name}: no _GridPanel for grid cell(s) {missing}.')
+
+    fig, axs = plt.subplots(n_rows, n_cols, sharey='row',
+                            figsize=(figsize_per_panel[0] * n_cols,
+                                     figsize_per_panel[1] * n_rows))
+    # np.atleast_2d turns a single-COLUMN grid into a (1, n_rows) row vector, which would silently
+    # transpose the figure; reshape to the intended shape explicitly.
+    axs = np.atleast_2d(axs).reshape(n_rows, n_cols)
+
+    contrasts_by_panel = {}
+    row_values = [[] for _ in range(n_rows)]
+    for (r, c), panel in sorted(panels.items()):
+        row_values[r].append(panel.df[panel.col].to_numpy(dtype=float))
+        _draw_cell_superplot_panel(
+            axs[r, c], panel.df, panel.col,
+            ylabel=(row_ylabels[r] if c == 0 else ''),
+            panel_name=f'{panel_name}[{panel.key}]',
+            # Column titles go on the top row only, and are re-set below with a pad: the bracket
+            # stack is drawn above the axes in axes-fraction coordinates and the title sits there
+            # too, so a zero pad puts the topmost asterisks through the column label.
+            title='', yscale=panel.yscale, y_quantum=panel.quantum,
+            annotate=annotate, bracket_mode='axes', jitter_width=0.22)
+        if r == 0:
+            axs[r, c].set_title(col_titles[c], size='small', pad=26)
+        contrasts_by_panel[panel.label] = _panel_contrasts(
+            panel.df, panel.col, panel.ci_scale, panel.ci_unit)
+
+    for r in range(n_rows):
+        ax0 = axs[r, 0]
+        vals = np.concatenate(row_values[r])
+        vals = vals[np.isfinite(vals)]
+        if ax0.get_yscale() == 'linear':
+            lo, hi = float(vals.min()), float(vals.max())
+            pad = 0.05 * max(hi - lo, 1e-9)
+            ax0.set_ylim(lo - pad, hi + pad)
+        else:
+            # A log axis cannot show the exact zeros that zero-event cells contribute; a symlog
+            # one can, and its bottom must stay at zero so those cells are not silently dropped.
+            positive = vals[vals > 0]
+            bottom = 0.0 if ax0.get_yscale() == 'symlog' else float(positive.min()) / 1.3
+            ax0.set_ylim(bottom, float(positive.max()) * 1.3)
+        # Only reserve bracket headroom when brackets were actually drawn -- annotate='none'
+        # would otherwise leave a fifth of every panel empty for annotations that do not exist.
+        if annotate == 'stats':
+            reserve_top_fraction(ax0)
+
+    # No suptitle: each row carries its own y-label and each column its own title, and these
+    # figures are always presented with a caption. Same choice plot_decomposition made.
+    fig.subplots_adjust(left=0.16, bottom=0.09, right=0.98, top=0.90, wspace=0.18, hspace=0.30)
+    _save_panel(fig, save_dir, filename_root)
+    write_decomposition_contrasts_markdown(contrasts_by_panel, save_dir,
+                                           filename_root + '_contrasts.md',
+                                           figure_has_stars=figure_has_stars,
+                                           no_star_note=no_star_note, title=contrasts_title)
+    return contrasts_by_panel
+
+
+def plot_paper_epoch_distributions(df_matched, save_dir, epochs=TFC_MATCHED_PROFILE_EPOCHS,
+                                   rows=('amplitude', 'population_rate'),
+                                   filename_root='tfc_amplitude_rate_by_epoch'):
+    """
+    The paper-facing distribution figure: per-event amplitude (top) and population event rate
+    (bottom) for each DREADD group, across the three exposure-matched TFC windows.
+
+    ** This is a re-cut of output that already exists, not a new analysis. ** Every panel draws
+    the same quantities plot_decomposition draws and computes its statistics through the same
+    _draw_cell_superplot_panel path; what changes is the selection (two components, three epochs,
+    one figure) and the fact that the columns are directly comparable. No test is run here that is
+    not already run in the TFC_cond lane.
+
+    ** sharey='row' is the point of the figure, not tidiness. ** The scientific claim these panels
+    support is that the hM3D amplitude elevation is a GLOBAL shift rather than a trace-specific
+    one (the joint group x epoch test is null for every component -- see
+    fit_and_report_epoch_interaction). Three independently autoscaled columns would let a reader
+    read an epoch difference straight off the axis limits, which is the opposite of what the data
+    say. One y-scale per row makes "flat across epochs" an honest reading.
+
+    ** The input must be exposure-matched. ** Pass the frame restricted by
+    restrict_to_exposure_matched_trials -- not the raw df_fine. The rate row is duration-sensitive
+    (P(active) = 1 - e^(-lambda*T) rises with T at a fixed underlying rate) and trial 1's trace
+    window is 15 s rather than 20 s, so on unmatched trials part of the trace-vs-baseline
+    difference in that row would be pure exposure. Amplitude is a per-event quantity and does not
+    care, but the two rows must be drawn over the same cells to be read together.
+
+    Brackets are Holm-corrected vs-control pairwise tests computed from the PER-MOUSE means only
+    (draw_superplot_triplet never passes the cell cloud to stat_fn). Comparing stars BETWEEN
+    columns is the difference-of-significance fallacy -- epoch specificity has exactly one test
+    per component, reported on the companion forest figure and in paper_results_summary.md.
+    """
+    epochs = tuple(epochs)
+    specs = [_DECOMPOSITION_COMPONENTS_BY_KEY[k] for k in rows]
+
+    panels = {}
+    for c, epoch in enumerate(epochs):
+        frames = _decomposition_grid_frames(aggregate_over_trials(df_matched, epoch))
+        for r, spec in enumerate(specs):
+            display = _PAPER_ROW_DISPLAY[spec.key]
+            sub = frames[spec.frame]
+            # One count = one quantum of rate. exposure_seconds is the same matched window for
+            # every cell within a trial, so the median is that window pooled over trials.
+            quantum = (1.0 / float(np.median(sub['exposure_seconds']))
+                       if display['quantum'] else None)
+            panels[(r, c)] = _GridPanel(
+                key=f'{spec.key}/{epoch}', label=f'{spec.label} — {epoch}', df=sub,
+                col=spec.col, yscale=display['yscale'], quantum=quantum,
+                ci_scale=spec.ci_scale, ci_unit=spec.ci_unit)
+
+    # Returned so the Results summary can quote the SAME payloads the panels were drawn from,
+    # rather than recomputing the contrasts and risking a figure and its own summary disagreeing.
+    return _draw_superplot_panel_grid(
+        panels,
+        row_ylabels=[_PAPER_ROW_DISPLAY[spec.key]['ylabel'] for spec in specs],
+        col_titles=[_PAPER_EPOCH_LABELS.get(e, e) for e in epochs],
+        save_dir=save_dir, filename_root=filename_root,
+        panel_name='plot_paper_epoch_distributions', annotate='stats', figure_has_stars=True)
+
+
+# Column titles for the conditioning-phase figure's epoch rows. `pre_tone` is deliberately the
+# 35 s baseline rather than the 20 s matched one: amplitude is a PER-EVENT quantity and so is
+# duration-insensitive (see the exposure-matching note in sp_rates_lmm_methods.md), the longer
+# window yields more events per cell and therefore a better-estimated per-cell mean, and it is the
+# reference the locked confirmatory amplitude contrasts already use -- so these numbers sit on the
+# same scale as the ones in docs/sp_rates_lmm.md section 5.
+_PHASE_FIGURE_EPOCH_LABELS = {
+    TFC_REFERENCE_EPOCH: 'Pre-tone baseline (35 s)\nlog(mean per-event amplitude)',
+    TFC_TRACE_EPOCH: 'Trace interval\nlog(mean per-event amplitude)',
+}
+
+_PHASE_CONTRASTS_NOTE = (
+    '**These intervals are not multiplicity-corrected, and the figure carries no significance '
+    'stars by design.** This figure is DESCRIPTIVE: it spends no alpha and is in neither the '
+    'confirmatory Holm family nor the secondary BH-FDR family. The formal test of whether the '
+    'group effect changes across trials already exists and is `group_x_trial_interaction` in the '
+    'secondary family — see `stats/secondary_fdr_family.csv` for its BH-adjusted q and '
+    '`stats/group_trial_photobleaching.txt` for the model. Read the four intervals below, not a '
+    'comparison of stars between columns.\n\n'
+    '**Absolute amplitude falls from early to late trials in every group** (~31% by trial 5, '
+    'consistent with photobleaching). That is an epoch-independent main effect of trial and it '
+    'cancels in a group contrast, which is why the contrast — not the level — is what this '
+    'figure is for. A drop in the raw values between the two columns is expected and means '
+    'nothing about the manipulation.'
+)
+
+
+def plot_conditioning_phase_amplitude(df_fine, save_dir, epochs=(TFC_REFERENCE_EPOCH,
+                                                                 TFC_TRACE_EPOCH),
+                                      phases=CONDITIONING_PHASES,
+                                      filename_root='conditioning_phase_amplitude'):
+    """
+    Per-event amplitude by group in EARLY (trials 1-2) versus LATE (trials 3-5) conditioning, for
+    the pre-tone baseline and the trace interval.
+
+    ** The question. ** The amplitude effect is known to be a global shift rather than a
+    trace-specific one (the joint group x epoch tests are null for every component). That leaves
+    a different question open, which no epoch contrast can answer: is the elevation TONIC --
+    present from the first trial, a property of the drug being on board -- or does it DEVELOP as
+    conditioning proceeds? Epochs are windows within a trial; this splits ACROSS trials instead,
+    which is an orthogonal axis.
+
+    ** DESCRIPTIVE. Spends no alpha, in neither multiplicity family. ** The formal version of this
+    question is already asked and corrected: `group_x_trial_interaction` (fit_group_trial_model)
+    is a member of the secondary BH-FDR family and tests whether the group effect changes across
+    trials. This figure exists so that result can be SEEN rather than taken on trust; it is not a
+    second test of it, and no significance stars are drawn (annotate='none') precisely because
+    comparing stars between the two columns would be the difference-of-significance fallacy.
+
+    ** Amplitude only, and that is not an oversight. ** The rate analog of this figure cannot be
+    drawn honestly at this split. Event rate and fraction active are duration-sensitive, so they
+    need exposure-matched trials -- and restrict_to_exposure_matched_trials drops trial 1, whose
+    trace window is 15 s rather than 20 s. That would reduce the 'early' column to trial 2 alone,
+    gutting exactly the half of the figure the question rests on. Amplitude is a per-event
+    quantity, needs no exposure matching, and therefore keeps every trial.
+
+    ** Read the CONTRAST, not the level. ** Absolute amplitude declines across trials in every
+    group (~31% by trial 5, consistent with photobleaching). That is a main effect of trial: it
+    moves both columns down together and cancels in a group contrast. The companion forest is
+    where the answer is legible -- four intervals, and the question is simply whether a group's
+    early and late intervals sit in the same place.
+
+    Writes: the distribution grid, the contrast forest, the per-panel contrasts markdown, and the
+    per-mouse trial coverage behind the split.
+    """
+    epochs, phases = tuple(epochs), tuple(phases)
+    spec = _DECOMPOSITION_COMPONENTS_BY_KEY['amplitude']
+    frames_by_phase, coverage = split_by_conditioning_phase(df_fine, phases)
+
+    panels, label_by_cell = {}, {}
+    for r, epoch in enumerate(epochs):
+        for c, phase in enumerate(phases):
+            sub = filter_amplitude_rows(
+                aggregate_over_trials(frames_by_phase[phase.key], epoch))
+            label = f'{epoch} — {phase.key}'
+            label_by_cell[(epoch, phase.key)] = label
+            panels[(r, c)] = _GridPanel(
+                key=f'{epoch}/{phase.key}', label=label, df=sub, col=spec.col,
+                # yscale='linear' because log_amplitude is ALREADY logged -- 'auto' would see
+                # all-positive values and apply a second log (plotting rule 2 / correction #7).
+                yscale='linear', quantum=None,
+                ci_scale=spec.ci_scale, ci_unit=spec.ci_unit)
+
+    contrasts = _draw_superplot_panel_grid(
+        panels,
+        row_ylabels=[_PHASE_FIGURE_EPOCH_LABELS.get(e, e) for e in epochs],
+        col_titles=[phase.label for phase in phases],
+        save_dir=save_dir, filename_root=filename_root,
+        panel_name='plot_conditioning_phase_amplitude',
+        annotate='none', figure_has_stars=False, no_star_note=_PHASE_CONTRASTS_NOTE,
+        contrasts_title='Per-event amplitude by conditioning phase — panel contrasts')
+
+    _draw_phase_contrast_forest({cell: contrasts[label] for cell, label in label_by_cell.items()},
+                                epochs, phases, save_dir, filename_root + '_forest')
+    write_text(os.path.join(save_dir, 'stats', 'conditioning_phase_trial_coverage.csv'),
+               coverage.to_csv(index=False))
+    return contrasts, coverage
+
+
+def _draw_phase_contrast_forest(contrasts_by_cell, epochs, phases, save_dir, filename_root):
+    """The companion to plot_conditioning_phase_amplitude: each DREADD group's amplitude ratio
+    against control, computed separately in early and late conditioning, one panel per epoch.
+
+    ** This is where the figure is actually read. ** Four clouds of cells cannot be compared by
+    eye across two columns; four intervals can. If a group's early and late points sit at the
+    same place, the effect is tonic -- and because the photobleaching decline is a main effect of
+    trial, it has already cancelled here, which it has not in the distribution panels.
+
+    Open markers are early trials, filled are late, so the pairing is legible without reading the
+    labels. sharex=True: the two epochs are meant to be compared, and per-panel autoscaling would
+    render the same ratio at two different distances from the reference line.
+    """
+    groups = [g for g in DREADD_DISPLAY_ORDER if g != 'mCherry']
+    entries = [(g, phase) for g in groups for phase in phases]
+
+    fig, axs = plt.subplots(1, len(epochs), sharex=True,
+                            figsize=(3.1 * len(epochs), 0.42 * len(entries) + 1.6))
+    axs = np.atleast_1d(axs)
+    lo_all, hi_all = np.inf, -np.inf
+    for c, epoch in enumerate(epochs):
+        ax = axs[c]
+        for i, (group, phase) in enumerate(entries):
+            cd = contrasts_by_cell[(epoch, phase.key)]['contrasts'][group]
+            # A ratio row falls back to the difference where mouse_contrast_ci could not form a
+            # ratio (a group mean at or below zero) -- see its scale= docs.
+            if cd['ratio'] is None:
+                raise RuntimeError(
+                    f'_draw_phase_contrast_forest: no ratio for {group}/{epoch}/{phase.key}; '
+                    f'log-amplitude means should be strictly positive.')
+            est, lo, hi = cd['ratio'], cd['ratio_lo'], cd['ratio_hi']
+            lo_all, hi_all = min(lo_all, lo), max(hi_all, hi)
+            ax.errorbar(est, -i, xerr=[[est - lo], [hi - est]], fmt='o',
+                        color=GROUP_COLOURS[group], capsize=2.5, markersize=6,
+                        markerfacecolor=('white' if phase.key == phases[0].key
+                                         else GROUP_COLOURS[group]),
+                        markeredgecolor=GROUP_COLOURS[group], markeredgewidth=1.2, linewidth=1.2)
+        ax.axvline(1.0, color='k', linewidth=0.8, linestyle='--')
+        ax.set_xscale('log')
+        ax.set_yticks([-i for i in range(len(entries))])
+        ax.set_yticklabels([f'{GROUP_LABELS[g]} {p.key}' for g, p in entries], size='x-small')
+        ax.set_ylim(-len(entries) + 0.5, 0.5)
+        ax.set_xlabel('amplitude ratio vs Ctl', size='xx-small')
+        ax.tick_params(axis='x', labelsize='xx-small')
+        ax.spines[['right', 'top']].set_visible(False)
+        ax.set_title(_PHASE_FIGURE_EPOCH_LABELS.get(epoch, epoch).split('\n')[0], size='x-small')
+
+    pad = 1.08
+    axs[0].set_xlim(lo_all / pad, hi_all * pad)
+    for ax in axs:
+        _set_ratio_xaxis(ax, lo_all / pad, hi_all * pad)
+    fig.suptitle('Per-event amplitude vs control: tonic or conditioning-induced?\n'
+                 'Open, trials 1-2; filled, trials 3-5. Descriptive — no alpha spent.',
+                 size='small')
+    fig.subplots_adjust(left=0.17, right=0.98, top=0.72, bottom=0.20, wspace=0.25)
+    _save_panel(fig, save_dir, filename_root)
+
+
+PAPER_METHODS_FILENAME = 'sp_rates_lmm_paper_methods.md'
+
+# Output that stays in the TFC_cond lane. Named explicitly in the summary file so the reduction to
+# a paper-sized figure set reads as a decision on record rather than as things having gone
+# missing -- every one of these is computed, kept, and available if a reviewer asks.
+_PAPER_SUPPLEMENT_ITEMS = (
+    'Event rate among ACTIVE cells, and total deconvolved amplitude-rate (a.u./s) -- the other '
+    'two terms of the decomposition identity (`decomposition*.png`).',
+    'The direct hM3D-vs-hM4D contrasts -- exploratory, uncorrected, in no multiplicity family '
+    '(docs/sp_rates_lmm.md section 5.2). Describe the two groups as showing divergent profiles; '
+    'do not report either as differing from control on this basis.',
+    'Amplitude ECDF and per-mouse 90th percentile -- where in the distribution the effect sits '
+    '(`amplitude_ecdf.png`, `amplitude_p90.png`).',
+    'Event-detection threshold sensitivity at thres in {1.5, 2.0, 3.0} (`threshold_sensitivity.png`).',
+    'Run-structure evidence: run width, local maxima per run, multi-peak fraction (`run_structure.png`).',
+    'group x trial photobleaching control (`stats/group_trial_photobleaching.txt`).',
+    'Early-vs-late post-shock within-cell contrast (Puhger et al. 2024 internal control) '
+    '-- descriptive, spends no alpha.',
+    'Cross-registration subset sensitivity, and the LT1->LT2 detection-dropout measurement.',
+    'Recall sessions: Test_B (48 h) and Test_B_1wk post-tone amplitude.',
+)
+
+
+def write_paper_results_summary(save_dir, primary_contrasts, holm, perm_results,
+                                interactions, q_by_name, panel_contrasts, rate_contrasts,
+                                manip_contrasts, filename='paper_results_summary.md'):
+    """
+    Every number the Results paragraph needs, in one file.
+
+    ** Nothing here is computed for the first time. ** Each block reformats a result the TFC_cond
+    lane already produced; this file exists so that writing the manuscript does not mean
+    reassembling six numbers out of twenty stats files in three evidential tiers, and so that the
+    tier of each number travels WITH it. That last part is the point: the recurring failure mode
+    this module has documented (docs/sp_rates_lmm.md section 5.2) is a tier-3 estimate being
+    written up as "significant" once it has been separated from the file that said otherwise.
+
+    Every null is reported with its interval and what that interval still admits. At n = 5/6/6 a
+    non-significant result is weak evidence of absence, and an interval reaching 1.55 has not
+    excluded a +55% effect.
+    """
+    lines = [
+        '# TFC cellular results — paper summary',
+        '',
+        'Per-event amplitude and event rate by DREADD group across the three exposure-matched '
+        '20 s TFC windows (pre-tone baseline, trace, post-shock). n = 5 hM3D / 6 hM4D / '
+        '6 mCherry animals; the mouse is the unit of inference throughout.',
+        '',
+        '**This is a re-cut of the `TFC_cond` output, not a separate analysis.** The full '
+        'rationale, every sensitivity analysis, and the decision record live in '
+        '`docs/sp_rates_lmm.md` and in the METHODS template beside this file.',
+        '',
+        '## Primary — trace-period per-event amplitude',
+        '',
+        f"Omnibus (mixed model, `log_amplitude ~ group + (1|mouse)`, cell-level, trials pooled): "
+        f"p = {holm['trace_amplitude']['p_raw']:.4g}, "
+        f"**Holm-corrected p = {holm['trace_amplitude']['p_holm']:.4g}** across the "
+        f"{len(holm)}-member confirmatory family"
+        f"{' (reject at alpha = 0.05)' if holm['trace_amplitude']['reject'] else ''}.",
+        '',
+        'Equal-mouse-weighted contrasts vs mCherry:',
+        '',
+    ]
+    lines += [f'- {ln}' if not ln.startswith('  ') else f'  - {ln.strip()}'
+              for ln in format_contrast_ci_lines(primary_contrasts, 'mCherry')]
+    # The permutation p is the one to quote: cluster-robust SEs are anti-conservative at 17
+    # clusters (docs/sp_rates_lmm.md section 4.3).
+    perm_lines = [f"- {k.replace('_', ' ')}: p = {v['p_two_sided']:.4g} ({v['n_perm']} draws)"
+                  for k, v in perm_results.items() if k.endswith('_mean_mouseweighted')]
+    if perm_lines:
+        lines += ['', 'Mouse-label permutation test on the same contrast (prefer this p to the '
+                      'model p — cluster-robust standard errors are anti-conservative at 17 '
+                      'clusters):', ''] + perm_lines
+
+    lines += [
+        '',
+        '## Epoch analysis — does the group effect differ across windows?',
+        '',
+        'One joint `group x epoch` test per component (mouse-label permutation over the 17 '
+        'animals, each keeping its whole profile across the three matched windows), BH-corrected '
+        'within the secondary family. This is the single answer to temporal specificity: '
+        'comparing per-epoch p-values against each other is the difference-of-significance '
+        'fallacy and is not a test of anything.',
+        '',
+    ]
+    for key in PAPER_COMPONENT_KEYS:
+        if key not in interactions:
+            continue
+        res = interactions[key]
+        q = q_by_name.get(f'epoch_specificity_{key}')
+        q_txt = '' if q is None else f', q = {q:.3f}'
+        lines.append(f"- **{_DECOMPOSITION_COMPONENTS_BY_KEY[key].label}**: "
+                     f"p = {res['p_two_sided']:.3f}{q_txt} "
+                     f"({res['n_cells']} cells, {res['n_mice']} mice)")
+    lines += [
+        '',
+        'Reading: no component shows a group effect that changes across pre-tone, trace and '
+        'post-shock. The hM3D amplitude elevation is a **global shift across the session**, not '
+        'a trace-specific one. No figure, caption or sentence may imply a trace-specific effect; '
+        "the trace interval's privileged status rests on prior anatomy and behaviour.",
+        '',
+        '## Per-epoch effect estimates (the numbers the figures draw)',
+        '',
+        'Equal-mouse-weighted contrasts vs mCherry with Welch 95% intervals, exposure-matched '
+        'trials. Ratios and absolute differences together — a fold-change off a small base '
+        'overstates the practical size of a change.',
+        '',
+    ]
+    for panel_label, payload in panel_contrasts.items():
+        lines.append(f'**{panel_label}**')
+        lines.append('')
+        lines += [f'- {ln}' if not ln.startswith('  ') else f'  - {ln.strip()}'
+                  for ln in format_contrast_ci_lines(payload['contrasts'], 'mCherry',
+                                                     unit=payload['unit'])]
+        lines.append('')
+
+    lines += [
+        '## Secondary — event rate (negative-binomial mixed model)',
+        '',
+        'Counts at the mouse x trial x epoch level with a `log(total cell-seconds)` exposure '
+        'offset, `(1|mouse) + (1|mouse:trial)`, dispersion estimated jointly. Posterior rate '
+        'ratios vs mCherry at each window, with highest-density intervals. **Secondary and '
+        'Bayesian**: there is no p-value here and none should be manufactured; report the '
+        'estimate and its interval.',
+        '',
+        '| group | epoch | rate ratio vs Ctl | HDI |',
+        '|---|---|---|---|',
+    ]
+    for _, row in rate_contrasts.iterrows():
+        lines.append(f"| {GROUP_LABELS.get(row['group'], row['group'])} | {row['epoch']} | "
+                     f"{row['rate_ratio']:.3f} | "
+                     f"[{row['hdi_lo']:.3f}, {row['hdi_hi']:.3f}] ({row['hdi_prob']:.0%}) |")
+    lines += ['', f"*{rate_contrasts['note'].iloc[0]}*", '']
+
+    lines += [
+        '## Manipulation check — LT1 (drug-free) to LT2 (CNO), within cell',
+        '',
+        'Independent confirmation that the DREADD does what it should, in a session pair that '
+        'carries no memory hypothesis. Differenced within cell, then contrasted against mCherry '
+        'so the shared order/time/photobleaching decline cancels.',
+        '',
+    ]
+    lines += [f'- {ln}' if not ln.startswith('  ') else f'  - {ln.strip()}'
+              for ln in format_contrast_ci_lines(manip_contrasts, 'mCherry')]
+
+    lines += [
+        '',
+        '## Deliberately supplementary',
+        '',
+        'Computed, kept, and available — but out of the main figures by decision, not by '
+        'omission. All of it is in the `TFC_cond/` output alongside its own stats files.',
+        '',
+    ]
+    lines += [f'- {item}' for item in _PAPER_SUPPLEMENT_ITEMS]
+    lines.append('')
+
+    ensure_dirs(save_dir)
+    write_text(os.path.join(save_dir, filename), '\n'.join(lines))
+
+
+def render_paper_tfc_amplitude_rate(PLOTS_DIR, df_matched, primary_contrasts, holm,
+                                    perm_results, interactions, q_by_name, rate_fit, delta_df,
+                                    epochs=TFC_MATCHED_PROFILE_EPOCHS):
+    """
+    The paper lane: two figures and one Results-ready numbers file, under
+    PLOTS_DIR/sp_rates_lmm/paper/tfc_amplitude_rate/.
+
+    ** Re-cut, not re-analysis. ** Every input here is an object the TFC_cond lane already
+    produced. Nothing is re-fit, no event detection is re-run, no test is added, and neither
+    multiplicity family changes size. The TFC_cond output is untouched and remains the internal
+    record; this folder is what a manuscript figure set looks like.
+
+    ** Must be called after build_secondary_fdr_table. ** The forest annotates each row with that
+    component's BH-ADJUSTED q, which does not exist until the whole secondary family has been
+    fit — the same ordering constraint that already puts the internal decomposition grid last in
+    run_sp_rates_lmm.
+
+    df_matched : df_fine restricted to exposure-matched (mouse, trial) pairs. The rate row is
+                 duration-sensitive and trial 1's trace window is 15 s rather than 20 s, so the
+                 columns are only comparable on matched trials.
+    """
+    paper_dir = os.path.join(PLOTS_DIR, 'sp_rates_lmm', 'paper', 'tfc_amplitude_rate')
+    paper_stats_dir = os.path.join(paper_dir, 'stats')
+    ensure_dirs(paper_dir, paper_stats_dir)
+    # Both templates land here: the short paper-facing one, and (via _save_panel) the full
+    # internal METHODS. The paper text is what goes in the manuscript; the internal one is what
+    # answers a reviewer who asks why a window is 20 s.
+    _copy_analysis_methods_template(PAPER_METHODS_FILENAME, paper_dir)
+
+    print('[sp_rates_lmm] Paper figures: amplitude + rate across the matched TFC windows...')
+    panel_contrasts = plot_paper_epoch_distributions(df_matched, paper_dir, epochs=epochs)
+
+    # The same grid the internal lane draws, restricted to the three paper components and with
+    # the exploratory DREADD-vs-DREADD point off. Not a second implementation -- see
+    # plot_decomposition_grid's components/include_exc_vs_inh arguments.
+    plot_decomposition_grid(
+        df_matched, paper_dir, epochs=epochs,
+        components=[_DECOMPOSITION_COMPONENTS_BY_KEY[k] for k in PAPER_COMPONENT_KEYS],
+        include_exc_vs_inh=False, filename_root='tfc_decomposition_forest',
+        interaction_q={k: q_by_name[f'epoch_specificity_{k}'] for k in PAPER_COMPONENT_KEYS
+                       if f'epoch_specificity_{k}' in q_by_name},
+        # Every column here is one of the three COMPLETE 20 s windows; post_shock_late, the one
+        # window with reduced trial coverage, is not among them.
+        reduced_coverage_epochs=(), epoch_labels=_PAPER_EPOCH_LABELS)
+
+    rate_contrasts = summarize_rate_group_epoch_contrasts(rate_fit)
+    write_text(os.path.join(paper_stats_dir, 'rate_group_epoch_contrasts.csv'),
+               rate_contrasts.to_csv(index=False))
+
+    manip_contrasts = mouse_contrast_ci(
+        _mouse_values_per_group(delta_df, 'delta_log_amplitude',
+                                panel_name='paper_manipulation_check', group_order=GROUP_ORDER),
+        scale='log')
+
+    write_paper_results_summary(paper_stats_dir, primary_contrasts, holm, perm_results,
+                                interactions, q_by_name, panel_contrasts, rate_contrasts,
+                                manip_contrasts)
+    print(f'[sp_rates_lmm] Paper figures written to {paper_dir}')
 
 
 def plot_manipulation_check(df_delta, dropout_df, save_dir, filename_root='manipulation_check'):
@@ -2506,6 +4079,61 @@ def run_sp_rates_lmm(PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond
         plot_decomposition(aggregate_over_trials(df_fine, epoch), out_dir,
                            filename_root=filename_root)
 
+    # ---- Joint group x epoch specificity test + the decomposition GRID ------------------------
+    # The single answer to "is the amplitude effect epoch-specific". Everything above compares
+    # epochs one at a time; nothing above tests whether the group effect CHANGES across them, and
+    # reading the confirmatory trace and post-shock p-values against each other does not either
+    # (that is the difference-of-significance fallacy). See make_group_epoch_interaction_stat.
+    #
+    # ADDITIVE: the confirmatory Holm family above is untouched and still has exactly three
+    # members. This p enters the SECONDARY BH-FDR family.
+    #
+    # Exposure-matched trials only. Trial 1's trace window is 15 s rather than 20 s, so pooled
+    # across trials the matched comparison is ~95 s of trace against ~100 s of pre_tone_matched,
+    # and both duration-sensitive components (fraction active, rate|active) are biased by that.
+    print('[sp_rates_lmm] Joint group x epoch specificity test (mouse-label permutation)...')
+    df_matched, matched_coverage = restrict_to_exposure_matched_trials(
+        df_fine, TFC_MATCHED_PROFILE_EPOCHS)
+    print(f'[sp_rates_lmm]   exposure-matched coverage (of {len(matched_coverage)} mice): '
+          f'{matched_coverage["n_trials_matched"].min()}-'
+          f'{matched_coverage["n_trials_matched"].max()} of '
+          f'{matched_coverage["n_trials_total"].max()} trials per mouse')
+    write_text(os.path.join(stats_dir, 'matched_decomposition_trial_coverage.csv'),
+               matched_coverage.to_csv(index=False))
+    interactions = fit_and_report_epoch_interaction(
+        df_matched, stats_dir, mice_per_group, matched_coverage,
+        epochs=TFC_MATCHED_PROFILE_EPOCHS, n_perm=n_perm, seed=seed)
+    for _key, _res in interactions.items():
+        secondary_pvalues[f'epoch_specificity_{_key}'] = _res['p_two_sided']
+        print(f"[sp_rates_lmm]   group x epoch ({_key}): p = {_res['p_two_sided']:.4f} "
+              f"({_res['n_cells']} cells, {_res['n_mice']} mice)")
+
+    # Descriptive: post_shock - pre_tone_matched paired WITHIN TRIAL. The confirmatory
+    # post_shock_vs_baseline pools each epoch across trials before differencing, so its reference
+    # mixes trial 1's shock-naive baseline with four post-shock ones at unaligned indices. This
+    # is a second, independent route to the problem TFC_POST_SHOCK_LATE_EPOCH also addresses.
+    fit_and_report_epoch_delta(
+        df_matched, TFC_POST_SHOCK_EPOCH, stats_dir, out_dir,
+        n_trace_active_cells=len(df_trace_amp),
+        reference_epoch=TFC_MATCHED_REFERENCE_EPOCH, is_confirmatory=False,
+        pair_within_trial=True)
+
+    # The grid reads across epochs, so it uses the exposure-matched trials too -- but over all of
+    # TFC_MATCHED_EPOCHS, restricted only on the three complete windows, so post_shock_late keeps
+    # whatever trials it has and is flagged as reduced-coverage rather than dropped.
+    #
+    # Restricted on (mouse, trial) PAIRS, not on the trial index: recordings are ragged, so which
+    # trials qualify differs per mouse and a global index filter would cut good trials from the
+    # mice whose recordings ran long (the same reason restrict_to_shared_trials matches per pair).
+    #
+    # ** The grid itself is drawn near the END of this function, not here. ** It annotates each
+    # row with that component's BH-ADJUSTED q, and the BH pass cannot run until every secondary
+    # member has been fit. Drawing it here would mean either annotating raw p-values on a figure
+    # whose own stats file says to report the corrected ones, or correcting twice.
+    matched_pairs = set(zip(df_matched['mouse'], df_matched['trial']))
+    df_grid = df_fine[[(m, t) in matched_pairs
+                       for m, t in zip(df_fine['mouse'], df_fine['trial'])]]
+
     # ---- group x trial (photobleaching control, plan section 5) --------------------------------
     print('[sp_rates_lmm] Fitting group x trial (photobleaching) model...')
     df_mouse_trial = build_mouse_trial_trace_amplitude(df_fine)
@@ -2519,6 +4147,20 @@ def run_sp_rates_lmm(PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond
               f"Per-group descriptive trial slopes (log_amplitude/trial, NOT a formal test):\n"
               f"{trial_slopes}\n\n{trial_fit['summary_text']}")
 
+    # Early (trials 1-2) vs late (trials 3-5) conditioning -- the DESCRIPTIVE companion to the
+    # group x trial model just fit. It asks whether the amplitude effect is tonic or develops
+    # with conditioning, an axis orthogonal to every epoch contrast above (epochs are windows
+    # WITHIN a trial). No test is added: the formal version is trial_fit's interaction, already a
+    # member of the secondary BH-FDR family. Drawn here rather than at the end of the run so it
+    # sits beside the model it visualizes; it annotates no p-value of its own, so unlike the
+    # decomposition grid it has no dependency on the BH pass.
+    print('[sp_rates_lmm] Early vs late conditioning amplitude (descriptive)...')
+    _phase_contrasts, phase_coverage = plot_conditioning_phase_amplitude(df_fine, out_dir)
+    print(f'[sp_rates_lmm]   trials per mouse -- early: '
+          f'{phase_coverage["n_trials_early"].min()}-{phase_coverage["n_trials_early"].max()}, '
+          f'late: {phase_coverage["n_trials_late"].min()}-'
+          f'{phase_coverage["n_trials_late"].max()}')
+
     # ---- Run-structure evidence (plan section 4) ------------------------------------------------
     print('[sp_rates_lmm] Run-structure evidence (trace epoch, from the table built above)...')
     df_runs_trace = df_runs[df_runs['epoch'] == TFC_TRACE_EPOCH].copy()
@@ -2529,22 +4171,40 @@ def run_sp_rates_lmm(PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond
     plot_run_structure(df_runs_trace, out_dir)
     df_runs_trace_mp = df_runs_trace.copy()
     df_runs_trace_mp['multi_peak'] = (df_runs_trace_mp['n_local_maxima'] >= 2).astype(float)
-    run_perm_results = {}
+    run_perm_results, run_perm_pairwise = {}, {}
     for other_group in ('hM3D', 'hM4D'):
         for label, col in (('width', 'width_frames'), ('n_local_maxima', 'n_local_maxima'),
                            ('multi_peak_fraction', 'multi_peak')):
             stat_fn = make_contrast_stat(df_runs_trace_mp, col, other_group, 'mCherry', weight='mouse')
             key = f'{other_group}_vs_mCherry_{label}'
+            # GLOBAL null (all 17 mice exchangeable) -- the family member, and the null every
+            # previously reported run-structure p was computed under. Unchanged deliberately.
             run_perm_results[key] = mouse_label_permutation_test(
                 stat_fn, mice_per_group, n_perm=n_perm, seed=seed)
             secondary_pvalues[f'run_structure_{key}'] = run_perm_results[key]['p_two_sided']
+            # PAIRWISE null (only the two groups being contrasted are exchangeable). Reported as
+            # a sensitivity line, NOT added to the BH family: it is the same hypothesis tested
+            # under a different exchangeability assumption, and entering both would correct one
+            # question twice while halving the family's power. See mouse_label_permutation_test's
+            # restrict_to_groups for why the two can differ materially.
+            run_perm_pairwise[key] = mouse_label_permutation_test(
+                stat_fn, mice_per_group, n_perm=n_perm, seed=seed,
+                restrict_to_groups=(other_group, 'mCherry'))
     run_perm_text = '\n'.join(
-        f"{k}: observed={v['observed']:.4g}, p_two_sided={v['p_two_sided']:.4g}, n_perm={v['n_perm']}"
+        f"{k}: observed={v['observed']:.4g}, p_two_sided={v['p_two_sided']:.4g}, "
+        f"n_perm={v['n_perm']}  |  pairwise-null p={run_perm_pairwise[k]['p_two_sided']:.4g}"
         for k, v in run_perm_results.items())
     write_text(os.path.join(stats_dir, 'run_structure.txt'),
               f"Per-mouse run-structure summary (trace epoch):\n"
               f"{run_summary.groupby('group')[['mean_width_frames', 'mean_n_local_maxima', 'fraction_multi_peak']].agg(['mean', 'std'])}\n\n"
-              f"Mouse-label permutation tests (equal-mouse-weighted mean contrast):\n{run_perm_text}\n")
+              f"Mouse-label permutation tests (equal-mouse-weighted mean contrast).\n"
+              f"p_two_sided is under the GLOBAL null (all 17 mice exchangeable) and is what "
+              f"enters the BH-FDR family.\n"
+              f"'pairwise-null p' restricts exchangeability to the two groups being contrasted, "
+              f"assuming nothing about the third. It is a SENSITIVITY value, in no multiplicity "
+              f"family -- report the family member unless you are specifically claiming a "
+              f"two-group difference. The two can differ materially when the excluded group is "
+              f"the most variable one.\n{run_perm_text}\n")
 
     # ---- Threshold sensitivity (plan section 4) --------------------------------------------------
     print('[sp_rates_lmm] Running threshold sensitivity (re-fits the primary contrast at '
@@ -2673,6 +4333,23 @@ def run_sp_rates_lmm(PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond
               f"{fdr_table.to_string(index=False)}\n")
     print(f'[sp_rates_lmm] Secondary BH-FDR family: {len(fdr_table)} tests, '
          f'{int(fdr_table["reject"].sum())} significant at q<0.05.')
+
+    # ---- The decomposition grid, drawn LAST so it can carry BH-adjusted q-values ---------------
+    # Each row is annotated with its own component's group x epoch q, which is why this waits for
+    # the FDR pass above rather than being drawn beside the tests that produced it.
+    _q_by_name = dict(zip(fdr_table['name'], fdr_table['q_value']))
+    plot_decomposition_grid(
+        df_grid, out_dir,
+        interaction_q={k: _q_by_name[f'epoch_specificity_{k}'] for k in interactions
+                       if f'epoch_specificity_{k}' in _q_by_name})
+
+    # ---- The paper lane -------------------------------------------------------------------------
+    # A manuscript-sized re-cut of everything above: two figures and one Results-ready numbers
+    # file under sp_rates_lmm/paper/. Nothing is re-fit and no test is added -- it reuses the
+    # objects already in scope. It goes last for the same reason the grid does: the forest carries
+    # BH-adjusted q-values, which do not exist until the secondary family is complete.
+    render_paper_tfc_amplitude_rate(PLOTS_DIR, df_grid, primary_contrasts, holm,
+                                    perm_results, interactions, _q_by_name, rate_fit, delta_df)
 
     print('[sp_rates_lmm] Done.')
     if auto_close:

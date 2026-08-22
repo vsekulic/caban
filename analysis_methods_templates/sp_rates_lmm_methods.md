@@ -215,9 +215,22 @@ time, never jointly.
   `shock_onsets_def = [220, 460, 700, 940, 1180]`): trace durations are `[15, 20, 20, 20, 20]`
   seconds. Trial 1 is short because `tone_onsets_def[0] = 185` rather than an intended 180 s
   (flagged as an accident in the source comment — at 180 the first trace would also be 20 s).
-  This needs no special handling in the models: every window's exposure (`exposure_seconds`) is
-  computed from that trial's ACTUAL onset/offset frames, not an assumed constant duration, so the
-  unequal first trial is already correctly absorbed wherever an exposure offset is used.
+  Every window's exposure (`exposure_seconds`) is computed from that trial's ACTUAL onset/offset
+  frames, not an assumed constant duration, so the unequal first trial is correctly absorbed
+  **wherever an exposure offset is used** — the rate model, and any per-event quantity such as
+  amplitude.
+  **It is not absorbed where there is no offset to absorb it.** The fraction of cells with >=1
+  event is a bounded proportion with no exposure term, and rate-among-active conditions on
+  `N > 0`, which is itself duration-dependent. Since epochs are pooled across trials by summing
+  exposure, trace pools to ~95 s against `pre_tone_matched`'s ~100 s, and that 5% mismatch lands
+  directly on exactly those two components. The cross-epoch decomposition and the joint epoch
+  test therefore use `restrict_to_exposure_matched_trials`, which keeps only the
+  `(mouse, trial)` pairs where every requested window is present at its full 20 s. The
+  restriction is derived from the MEASURED `exposure_seconds`, never from a trial index —
+  hard-coding "trials 2-5" would encode nominal protocol timing, which is data-dependent (trial
+  counts vary per mouse and recordings can stop as little as 20.5 s after the last shock). Per-mouse
+  trial coverage is written to `stats/matched_decomposition_trial_coverage.csv` and is reported
+  with the estimates.
 - Test_B / Test_B_1wk post-tone window is pinned to **20 s** explicitly (via
   `get_testb_epoch_frames(..., post_tone_duration_s=20.0)`), matching the representative TFC
   trace duration (4 of 5 trials). Neither of the two existing alternatives is the correct recall
@@ -226,6 +239,35 @@ time, never jointly.
   (~200+ s inter-trial interval, not a matched window at all).
 
 ## Statistics
+
+### Evidential tiers: what may be called "significant"
+
+Every output of this analysis sits in exactly one of three tiers. **The tier, not the p-value,
+determines how a result may be written up.**
+
+| tier | members | how to report |
+|---|---|---|
+| **Confirmatory** | the three Holm-corrected tests below | "significant", quoting `p_holm` |
+| **Secondary** | the declared BH-FDR family | "significant" with its `q`, described as secondary |
+| **Exploratory** | everything else — the direct DREADD-vs-DREADD contrasts, descriptive epoch deltas, the early-vs-late contrast, threshold sensitivity, cross-registration subsets | **effect estimate + 95% interval only.** Never "significant" |
+
+A tier-3 result is not weak evidence of the same kind as a tier-1 result; it is a different kind
+of statement. Four properties recur and none is repaired by computing a better p-value:
+
+- **Post-hoc selection.** A contrast chosen after inspecting a figure cannot re-enter the
+  confirmatory family. This analysis is a LOCKED CONFIRMATORY REANALYSIS, not a prospective
+  preregistration, which makes that boundary load-bearing rather than pedantic.
+- **No multiplicity protection.** Tier-3 output is deliberately in no family, so nothing controls
+  an error rate across it.
+- **The contrast may not be the design's question.** A DREADD-vs-DREADD difference contains no
+  control group; it licenses "A differs from B", never "A raised X". If neither group differs from
+  control, that distinction is the whole result.
+- **Sensitivity to analysis choices.** Where an estimate moves with a defensible change of subset
+  or window, that variation belongs in the report alongside the estimate.
+
+Prefer folding a tier-3 observation into a claim that a tier-1 or tier-2 result already supports
+("consistent with"), which spends no alpha. If it must be a finding in its own right, declare it
+prospectively for a future cohort.
 
 ### Denominator degrees of freedom (applies to every joint Wald test below)
 
@@ -348,6 +390,97 @@ are flagged `is_confirmatory` in the output table; `pre_tone_matched` is exclude
 entirely, since its delta against `pre_tone` is a window-length artifact rather than an epoch
 effect.
 
+### The joint group x epoch specificity test (secondary)
+
+Everything described immediately above compares epochs ONE AT A TIME. None of it tests whether
+the group effect CHANGES across epochs, and **reading the confirmatory p-values against each
+other — significant in trace, not significant in the epoch deltas — does not test it either.**
+That is the difference-of-significance fallacy: a difference between two p-values is not itself
+a test. Epoch specificity gets exactly one test here
+(`caban.sp_rates_lmm.fit_and_report_epoch_interaction`), reported once.
+
+**One test per decomposition component.** The test below is run separately for fraction active,
+rate among active cells, population event rate, and per-event amplitude — the same four
+components the decomposition grid plots, from the same shared definitions, so each grid row is
+annotated by a test computed from exactly the frame and column that row is drawn from. A single
+pooled test across all four would answer "did ANY component's profile change", which is not a
+question anyone asks, and would be driven by whichever component has the largest between-mouse
+spread.
+
+**The four resulting p-values are strongly DEPENDENT** — the components are one exact identity
+(overall_rate = fraction_active x rate_active, plus amplitude) computed over overlapping cells.
+Benjamini-Hochberg remains valid under positive dependence, so the q-values stand, but they
+describe ONE decomposition and must not be counted as four independent findings.
+
+**Profile.** For each mouse, the mean WITHIN-CELL elevation of the component over the
+exposure-matched baseline in each response window: `delta_trace` and `delta_post_shock` against
+`pre_tone_matched`, over the exposure-matched trials only (see "Exposure matching" above). This
+is a 17 x 2 matrix, one complete profile per animal. Differencing against the reference epoch
+removes the epoch MAIN effect by construction, so what remains is only the interaction — a mouse
+whose component is uniformly elevated contributes a flat profile of zeros regardless of how
+elevated it is.
+
+**Fraction active is per-mouse by nature and has no paired variant.** It is a proportion computed
+OVER a mouse's cells, so there is no per-cell value to pair across epochs; its paired and
+unpaired tests are the same test, not two. The other three components are genuine per-cell
+quantities and carry both.
+
+**The delta is taken on each component's own scale** — a log-ratio for amplitude (whose column is
+already logged), a raw difference in events/s for the two rates, a difference in proportion for
+fraction active. Those are not commensurable with one another, which does not matter: the
+statistic standardizes each epoch's delta by its own pooled between-mouse SD, so it is scale-free
+and each component's test is computed in the units its own contrasts are reported in. Note that
+only the amplitude DELTA is a log-difference and therefore has a meaningful fold-change on
+exponentiation; the other deltas are differences of possibly-negative quantities and are reported
+as differences only.
+
+**Statistic.** The standardized sum of squared difference-of-differences,
+
+```
+T = sum over non-reference groups g, over response epochs e of
+        ( ( mean_g[delta_e] - mean_control[delta_e] ) / sd_pooled(delta_e) ) ** 2
+```
+
+Each term is exactly the difference-of-differences reported beside it with a 95% interval, e.g.
+`[hM3D - Ctl]_trace - [hM3D - Ctl]_pre_tone_matched`. Standardizing by the per-epoch pooled
+between-mouse SD is required, not cosmetic: without it whichever delta has the larger scale
+dominates the sum and the omnibus silently becomes a test about that one epoch. The SD is
+recomputed under every permutation, so it is a function of the data being permuted.
+
+**Inference.** Mouse-label permutation (see "Small-n inference" below): the 17 group labels are
+shuffled while each mouse keeps its ENTIRE epoch profile, preserving both the 5/6/6 group sizes
+and the within-mouse covariance between epochs. Because `T` is non-negative, the two-sided
+`|null| >= |observed|` rule is an upper-tail omnibus test. The permutation distribution is what
+carries validity, so the choice of statistic affects POWER, not correctness; this one is used
+because each of its terms is separately reportable.
+
+An epoch with zero between-mouse variance contributes 0 to `T`, never a NaN, and the permutation
+test computes its p-value over the finite draws only, raising rather than reporting a number if
+the observed statistic is non-finite or if more than half the draws are. This matters because a
+NaN in a permutation null is not a neutral value: `abs(nan) >= abs(observed)` is False, so NaN
+draws would count as "not extreme" and push the p-value DOWN. On a deliberately degenerate
+fixture (a component with no between-mouse variation at all) the unguarded version returned
+p <= 0.05 on 87% of true nulls.
+
+**Two variants are run and both reported.** The primary is PAIRED — the delta is computed within
+cell, so a cell must be amplitude-active in all three epochs (a stricter intersection than any
+pairwise one; `n_cells` is reported). The sensitivity variant is UNPAIRED — each epoch's per-mouse
+mean is taken over that epoch's own active cells and the means differenced afterwards.
+Permutation validity never depended on the cell pairing, so a disagreement between the two is
+evidence that the triple intersection selects a special subpopulation, not that either is invalid.
+
+**Status: secondary BH-FDR family**, not confirmatory. The confirmatory Holm family stays at
+exactly three members. It is NOT re-formed around this test, even though doing so would be
+conceptually tidier, because its two epoch members are already known to be null and dropping them
+now would move the primary `p_holm` from 0.027 back toward 0.009 — an outcome-driven change to a
+locked family, which this analysis does not make.
+
+**Interpreting a null.** A null here does not mean the manipulation has no effect; the primary
+trace amplitude contrast is separately significant. It means the data do not support the stronger
+claim that the effect is specific to any one epoch — i.e. amplitude is elevated broadly across
+TFC epochs. Report the difference-of-differences intervals for what magnitude of epoch
+specificity remains admissible; at n = 5/6/6 that range is wide.
+
 ### Bursting evidence: run structure and threshold sensitivity
 
 - **Run-structure panels** (`caban.sp_rates_lmm.build_run_structure_table` /
@@ -377,7 +510,11 @@ across the FREQUENTIST secondary tests only:
 - Test_B and Test_B_1wk post-tone amplitude omnibus tests,
 - the `group x trial` photobleaching interaction,
 - the run-structure mouse-label permutation tests (run width, local maxima per run, multi-peak
-  fraction; each DREADD group vs control).
+  fraction; each DREADD group vs control),
+- the **joint group x epoch specificity permutation tests**, one per decomposition component
+  (`epoch_specificity_{fraction_active,rate_active,population_rate,amplitude}`; see its section
+  above, including the note that these four are strongly dependent and describe one
+  decomposition).
 
 Excluded, by declaration rather than omission:
 
@@ -476,6 +613,26 @@ Excluded, by declaration rather than omission:
   estimate, the 17-mouse-level plot (`mouse_level_trace_amplitude`, a display/sanity-check
   aggregation, never the model input), and the permutation-test CI. If a conclusion depends on
   the model and is invisible at the level of the 17 animals, it should not be claimed.
+- **Two exchangeability assumptions are available, and they answer different questions.** By
+  default all 17 mice are exchangeable under the null, which tests the GLOBAL null "no group
+  differs from any other". Passing `restrict_to_groups=(a, b)` restricts the shuffle to two
+  groups, testing the PAIRWISE null "a does not differ from b" while assuming nothing about the
+  third group.
+
+  The distinction matters whenever the EXCLUDED group is the most variable one. Under the global
+  null a permuted `hM3D` bucket can contain mCherry mice, so mCherry's between-mouse spread
+  enters the null distribution even though mCherry appears nowhere in an hM3D-vs-hM4D statistic.
+  In this dataset the control is by far the most variable group (trace fraction-active
+  between-mouse SD 0.131 for mCherry against 0.032 for hM3D), and the trace fraction-active
+  hM3D-vs-hM4D contrast gives p = 0.099 under the global null against p = 0.027 under the
+  pairwise one — the latter matching exhaustive enumeration over all 462 splits of the 11 DREADD
+  mice (p = 0.026).
+
+  The reported family members use the GLOBAL null, which is what every previously reported
+  permutation p in this analysis was computed under. The run-structure output additionally prints
+  the pairwise-null value as a clearly labelled SENSITIVITY figure that enters no multiplicity
+  family — the same hypothesis under a different assumption, so entering both would correct one
+  question twice.
 
 ### Freezing/locomotion is deliberately NOT covaried in the primary model
 
@@ -613,6 +770,58 @@ decision.
 The primary/co-primary contrasts additionally get a multiplicative-scale forest plot
 (`plot_effect_forest`) giving the fold-change + 95% CI directly (e.g. "1.16x [1.14, 1.19]").
 
+### The decomposition grid: estimates across components x epochs, no stars
+
+`plot_decomposition_grid` is a SEPARATE figure from the per-epoch decomposition panels above, not
+a restyling of them. The panels show the distributions and answer "what do these cells look
+like"; the grid shows only the contrasts — four components (fraction active, rate among active,
+population event rate, per-event amplitude) x the exposure-matched epochs, each as hM3D/Ctl and
+hM4D/Ctl with a 95% interval — and answers "which component accounts for the change, and is that
+consistent across the session". Both are kept: the per-epoch panels remain the distribution
+figures and the sensitivity archive.
+
+**No significance stars appear anywhere on the grid**, deliberately. The four rows are not four
+independent phenotypes; they are one exact identity,
+`overall_rate = fraction_active x rate_active`, plus the amplitude term. Starring them separately
+invites a reader to count significant components as if each were fresh evidence, and starring
+them per epoch invites the difference-of-significance fallacy across columns on top of that.
+Epoch specificity gets ONE number per ROW — that component's joint group x epoch test, at its
+BH-ADJUSTED q — printed on the row label, never one per cell of the grid. (The figure is drawn
+after the BH pass for exactly this reason: a member of a multiplicity family is reported at its
+corrected value.)
+
+**Three points per panel, not two.** hM3D/Ctl, hM4D/Ctl, and the DIRECT hM3D-vs-hM4D contrast in
+grey. The third is there because a reader looking at a row where red sits above the reference
+line and blue below it will conclude the two DREADDs differ, and the two plotted vs-control
+intervals do not license that: they SHARE mCherry as their reference, so the comparison between
+them is not either of the intervals shown. The direct contrast is computed with hM4D as the
+reference group and has its own standard error. Drawing it removes the temptation to infer it by
+eye. It is deliberately NOT added to the standalone decomposition panels, whose correction family
+(`PANEL_HOLM_FAMILY`) is `'vs_control'` because that is where this design's question sits.
+
+**The direct contrast is not systematically wider than the vs-control ones.** Its variance is
+`Va/na + Vb/nb`, against `Va/na + Vc/nc` for a vs-control contrast: it drops the control group's
+contribution and keeps both DREADD groups'. Whether it is wider or narrower therefore depends on
+whether the CONTROL is the noisy group. In this dataset the control is by some margin the most
+variable — trace fraction-active between-mouse SD 0.131 for mCherry against 0.032 for hM3D — so
+the direct contrast is often the tightest of the three, and can exclude the null in panels where
+neither vs-control interval does. This is a genuine property of the comparison, not an
+inconsistency. **These intervals are uncorrected and belong to no declared multiplicity family**
+(sixteen appear on the grid), so a direct contrast excluding the null is an effect estimate worth
+following up, not a discovery to report as one.
+
+Two axis choices carry meaning:
+
+- **Fraction active is a bounded proportion**, so `mouse_contrast_ci` reports it as a DIFFERENCE
+  rather than a fold-change, and its row gets a linear axis centred on 0.0 while the other three
+  are fold-changes on a log axis centred on 1.0. Forcing one shared axis would plot a difference
+  against a ratio reference line.
+- **The x-axis is shared WITHIN each row.** The figure exists to be read across epochs, and
+  per-panel autoscaling would render a large effect and a small one at the same apparent distance
+  from the reference line — which would make the expected "flat across epochs" reading
+  unfalsifiable by eye. Fold-change rows use a log axis so a halving and a doubling sit
+  symmetrically about the reference.
+
 ### Pairwise correction family on the panels
 
 Panels in this module Holm-correct across the **two control contrasts only** (hM3D-vs-mCherry,
@@ -728,6 +937,13 @@ listed here so this document does not silently promise analyses that do not exis
   - `decomposition_contrasts.md` — the companion file for the panel above: per-panel
     equal-mouse-weighted ratio + 95% interval + absolute difference vs control, with an explicit
     note that these intervals are uncorrected while the figure's asterisks are Holm-corrected.
+  - `decomposition_grid.png/.svg` — the four decomposition components x the exposure-matched
+    epochs, as hM3D/Ctl, hM4D/Ctl **and the direct hM3D-vs-hM4D** effect estimates with 95%
+    intervals and **no significance stars**, x-axis shared within each row, with each row
+    labelled by that component's BH-adjusted group x epoch q. See "The decomposition grid" above
+    for why this is a separate figure from `decomposition*.png` rather than a restyling of it.
+  - `decomposition_grid_contrasts.md` — its companion file, keyed per (component, epoch), with
+    the direct DREADD-vs-DREADD contrast reported under each panel's vs-control pair.
   - `run_structure.png/.svg` — run width (frames), local maxima per run, and fraction of
     multi-peak runs, trace epoch, per-mouse means.
   - `threshold_sensitivity.png/.svg` — forest plot of the primary contrast re-fit at
@@ -749,5 +965,14 @@ listed here so this document does not silently promise analyses that do not exis
     its q-value, and the alpha=0.05 decision, plus the written record of what is excluded and why.
   - `epoch_deltas_descriptive.csv` — the per-epoch within-cell delta table behind
     `epoch_delta_forest`, with the `is_confirmatory` flag.
+  - `secondary_epoch_interaction.txt` — the joint group x epoch specificity tests, one section
+    per decomposition component: the permutation p (paired and unpaired variants where both
+    exist), the observed statistic, cell/mouse/trial coverage, and the per-epoch
+    difference-of-differences with 95% intervals.
+  - `matched_decomposition_trial_coverage.csv` — per-mouse count of trials surviving the
+    exposure-matched restriction, against that mouse's total.
+  - `descriptive_epoch_delta_post_shock_vs_pre_tone_matched_within_trial.txt` — the descriptive
+    post-shock-minus-baseline delta paired WITHIN trial, the alternative to the confirmatory
+    member's trial-pooled differencing.
   - `secondary_rate.txt` — the NB rate model, including sampler convergence diagnostics and the
     observed rate contrasts as ratio *and* absolute difference in events/s.
