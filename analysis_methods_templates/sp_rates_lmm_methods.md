@@ -240,10 +240,89 @@ time, never jointly.
 
 ## Statistics
 
-### Evidential tiers: what may be called "significant"
+### The paper-facing analysis: one unified mouse-level model per outcome
 
-Every output of this analysis sits in exactly one of three tiers. **The tier, not the p-value,
-determines how a result may be written up.**
+**Everything the manuscript reports comes from here. Everything in the rest of this section is
+internal and sensitivity output.**
+
+Per-event amplitude and population event rate are presented as parallel outcomes of one two-row
+figure, so they receive one identical statistical treatment rather than two different ones:
+
+1. **One mouse-level value per epoch, for each outcome**, over the three exposure-matched 20 s
+   windows (`pre_tone_matched`, `trace`, `post_shock`) and the same retained (mouse, trial) pairs
+   for both — 17 mice × 3 epochs = 51 rows
+   (`caban.sp_rates_lmm.build_mouse_epoch_unified_table`).
+   - *Amplitude*: each active cell's mean event-run integral over the retained trials → natural
+     log → arithmetic mean of those cell-level logs within the mouse. Cells with no event in that
+     epoch are excluded (amplitude is undefined for them). **exp(a group contrast) is therefore a
+     ratio of GEOMETRIC means** of the cell-level mean event amplitudes, not of pooled arithmetic
+     means.
+   - *Population rate*: total events over all detected cells (zero-event cells included) divided
+     by total cell-seconds, then logged. A zero rate raises rather than receiving a pseudocount.
+2. **The same model for each**: `log(metric) ~ group * epoch + (1|mouse)`, reference levels
+   `mCherry` and `pre_tone_matched` set explicitly as ordered categoricals, fit by
+   `caban.single_unit_common.fit_mixed_model` (statsmodels MixedLM, REML). If EITHER outcome
+   fails to fit as a mixed model, the paper analysis hard-fails
+   (`require_common_unified_method`) rather than letting one outcome take the clustered-OLS
+   fallback while the other does not — the claim that the two received the same treatment would
+   otherwise be false.
+3. **One joint Wald test of the four group × epoch coefficients per outcome**
+   (`joint_wald_test`, `df2 = n_mice - 1 = 16`). This is the paper's only test of epoch
+   dependence.
+4. **Six planned treatment-vs-control simple effects per outcome** (3 epochs × {hM3D, hM4D} vs
+   mCherry), each a linear contrast of the fitted model (`linear_contrast_test`, same `df = 16`):
+   the group coefficient at the reference epoch, the group coefficient plus the corresponding
+   interaction coefficient elsewhere. A simple effect is a contrast, not a coefficient, and cannot
+   be read off the model summary.
+5. **A Holm family of two contrasts WITHIN each epoch** (`p_holm_epoch`): for every
+   `(outcome, epoch)`, the hM3D-vs-mCherry and hM4D-vs-mCherry comparisons are corrected
+   together. That is six two-member families — 3 epochs × 2 outcomes — and the procedure is
+   identical in all of them, so every visually equivalent panel of the paper figure is treated
+   equivalently. hM3D-vs-hM4D is in no family.
+6. **The six-comparison across-epoch Holm correction is retained as SENSITIVITY** (`p_holm_six`):
+   all six simple effects corrected together within each outcome, computed from the same twelve
+   raw contrasts. It annotates nothing and supports no Results claim.
+
+`stats/unified_lmm_posthoc_contrasts.csv` is the single authoritative source for every estimate,
+interval, P-value and asterisk on a paper-facing figure; `stats/unified_lmm_mouse_epoch_values.csv`
+is the inferential dataset and is what the figures' large mouse markers plot (asserted at draw
+time). `stats/unified_lmm_interactions.csv` carries the two interaction tests.
+
+Descriptive companions reported beside the model output, never in place of it: the observed
+equal-mouse-weighted group means, and for rate their absolute difference in events/s/cell (a
+fold-change off a small base overstates the practical size of a change).
+
+**Wording.** A non-significant interaction means there was *no evidence that the treatment effect
+differed across* the sampled epochs — not that the effect is identical, global, tonic, or
+equivalent across them. A significant treatment-control comparison within one epoch does not imply
+that the treatment effect differs from another epoch; epoch dependence is tested by the
+interaction. This analysis was finalised after substantial inspection of the dataset and is
+described as the **main statistical analysis**, never as prospectively confirmatory.
+
+Diagnostics (`stats/unified_lmm_diagnostics.*`, `unified_lmm_residuals.csv`,
+`unified_lmm_influence.csv`): residual-vs-fitted and normal Q-Q plots per outcome, and
+leave-one-mouse-out refits reporting each animal's effect on the twelve contrast ESTIMATES. These
+are descriptive. No residual-normality test is used as an acceptance criterion (a mixed model's
+residuals are not 51 independent observations), and significance-decision flips are deliberately
+not computed (at n = 17 a threshold crossing near α is expected and says nothing about
+robustness). `stats/unified_lmm_synthetic_verification.txt` records two planted-effect designs
+run through the same code: an equal shift in every epoch must be detected while the interaction
+stays null, and a trace-only shift must make the interaction significant.
+
+---
+
+### Internal architecture below this line
+
+**The tier system, multiplicity families and models described from here on are SENSITIVITY and
+historical infrastructure.** They all still run and still write their files, and they are what a
+reviewer asking "does this survive a different modelling choice" should be shown. None of them
+supplies a number to the manuscript or to a paper figure. The tier vocabulary below applies
+within that internal output only.
+
+### Evidential tiers: what may be called "significant" (internal output only)
+
+Every internal output of this analysis sits in exactly one of three tiers. **The tier, not the
+p-value, determines how a result may be written up.**
 
 | tier | members | how to report |
 |---|---|---|
@@ -254,9 +333,9 @@ determines how a result may be written up.**
 A tier-3 result is not weak evidence of the same kind as a tier-1 result; it is a different kind
 of statement. Four properties recur and none is repaired by computing a better p-value:
 
-- **Post-hoc selection.** A contrast chosen after inspecting a figure cannot re-enter the
-  confirmatory family. This analysis is a LOCKED CONFIRMATORY REANALYSIS, not a prospective
-  preregistration, which makes that boundary load-bearing rather than pedantic.
+- **Post-hoc selection.** A contrast chosen after inspecting a figure cannot re-enter this
+  internal confirmatory family. That family was a locked reanalysis, not a prospective
+  preregistration, which makes the boundary load-bearing rather than pedantic.
 - **No multiplicity protection.** Tier-3 output is deliberately in no family, so nothing controls
   an error rate across it.
 - **The contrast may not be the design's question.** A DREADD-vs-DREADD difference contains no
@@ -288,7 +367,12 @@ prospectively for a future cohort.
   principle afford more power, but this codebase implements no such correction. This affects
   power, not Type I error control.
 
-### Confirmatory family (Holm-corrected across exactly these three tests)
+### Internal confirmatory family (Holm-corrected across exactly these three tests)
+
+*Historical: this was the paper's primary analysis before the unified mouse-level models above.
+It is retained as a sensitivity check — it uses a different unit of aggregation (cell rather than
+mouse), a different baseline window (35 s `pre_tone` rather than the 20 s matched one), and a
+different multiplicity family. It supplies no manuscript number.*
 
 - **Primary endpoint**: `log(mean per-event amplitude) ~ C(group, Treatment('mCherry'))`,
   cell-level, trace epoch pooled (summed, not averaged) across the five trials, random intercept
@@ -375,8 +459,8 @@ Two consequences for how this analysis is written up:
   the same within-cell delta contrast is computed and reported for **every** non-reference epoch
   (`caban.sp_rates_lmm.compute_all_epoch_deltas`, plotted by `plot_epoch_delta_forest`):
   tone−pre_tone and post_shock_late−pre_tone alongside the confirmatory trace−pre_tone and
-  post_shock−pre_tone. A reader can then see the flat profile directly rather than taking it on
-  trust, and cannot mistake "no trace-specific effect" for "no effect".
+  post_shock−pre_tone. A reader can then see the per-epoch profile of estimates directly rather
+  than taking it on trust, and cannot mistake "no evidence of epoch dependence" for "no effect".
 - The early-versus-late post-shock delta (post_shock−post_shock_late) is reported separately from
   this forest, since its reference is not `pre_tone`. It goes through the same code path as the
   confirmatory deltas (`fit_and_report_epoch_delta`, with `is_confirmatory=False`), and its
@@ -524,6 +608,10 @@ Excluded, by declaration rather than omission:
 - **The Bambi Negative-Binomial rate model.** It reports posterior contrasts, HDIs and an
   ELPD-LOO comparison; there is no p-value to correct. Manufacturing one so a Bayesian result can
   be folded into a frequentist FDR family is a category error, not a conservative choice.
+  - **This is a statement about THIS model, not about the rate endpoint.** The paper-facing rate
+    endpoint is the unified mouse-level Gaussian LMM on `log(population_rate)` described at the
+    top of this section; it has a frequentist P-value and IS Holm-corrected, in its own 6-member
+    planned-contrast family. The NB model is the distribution-aware sensitivity check on it.
 - **Purely descriptive and sensitivity output**: the non-confirmatory within-cell epoch deltas,
   the threshold-sensitivity forest, the LT1→LT2 dropout fractions, and the amplitude permutation
   tests that re-express the primary contrast under a different weighting or a tail statistic.
@@ -555,9 +643,13 @@ Excluded, by declaration rather than omission:
     `log(n_cells)` term leaked into the group fixed effect rather than being absorbed by the
     mouse random intercept (a shrunk random effect, not a free per-mouse parameter).
   - **Implementation note**: `statsmodels`' `mixedlm` is Gaussian-only and has no
-    negative-binomial/GLMM path, so the rate endpoint cannot use the same fitting machinery as
-    the amplitude endpoints above — a genuine Python-tooling limitation (`statsmodels` alone
-    cannot fit this model), not a statistical preference. Bambi closes that gap directly:
+    negative-binomial/GLMM path, so a COUNT model of rate cannot use the same fitting machinery as
+    the amplitude endpoints — a genuine Python-tooling limitation (`statsmodels` alone cannot fit
+    this model), not a statistical preference. (The paper-facing rate model sidesteps this
+    entirely by modelling the mouse-level population rate, a continuous positive summary over many
+    events and cell-seconds, on the log scale — which statsmodels fits with exactly the same
+    machinery as amplitude. This NB model exists to check that the simplification does not change
+    the conclusion.) Bambi closes that gap directly:
     dispersion (alpha) is estimated jointly with the fixed and random effects in a single fit,
     the same way R's `glmmTMB`/`brms` would, rather than via a separate pre-estimation step.
   - **Implementation note**: the interaction's contribution is assessed via **LOO
@@ -824,6 +916,11 @@ Two axis choices carry meaning:
 
 ### Pairwise correction family on the panels
 
+**This describes the INTERNAL panels only.** The paper-facing figures do not compute a statistic
+at all: their asterisks are the Holm-adjusted planned contrasts from the unified models
+(`_precomputed_stat_fn`, fed from `unified_lmm_posthoc_contrasts.csv`), corrected across six
+contrasts per outcome rather than two per panel, and no hM3D-vs-hM4D bracket is drawn.
+
 Panels in this module Holm-correct across the **two control contrasts only** (hM3D-vs-mCherry,
 hM4D-vs-mCherry), reporting hM3D-vs-hM4D uncorrected alongside — `PANEL_HOLM_FAMILY` in
 `caban.sp_rates_lmm`, via `do_pairwise_holm_plot(holm_family='vs_control')`. The design question
@@ -976,3 +1073,46 @@ listed here so this document does not silently promise analyses that do not exis
     member's trial-pooled differencing.
   - `secondary_rate.txt` — the NB rate model, including sampler convergence diagnostics and the
     observed rate contrasts as ratio *and* absolute difference in events/s.
+
+### The paper lane — `PLOTS_DIR/sp_rates_lmm/paper/tfc_amplitude_rate/`
+
+Where the unified paper-facing analysis is fit and where the manuscript figures live. Everything
+under `TFC_cond/` above is the internal/sensitivity record.
+
+- `tfc_amplitude_rate_by_epoch.png/.svg` — the two-row (per-event amplitude, population event
+  rate) x three-column (pre-tone, trace, post-shock) SuperPlot figure. Per-cell clouds are
+  descriptive; the large markers are the exact mouse-level values both models are fit on (asserted
+  at draw time against `unified_lmm_mouse_epoch_values.csv`), drawn on the natural scale — the
+  amplitude marker is `exp(mouse_mean_log_amplitude)`, i.e. that animal's geometric mean event
+  amplitude. Asterisks are the within-epoch Holm-adjusted contrasts (`p_holm_epoch`) read from
+  `unified_lmm_posthoc_contrasts.csv` — every panel is annotated by the same procedure, and a
+  panel without a bracket is one where neither comparison reached α, not one exempted from
+  testing. The panel computes no statistic of its own.
+  - `..._contrasts.md` — the same contrasts as text, with their estimates, intervals and adjusted
+    P values.
+- `tfc_decomposition_forest.png/.svg` — the same twelve contrasts as ratios with 95% CI, one row
+  per outcome and one column per epoch, each row labelled with that outcome's joint group x epoch
+  Wald test. Same source table as the figure above.
+- `stats/`
+  - `unified_lmm_mouse_epoch_values.csv` — the inferential dataset: one row per (mouse, epoch),
+    both outcomes and their inputs (cell counts, total events, total cell-seconds).
+  - `unified_lmm_amplitude_summary.txt`, `unified_lmm_rate_summary.txt` — formula, fitting method,
+    n, joint Wald result and the full statsmodels summary per outcome. The embedded coefficient
+    table's `P>|z|` column is statsmodels' own **asymptotic z test** and is diagnostic only; the
+    paper's P-values are the separately computed `t(df=16)` contrasts and joint Wald F tests in
+    the CSVs. Each file states this above and below the table.
+  - `unified_lmm_interactions.csv` — the two group x epoch joint Wald tests (F, df1, df2, P).
+  - `unified_lmm_posthoc_contrasts.csv` — **the authoritative table.** Twelve rows: outcome,
+    epoch, comparison, log estimate, SE, log CI, ratio, ratio CI, raw P, then two adjusted
+    P columns — `p_holm_epoch` (paper-facing: Holm across that epoch's two treatment-vs-control
+    comparisons; the only one behind a figure asterisk or a Results claim) and `p_holm_six`
+    (sensitivity: Holm across all six simple effects within the outcome) — each with its
+    rejection flag. Rate rows also carry the descriptive absolute difference in events/s/cell and
+    the observed group means.
+  - `unified_lmm_diagnostics.png/.txt`, `unified_lmm_residuals.csv`, `unified_lmm_influence.csv` —
+    descriptive model diagnostics; see the paper-facing statistics section above.
+  - `unified_lmm_synthetic_verification.txt` — the two planted-effect designs and their realised
+    values.
+  - `paper_results_summary.md` — every number the Results paragraph needs, with Part 1 (the
+    paper-facing analysis) and Part 2 (sensitivity and supplementary) separated explicitly.
+  - `rate_group_epoch_contrasts.csv` — the NB sensitivity model's posterior rate ratios and HDIs.

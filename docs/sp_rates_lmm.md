@@ -1,30 +1,507 @@
 # sp_rates_lmm — analysis reference and decision record
 
-Cell-level pyramidal event-**amplitude** analysis of DREADD effects during trace fear conditioning.
+Pyramidal event-**amplitude** and event-**rate** analysis of DREADD effects during trace fear
+conditioning.
 
-**This document is the single source of truth for why this analysis is built the way it is.** It
-exists because the design deliberately departs from an external methodological review in several
-places, and sessions that read only the review (or only the code) keep re-litigating settled
-decisions. If you are picking this up cold, read §2.3 and §8 before changing anything — and §3.4
-plus §4.5 before touching an epoch definition or adding one to any model.
+**This document has two parts, and the distinction is the most important thing in it.**
 
-**Before writing up any number from this analysis, read [§5.2](#52-what-may-be-claimed-from-these-results).**
-Every output sits in one of three evidential tiers, and the tier — not the p-value — decides
-whether it may be called "significant". That question has already come up once.
+- **[Part A](#part-a--the-current-paper-facing-analysis)** is the analysis the manuscript reports:
+  two mouse-level mixed models, one per outcome, given identical treatment. Every number in a
+  paper figure or a Results sentence comes from here.
+- **[Part B](#part-b--sensitivity-supplementary-and-historical-analyses)** is everything else this
+  module computes — the cell-level amplitude model and its three-test Holm family, the Bayesian
+  negative-binomial rate model, the mouse-label permutation tests, the BH-FDR secondary family,
+  threshold sensitivity, run structure, the exploratory DREADD-vs-DREADD contrasts, and the
+  decision record behind all of it. All of it still runs, all of it is worth having, and **none of
+  it is a paper-facing result.**
 
-**And before writing the word "trace" next to the amplitude effect, read [§5](#5-results-as-of-the-last-full-run).**
-About 73% of the trace-period amplitude elevation is already present in the pre-tone baseline.
-The effect is tonic across the session, not specific to the trace interval, and the figures make
-that visible on purpose.
+Exactly one analysis is primary. If you find a sentence anywhere that reads as though a Part B
+p-value were the headline, it is stale — fix it.
+
+If you are picking this up cold: read §A (the models), then §2.3 and §8 before changing anything,
+and §3.4 plus §4.5 before touching an epoch definition.
 
 | | |
 |---|---|
 | Module | [caban/sp_rates_lmm.py](../caban/sp_rates_lmm.py) |
 | Entry point | `caban.sections.run_sp_rates_lmm(ds, cfg)`, gated on `cfg.plot_sp_rates_lmm` |
-| METHODS template | [analysis_methods_templates/sp_rates_lmm_methods.md](../analysis_methods_templates/sp_rates_lmm_methods.md) |
+| Paper analysis | `caban.sp_rates_lmm.render_paper_tfc_amplitude_rate()` |
+| METHODS templates | [sp_rates_lmm_paper_methods.md](../analysis_methods_templates/sp_rates_lmm_paper_methods.md) (manuscript), [sp_rates_lmm_methods.md](../analysis_methods_templates/sp_rates_lmm_methods.md) (internal) |
 | Notebook | `run_pipeline.ipynb`, cells 24–29 (immediately after `run_sp_rates`) |
-| Output | `PLOTS_DIR/sp_rates_lmm/{TFC_cond,Test_B,Test_B_1wk}/` + `stats/` subdirs; the paper-facing re-cut in `paper/tfc_amplitude_rate/` (§6.1) |
+| Output | paper: `PLOTS_DIR/sp_rates_lmm/paper/tfc_amplitude_rate/`; internal: `PLOTS_DIR/sp_rates_lmm/{TFC_cond,Test_B,Test_B_1wk}/` + `stats/` |
 | Design | 17 mice — hM3D n=5, hM4D n=6, mCherry n=6 |
+
+---
+
+# Part A — the current paper-facing analysis
+
+## A. Two outcomes, one statistical framework
+
+Per-event amplitude and population event rate are presented as parallel rows of one figure, so
+they get one statistical treatment rather than two. Amplitude remains the **primary biological
+endpoint** (the claim under test is that hM3D increases per-event Ca²⁺ influx, not merely event
+frequency) and rate the secondary one — but that is a scientific ordering, not a statistical one.
+Both are analysed identically.
+
+**This analysis was finalised after substantial inspection of this dataset.** It is the *main
+statistical analysis* / *primary paper-facing analysis*. It is not prospectively preregistered, is
+not described as prospectively confirmatory, and does not introduce an evidential-tier taxonomy.
+
+### A.1 One mouse-level value per epoch
+
+`build_mouse_epoch_unified_table()` produces the inferential dataset: **17 mice × 3 epochs = 51
+rows**, both outcomes on one frame, from one call to `restrict_to_exposure_matched_trials()` over
+`pre_tone_matched` / `trace` / `post_shock` (§3.4a). Because both outcomes are derived from that
+single frame, the two figure rows provably describe the same animals, epochs and trials — there is
+no code path in which the rate row comes from a different trial set than the amplitude row above
+it.
+
+| | per-event amplitude | population event rate |
+|---|---|---|
+| per cell | mean event-run integral over the retained trials | — |
+| then | natural log of that | — |
+| per mouse | arithmetic mean of those cell-level logs | total events ÷ total cell-seconds, then logged |
+| zero-event cells | excluded (amplitude undefined) | **retained in the denominator** |
+| column | `mouse_mean_log_amplitude` | `log_population_rate` |
+
+The amplitude weighting is deliberate and unchanged from this module's original design: each
+active cell contributes equally within its animal, each animal contributes exactly one value to
+the model. Cells are never pooled across animals before the group mean.
+
+**`exp(a group contrast)` on amplitude is a ratio of GEOMETRIC means** of the cell-level mean
+event-run integrals — the mean of logs is the log of the geometric mean. Describing it as a ratio
+of pooled arithmetic mean event amplitudes would be wrong by Jensen's inequality, by an amount
+that depends on each group's cell-level spread. Say "geometric" wherever this ratio is reported.
+
+A zero population rate would make `log()` undefined. It is checked for and **raises**; no
+pseudocount is applied, since the constant chosen would determine the answer.
+
+### A.2 The models
+
+For each outcome, identically:
+
+```
+log(metric) ~ group * epoch + (1 | mouse)
+```
+
+- reference group `mCherry`, reference epoch `pre_tone_matched`, both set as ordered
+  `pd.Categorical` so nothing depends on alphabetical order;
+- fit by `caban.single_unit_common.fit_mixed_model` (statsmodels `MixedLM`, REML, L-BFGS);
+- **if either outcome fails to fit as a mixed model the paper analysis hard-fails**
+  (`require_common_unified_method`). Letting one outcome take the documented clustered-OLS
+  fallback while the other stays on MixedLM would falsify the claim that the two received the
+  same treatment. Adopting clustered OLS as a *common* fallback for both is a deliberate decision
+  to be made after inspecting the failure, never applied automatically.
+
+### A.3 Epoch dependence: one joint Wald test per outcome
+
+`joint_wald_test` on the four `group × epoch` coefficients, `df2 = n_mice − 1 = 16` (§4's
+denominator-df convention, applied identically to both outcomes and to the contrasts below, so
+the omnibus and its simple effects are one procedure).
+
+**Wording.** A null interaction is *no evidence that the treatment effect differed across the
+pre-tone, trace and post-shock epochs*. Internally the shorthand "the treatment effect was not
+detectably epoch-specific" is fine; the manuscript uses the literal form. Nothing anywhere may
+turn a null interaction into positive evidence that the effect is identical, global, tonic, or
+equivalent across epochs.
+
+And in the other direction: a significant treatment-control comparison within one epoch does not
+imply that the treatment effect differs from another epoch. Epoch dependence is tested by the
+interaction, once per outcome, and by nothing else.
+
+### A.4 Contrasts and multiplicity: within-epoch treatment-vs-control families
+
+Twelve treatment-vs-control simple effects — 3 epochs × {hM3D, hM4D} vs mCherry, per outcome —
+each a linear contrast of the fitted model (`linear_contrast_test`, same `df = 16`):
+
+- at `pre_tone_matched`: the group coefficient alone;
+- at `trace` / `post_shock`: the group coefficient **plus** that group's interaction coefficient,
+  with a variance that includes their covariance.
+
+A simple effect is a contrast, not a coefficient; reading the group coefficient off the model
+summary and calling it "the effect at trace" is wrong at every non-reference epoch.
+
+**The multiplicity family is within an epoch, and is the same in every epoch.** For each
+`(outcome, epoch)` the two treatment-versus-control comparisons — hM3D vs mCherry and hM4D vs
+mCherry — are Holm-corrected together (`p_holm_epoch`, finite on every row). That is six
+two-member families: 3 epochs × 2 outcomes. The procedure is identical in all six, so every
+visually equivalent panel of the paper figure is treated equivalently and no epoch receives a
+different kind of inferential treatment.
+
+Amplitude and rate remain separate outcomes and therefore separate families. hM3D-vs-hM4D is in
+no family and is not computed here — it remains exploratory internal output (§5.1).
+
+So the whole paper-facing hierarchy is six steps:
+
+1. one mouse-level value per animal per epoch (§A.1);
+2. the same LMM for amplitude and for rate (§A.2);
+3. two model-derived treatment-versus-control post-hoc contrasts within each epoch;
+4. Holm correction across exactly those two comparisons within that epoch → `p_holm_epoch`;
+5. the group × epoch joint Wald test for epoch dependence (§A.3);
+6. the six-way across-epoch Holm correction retained as sensitivity only.
+
+**A simple effect and an interaction answer different questions.** A significant comparison in one
+epoch and not in another is *not* evidence that the treatment effect differs between those epochs;
+that is what step 5 tests, and it is tested by nothing else. Symmetrically, a significant simple
+effect and a null interaction are not in conflict — *does treatment differ from control in this
+epoch?* is a different question from *does that difference itself vary across epochs?*
+
+**The conservative six-comparison family is retained as sensitivity output**, not deleted:
+`p_holm_six` Holm-corrects all six treatment-versus-control simple effects across the three epochs
+within each outcome. Both families are computed from the same twelve raw contrasts; only the
+grouping differs, and the wider one is kept so the choice stays auditable. `p_holm_six` determines
+no figure annotation and no Results significance statement, and it appears only under Part 2 of
+`paper_results_summary.md`.
+
+Reported per contrast: log estimate, SE, log 95% CI, exponentiated ratio and ratio CI, raw P,
+`p_holm_epoch` (all rows, paper-facing) and `p_holm_six` (all rows, sensitivity), each with its
+rejection flag. For rate, additionally the **observed absolute difference in events/s/cell**
+(equal-mouse-weighted group means) — descriptive, no test, reported because a rate ratio off a
+small base overstates the practical size of a change.
+
+*(Earlier passes used a single six-member family, and then a privileged trace-only primary family
+`p_holm_trace`. Both are superseded; see §7 for the correction record.)*
+
+### A.5 The figures come from these two tables and nothing else
+
+| file | what it is |
+|---|---|
+| `stats/unified_lmm_mouse_epoch_values.csv` | the 51-row inferential dataset |
+| `stats/unified_lmm_posthoc_contrasts.csv` | **authoritative** — every estimate, interval, P and asterisk |
+| `stats/unified_lmm_interactions.csv` | the two joint Wald interaction tests |
+
+- **Large mouse markers** on `tfc_amplitude_rate_by_epoch.png` are the exact model values, on the
+  natural scale: `exp(mouse_mean_log_amplitude)` (that animal's geometric mean event amplitude)
+  for the top row, `population_rate` for the bottom. `_assert_markers_match_model` hard-fails if a
+  drawn marker is not the corresponding row of the values CSV, so figure/model identity is
+  mechanical rather than visual. Per-cell clouds are display only and are plotted on the same
+  natural scale as their marker.
+- **Every panel is annotated by the same procedure.** Each of the six panels takes its own
+  `(outcome, epoch)` pair of `p_holm_epoch` values from the contrasts CSV, handed to the panel by
+  `_precomputed_stat_fn` via `_paper_panel_star_pvalues`, which ignores the data arrays entirely
+  and hard-fails on a non-finite adjusted P. There is no per-epoch branch: a bracket is drawn
+  wherever the adjusted P clears α, so a panel without one is a panel where neither comparison
+  reached significance, not one that was exempted from testing. A paper panel cannot compute a
+  statistic of its own, and no `p_holm_six` value can reach a figure.
+- **`tfc_decomposition_forest.png`** draws the same twelve rows as ratios with CIs — all three
+  epochs, because the estimates are scientifically informative — each row labelled with that
+  outcome's joint Wald test. No significance stars are placed on the forest. It is a second view
+  of one table, not a second estimate.
+- No Bayesian HDI, no permutation p, no per-panel Welch test and no BH q-value appears on a paper
+  figure. Those all still exist under Part B.
+
+### A.6 Diagnostics and verification
+
+Descriptive, gating nothing, adding no inference:
+
+- `unified_lmm_diagnostics.png` — residual-vs-fitted and normal Q-Q per outcome;
+  `unified_lmm_residuals.csv` the underlying rows. **No residual-normality test is used as an
+  acceptance criterion** — a mixed model's residuals are not 51 independent observations, and a
+  normality test crossing 0.05 is not a principled pass/fail rule at this n. Read the plots.
+- `unified_lmm_influence.csv` — leave-one-mouse-out refits of both models, reporting each animal's
+  effect on the twelve contrast **estimates**. Significance-decision flips are deliberately not
+  computed: at n = 17 an adjusted p crossing 0.05 when one animal is dropped is expected and says
+  nothing about robustness. Only a genuinely large estimate change is flagged (more than half the
+  full-data effect *and* more than 0.10 log units — the absolute floor matters, since on a null
+  contrast a relative rule alone fires constantly).
+- `unified_lmm_synthetic_verification.txt` — two planted designs run through the real fitting and
+  contrast code. An equal shift in every epoch must be detected by the simple effects while the
+  interaction stays null; a trace-only shift must make the interaction significant. Margins are
+  wide by construction, so this tests the code rather than one lucky realization.
+
+---
+
+## M. Manuscript draft (Nature style)
+
+**This is the single canonical draft, and it is written from Part A only.** No Part B number
+appears in it. The figure guide's Part 2 used to hold a second copy; it now points here, because
+the two had already diverged.
+
+Register is Nature's — past tense, effect size with its interval before any *P*, the mouse as the
+stated unit of inference.
+
+**Values written `{{ABnn}}` must be read off this run's own output before submission**; §M.3 maps
+every code to its file, row and column. Sections that are not this analysis' to write — animals,
+surgery, viral constructs, CNO dosing, behavioural apparatus, miniscope hardware, source
+extraction parameters — are marked ⟨…⟩ rather than invented here.
+
+### M.1 Methods
+
+**Calcium imaging and source extraction.** ⟨Miniscope model, lens, FOV, illumination, and CNMF-E
+parameters.⟩ Imaging was performed at 20 Hz. Regions of interest and their deconvolved activity
+traces were extracted with CNMF-E, and cells were registered across sessions with ⟨CellReg
+version and parameters⟩. Cross-session correspondence was taken from the registration table
+directly; no analysis matched cells by within-session identifier across sessions.
+
+**Calcium event detection.** Events were detected on the deconvolved spike-inference trace (*S*)
+of each dorsal CA1 pyramidal cell. A single event was defined as one contiguous run of *S* above a
+threshold of 2 s.d., and its amplitude as the integral of *S* over that run. This definition
+departs from the more common one — one event per local maximum, quantified by the value at its
+peak frame — for a specific reason: summed over a window, the peak-based quantity is exactly the
+product of event rate and mean peak height, and therefore cannot distinguish larger events from
+more frequent ones. Under the run definition, temporally clustered peaks merge into a single wider
+event of larger integral (median run length 4 frames; 11.7% of runs were confined to a single
+frame), so event counts are not interchangeable between the two definitions and were recomputed
+under this one throughout.
+
+Cells with no detected events were retained in the population event-rate denominator, so that a
+manipulation silencing cells appears as a reduced population rate. Per-event amplitude is
+undefined for such cells, which are therefore necessarily absent from amplitude analyses; this is
+a definitional exclusion rather than missing data.
+
+**Behavioural epochs.** Trial timing was measured per animal from each recording rather than taken
+from nominal protocol constants, as recordings were ragged and trial counts varied. Analyses
+focused on three duration-matched 20 s windows during trace fear conditioning: a pre-tone baseline
+ending at tone onset, the trace interval (tone offset to shock onset), and a post-shock window
+beginning at shock offset. The 2 s shock was excluded from all models: at the observed event
+rates, expected counts in a 2 s window are dominated by counting noise (P(zero events per cell)
+67–91% at 0.05–0.2 Hz).
+
+Because the trace interval on the first trial was 15 s rather than 20 s, analyses were restricted
+for each animal to trials in which all three windows were present at the full 20 s duration,
+determined from each window's measured exposure rather than from a trial index. Both outcomes were
+computed from that same set of animal × trial windows.
+
+**Statistical analysis.** The animal was the unit of inference (*n* = 5 hM3D, 6 hM4D, 6 mCherry).
+Cells and trials contributed precision, not replication, and no analysis treated cells as
+independent experimental units. Figures showing per-cell distributions display them for
+description only; all statistics were computed from per-animal values (SuperPlot convention, Lord
+et al., *J. Cell Biol.* 219, e202001064, 2020). The inferential dataset contained one value per
+animal per epoch ({{AB00}} rows).
+
+For each animal and epoch, per-event amplitude was summarized by first calculating each active
+cell's mean event-run integral across the retained trials, log-transforming this value, and then
+averaging across cells within the animal; an exponentiated group contrast on this response is
+therefore a ratio of geometric means of the cell-level mean event amplitudes. Population event
+rate was calculated for the same trials as the total number of detected events divided by the
+corresponding total cell-seconds across all detected pyramidal cells, including cells with zero
+events, and was log-transformed before statistical analysis. No animal × epoch had a zero
+population rate and no pseudocount was applied.
+
+Per-event amplitude and population event rate were analysed separately using the same linear
+mixed-effects model, with DREADD group (mCherry, hM3D or hM4D), epoch (pre-tone, trace or
+post-shock), and their interaction as fixed effects and animal as a random intercept
+(`log(metric) ~ group * epoch + (1|animal)`; reference levels mCherry and pre-tone, set
+explicitly). Within each epoch, hM3D and hM4D were compared with mCherry using linear contrasts of
+the fitted model — at the reference epoch the group coefficient alone, and at the trace and
+post-shock epochs that coefficient plus the corresponding group × epoch interaction coefficient,
+with their covariance — with Holm correction across the two treatment-versus-control comparisons
+in that epoch. Amplitude and rate formed separate correction families, and the direct
+hM3D-versus-hM4D comparison was in neither. Group × epoch interactions were assessed by joint Wald
+tests of the four interaction coefficients. All Wald and contrast inference used
+an animal-level denominator degrees of freedom of *n*<sub>animals</sub> − 1 = 16, applied
+consistently to both outcomes; no Satterthwaite or Kenward–Roger approximation was applied.
+
+Effects are reported as exponentiated model contrasts (fold change or rate ratio) with 95%
+confidence intervals; for amplitude, exponentiation yields the ratio of animal-level geometric
+mean event amplitudes, and for population rate a rate ratio. Population-rate effects are
+additionally reported as observed absolute differences in events s⁻¹ per cell, which are
+descriptive summaries of the animal-level means and carry no separate test. *P* < 0.05 after Holm
+correction was considered statistically significant.
+
+As a conservative sensitivity analysis, the six treatment-versus-control simple effects spanning
+all three epochs were additionally corrected together by the Holm procedure within each outcome.
+This sensitivity correction did not determine the figure annotations or any manuscript
+significance statement.
+
+Locomotion and freezing were not covaried: both are post-treatment variables, and conditioning on
+them would remove part of the effect being estimated. One cross-registration cell set was primary;
+the others were sensitivity analyses, not replications.
+
+Analyses used Python 3.11.15 with statsmodels 0.14.6 (`MixedLM`, REML, L-BFGS), scipy 1.17.1,
+numpy 2.4.5 and pandas 3.0.2.
+
+*Supplementary Methods.* A negative-binomial mixed-effects count model with a log(total
+cell-seconds) exposure offset, random intercepts for animal and for animal × trial, and jointly
+estimated dispersion (Bambi/PyMC; ⟨draws, tuning, chains, convergence diagnostics⟩) was used as a
+sensitivity analysis of the population-rate result. Further sensitivity analyses — a cell-level
+amplitude model, mouse-label permutation tests of both the group contrasts and the group × epoch
+interaction, event-detection threshold sensitivity, event run-structure measures, a group × trial
+photobleaching control, and cross-registration subset variants — are described in the analysis
+methods documentation.
+
+The analysis above was finalised after substantial prior inspection of this dataset; it is the
+main statistical analysis and is not prospectively preregistered. The trace interval's privileged
+role in the comparison structure derives from the biological question and the design and predates
+this statistical analysis, but the final multiplicity structure was settled after that inspection,
+which is why the more conservative six-comparison correction is reported alongside it. With
+*n* = 5/6/6 animals the
+design has 80% power only for very large standardized effects (Cohen's *d* ≈ 1.8–2.0 pairwise), so
+every null is reported with its interval and with what that interval still admits, and none is
+presented as evidence of absence.
+
+**Code availability.** Analysis code is available at ⟨repository/DOI⟩.
+
+### M.2 Results
+
+**Chemogenetic modulation of SST interneurons dissociates the size and the frequency of CA1
+pyramidal calcium events.**
+
+To ask how SST-interneuron modulation reshapes dorsal CA1 pyramidal output during trace fear
+conditioning, we detected calcium events as contiguous supra-threshold runs of the deconvolved
+signal and quantified each by its integral rather than its peak, so that a wider event is
+distinguishable from a taller one. Because summed event amplitude per second is the exact product
+of event rate and per-event amplitude, we analysed the two factors separately, using the same
+mouse-level mixed-effects framework for both, and report them together (Fig. 1). All statistics
+treat the mouse as the unit of inference (*n* = 5 hM3D, 6 hM4D, 6 mCherry).
+
+The manipulation was effective. Within cells tracked across two same-day linear-track sessions
+recorded before and after CNO, hM3D increased per-event amplitude relative to control
+(difference-in-differences +0.47 log units); control cells declined by 0.27 log units across the
+session pair, consistent with photobleaching, whereas hM3D cells rose by 0.20. The fraction of
+cells failing to re-register between the two sessions did not differ between hM4D and control
+(77.1% versus 76.8%; hM3D 81.7%), arguing against activity-dependent loss of silenced cells as an
+explanation for the hM4D results below.
+
+Chemogenetic modulation of SST interneurons differentially altered the magnitude and frequency of
+dorsal CA1 pyramidal-cell calcium events during trace fear conditioning. Within each epoch, hM3D
+and hM4D were compared with mCherry controls using model-derived post-hoc contrasts, Holm-
+corrected across those two treatment-versus-control comparisons. hM3D mice showed increased
+per-event amplitudes relative to controls during the trace interval ({{AB07}}-fold, 95% CI
+{{AB08}}–{{AB09}}; Holm-adjusted *P* = {{AB10}}) and the post-shock period ({{AB06}}-fold, 95% CI
+{{AB31}}–{{AB32}}; Holm-adjusted *P* = {{AB33}}), whereas the pre-tone comparison did not reach
+significance ({{AB05}}-fold; *P* = {{AB30}}). hM4D did not significantly alter per-event amplitude
+in any of the three epochs (trace {{AB11}}-fold, 95% CI {{AB12}}–{{AB13}}; *P* = {{AB14}})
+(Fig. 1a).
+
+Population event rate showed a complementary pattern. hM4D mice exhibited a reduced event rate
+during the trace interval (rate ratio {{AB19}}, 95% CI {{AB20}}–{{AB21}}; absolute difference
+{{AB22}} events s⁻¹ per cell; Holm-adjusted *P* = {{AB23}}), whereas the pre-tone
+({{AB24}}-fold; *P* = {{AB34}}) and post-shock ({{AB25}}-fold; *P* = {{AB35}}) comparisons did not
+reach significance after correction. hM3D did not significantly alter population event rate in any
+epoch (trace rate ratio {{AB15}}, 95% CI {{AB16}}–{{AB17}}; *P* = {{AB18}}) (Fig. 1b).
+
+Despite these epoch-wise simple effects, there was no evidence that the magnitude of the treatment
+effect differed across epochs, for either per-event amplitude (*F*({{AB02}},{{AB03}}) = {{AB01}},
+*P* = {{AB04}}) or population event rate (*F*({{AB27}},{{AB28}}) = {{AB26}}, *P* = {{AB29}}). Thus
+the data support differential effects of SST-interneuron excitation and inhibition on CA1 event
+magnitude and frequency — hM3D predominantly affecting event magnitude and hM4D predominantly
+affecting event frequency — but do not demonstrate that either treatment effect was specific to a
+particular conditioning epoch. A negative-binomial count model of the same event counts, fit as a
+sensitivity analysis, yielded the same direction of effect for the population-rate result.
+
+The hM3D amplitude signature persisted at recall: it was still present in the post-tone window
+48 h after conditioning (1.41-fold, ⟨95% CI⟩) but was no longer detectable at one week (1.25-fold,
+⟨95% CI⟩). The one-week interval is wide and this is not evidence that the effect had resolved.
+⟨The recall sessions are not yet part of the unified framework — see §9.⟩
+
+A burst-like origin for the larger events is suggested but not established. Supra-threshold runs
+were wider in hM3D than in control (5.74 versus 4.90 frames, with per-animal means almost fully
+separated), although this difference was not resolved at the present sample size, and the fraction
+of runs containing more than one local maximum did not differ between groups (0.112 versus 0.131).
+Because temporally clustered events merge into a single run under this event definition, run width
+is the measurement that would distinguish genuine bursting from that merging. The amplitude effect
+was stable across event-detection thresholds spanning 1.5–3.0 s.d. ⟨coefficient range⟩, excluding
+a threshold artifact as its sole source. Per-event amplitude declined monotonically across the
+five conditioning trials in every group (~31% by trial 5), consistent with photobleaching; this is
+a main effect of trial and cancels in a between-group contrast.
+
+Finally, cellular analyses of this kind are conditional on the neurons that source extraction
+detects. The absence of an hM4D amplitude effect cannot exclude changes in neurons that became
+undetectable, although the matched cross-session dropout reported above makes such loss unlikely
+to account for it.
+
+### M.3 Placeholder lookup
+
+All paths are relative to `PLOTS_DIR/sp_rates_lmm/paper/tfc_amplitude_rate/`. In
+`unified_lmm_posthoc_contrasts.csv` a row is keyed by `(outcome, epoch, comparison)`; in
+`unified_lmm_interactions.csv` by `outcome`.
+
+| code | value | source |
+|---|---|---|
+| AB00 | number of rows in the inferential dataset (expect 51) | `stats/unified_lmm_mouse_epoch_values.csv` (row count) |
+| AB01 | amplitude interaction *F* | `stats/unified_lmm_interactions.csv` — `amplitude`, `F` |
+| AB02 | amplitude interaction df1 (expect 4) | same row, `df1` |
+| AB03 | amplitude interaction df2 (expect 16) | same row, `df2` |
+| AB04 | amplitude interaction *P* | same row, `p` |
+| AB05 | hM3D amplitude ratio, pre-tone | contrasts — `amplitude / pre_tone_matched / hM3D_vs_mCherry`, `ratio` |
+| AB06 | hM3D amplitude ratio, post-shock | contrasts — `amplitude / post_shock / hM3D_vs_mCherry`, `ratio` |
+| AB07 | hM3D amplitude ratio, trace | contrasts — `amplitude / trace / hM3D_vs_mCherry`, `ratio` |
+| AB08 | …its CI low | same row, `ratio_ci_low` |
+| AB09 | …its CI high | same row, `ratio_ci_high` |
+| AB10 | …its within-epoch Holm-adjusted *P* | same row, `p_holm_epoch` |
+| AB11 | hM4D amplitude ratio, trace | contrasts — `amplitude / trace / hM4D_vs_mCherry`, `ratio` |
+| AB12 | …its CI low | same row, `ratio_ci_low` |
+| AB13 | …its CI high | same row, `ratio_ci_high` |
+| AB14 | …its within-epoch Holm-adjusted *P* | same row, `p_holm_epoch` |
+| AB15 | hM3D rate ratio, trace | contrasts — `population_rate / trace / hM3D_vs_mCherry`, `ratio` |
+| AB16 | …its CI low | same row, `ratio_ci_low` |
+| AB17 | …its CI high | same row, `ratio_ci_high` |
+| AB18 | …its within-epoch Holm-adjusted *P* | same row, `p_holm_epoch` |
+| AB19 | hM4D rate ratio, trace | contrasts — `population_rate / trace / hM4D_vs_mCherry`, `ratio` |
+| AB20 | …its CI low | same row, `ratio_ci_low` |
+| AB21 | …its CI high | same row, `ratio_ci_high` |
+| AB22 | …its absolute difference (events/s/cell) | same row, `absolute_difference_events_per_s_per_cell` |
+| AB23 | …its within-epoch Holm-adjusted *P* | same row, `p_holm_epoch` |
+| AB24 | hM4D rate ratio, pre-tone | contrasts — `population_rate / pre_tone_matched / hM4D_vs_mCherry`, `ratio` |
+| AB25 | hM4D rate ratio, post-shock | contrasts — `population_rate / post_shock / hM4D_vs_mCherry`, `ratio` |
+| AB26 | rate interaction *F* | `stats/unified_lmm_interactions.csv` — `population_rate`, `F` |
+| AB27 | rate interaction df1 (expect 4) | same row, `df1` |
+| AB28 | rate interaction df2 (expect 16) | same row, `df2` |
+| AB29 | rate interaction *P* | same row, `p` |
+| AB30 | hM3D amplitude, pre-tone — within-epoch Holm-adjusted *P* | contrasts — `amplitude / pre_tone_matched / hM3D_vs_mCherry`, `p_holm_epoch` |
+| AB31 | hM3D amplitude ratio CI low, post-shock | contrasts — `amplitude / post_shock / hM3D_vs_mCherry`, `ratio_ci_low` |
+| AB32 | …its CI high | same row, `ratio_ci_high` |
+| AB33 | …its within-epoch Holm-adjusted *P* | same row, `p_holm_epoch` |
+| AB34 | hM4D rate, pre-tone — within-epoch Holm-adjusted *P* | contrasts — `population_rate / pre_tone_matched / hM4D_vs_mCherry`, `p_holm_epoch` |
+| AB35 | hM4D rate, post-shock — within-epoch Holm-adjusted *P* | contrasts — `population_rate / post_shock / hM4D_vs_mCherry`, `p_holm_epoch` |
+
+(AB05, AB06, AB24 and AB25 are the pre-tone/post-shock *ratios* already listed above; AB30 and
+AB33–AB35 are the adjusted *P* values that now accompany them in the Results.)
+
+**Quote AB33 to enough digits to be unambiguous.** The post-shock hM3D amplitude adjusted *P*
+sits just under α; write it as `0.0497`, never rounded to `0.050`, which reads as failing to
+reject. The same applies to any other `p_holm_epoch` landing within a rounding step of 0.05.
+
+**The `ABnn` namespace is the paper-facing analysis only.** Every `ABnn` *P* above is either an
+interaction *P* or a `p_holm_epoch`. The conservative six-comparison across-epoch sensitivity
+values live in a deliberately separate `SENSnn` namespace so that one placeholder can never stand
+for two multiplicity families. Quote a `SENSnn` value only in a passage explicitly labelled as the
+sensitivity correction (Part B / supplementary), never in the Results sentences above.
+
+| code | value | source |
+|---|---|---|
+| SENS01 | hM3D amplitude, trace — six-comparison Holm *P* | contrasts — `amplitude / trace / hM3D_vs_mCherry`, `p_holm_six` |
+| SENS02 | hM4D amplitude, trace — six-comparison Holm *P* | contrasts — `amplitude / trace / hM4D_vs_mCherry`, `p_holm_six` |
+| SENS03 | hM3D rate, trace — six-comparison Holm *P* | contrasts — `population_rate / trace / hM3D_vs_mCherry`, `p_holm_six` |
+| SENS04 | hM4D rate, trace — six-comparison Holm *P* | contrasts — `population_rate / trace / hM4D_vs_mCherry`, `p_holm_six` |
+| SENS05–SENS12 | the same for the pre-tone and post-shock rows of both outcomes | contrasts — corresponding row, `p_holm_six` |
+
+`stats/paper_results_summary.md` prints every one of these already formatted — the `ABnn` values
+in Part 1, the `SENSnn` values only under Part 2's *Sensitivity — conservative six-comparison Holm
+correction*; it is the fastest place to read them.
+
+Still ⟨angle-bracketed⟩ and not from this analysis:
+
+| Placeholder | Where to read it |
+|---|---|
+| Recall 95% CIs | `Test_B*/stats/post_tone_amplitude.txt` |
+| Threshold-sensitivity coefficient range | `TFC_cond/stats/threshold_sensitivity.csv` |
+| Sampler settings and convergence for the NB sensitivity model | `TFC_cond/stats/secondary_rate.txt` |
+| Imaging hardware, CNMF-E and CellReg parameters | not in this analysis |
+
+Claims that must not drift back into the draft:
+
+- **Any Part B p-value, HDI or q-value as a headline result.** The cell-level Holm *p*, the
+  Bayesian HDIs and the permutation *q*s are sensitivity output. They may be mentioned as such;
+  they may not be reported as the main test.
+- **"Tonic", "global shift", "the effect is equivalent across epochs", or "73% of the trace effect
+  is already present at baseline" as an inferential statement.** A null interaction is not
+  evidence of equivalence, and a ratio of two uncertain effect estimates is not a decomposition of
+  one effect into components.
+- **A trace-specific amplitude effect,** unless the interaction actually supports it.
+
+---
+
+# Part B — sensitivity, supplementary and historical analyses
+
+**Nothing below is a paper-facing result.** Every model, family and p-value in Part B is retained
+because it tests whether Part A's conclusions survive a different modelling choice, weighting or
+distributional assumption — and because the decision record is worth keeping. None of it supplies
+an asterisk, an interval or a P-value to any manuscript sentence or paper figure.
+
+The evidential-tier vocabulary used below applies **within Part B's internal output only**. It is
+not the manuscript's framework.
 
 ---
 
@@ -115,7 +592,8 @@ Useful quantitative content worth keeping (all from the review, none of it imple
 
 ### 2.3 Where we deliberately departed — **do not reopen these**
 
-**(a) Amplitude is PRIMARY; rate is SECONDARY. The review recommended the opposite.**
+**(a) Amplitude is the PRIMARY BIOLOGICAL endpoint; rate is secondary. The review recommended the
+opposite.**
 
 This is the single most-relitigated point. The user's scientific claim is specifically about
 **burst magnitude** — that hM3D produces larger per-event Ca²⁺ influx — not about firing more
@@ -124,12 +602,19 @@ not calibrated, which is true and is handled by relabelling the measurement (§3
 the endpoint. The user's position, verbatim: *"It should be precisely the other way around
 (amplitude is primary; frequency secondary)."*
 
-Rate is reported with a full interval in **every** panel alongside amplitude. "Secondary" means it
-carries no confirmatory alpha, not that it is de-emphasized.
+**This ordering is scientific, not statistical.** Since the unified models (§A) the two outcomes
+receive *identical* statistical treatment: the same model, the same interaction test, the same
+contrasts, and the same within-epoch Holm families (§A.4). "Secondary" means amplitude
+is the endpoint the hypothesis is about; it does not mean rate is analysed differently or shown
+less prominently. Rate is reported with a full interval in every panel alongside amplitude.
 
-There is also a technical reason the review's fix cannot be applied as stated: the rate model is
-Bayesian (LOO/HDI), and you cannot Holm-correct across a mixed Bayesian/frequentist family. Holm
-stays across a small all-frequentist family — exactly **3** tests (§4.1).
+> ⚠️ **Superseded argument, kept for the record.** This section used to add: *"the rate model is
+> Bayesian (LOO/HDI), and you cannot Holm-correct across a mixed Bayesian/frequentist family."*
+> That is still true **of the negative-binomial count model**, which remains Bayesian and remains
+> outside every frequentist correction family. It is no longer true of the **paper-facing rate
+> endpoint**, which is the Gaussian LMM on log(population rate) described in §A: it has a
+> frequentist P-value and carries a Holm-corrected contrast family of its own (§A.4). Do not
+> cite this paragraph as a reason the rate endpoint cannot carry a corrected p-value.
 
 **(b) Within-cell epoch differencing instead of `(1|mouse) + (1|mouse:cell)`.**
 
@@ -328,9 +813,14 @@ subsets exist for a mouse that **is** present.
 
 ---
 
-## 4. Statistical architecture
+## 4. Statistical architecture (internal / sensitivity)
 
-### 4.1 Confirmatory family — Holm across exactly three tests
+*The paper-facing architecture is §A: two models, two joint Wald interaction tests, twelve
+model-derived contrasts, and a primary Holm family of the two trace comparisons per outcome with
+the six-comparison correction kept as sensitivity output. Everything in §4 is the internal
+machinery that now serves as sensitivity evidence and as the decision record.*
+
+### 4.1 Internal confirmatory family — Holm across exactly three tests
 
 | key | Endpoint | Model |
 |---|---|---|
@@ -508,8 +998,8 @@ Four things about it that are easy to get wrong:
 
 - **Differencing against the reference epoch removes the epoch main effect by construction**, so
   what is left is only the interaction. A mouse with uniformly high amplitude contributes a flat
-  profile of zeros no matter how high — which is exactly why a global shift (the actual finding)
-  gives a null here and a trace-specific effect would not. Verified on synthetic data: a planted
+  profile of zeros no matter how high — which is exactly why an equal shift across epochs gives a
+  null here and an epoch-specific effect would not. Verified on synthetic data: a planted
   trace-only elevation gives p = 0.0005, a planted all-epoch elevation of the same size gives
   p = 0.61.
 - **The statistic must be SCALAR.** `mouse_label_permutation_test` accumulates into
@@ -536,9 +1026,17 @@ a special subpopulation, not that either is invalid.
 
 ---
 
-## 5. Results as of the last full run
+## 5. Sensitivity results as of the last full run
 
-**Confirmatory (Holm across 3):**
+**None of the numbers in this section is a paper-facing result.** They are the internal/sensitivity
+analyses' own output, retained as the decision record and as robustness evidence. The manuscript's
+numbers come from Part A's two models and live in
+`paper/tfc_amplitude_rate/stats/unified_lmm_posthoc_contrasts.csv` and
+`unified_lmm_interactions.csv`. Nothing here should be quoted alongside those as if it were an
+alternative primary result, and the unified models may reach different decisions — especially
+under the six-contrast Holm family — which is expected and is not a reason to prefer these.
+
+**Internal confirmatory family (Holm across 3) — historical primary:**
 
 | test | p_raw | p_holm | |
 |---|---|---|---|
@@ -546,8 +1044,11 @@ a special subpopulation, not that either is invalid.
 | `trace_vs_baseline` | 0.998 | 1.0 | — |
 | `post_shock_vs_baseline` | 0.935 | 1.0 | — |
 
-- **Primary — trace amplitude: hM3D +0.435 log units (~1.5× control), p_holm = 0.027.** hM4D null
-  (+0.092, p=0.60). The permutation p is also 0.027; quote that one.
+- **Historical primary — trace amplitude: hM3D +0.435 log units (~1.5× control), p_holm = 0.027.**
+  hM4D null (+0.092, p=0.60). The permutation p is also 0.027. ⚠️ **This is not the manuscript's
+  amplitude result and must not be quoted as one.** It is a cell-level model on a different epoch
+  definition and a different unit of aggregation, retained as a sensitivity check. The reported
+  amplitude effect is the unified mouse-level LMM contrast and its `p_holm_epoch` (§A.4).
 - **Both co-primary epoch-specificity tests are NULL.** Neither the trace window nor the
   post-shock window shows a group-specific within-cell elevation over baseline.
 
@@ -556,9 +1057,11 @@ a special subpopulation, not that either is invalid.
 
 **The co-primary nulls matter and are easy to get wrong.** An earlier version reported
 p = 1.2 × 10⁻¹¹ from a `group × epoch` model fit on 100,264 cell × trial × epoch rows with only a
-mouse random intercept — that was pure pseudoreplication. Corrected, there is **no trace-specific
-effect**: hM3D elevates amplitude **globally across all epochs**. No figure, caption, or text may
-imply a trace-specific effect. The trace interval's privileged status now rests on prior anatomy and
+mouse random intercept — that was pure pseudoreplication. Corrected, these tests give **no
+evidence that the amplitude effect differed between epochs**; the estimates are elevated at every
+epoch. That is not evidence that the effect is identical, global or tonic across them, and no
+figure, caption or text may imply a trace-specific effect either. The trace interval's privileged
+status rests on prior anatomy and
 behaviour, not on this result.
 
 **The joint `group × epoch` test (§4.6) has now run, and every component is null:**
@@ -573,16 +1076,19 @@ behaviour, not on this result.
 Paired (within-cell) values, 5,291 cells active in all three matched epochs, 3–4 of 5 trials per
 mouse. The unpaired sensitivity variant agrees for amplitude (p = 0.568).
 
-**This is now a tested claim rather than an inference from three nulls.** No component's effect is
-specific to any epoch — the dissociation is broad across the session. Any apparent left-to-right
-gradient on the decomposition grid is unsupported, and if the same drift appears in *both* DREADD
-groups it is an epoch main effect (a property of the trial structure), not a treatment effect.
+**This is a direct test of epoch dependence rather than an inference from three nulls.** For every
+component, there is **no evidence that the treatment effect differed across epochs** — which is
+not evidence that it was identical, global, tonic, or present throughout conditioning. Any
+apparent left-to-right gradient on the decomposition grid is unsupported by these tests, and if
+the same drift appears in *both* DREADD groups it is an epoch main effect (a property of the trial
+structure), not a treatment effect.
 
-The same holds for the post-shock window: with a properly-windowed 20 s definition (§3.4) it
-is *also* null, so the epoch split did not rescue a post-shock-specific effect either. The flat
-profile across every epoch is the finding. `plot_epoch_profile` and `epoch_delta_forest` exist to
-make that visible rather than asking a reader to take it on trust — a figure showing only the
-trace contrast cannot distinguish "no trace-specific effect" from "no effect".
+The same holds for the post-shock window: with a properly-windowed 20 s definition (§3.4) its
+interaction test is *also* null. `plot_epoch_profile` and `epoch_delta_forest` exist so the
+per-epoch estimates can be read side by side rather than taken on trust — a figure showing only
+the trace contrast cannot distinguish "no evidence of epoch dependence" from "no effect". Note
+that a null interaction and a resolved trace-period simple effect (§A.4) answer different
+questions and are not in conflict.
 
 **Dissociation (the main scientific story):** hM3D → amplitude; hM4D → rate. hM4D's
 rate-among-active-cells is reduced vs control while its amplitude is flat; the Bambi model agrees
@@ -619,21 +1125,28 @@ but quote the permutation or the interval, not the clustered p (§4.3).
 
 Two readings this table settles.
 
-**The double dissociation is clean.** hM3D moves amplitude and not rate; hM4D moves rate and not
+**The dissociation is clean.** hM3D moves amplitude and not rate; hM4D moves rate and not
 amplitude. Neither group's *off-target* row has an interval excluding the null in any window.
-That is the headline, and it is what the paper leads with.
+That is the shape of the result — though the manuscript's version of it is Part A's, and prefers
+"dissociation" to "double dissociation".
 
-**The hM3D amplitude effect is largely TONIC, not conditioning-related.** In log units it is
-**+0.323 at pre-tone, +0.440 at trace, +0.389 at post-shock** — so roughly **73% of the trace
-effect is already present in the baseline window, before the tone comes on**. The
-trace-specific increment is +0.117 log units against a CI half-width of ~±0.31, i.e.
-indistinguishable from zero, which is the same conclusion §4.6's joint test reaches by a
-different route. It is also consistent with the LT1→LT2 manipulation check (+0.474): one tonic
-CNO effect on event amplitude, present whenever the drug is on board.
+**Descriptive note on the epoch profile.** In log units the hM3D amplitude contrast is
+**+0.323 at pre-tone, +0.440 at trace, +0.389 at post-shock**. The apparent trace-specific
+increment is +0.117 log units against a CI half-width of ~±0.31 — indistinguishable from zero,
+consistent with §4.6's joint test being null.
 
-> **The defensible sentence is therefore "hM3D increased per-event amplitude throughout
-> conditioning", NOT "during the trace interval."** The trace interval keeps its privileged
-> status from prior anatomy and from the behavioural phenotype, not from this measurement.
+> ⚠️ **Do not turn the 0.323/0.440 ≈ 73% ratio into an inferential statement.** It is a ratio of
+> two uncertain effect estimates, not a decomposition of one effect into a baseline component and
+> a conditioning component, and it does not license "the effect is tonic". A null interaction is
+> *no evidence that the effect differed across epochs* — nothing more. Whether a genuinely
+> conditioning-naive, drug-on baseline shows the elevation is a different measurement, and it is
+> not the one made here. If the manuscript ever wants a mechanistic tonic-CNO claim, it needs that
+> measurement first.
+
+> The defensible framing is that the estimated effect was positive in all three windows and the
+> interaction gave no evidence that it differed between them. The trace interval keeps its
+> privileged status from prior anatomy and from the behavioural phenotype, not from this
+> measurement.
 
 **A star-versus-interval trap, recorded because it is live in the current figures.** On
 `tfc_amplitude_rate_by_epoch`, amplitude is starred at trace and nowhere else — yet the pre-tone
@@ -670,11 +1183,17 @@ group, both vs-control contrasts pay for that noise, and the direct contrast doe
 
 **Read §5.2 before reporting any of these.**
 
-### 5.2 What may be claimed from these results
+### 5.2 What may be claimed from these internal results
+
+*This section governs Part B's output only. Part A's twelve model contrasts are reported with
+their estimates and intervals — and, for the two primary trace comparisons per outcome, their
+Holm-adjusted P values — and need none of this machinery; that is the point of the
+simplification.*
 
 This section exists because the question *"can I report this as statistically significant?"* has
-come up once already and will again. Every output of this analysis sits in exactly one of three
-tiers, and the tier — not the p-value — determines how it may be written up.
+come up once already and will again. Every internal output sits in exactly one of three tiers, and
+the tier — not the p-value — determines how it may be written up. **None of these tiers reaches
+the manuscript: a Part B result is at most a sensitivity statement, whatever its tier.**
 
 | tier | members | how to report |
 |---|---|---|
@@ -721,9 +1240,9 @@ untouched by it.
 > ~~hM3D significantly increased the fraction of active cells during trace and post-shock.~~
 
 The cheaper route is usually to fold such a result into the dissociation that *is* supported —
-hM3D → amplitude (confirmatory, `p_holm` = 0.027) and hM4D → rate (Bayesian model, HDI excluding
-0) — and cite the fraction-active gap as *consistent with* it, which costs no alpha. If it needs to
-be a finding, declare it prospectively for the next cohort.
+hM3D → amplitude and hM4D → rate, both from the unified LMMs and their `p_holm_epoch` values
+(§A.4) — and cite the fraction-active gap as *consistent with* it, which costs no alpha. If it
+needs to be a finding, declare it prospectively for the next cohort.
 
 ---
 
@@ -815,9 +1334,9 @@ companion file that mis-describes its own figure is a false claim in a document 
 ### 6.0a Early vs late conditioning — `conditioning_phase_amplitude`
 
 Every epoch contrast in this module compares windows **within** a trial. That leaves an
-orthogonal question unanswered: the amplitude effect is a global shift across epochs (§4.6), but
-is it **tonic** — present from the first trial, a property of the drug being on board — or does it
-**develop** as conditioning proceeds? `plot_conditioning_phase_amplitude` splits the five trials
+orthogonal question unanswered: the epoch tests give no evidence that the amplitude effect
+differed between windows *within* a trial (§4.6), but is the effect present from the first trial —
+a property of the drug being on board — or does it **develop** as conditioning proceeds? `plot_conditioning_phase_amplitude` splits the five trials
 into early (1–2) and late (3–5) and draws the amplitude contrast in each, for `pre_tone` and
 `trace`.
 
@@ -841,7 +1360,7 @@ into early (1–2) and late (3–5) and draws the amplitude contrast in each, fo
   A drop between the two columns is expected and says nothing about the manipulation. The
   companion `_contrasts.md` states this where someone quoting a number will see it.
 
-Validated on synthetic data with planted ground truth: a tonic group effect gives early 1.65 /
+Validated on synthetic data with planted ground truth: a trial-invariant group effect gives early 1.65 /
 late 1.60 (overlapping), a ramping one of the same final size gives 1.12 / 1.36 (separated). The
 figure distinguishes the two hypotheses it claims to — worth keeping, since a figure that would
 show flat points either way would be worse than none.
@@ -849,9 +1368,9 @@ show flat points either way would be worse than none.
 The distribution grid is drawn by the shared `_draw_superplot_panel_grid` (§6), the same
 primitive the paper lane's figure uses; only the `_GridPanel` contents differ.
 
-**The observed result belongs here once the run reports it.** §5 establishes that ~73% of the
-trace amplitude effect is already present at the pre-tone baseline, which is a statement about
-*epochs within a trial*. Whether that baseline elevation is there from trial 1 is the separate
+**The observed result belongs here once the run reports it.** §5 records that the amplitude
+contrast is comparable in the pre-tone, trace and post-shock windows, which is a statement about
+*epochs within a trial*. Whether the pre-tone elevation is there from trial 1 is the separate
 question this figure answers, and it is not yet filled in.
 
 `CONDITIONING_PHASES` uses **1-based trial numbers**, since that is how the protocol is
@@ -869,43 +1388,59 @@ the point directly: once the original structural problems (pseudoreplication, ~2
 ANOVAs, shifting units of analysis) were fixed, further inferential machinery stopped buying
 anything. *There is no prize for constructing the most elaborate possible inferential framework.*
 
-So there is a second, deliberately small output folder holding a manuscript-sized re-cut:
+The paper lane is the answer to that. **It is not a re-cut of the internal output any more — it is
+where the paper-facing analysis is fit** (Part A, §A). Everything it draws comes from the two
+unified mouse-level models and their contrast table.
 
 | | |
 |---|---|
 | Entry point | `render_paper_tfc_amplitude_rate(...)`, last call in `run_sp_rates_lmm` |
-| Figures | `tfc_amplitude_rate_by_epoch` (distributions), `tfc_decomposition_forest` (effect estimates) |
-| Numbers | `stats/paper_results_summary.md` — everything a Results paragraph needs, in one file |
+| Models | `build_mouse_epoch_unified_table` → `fit_unified_group_epoch_model` ×2 → `unified_posthoc_contrasts` |
+| Figures | `tfc_amplitude_rate_by_epoch` (distributions + stars), `tfc_decomposition_forest` (the same contrasts as estimates) |
+| Numbers | `stats/unified_lmm_*.csv/.txt`, and `stats/paper_results_summary.md` (Part 1 = paper, Part 2 = sensitivity) |
 | METHODS | `sp_rates_lmm_paper_methods.md`, alongside the full internal template |
 
-**It computes nothing new.** Every number is an object the `TFC_cond` lane already produced. The
-one addition, `summarize_rate_group_epoch_contrasts`, reformats posterior draws from the
-already-fitted NB model into per-epoch rate ratios — the quantity a Results section quotes, which
-the raw interaction coefficients are not. No test is added, no epoch is added, and neither
-multiplicity family changes size.
+It also reformats two things it did not fit: `summarize_rate_group_epoch_contrasts` turns the
+already-fitted NB model's posterior draws into per-epoch rate ratios, and the manipulation-check
+contrasts are recomputed for the summary. Both appear only under Part 2 of the summary.
 
-Four decisions it embodies, so they are not re-argued:
+Decisions it embodies, so they are not re-argued:
 
-- **Three components, not five.** `fraction_active`, `population_rate`, `amplitude`
-  (`PAPER_COMPONENT_KEYS`). `rate_active` and the total amplitude-rate are diagnostics of the
-  identity, not separate biological claims; they stay in `TFC_cond/`.
-- **No Exc/Inh contrasts.** `include_exc_vs_inh=False`. §5.2 already forbids reporting those 16
-  tier-3 intervals as findings; the defensible sentence is that the two DREADDs show divergent
-  recruitment profiles while neither differs conclusively from control.
+- **Two rows, not three or five.** `population_rate` and `amplitude` (`PAPER_COMPONENT_KEYS`).
+  `fraction_active` was dropped when the unified models arrived: it has no unified mouse-level
+  model, so including it would put a second, differently derived inferential source on a paper
+  figure — the exact heterogeneity this design removed. `rate_active` and the total amplitude-rate
+  are diagnostics of the identity, not separate biological claims. All three stay in `TFC_cond/`.
+- **No Exc/Inh contrasts.** `include_exc_vs_inh=False`, and `_precomputed_stat_fn` returns NaN for
+  that pair so no bracket can be drawn. §5.2 explains why those intervals are exploratory; the
+  defensible sentence is that the two DREADDs show divergent recruitment profiles while neither is
+  claimed to differ from the other.
 - **Three columns, sharing one y-scale per row.** `pre_tone_matched | trace | post_shock`,
-  exposure-matched trials. The scientific claim is that the amplitude elevation is a *global*
-  shift (§4.6, §5), and independently autoscaled columns would let a reader read an epoch
-  difference straight off the axis limits. `sharey='row'` is load-bearing here for the same
-  reason `sharex='row'` is on the grid.
-- **Stars on the distributions, none on the forest.** Conventional, and it is what a normal paper
-  does. Epoch specificity still gets exactly one number per component, on the forest's row label.
+  exposure-matched trials, both rows from the same frame. Independently autoscaled columns would
+  let a reader take an epoch difference straight off the axis limits; `sharey='row'` makes that
+  comparison honest. Whether the effect actually differs between epochs is not read off the
+  columns at all — it is the interaction, on the forest's row labels.
+- **Stars on the distributions, none on the forest.** Conventional, and what a normal paper does.
+  Both come from the same twelve rows of `unified_lmm_posthoc_contrasts.csv`: the distribution
+  figure shows the decision, the forest shows the effect size and what its interval still admits.
+- **Natural-scale display on both rows.** The models are fit on logs; the figure plots raw per-cell
+  values on a log axis with the marker at `exp(fitted response)`. Cells and markers must never sit
+  on mismatched scales — see `_PAPER_ROW_DISPLAY`.
 
-`plot_decomposition_grid` gained `components=`, `include_exc_vs_inh=` and `epoch_labels=`, all
-defaulting to today's behaviour — the paper forest is that same function, not a second
-implementation of it.
+`plot_decomposition_grid` gained `contrast_payloads=`, `interaction_note=`, `subtitle=`,
+`contrasts_note=` and `row_height=` alongside the earlier `components=`/`include_exc_vs_inh=`/
+`epoch_labels=`, all defaulting to the internal behaviour — the paper forest is that same function
+given a different set of contrasts, not a second implementation of it. Likewise
+`_draw_cell_superplot_panel` gained `stat_fn=`/`mouse_means_override=`, and `_GridPanel` three
+optional fields.
 
-`docs/sp_rates_lmm.md` stays the internal record. **Do not try to make the manuscript resemble
-it.** Its value is that a reviewer's question already has an answer.
+**Nothing on a paper figure computes its own statistic.** `_precomputed_stat_fn` ignores the data
+arrays it is handed and returns the two looked-up adjusted p-values;
+`_assert_markers_match_model` hard-fails if a drawn marker is not the corresponding row of
+`unified_lmm_mouse_epoch_values.csv`.
+
+`docs/sp_rates_lmm.md`'s Part B stays the internal record. **Do not try to make the manuscript
+resemble it.** Its value is that a reviewer's question already has an answer.
 
 ---
 
@@ -937,6 +1472,10 @@ Everything below was found and fixed. Listed so nobody re-fixes, re-introduces, 
 | 20 | Every permutation test shuffled all 17 labels, so a two-group contrast was tested against a null containing the *third* group's variance — and mCherry is this dataset's most variable group | `restrict_to_groups` added (§4.3). Not a bug: the global null is a legitimate hypothesis and stays the default so no reported number moves. But it is not the pairwise null, and on the trace fraction-active hM3D-vs-hM4D contrast the two give p = 0.099 vs 0.027. Run-structure output now prints both. |
 | 21 | **Per-panel bracket headroom COMPOUNDS under `sharey='row'`.** `annotate_pairwise_brackets` reserves the top 20% of its own axes for the bracket stack; on a shared-y row every panel reserves again on the limits the previous one already grew, so three panels leave `0.8³ ≈ 51%` of the row to the data and the clouds sit squashed in the bottom half against a band of empty axis | `_draw_superplot_panel_grid` resets each row to its own pooled data range and calls `reserve_top_fraction` **once**, after the whole row is drawn. Brackets are positioned in axes fractions, so they follow the new limits rather than being orphaned by them. Headroom is reserved only when `annotate='stats'` — a star-free grid was otherwise leaving a fifth of every panel empty for annotations that do not exist |
 | 22 | Column titles on a bracket-annotated grid were drawn **through** the topmost asterisks — both the title and the bracket stack live above the axes, and `set_title`'s default pad is zero | Top-row titles are re-set with `pad=26` after the panel is drawn. Cosmetic, but it made the first real render of the paper figure unreadable at exactly the point a reader looks first |
+| 23 | The paper figure's two rows were annotated from three unrelated frameworks | Amplitude had a cell-level frequentist LMM, rate a Bayesian NB model with HDIs, the asterisks came from a per-panel Welch/Holm test, the intervals from equal-mouse-weighted Welch CIs, and epoch specificity from a permutation statistic. No number on the figure traced to a model. Replaced by the unified analysis (Part A): one mouse-level model per outcome, one interaction test each, twelve planned contrasts, and `unified_lmm_posthoc_contrasts.csv` as the only source of a paper estimate, interval, P or asterisk. All the old machinery is retained as sensitivity output. |
+| 24 | Post-hoc multiplicity on the paper figure was per-panel and of a different kind from the models | Made model-derived: Holm across model contrasts rather than per-panel Welch tests, with the conservative six-comparison across-epoch correction retained as `p_holm_six` sensitivity output. Decisions may differ from the old per-panel stars; that is the correction working, not a regression. *(This entry is HISTORICAL in one respect: the intermediate step it introduced — a privileged trace-only primary family `p_holm_trace` / `is_primary_trace_contrast` — was itself superseded by row 26. Those columns no longer exist.)* |
+| 25 | The amplitude row plotted `log_amplitude` cells against a `mouse_mean_log_amplitude` marker on a linear axis | Both rows now display natural-scale values on a log axis, with the marker at `exp(fitted response)` — the geometric mean amplitude, and the population rate. `_assert_markers_match_model` hard-fails if a drawn marker is not the model's own value. |
+| 26 | The trace-only primary family made six visually equivalent panels statistically asymmetric | Only the trace column carried asterisks, pre-tone and post-shock were described as "not tests", and the paper Methods needed a long multiplicity-philosophy passage to justify it. Replaced by the symmetric rule: within EACH epoch the two treatment-vs-control comparisons are Holm-corrected together (`p_holm_epoch`), so all six panels run the same procedure and the Methods reads like an ordinary analysis. `p_holm_trace` and `is_primary_trace_contrast` were removed outright. **No model, contrast, raw P-value or interaction test changed** — only the grouping of the corrections and what the figure is allowed to annotate. The trace interval's biological importance is now argued in the Introduction/Results rather than encoded in the multiplicity structure. |
 | — | *Not a correction, recorded so it is not re-litigated:* an earlier draft of §6 rule 5 and the METHODS claimed the direct DREADD-vs-DREADD contrast is "generally wider" than a vs-control one. **That is wrong.** Its variance is `Va/na + Vb/nb` against `Va/na + Vc/nc` — it drops the control's contribution, so it is wider or narrower depending on which group is noisiest. Here the control is noisiest and the direct contrast is often the tightest of the three. |
 
 ---
@@ -1006,8 +1545,21 @@ distribution figures and the sensitivity archive, and the grid is what carries t
 Also done: the direct hM3D-vs-hM4D contrast (§6 rule 5), the `restrict_to_groups` pairwise null
 (§4.3), and the evidential-tier reporting standard (§5.2).
 
-Done in the most recent round, all of it **additive** — the confirmatory family is still exactly
-three and the secondary family still 13: the **paper lane** (§6.1) with its two figures,
+Done in the most recent round: the **unified paper-facing analysis** (Part A) — two mouse-level
+models, two joint Wald interaction tests, twelve model-derived contrasts, model diagnostics,
+synthetic verification, and the figure/forest rewiring that makes
+`unified_lmm_posthoc_contrasts.csv` the only source of a paper number. The internal families are
+untouched (still exactly three and 13 members) and now serve as sensitivity evidence.
+
+Done in the most recent round on top of that: the **within-epoch post-hoc families** (§A.4). The
+models, matched trials, estimates, raw P-values and interaction tests are unchanged; within each
+epoch the two treatment-vs-control comparisons are Holm-corrected together (`p_holm_epoch`), the
+six-comparison across-epoch correction is retained as `p_holm_six` sensitivity output reported
+only under Part 2 of `paper_results_summary.md`, and all six panels of the distribution figure are
+annotated by that one procedure. This replaced an intermediate trace-only primary family
+(`p_holm_trace`), which is gone (§7 row 26).
+
+Done in an earlier round, all of it **additive**: the **paper lane** (§6.1) with its two figures,
 `paper_results_summary.md` and its own short METHODS template;
 `summarize_rate_group_epoch_contrasts`, which turns the NB model's raw interaction coefficients
 into per-epoch rate ratios with HDIs (a reformatting of an existing fit, not a new test);
@@ -1017,12 +1569,13 @@ defaulting to the previous behaviour; the **early-vs-late conditioning figure** 
 
 **Statistical:**
 
-- **The tonic-versus-conditioning-induced question is now half-answered and should be closed
-  out.** §5 shows ~73% of the trace amplitude effect sits in the pre-tone baseline; §6.0a's
-  figure asks whether that baseline elevation is present from trial 1. Fill the result into
-  §6.0a when the run reports it. If it *is* flat across trials, the honest framing of the whole
-  cellular story is a tonic drug effect, and the manuscript should say so rather than leaving a
-  reader to infer a conditioning-linked one from the trace figure.
+- **The develops-with-conditioning question is half-answered and should be closed out.** §5
+  records comparable amplitude contrasts in all three within-trial windows; §6.0a's figure asks
+  whether the pre-tone elevation is present from trial 1. Fill the result into §6.0a when the run
+  reports it. Note what it would and would not license: a flat early-vs-late profile is evidence
+  that the effect does not develop over conditioning, **not** proof of a tonic drug effect — that
+  claim needs a conditioning-naive, drug-on baseline, which this design does not provide. Do not
+  write "tonic" into the manuscript on the strength of these two analyses.
 
 - **Decide whether the four epoch-specificity tests should all stay in the BH family.** They are
   strongly dependent (one decomposition identity over overlapping cells), and adding them took the
@@ -1072,7 +1625,7 @@ posterior-predictive and zero-inflation diagnostics; peri-shock analysis.
 | File | Role |
 |---|---|
 | [caban/sp_rates_lmm.py](../caban/sp_rates_lmm.py) | Everything: tables, models, permutations, all figures, orchestrator |
-| [caban/single_unit_common.py](../caban/single_unit_common.py) | `fit_mixed_model`, `joint_wald_test`, `draw_superplot_triplet`, `ecdf_panel`, `fdr_correct` |
+| [caban/single_unit_common.py](../caban/single_unit_common.py) | `fit_mixed_model`, `joint_wald_test`, `linear_contrast_test`, `holm_correct`, `fdr_correct`, `draw_superplot_triplet`, `ecdf_panel` |
 | [caban/utilities.py](../caban/utilities.py) | `find_event_runs_ca{,_S}`, `find_spikes_ca{,_S}`, `barplot_annotate_brackets` |
 | [caban/epoch_analysis.py](../caban/epoch_analysis.py) | `get_epoch_frames`, `get_testb_epoch_frames`, `TRACE_MATCHED_WINDOW_S`, `POST_SHOCK_LATE_ONSET_S`. `EPOCH_NAMES` here is the **PV/RDM pipeline's** epoch set, not a list of every window `get_epoch_frames` supports — `post_shock_late` is deliberately absent from it, since adding it would put a new row and column on every existing RDM figure |
 | [caban/analysis.py](../caban/analysis.py) | `_draw_violin_triplet`, `do_pairwise_holm_plot` |
@@ -1083,211 +1636,17 @@ posterior-predictive and zero-inflation diagnostics; peri-shock analysis.
 | [analysis_methods_templates/sp_rates_lmm_paper_methods.md](../analysis_methods_templates/sp_rates_lmm_paper_methods.md) | Short paper-facing METHODS text, copied into the paper output dir (§6.1) |
 | [analysis_methods_templates/sp_rates_lmm_figure_guide.md](../analysis_methods_templates/sp_rates_lmm_figure_guide.md) | Per-figure reading guide |
 
----
+Paper-lane outputs (`PLOTS_DIR/sp_rates_lmm/paper/tfc_amplitude_rate/`):
 
-## 11. Manuscript draft (Nature style)
-
-**This is the single canonical draft.** The figure guide's Part 2 used to hold a second copy; it
-now points here, because the two had already diverged (it still quoted `p_holm` = 0.018 from the
-retired two-test family — §1). Keep it that way: one draft, one place.
-
-Register is Nature's — past tense, effect size with its interval before any *P*, the mouse as the
-stated unit of inference. Numbers are keyed to the run recorded in §5 and to
-`paper/tfc_amplitude_rate/`. **Anything in ⟨angle brackets⟩ is a placeholder that must be read off
-this run's own `stats/` before submission**; §11.3 lists them.
-
-Sections that are not this analysis' to write — animals, surgery, viral constructs, CNO dosing,
-behavioural apparatus, miniscope hardware, source extraction parameters — are marked ⟨…⟩ rather
-than invented here.
-
-### 11.1 Methods
-
-**Calcium imaging and source extraction.** ⟨Miniscope model, lens, FOV, illumination, and CNMF-E
-parameters.⟩ Imaging was performed at 20 Hz. Regions of interest and their deconvolved activity
-traces were extracted with CNMF-E, and cells were registered across sessions with ⟨CellReg
-version and parameters⟩. Cross-session correspondence was taken from the registration table
-directly; no analysis matched cells by within-session identifier across sessions.
-
-**Calcium event detection.** Events were detected on the deconvolved spike-inference trace (*S*)
-of each cell. A single event was defined as one contiguous run of *S* above a threshold of 2 s.d.,
-and its amplitude as the integral of *S* over that run. This definition departs from the more
-common one — one event per local maximum, quantified by the value at its peak frame — for a
-specific reason: summed over a window, the peak-based quantity is exactly the product of event
-rate and mean peak height, and therefore cannot distinguish larger events from more frequent ones.
-Under the run definition, temporally clustered peaks merge into a single wider event of larger
-integral (median run length 4 frames; 11.7% of runs were confined to a single frame), so event
-counts are not interchangeable between the two definitions and were recomputed under this one
-throughout.
-
-Cells with no detected events were retained in every rate and fraction-active denominator, so that
-a manipulation silencing cells appears as a reduced population rate. Per-event amplitude is
-undefined for such cells, which are therefore necessarily absent from amplitude analyses; this is
-a definitional exclusion rather than missing data.
-
-**Behavioural epochs.** Trial timing was measured per animal from each recording rather than taken
-from nominal protocol constants, as recordings were ragged and trial counts varied. Three
-duration-matched 20 s windows were used: a pre-tone baseline ending at tone onset, the trace
-interval (tone offset to shock onset), and a post-shock window beginning at shock offset. A 35 s
-pre-tone window was used as the reference for amplitude contrasts, which are per-event and
-therefore insensitive to window duration. The 2 s shock was excluded from all models: at the
-observed event rates, expected counts in a 2 s window are dominated by counting noise (P(zero
-events per cell) 67–91% at 0.05–0.2 Hz).
-
-Because the trace interval on the first trial was 15 s rather than 20 s, analyses of
-duration-sensitive quantities — event rate and fraction of cells active — were restricted to
-(animal, trial) pairs in which every window was present at its full 20 s, determined from each
-window's measured exposure rather than from a trial index.
-
-**Statistical analysis.** The animal was the unit of inference throughout (*n* = 5 hM3D, 6 hM4D, 6
-mCherry). Cells and trials contributed precision, not replication, and no analysis treated cells
-as independent experimental units. Figures showing per-cell distributions display them for
-description only; all statistics were computed from per-animal values (SuperPlot convention, Lord
-et al., *J. Cell Biol.* 219, e202001064, 2020).
-
-Per-event amplitude was analysed with linear mixed-effects models on log amplitude, with treatment
-group as a fixed effect and animal as a random intercept, falling back to animal-clustered
-ordinary least squares where the mixed model failed to converge or converged to a boundary
-solution. Group effects were assessed by joint Wald tests with animal-level denominator degrees of
-freedom (*df*₂ = *n*<sub>animals</sub> − 1); using an observation-level denominator would treat
-each cell as independent and is not appropriate for cells nested within 17 animals.
-Treatment-versus-control contrasts are reported as equal-animal-weighted estimates with 95%
-confidence intervals, rather than pooled cell-weighted means, because the number of contributing
-cells is itself group-correlated and activity-dependent.
-
-Because cluster-robust standard errors are anti-conservative with 17 clusters, every reported
-*P* value was corroborated by a mouse-label permutation test in which treatment labels were
-shuffled across animals — never across cells — and the contrast recomputed (20,000 draws).
-
-A confirmatory family of three prespecified tests was corrected by the Holm procedure at
-α = 0.05: trace-interval amplitude, and the within-cell elevation of the trace and post-shock
-windows over baseline. Epoch contrasts were formed within cell — each cell's mean log amplitude in
-one window minus its own baseline — which removes the cell-level random effect by construction and
-converts an epoch × group interaction into a group main effect on a per-cell contrast. All
-remaining frequentist tests formed a declared secondary family controlled by the
-Benjamini–Hochberg procedure at α = 0.05. Analyses in neither family are reported as effect
-estimates with intervals and are not described as significant.
-
-Whether the group effect differed between windows was addressed by a single joint group × epoch
-test per component, rather than by comparing per-window *P* values against one another, which is
-not a test of that difference. Each animal retained its complete profile across the three matched
-windows while treatment labels were permuted; the statistic was the standardized sum of squared
-differences-of-differences against control, so that a uniform elevation across windows contributes
-zero by construction.
-
-Event counts were analysed with a negative-binomial mixed-effects model at the animal × trial ×
-window level, with a log(total cell-seconds) exposure offset, random intercepts for animal and for
-animal × trial, and the dispersion parameter estimated jointly with the remaining parameters
-(Bambi/PyMC; ⟨draws, tuning, chains, convergence diagnostics⟩). The animal × trial intercept was
-included because the windows of a single trial are consecutive parts of one behavioural episode
-rather than independent replicates. Rate results are reported as posterior rate ratios with
-highest-density intervals; this endpoint was secondary and carried no confirmatory α.
-
-Locomotion and freezing were not covaried in the primary estimand: both are post-treatment
-variables, and conditioning on them would remove part of the effect being estimated. Whether the
-group difference changed as freezing developed was instead tested directly as a group × trial
-interaction. One cross-registration cell set was primary; the others were sensitivity analyses,
-not replications.
-
-This was a locked confirmatory reanalysis rather than a prospective preregistration: the endpoint
-was chosen after prior inspection of this dataset, and is confirmatory in the sense that the family
-was fixed before the reported models were fit. With *n* = 5/6/6 animals the design has 80% power
-only for very large standardized effects (Cohen's *d* ≈ 1.8–2.0 pairwise), so every null is
-reported with its interval and with what that interval still admits, and none is presented as
-evidence of absence.
-
-**Code availability.** Analysis code is available at ⟨repository/DOI⟩.
-
-### 11.2 Results
-
-**Chemogenetic modulation of SST interneurons dissociates the size and the frequency of CA1
-pyramidal calcium events.**
-
-To ask how SST-interneuron modulation reshapes dorsal CA1 pyramidal output during trace fear
-conditioning, we detected calcium events as contiguous supra-threshold runs of the deconvolved
-signal and quantified each by its integral rather than its peak, so that a wider event is
-distinguishable from a taller one. Because summed event amplitude per second is the exact product
-of event rate and per-event amplitude, we analysed the two factors separately and report them
-together (Fig. 1). All statistics treat the mouse as the unit of inference (*n* = 5 hM3D, 6 hM4D,
-6 mCherry).
-
-The manipulation was effective. Within cells tracked across two same-day linear-track sessions
-recorded before and after CNO, hM3D increased per-event amplitude relative to control
-(difference-in-differences +0.47 log units, *P* = 5 × 10⁻⁷); control cells declined by 0.27 log
-units across the session pair, consistent with photobleaching, whereas hM3D cells rose by 0.20.
-The fraction of cells failing to re-register between the two sessions did not differ between hM4D
-and control (77.1% versus 76.8%; hM3D 81.7%), arguing against activity-dependent loss of silenced
-cells as an explanation for the hM4D results below.
-
-During the trace interval of conditioning, hM3D mice showed larger individual calcium events than
-controls (1.55-fold, 95% CI 1.14–2.12; joint Wald *F*(2,16) = 6.44, *P* = 0.0089; Holm-corrected
-across the three confirmatory tests, *P* = 0.027; mouse-label permutation *P* = 0.027), whereas
-hM4D did not (1.18-fold, 95% CI 0.86–1.63) (Fig. 1a). The hM4D interval does not exclude effects
-up to +63%, so this is a limit on the observable effect rather than a demonstrated absence.
-
-**This amplitude increase was tonic rather than specific to the trace interval.** The same
-elevation was present in the pre-tone baseline window (1.38-fold, 95% CI 1.02–1.86) and after the
-shock (1.47-fold, 95% CI 1.00–2.17) (Fig. 1a): in log units, +0.323 at baseline against +0.440
-during trace, so roughly three-quarters of the trace-period effect was already present before tone
-onset. Referencing each cell to its own pre-tone baseline, the group difference in
-trace-minus-baseline amplitude was null (*F*(2,16) = 0.002, *P* = 0.998), as was the equivalent
-post-shock contrast (*P* = 0.935). A single joint group × epoch test — which asks directly whether
-the group effect changes across windows, rather than comparing per-window *P* values — was null for
-per-event amplitude (permutation *P* = 0.266, *q* = 0.72; 5,291 cells active in all three matched
-windows) and for every other component of the decomposition (*P* = 0.39–0.64, *q* ≥ 0.72). The
-enlargement of calcium events therefore reflects a sustained change in pyramidal output across the
-conditioning session, not a state-specific response to the trace interval.
-
-Decomposing population activity into its exact factors localized where each manipulation acted
-(Fig. 1b, Fig. 2). Neither DREADD changed the fraction of cells recruited during the trace
-interval (hM3D +0.047, 95% CI −0.094 to +0.188; hM4D −0.095, 95% CI −0.236 to +0.046). hM4D instead
-reduced the population event rate (0.51-fold, 95% CI 0.33–0.76; −0.039 events s⁻¹, 95% CI −0.070 to
-−0.008), an effect the secondary negative-binomial count model reproduced independently
-(coefficient −0.278, 94% highest-density interval −0.527 to −0.047), while leaving per-event
-amplitude unchanged. hM3D showed the converse profile: enlarged events with no resolved rate
-change (0.78-fold, 95% CI 0.53–1.15). Excitatory and inhibitory modulation of SST interneurons
-therefore acted on orthogonal factors of the same quantity — hM4D reduced how many events occurred
-without altering their size, hM3D enlarged events without altering how many occurred. hM3D and
-hM4D showed divergent recruitment profiles across the session, although neither differed
-conclusively from control in the fraction of cells active.
-
-The hM3D amplitude signature persisted at recall: it was still present in the post-tone window
-48 h after conditioning (1.41-fold, ⟨95% CI⟩, *P* < 0.001, *q* = ⟨…⟩) but was no longer detectable
-at one week (1.25-fold, ⟨95% CI⟩, *P* = 0.26). The one-week interval is wide and this is not
-evidence that the effect had resolved.
-
-A burst-like origin for the larger events is suggested but not established. Supra-threshold runs
-were wider in hM3D than in control (5.74 versus 4.90 frames, with per-animal means almost fully
-separated), although this difference was not significant (permutation *P* = 0.096, *q* = ⟨…⟩), and
-the fraction of runs containing more than one local maximum did not differ between groups (0.112
-versus 0.131). Because temporally clustered events merge into a single run under this event
-definition, run width is the measurement that would distinguish genuine bursting from that merging,
-and at the present sample size it does not do so decisively. The amplitude effect was stable across
-event-detection thresholds spanning 1.5–3.0 s.d. ⟨coefficient range⟩, excluding a threshold
-artifact as its sole source. Per-event amplitude declined monotonically across the five
-conditioning trials in every group (~31% by trial 5), consistent with photobleaching; this is a
-main effect of trial and cancels in a between-group contrast ⟨group × trial interaction q⟩.
-
-Finally, cellular analyses of this kind are conditional on the neurons that source extraction
-detects. The absence of an hM4D amplitude effect cannot exclude changes in neurons that became
-undetectable, although the matched cross-session dropout reported above makes such loss unlikely to
-account for it.
-
-### 11.3 Placeholders to resolve before submission
-
-Every ⟨…⟩ above, plus:
-
-| Placeholder | Where to read it |
+| File | Role |
 |---|---|
-| Recall 95% CIs, Test_B `q` | `Test_B*/stats/post_tone_amplitude.txt`, `TFC_cond/stats/secondary_fdr_family.csv` |
-| Run-width `q`, group × trial `q` | `TFC_cond/stats/secondary_fdr_family.csv` |
-| Threshold-sensitivity coefficient range | `TFC_cond/stats/threshold_sensitivity.csv` |
-| p90 / ECDF tail statistics, if used | `TFC_cond/stats/secondary_permutation_tests.txt` |
-| Sampler settings and convergence | `TFC_cond/stats/secondary_rate.txt` |
-| Imaging hardware, CNMF-E and CellReg parameters | not in this analysis |
-| **Early-vs-late conditioning result** | `TFC_cond/conditioning_phase_amplitude_forest.png` — §6.0a. **Not yet run.** If the elevation is flat across trials, say so here: it converts "tonic across the session" into "tonic from the first trial", which is a stronger and cleaner statement |
-
-Two claims that must not drift back in, both of which appeared in earlier drafts:
-
-- **`p_holm` = 0.018.** That was the retired two-test family (§1). It is 0.027.
-- **A trace-specific amplitude effect.** Ruled out by three independent routes (§5). No sentence,
-  caption or figure may imply it.
+| `stats/unified_lmm_mouse_epoch_values.csv` | the 51-row inferential dataset; what the figures' mouse markers plot |
+| `stats/unified_lmm_posthoc_contrasts.csv` | **authoritative** — every paper estimate, interval, P and asterisk |
+| `stats/unified_lmm_interactions.csv` | the two joint group × epoch Wald tests |
+| `stats/unified_lmm_{amplitude,rate}_summary.txt` | full model summaries |
+| `stats/unified_lmm_diagnostics.{png,txt}`, `unified_lmm_residuals.csv`, `unified_lmm_influence.csv` | descriptive diagnostics (§A.6) |
+| `stats/unified_lmm_synthetic_verification.txt` | the two planted-effect regression designs |
+| `stats/paper_results_summary.md` | Part 1 = paper numbers, Part 2 = sensitivity |
+| `stats/rate_group_epoch_contrasts.csv` | the NB sensitivity model's rate ratios + HDIs |
+| `tfc_amplitude_rate_by_epoch.{png,svg}` + `_contrasts.md` | the two-row distribution figure |
+| `tfc_decomposition_forest.{png,svg}` + `_contrasts.md` | the same contrasts as estimates |

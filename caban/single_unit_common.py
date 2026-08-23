@@ -81,6 +81,30 @@ def fdr_correct(pvalues, alpha=0.05):
     return reject, qvals
 
 
+def holm_correct(pvalues, alpha=0.05):
+    """Holm-Bonferroni step-down. Returns (reject_bool_array, adjusted_pvalues), in the same
+    shape and with the same NaN handling as :func:`fdr_correct` -- a NaN p is left NaN, is never
+    marked significant, and does not count towards the family size.
+
+    Holm rather than BH where the family is a small set of PLANNED comparisons whose members are
+    each meant to support a claim on their own (strong FWER control), against BH's role for a
+    larger exploratory family where a controlled proportion of false positives is acceptable.
+    Both live here so no caller re-implements either correction; see
+    caban.sp_rates_lmm.unified_posthoc_contrasts for the planned-contrast family this exists for
+    and caban.sp_rates_lmm.build_secondary_fdr_table for the BH one.
+    """
+    pvalues = np.asarray(pvalues, dtype=float)
+    reject = np.zeros(pvalues.shape, dtype=bool)
+    padj = np.full(pvalues.shape, np.nan)
+    finite = np.isfinite(pvalues)
+    if finite.sum() == 0:
+        return reject, padj
+    rej, p_corrected, _, _ = multipletests(pvalues[finite], alpha=alpha, method='holm')
+    reject[finite] = rej
+    padj[finite] = p_corrected
+    return reject, padj
+
+
 def get_mapping_signal(session, mapping, signal_attr='C', with_crossreg=None):
     """Activity matrix (cells x frames) for a mapping's cell subset.
 
@@ -437,7 +461,13 @@ def format_contrast_ci_lines(contrasts, reference, unit='', group_labels=None, d
     the same group always occupies the same line across panels.
 
     Split out from annotate_contrast_ci so the identical wording can be written into the stats
-    .txt files without a second formatter drifting away from what the figures say."""
+    .txt files without a second formatter drifting away from what the figures say.
+
+    A contrast dict carrying a 'p_holm' key (as the model-derived ones in
+    caban.sp_rates_lmm._unified_contrast_payloads do) additionally gets its adjusted p-value on
+    the ratio line, so a model-derived contrast is never quoted without the decision that goes
+    with it. Contrasts without one -- the equal-mouse-weighted Welch intervals, which are in no
+    multiplicity family -- are unchanged."""
     labels = GROUP_LABELS if group_labels is None else group_labels
     ref_label = labels.get(reference, reference)
     unit_suffix = f' {unit}' if unit else ''
@@ -448,13 +478,15 @@ def format_contrast_ci_lines(contrasts, reference, unit='', group_labels=None, d
         diff_unit = ' log units' if c['unit_is_log'] else unit_suffix
         diff_text = (f"{diff_fmt.format(c['diff'])} "
                      f"[{diff_fmt.format(c['diff_lo'])}, {diff_fmt.format(c['diff_hi'])}]{diff_unit}")
+        p_text = ('' if c.get('p_holm') is None
+                  else f", Holm-adjusted P = {c['p_holm']:.4g}")
         if c['ratio'] is None:
             # No ratio (a bounded proportion, or a group mean at/below zero): the difference line
             # carries the group label itself, so a group is never rendered as a bare unlabelled row.
-            lines.append(f'{label}/{ref_label} diff {diff_text}')
+            lines.append(f'{label}/{ref_label} diff {diff_text}{p_text}')
         else:
             lines.append(f"{label}/{ref_label} {c['ratio']:.2f}x "
-                         f"[{c['ratio_lo']:.2f}, {c['ratio_hi']:.2f}]")
+                         f"[{c['ratio_lo']:.2f}, {c['ratio_hi']:.2f}]{p_text}")
             lines.append(f'  diff {diff_text}')
     return lines
 
@@ -832,6 +864,82 @@ def fit_group_mixed_model(df, value_col='value', reference='mCherry'):
     return text, method
 
 
+def _fe_params_and_cov(result, n_fixed=None):
+    """(fixed-effect names, coefficient vector, fixed-effect covariance block, n_fixed) for a
+    fitted MixedLM result OR a cluster-robust OLS result -- the two things
+    :func:`fit_mixed_model` can return.
+
+    The two differ in exactly two places: MixedLM exposes its fixed effects on ``.fe_params``
+    while OLS puts everything on ``.params``, and MixedLM's ``cov_params()`` appends the
+    variance-component parameters after the fixed effects. Both are handled here once so that
+    :func:`joint_wald_test` and :func:`linear_contrast_test` cannot drift apart in how they read
+    a model -- an omnibus test and its own post-hoc contrasts disagreeing about which
+    coefficients they are reading would be a silent, near-undebuggable error.
+    """
+    names = (list(result.fe_params.index) if hasattr(result, 'fe_params')
+             else list(result.params.index))
+    if n_fixed is None:
+        n_fixed = len(names)
+    beta = (np.asarray(result.fe_params) if hasattr(result, 'fe_params')
+            else np.asarray(result.params)).reshape(-1)[:n_fixed]
+    cov_full = np.asarray(result.cov_params())
+    cov_fe = cov_full[:n_fixed, :n_fixed] if cov_full.shape[0] != n_fixed else cov_full
+    return names, beta, cov_fe, n_fixed
+
+
+def linear_contrast_test(result, weights, n_groups, n_fixed=None, alpha=0.05):
+    """Two-sided t-test of one linear combination of fixed effects, ``sum_k w_k * beta_k = 0``.
+
+    The single-contrast counterpart of :func:`joint_wald_test`, sharing its parameter extraction
+    (:func:`_fe_params_and_cov`) and -- deliberately -- its denominator degrees of freedom. This
+    is what turns a fitted ``group * epoch`` model into an interpretable SIMPLE EFFECT: the
+    treatment-vs-control difference AT one epoch is the group main coefficient plus that epoch's
+    interaction coefficient, which is a contrast, not a coefficient, and therefore cannot be read
+    off the model summary.
+
+    weights  - {fixed-effect coefficient name: weight}. Names are read off the fitted result
+               (``result.fe_params.index`` / ``result.params.index``), never guessed: statsmodels'
+               dummy-name format depends on the formula. An unknown name raises.
+    n_groups - number of clusters (mice) behind the fit. ``df = n_groups - 1``, the SAME
+               animal-level convention :func:`joint_wald_test` uses and for the same reason (see
+               its docstring): every row of these models is nested in one of a handful of animals,
+               so an observation-level df would overstate precision. Using one convention for the
+               omnibus test and its post-hoc contrasts is what lets both be reported as one
+               procedure.
+    alpha    - the confidence interval is (1 - alpha); the p-value is unaffected.
+
+    Returns dict(estimate, se, t, df, p, ci_low, ci_high) on the scale the model was fit on. For
+    a log-scale response, exponentiate the estimate and both interval bounds to obtain the ratio
+    and its interval -- do NOT exponentiate the standard error.
+    """
+    names, beta, cov_fe, n_fixed = _fe_params_and_cov(result, n_fixed)
+    name_to_idx = {n: i for i, n in enumerate(names)}
+    missing = [n for n in weights if n not in name_to_idx]
+    if missing:
+        raise ValueError(f'linear_contrast_test: parameter(s) not found in fitted model: '
+                         f'{missing}. Available: {names}')
+    if n_groups < 2:
+        raise ValueError(f'linear_contrast_test: n_groups={n_groups} must be >=2 for a defined df.')
+
+    c = np.zeros(n_fixed, dtype=float)
+    for name, w in weights.items():
+        c[name_to_idx[name]] = float(w)
+
+    estimate = float(c @ beta)
+    var = float(c @ cov_fe @ c)
+    if not np.isfinite(var) or var <= 0.0:
+        raise RuntimeError(f'linear_contrast_test: contrast variance is {var:.3g} for weights '
+                           f'{weights} -- the fitted covariance is degenerate, so no interval or '
+                           f'p-value can be formed from it.')
+    se = float(np.sqrt(var))
+    df = n_groups - 1
+    tstat = estimate / se
+    p = float(2.0 * t_dist.sf(abs(tstat), df))
+    crit = float(t_dist.ppf(1.0 - alpha / 2.0, df))
+    return {'estimate': estimate, 'se': se, 't': tstat, 'df': df, 'p': p,
+            'ci_low': estimate - crit * se, 'ci_high': estimate + crit * se}
+
+
 def joint_wald_test(result, param_names, n_groups, n_fixed=None):
     """Joint Wald test that every fixed-effect coefficient named in ``param_names`` equals zero.
 
@@ -872,14 +980,10 @@ def joint_wald_test(result, param_names, n_groups, n_fixed=None):
 
     Returns dict(F=..., df1=..., df2=..., p=...). F/p are nan if param_names is empty.
     """
-    all_names = (list(result.fe_params.index) if hasattr(result, 'fe_params')
-                else list(result.params.index))
-    if n_fixed is None:
-        n_fixed = len(all_names)
-
     if len(param_names) == 0:
         return {'F': float('nan'), 'df1': 0, 'df2': 0, 'p': float('nan')}
 
+    all_names, beta, cov_fe, n_fixed = _fe_params_and_cov(result, n_fixed)
     name_to_idx = {n: i for i, n in enumerate(all_names)}
     missing = [n for n in param_names if n not in name_to_idx]
     if missing:
@@ -889,11 +993,6 @@ def joint_wald_test(result, param_names, n_groups, n_fixed=None):
     Rmat = np.zeros((len(param_names), n_fixed), dtype=float)
     for k, name in enumerate(param_names):
         Rmat[k, name_to_idx[name]] = 1.0
-
-    beta = (np.asarray(result.fe_params) if hasattr(result, 'fe_params')
-            else np.asarray(result.params)).reshape(-1)[:n_fixed]
-    cov_full = np.asarray(result.cov_params())
-    cov_fe = cov_full[:n_fixed, :n_fixed] if cov_full.shape[0] != n_fixed else cov_full
 
     Rb = Rmat @ beta
     RVR = Rmat @ cov_fe @ Rmat.T

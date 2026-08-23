@@ -1,31 +1,53 @@
 """
-Cell-level pyramidal event-AMPLITUDE analysis for DREADD effects on trace fear conditioning.
+Pyramidal event-AMPLITUDE and event-RATE analysis of DREADD effects on trace fear conditioning.
 
-Replaces sp_rates' ~205 uncorrected three-group ANOVAs (session x epoch x cross-registration
-subset x metric) with a small, pre-declared confirmatory family built on PER-EVENT DECONVOLVED
-AMPLITUDE at the cell level, never collapsing cells to a per-mouse scalar before testing. See
-analysis_methods_templates/sp_rates_lmm_methods.md for the full statistical rationale.
+** The analysis the manuscript reports is the UNIFIED PAPER-FACING one. ** Per-event amplitude
+and population event rate are presented as parallel outcomes of one two-row figure, so they get
+one statistical framework rather than two: for each outcome, one mouse-level value per epoch, the
+same `log(metric) ~ group * epoch + (1|mouse)` model, the same joint Wald interaction test, the
+same model-derived treatment-vs-control contrasts, and the same multiplicity structure: WITHIN
+each epoch the two treatment-vs-control contrasts are Holm-corrected together (p_holm_epoch), the
+same way in every epoch and both outcomes, and the conservative six-comparison across-epoch Holm
+correction is retained as sensitivity output. Every
+marker, interval, p-value and asterisk on a paper-facing figure is read out of that one contrast
+table. Start at UNIFIED_OUTCOMES and
+build_mouse_epoch_unified_table(); the entry point is render_paper_tfc_amplitude_rate().
 
-Amplitude, not rate, is primary here: the scientific claim under test is that hM3D increases
-pyramidal BURSTING (larger per-event Ca2+ influx), not merely more frequent events. Event rate,
-fraction of cells active, and total S/s are always reported alongside amplitude in the same
-panel -- "secondary" means they carry no confirmatory alpha, not that they are hidden.
+This is the module's MAIN statistical analysis, finalised after substantial inspection of this
+dataset -- it is not a prospective preregistration and is not described as confirmatory.
 
-This is a LOCKED CONFIRMATORY REANALYSIS, not a prospective preregistration: the amplitude-primary
-decision followed prior inspection of this dataset (see METHODS). A post-hoc methodological
-review of an earlier version of this module found three correctness bugs (denominator df, a
-missing exposure factor, a mislabelled recall title) and two overstated designs (the co-primary
-epoch model's pseudoreplication, cell- vs mouse-weighting of the primary contrast); all are fixed
-here -- see the module CHANGELOG below and analysis_methods_templates/sp_rates_lmm_methods.md.
+** Everything else here is sensitivity/internal output. ** The cell-level amplitude model and its
+three-member Holm family, the Bayesian negative-binomial rate model, the mouse-label permutation
+tests, the BH-FDR secondary family, threshold sensitivity, run structure, the group x trial
+photobleaching control, and the direct hM3D-vs-hM4D contrasts all still run, still write every
+file they always did, and are all valuable as robustness evidence. None of them supplies a number
+to a manuscript sentence or a paper figure. docs/sp_rates_lmm.md is organised into exactly those
+two parts, and so is paper_results_summary.md.
+
+The whole thing replaces sp_rates' ~205 uncorrected three-group ANOVAs (session x epoch x
+cross-registration subset x metric). Amplitude remains the primary BIOLOGICAL endpoint and rate
+the secondary one -- the claim under test is that hM3D increases pyramidal BURSTING (larger
+per-event Ca2+ influx), not merely more frequent events -- but both now receive identical
+statistical treatment. See analysis_methods_templates/sp_rates_lmm_methods.md for the full
+rationale behind every measurement choice.
+
+A post-hoc methodological review of an earlier version of this module found three correctness
+bugs (denominator df, a missing exposure factor, a mislabelled recall title) and two overstated
+designs (the co-primary epoch model's pseudoreplication, cell- vs mouse-weighting of the primary
+contrast); all are fixed here -- see the module CHANGELOG below.
 
 Module layout
 -------------
+  Unified paper analysis      -- build_mouse_epoch_unified_table(), fit_unified_group_epoch_model(),
+                                require_common_unified_method(), unified_posthoc_contrasts(),
+                                unified_interactions_table(), unified_model_diagnostics(),
+                                verify_unified_tfc_synthetic(), render_paper_tfc_amplitude_rate()
   Event/run table construction -- _iter_event_windows() (shared traversal), build_epoch_event_table(),
                                   build_run_structure_table(), aggregate_over_trials(),
                                   filter_amplitude_rows(), build_mouse_trial_epoch_rate_table(),
                                   build_mouse_trial_trace_amplitude(), compute_epoch_delta_table()
-  Confirmatory models        -- fit_primary_trace_amplitude(), fit_epoch_delta_model(),
-                                fit_epoch_interaction_nested_attempt() (one-off, not in the main
+  Sensitivity models (was     -- fit_primary_trace_amplitude(), fit_epoch_delta_model(),
+  the confirmatory family)      fit_epoch_interaction_nested_attempt() (one-off, not in the main
                                 pipeline -- see its docstring), fit_rate_group_epoch_model(),
                                 holm_correct_confirmatory()
   Secondary/sensitivity models -- fit_group_trial_model(), report_group_trial_slopes(),
@@ -44,6 +66,26 @@ Module layout
 
 CHANGELOG (post-review corrections, see analysis_methods_templates/sp_rates_lmm_methods.md and
 the plan this module was built from for the full rationale):
+  - THE UNIFIED PAPER-FACING ANALYSIS. The paper figure's two rows used to be supported by three
+    unrelated frameworks: a cell-level frequentist LMM for amplitude, a Bayesian negative-binomial
+    model with HDIs for rate, per-panel Welch/Holm tests for the asterisks, and equal-mouse-
+    weighted Welch intervals for the effect sizes -- with epoch specificity coming from a fourth,
+    a mouse-label permutation statistic. No number on the figure traced to a model, and the
+    statistical treatment of the two rows could not be described in one sentence. They are now
+    one procedure (build_mouse_epoch_unified_table -> fit_unified_group_epoch_model ->
+    unified_posthoc_contrasts), and the figures read their markers, intervals, p-values and stars
+    out of it via _precomputed_stat_fn / _unified_contrast_payloads. All previous machinery is
+    retained as sensitivity output and supplies no paper number.
+  - WITHIN-EPOCH POST-HOC FAMILIES (`p_holm_epoch`). The unified models, matched trials,
+    estimates, raw p-values and interaction tests are unchanged; only the multiplicity/display
+    structure moved. Within EACH epoch the two treatment-vs-control comparisons (hM3D vs mCherry,
+    hM4D vs mCherry) are Holm-corrected together -- six identical two-member families, one per
+    (outcome, epoch). The procedure is the same in all six panels of the paper figure; no epoch
+    receives a different kind of inferential treatment, and epoch dependence is tested only by
+    the group x epoch interaction. The conservative across-epoch six-comparison correction is
+    kept in full as `p_holm_six` sensitivity output. (Earlier passes corrected all six simple
+    effects together, and then treated the trace epoch's two contrasts as a privileged primary
+    family; both are superseded -- see docs/sp_rates_lmm.md section 7.)
   - joint_wald_test's denominator df is now n_groups-1 (caban.single_unit_common), not
     nobs-n_fixed -- fixes a massively anti-conservative omnibus p-value on every cluster-robust
     or MixedLM joint test in this module (and in caban.pca_state_metrics, which shared the bug).
@@ -95,6 +137,7 @@ import collections
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from scipy import stats as scipy_stats
 import statsmodels.formula.api as smf
 from statsmodels.stats.multitest import multipletests
 import bambi as bmb
@@ -103,8 +146,9 @@ import arviz as az
 from caban.utilities import find_event_runs_ca, find_event_runs_ca_S, MINISCOPE_FPS
 from caban.single_unit_common import (
     GROUP_ORDER, GROUP_LABELS, GROUP_COLOURS, DREADD_DISPLAY_ORDER,
-    ensure_dirs, write_text, save_fig, ecdf_panel, fdr_correct,
-    fit_mixed_model, joint_wald_test, draw_superplot_triplet, no_stat_annotation,
+    ensure_dirs, write_text, save_fig, ecdf_panel, fdr_correct, holm_correct,
+    fit_mixed_model, joint_wald_test, linear_contrast_test,
+    draw_superplot_triplet, no_stat_annotation,
     mouse_contrast_ci, annotate_contrast_ci, format_contrast_ci_lines,
     annotate_pairwise_brackets, reserve_top_fraction,
 )
@@ -234,7 +278,60 @@ PRIMARY_PROFILE_COMPONENT = 'amplitude'
 # in full in the TFC_cond output as supplement material -- but they are not separate biological
 # claims, and putting five quantities in front of a reader to make a three-quantity point is how
 # a figure stops being read. See docs/sp_rates_lmm.md for what else is supplement.
-PAPER_COMPONENT_KEYS = ('fraction_active', 'population_rate', 'amplitude')
+#
+# ** 'fraction_active' was removed when the unified paper-facing models were introduced. ** Every
+# number on a paper figure now comes from one of the two unified LMMs (see UNIFIED_OUTCOMES
+# below), and fraction active has no such model -- drawing its row would put a second, differently
+# derived inferential source on the same figure, which is exactly what the unification exists to
+# remove. It is unchanged on the internal four-component decomposition_grid and is described in
+# the paper summary as supplementary.
+PAPER_COMPONENT_KEYS = ('population_rate', 'amplitude')
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# The unified paper-facing analysis: one mouse-level model per outcome
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# ** This is the analysis the manuscript reports. ** Per-event amplitude and population event rate
+# are presented as parallel outcomes on one two-row figure, so they get ONE statistical framework:
+# the same mouse-level response construction, the same `group * epoch + (1|mouse)` model, the same
+# joint Wald interaction test, the same model-derived contrasts, and the same multiplicity
+# structure (see unified_posthoc_contrasts). Every marker, interval, p-value and asterisk on a paper-facing panel is read out of
+# unified_lmm_mouse_epoch_values.csv / unified_lmm_posthoc_contrasts.csv and nowhere else.
+#
+# Everything else this module computes -- the cell-level amplitude model, the Bayesian NB rate
+# model, the mouse-label permutation tests, the BH-FDR family, threshold sensitivity, run
+# structure -- is retained in full as SENSITIVITY/internal output and supplies no paper number.
+# See docs/sp_rates_lmm.md, which is organised into exactly those two parts.
+UNIFIED_REFERENCE_GROUP = 'mCherry'
+UNIFIED_REFERENCE_EPOCH = TFC_MATCHED_REFERENCE_EPOCH
+UNIFIED_TREATMENT_GROUPS = ('hM3D', 'hM4D')
+
+# ** The multiplicity family is WITHIN an epoch, and is the same in every epoch. **
+# For each (outcome, epoch) the two treatment-vs-control simple effects -- hM3D vs mCherry and
+# hM4D vs mCherry -- are Holm-corrected together (p_holm_epoch). That gives six two-member
+# families: 3 epochs x 2 outcomes. The procedure is identical in all six panels of the paper
+# figure, so visually equivalent panels are treated equivalently and no epoch receives a
+# different kind of inferential treatment. Whether the treatment effect DIFFERS across epochs is
+# a separate question, tested directly and only by the group x epoch interaction.
+#
+# The conservative alternative -- Holm across all six treatment-vs-control simple effects
+# spanning the three epochs within an outcome -- is retained in full as p_holm_six and reported
+# as a sensitivity analysis. It generates no figure asterisk and no manuscript claim.
+
+# outcome key -> (model response column, natural-scale display column on the mouse-level table).
+# The response is what the LMM is fit on; the display column is what the figure's large mouse
+# markers show, and the two are related by exp() in both cases (see _UNIFIED_MARKER_TRANSFORM).
+_UnifiedOutcome = collections.namedtuple(
+    '_UnifiedOutcome', 'key label response_col marker_col component_key ratio_label')
+
+UNIFIED_OUTCOMES = (
+    _UnifiedOutcome('amplitude', 'Per-event amplitude', 'mouse_mean_log_amplitude',
+                    'geometric_mean_amplitude', 'amplitude', 'fold change'),
+    _UnifiedOutcome('population_rate', 'Population event rate', 'log_population_rate',
+                    'population_rate', 'population_rate', 'rate ratio'),
+)
+UNIFIED_OUTCOMES_BY_KEY = {o.key: o for o in UNIFIED_OUTCOMES}
 
 # The two response windows whose within-cell elevation over TFC_REFERENCE_EPOCH is confirmatory
 # (holm_correct_confirmatory's second and third members). Every other epoch's delta is
@@ -2202,6 +2299,605 @@ def fit_lt1_lt2_manipulation_check(df_delta, reference='mCherry'):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# THE UNIFIED PAPER-FACING MODELS (see UNIFIED_OUTCOMES for what this is and why)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def build_mouse_epoch_unified_table(df_matched, epochs=TFC_MATCHED_PROFILE_EPOCHS):
+    """
+    The inferential dataset for the paper: ONE row per (mouse, epoch), carrying both paper-facing
+    outcomes. With a complete cohort this is 17 mice x 3 epochs = 51 rows.
+
+    ** Both outcomes come off ONE frame, so they cannot silently diverge. ** Amplitude and rate
+    are presented as parallel rows of one figure, so they must be computed from the same animals,
+    the same epochs and the same retained trials. Passing `df_matched` (the output of
+    restrict_to_exposure_matched_trials over `epochs`) once and deriving both here makes that true
+    by construction rather than by a downstream assertion -- there is no code path in which the
+    rate row is built from a different trial set than the amplitude row above it.
+
+    ** Per-event amplitude. ** Per epoch, aggregate_over_trials pools each cell's events across the
+    retained trials, filter_amplitude_rows drops the cells with no event in that epoch (amplitude
+    is undefined for them, definitionally, not missing) and takes log of each cell's mean event-run
+    integral, and those cell-level LOGS are averaged within the mouse. That weighting is
+    deliberate and is the one this module has always used: each active cell contributes equally
+    within its animal, and each animal contributes exactly one value to the model. Cells are NOT
+    pooled across animals before the group mean.
+
+    ** exp(a group contrast on this response) is a ratio of GEOMETRIC means ** of the cell-level
+    mean event-run integrals -- not a ratio of pooled arithmetic mean event amplitudes. The mean
+    of logs is the log of the geometric mean; describing it as a ratio of arithmetic means would
+    be wrong by Jensen's inequality, and the amount wrong depends on each group's cell-level
+    spread. Every place this ratio is reported says so.
+
+    ** Population event rate. ** Total events over ALL detected pyramidal cells (zero-event cells
+    included, which is the whole point of a POPULATION rate) divided by the corresponding total
+    cell-seconds. Because thousands of cells contribute, a zero is not expected -- but it is
+    checked rather than assumed, and a zero RAISES instead of receiving a pseudocount. A
+    pseudocount would put an arbitrary constant inside a log on the response scale, where its size
+    determines the answer.
+
+    Categorical dtypes are set here with the REFERENCE LEVEL FIRST (mCherry, pre_tone_matched) so
+    the model's reference never depends on alphabetical category order; fit_mixed_model
+    deliberately does not touch dtypes.
+
+    Returns a DataFrame with columns
+        mouse, group, epoch, n_cells, n_active_cells,
+        mouse_mean_log_amplitude, geometric_mean_amplitude,
+        total_events, total_cell_seconds, population_rate, log_population_rate
+    """
+    epochs = tuple(epochs)
+    rows = []
+    for epoch in epochs:
+        pooled = aggregate_over_trials(df_matched, epoch)
+        amp = filter_amplitude_rows(pooled)
+        amp_by_mouse = amp.groupby(['mouse', 'group'], observed=True)['log_amplitude'].agg(
+            ['mean', 'size'])
+        for (mouse, group), grp in pooled.groupby(['mouse', 'group'], observed=True):
+            if (mouse, group) not in amp_by_mouse.index:
+                raise RuntimeError(
+                    f'build_mouse_epoch_unified_table: mouse {mouse!r} ({group}) has no cell with '
+                    f'>=1 event in epoch {epoch!r}, so its per-event amplitude is undefined. The '
+                    f'unified model needs a complete mouse x epoch grid; investigate the '
+                    f'recording rather than dropping the row.')
+            mean_log_amp = float(amp_by_mouse.loc[(mouse, group), 'mean'])
+            total_events = float(grp['n_events'].sum())
+            total_cell_seconds = float(grp['exposure_seconds'].sum())
+            if total_cell_seconds <= 0:
+                raise RuntimeError(
+                    f'build_mouse_epoch_unified_table: mouse {mouse!r} epoch {epoch!r} has '
+                    f'{total_cell_seconds} cell-seconds of exposure.')
+            population_rate = total_events / total_cell_seconds
+            if population_rate <= 0:
+                raise RuntimeError(
+                    f'build_mouse_epoch_unified_table: mouse {mouse!r} ({group}) has a population '
+                    f'event rate of {population_rate} in epoch {epoch!r} over '
+                    f'{len(grp)} cells. log() is undefined there and NO pseudocount is applied -- '
+                    f'a zero population rate across every cell of an animal is a data problem, '
+                    f'not a value to smooth over.')
+            if not np.isfinite(mean_log_amp):
+                raise RuntimeError(
+                    f'build_mouse_epoch_unified_table: mouse {mouse!r} epoch {epoch!r} has a '
+                    f'non-finite mean log amplitude ({mean_log_amp}).')
+            rows.append({
+                'mouse': mouse, 'group': group, 'epoch': epoch,
+                'n_cells': int(len(grp)),
+                'n_active_cells': int(amp_by_mouse.loc[(mouse, group), 'size']),
+                'mouse_mean_log_amplitude': mean_log_amp,
+                'geometric_mean_amplitude': float(np.exp(mean_log_amp)),
+                'total_events': total_events,
+                'total_cell_seconds': total_cell_seconds,
+                'population_rate': population_rate,
+                'log_population_rate': float(np.log(population_rate)),
+            })
+
+    out = pd.DataFrame(rows)
+    # Completeness: every mouse must carry every epoch, or the model silently becomes unbalanced
+    # and the interaction test is answering a different question from the one documented.
+    mice = sorted(out['mouse'].unique())
+    missing = [(m, e) for m in mice for e in epochs
+               if not ((out['mouse'] == m) & (out['epoch'] == e)).any()]
+    if missing:
+        raise RuntimeError(f'build_mouse_epoch_unified_table: missing (mouse, epoch) rows '
+                           f'{missing}; the unified model requires a complete grid.')
+    if len(out) != len(mice) * len(epochs):
+        raise RuntimeError(f'build_mouse_epoch_unified_table: got {len(out)} rows for '
+                           f'{len(mice)} mice x {len(epochs)} epochs -- a mouse appears under '
+                           f'more than one group.')
+
+    out['group'] = pd.Categorical(
+        out['group'],
+        categories=[UNIFIED_REFERENCE_GROUP] + [g for g in GROUP_ORDER
+                                                if g != UNIFIED_REFERENCE_GROUP])
+    out['epoch'] = pd.Categorical(
+        out['epoch'], categories=[UNIFIED_REFERENCE_EPOCH] + [e for e in epochs
+                                                              if e != UNIFIED_REFERENCE_EPOCH])
+    return out.sort_values(['group', 'mouse', 'epoch']).reset_index(drop=True)
+
+
+def _unified_formula(response_col):
+    return (f'{response_col} ~ C(group, Treatment(reference="{UNIFIED_REFERENCE_GROUP}"))'
+            f' * C(epoch, Treatment(reference="{UNIFIED_REFERENCE_EPOCH}"))')
+
+
+def fit_unified_group_epoch_model(df_me, response_col):
+    """
+    Fit `response_col ~ group * epoch + (1|mouse)` on the mouse x epoch table -- IDENTICALLY for
+    both paper-facing outcomes, which is the entire point of this function existing rather than
+    two bespoke ones.
+
+    Goes through fit_mixed_model so the module's one documented convergence/degeneracy criterion
+    applies; the caller is expected to run require_common_unified_method() over both fits before
+    using either, because a fallback taken by ONE outcome would break the claim that amplitude and
+    rate received the same treatment.
+
+    The omnibus is the joint Wald test that all four group x epoch coefficients are zero, with
+    df2 = n_mice - 1 (joint_wald_test's animal-level convention -- the same denominator df the
+    post-hoc contrasts use, so the interaction test and its simple effects are one procedure).
+
+    Returns dict(result, method, summary_text, formula, n_mice, fe_names, interaction_names,
+    omnibus, response_col).
+    """
+    formula = _unified_formula(response_col)
+    n_mice = int(df_me['mouse'].nunique())
+    result, method, text = fit_mixed_model(df_me, formula, group_col='mouse')
+    fe_names, _params = _fe_names_and_params(result)
+    # Read the interaction coefficients off the FITTED model rather than reconstructing
+    # statsmodels' dummy-name format, which depends on the formula.
+    interaction_names = [n for n in fe_names if ':' in n]
+    if len(interaction_names) != 4:
+        raise RuntimeError(f'fit_unified_group_epoch_model: expected 4 group x epoch coefficients '
+                           f'(3 groups x 3 epochs), found {len(interaction_names)}: '
+                           f'{interaction_names}. Available: {fe_names}')
+    omnibus = joint_wald_test(result, interaction_names, n_mice)
+    return {'result': result, 'method': method, 'summary_text': text, 'formula': formula,
+            'n_mice': n_mice, 'fe_names': fe_names, 'interaction_names': interaction_names,
+            'omnibus': omnibus, 'response_col': response_col}
+
+
+def require_common_unified_method(fits):
+    """Raise unless EVERY unified fit used the same intended random-intercept mixed model.
+
+    ** The paper claims amplitude and rate received the same statistical treatment. ** That claim
+    is false the moment one of them quietly takes fit_mixed_model's documented clustered-OLS
+    fallback while the other stays on MixedLM -- the two would then differ in how between-animal
+    variance is handled, which is precisely the heterogeneity this rewrite removed. So the
+    paper-facing analysis HARD-FAILS and names the offending outcome instead of proceeding.
+
+    Adopting clustered OLS as a COMMON fallback (both outcomes refit that way) is a deliberate
+    decision to be made after inspecting the failure, not something to apply automatically here.
+    The internal analyses keep their per-model fallback and are unaffected.
+    """
+    bad = {key: fit['method'] for key, fit in fits.items() if fit['method'] != 'mixedlm'}
+    if bad:
+        details = '\n\n'.join(f'--- {key} ({fits[key]["method"]}) ---\n'
+                              f'{fits[key]["summary_text"].splitlines()[0]}' for key in bad)
+        raise RuntimeError(
+            f'require_common_unified_method: outcome(s) {sorted(bad)} did not fit as a mixed '
+            f'model (methods: {bad}). The unified paper analysis requires BOTH outcomes on the '
+            f'same estimator; it will not report one MixedLM result beside one clustered-OLS '
+            f'result as though they were the same procedure. Inspect the fit and decide '
+            f'explicitly whether to refit BOTH with the common fallback.\n\n{details}')
+
+
+def _unified_group_coef(fe_names, group):
+    """The main-effect coefficient name for `group` (no ':' -- an interaction term also contains
+    the group name and would otherwise match)."""
+    matches = [n for n in fe_names if f'[T.{group}]' in n and ':' not in n]
+    if len(matches) != 1:
+        raise RuntimeError(f'_unified_group_coef: expected exactly one main-effect coefficient '
+                           f'for group {group!r}, found {matches} in {fe_names}.')
+    return matches[0]
+
+
+def _unified_epoch_interaction_coef(fe_names, group, epoch):
+    """The `group x epoch` coefficient name for this (group, epoch) pair."""
+    matches = [n for n in fe_names if ':' in n and f'[T.{group}]' in n and f'[T.{epoch}]' in n]
+    if len(matches) != 1:
+        raise RuntimeError(f'_unified_epoch_interaction_coef: expected exactly one interaction '
+                           f'coefficient for ({group!r}, {epoch!r}), found {matches}.')
+    return matches[0]
+
+
+def unified_posthoc_contrasts(fits, df_me, epochs=TFC_MATCHED_PROFILE_EPOCHS,
+                              alpha=0.05):
+    """
+    The planned treatment-vs-control simple effects, from the fitted models -- the single
+    authoritative source for every effect estimate, interval, p-value and asterisk on the
+    paper-facing figures.
+
+    ** Twelve contrasts; the family is the two comparisons WITHIN an epoch. ** Three epochs x
+    {hM3D vs mCherry, hM4D vs mCherry} are estimated for each outcome. For each (outcome, epoch)
+    those two treatment-vs-control simple effects are Holm-corrected together -> `p_holm_epoch`,
+    finite on every row. That is six two-member families (3 epochs x 2 outcomes), and the
+    procedure is IDENTICAL in all six: every visually equivalent panel of the paper figure is
+    treated equivalently, and no epoch is a special case. Amplitude and rate remain separate
+    outcomes. hM3D-vs-hM4D is in no family and is not computed here -- it is not this design's
+    question and appears only as exploratory output.
+
+    ** `p_holm_epoch` is the only adjusted P behind a paper asterisk or Results claim. ** Whether
+    the treatment effect DIFFERS across epochs is a different question and is tested by the
+    group x epoch interaction and by nothing else (unified_interactions_table). A significant
+    comparison in one epoch and not another is not itself evidence that the epochs differ.
+
+    ** The conservative six-comparison family is retained, not deleted. ** `p_holm_six` Holm-
+    corrects all six treatment-vs-control simple effects ACROSS the three epochs within each
+    outcome -- the more expansive definition of the family -- and is reported as a SENSITIVITY
+    analysis. It supplies no figure asterisk and no Part 1 number in paper_results_summary.md.
+    Both families are computed from the same twelve raw contrasts; only the grouping differs.
+
+    ** A simple effect is a CONTRAST, not a coefficient. ** At the reference epoch the
+    treatment-vs-control difference is the group main coefficient alone; at any other epoch it is
+    that coefficient PLUS the corresponding group x epoch coefficient, with a variance that
+    involves their covariance. Reading the group coefficient off the model summary and calling it
+    "the effect at trace" would be wrong at every non-reference epoch.
+
+    Estimates are on the model's log scale; `ratio` and its interval are exp() of the estimate and
+    of the interval bounds (never of the standard error). For amplitude that ratio is a ratio of
+    geometric means -- see build_mouse_epoch_unified_table.
+
+    For the rate outcome the observed equal-mouse-weighted group means and their absolute
+    difference in events/s/cell are attached as DESCRIPTIVE columns. They carry no test: a rate
+    ratio computed off a small base can overstate the practical size of a change, and the absolute
+    difference is what tells a reader how large the change actually is. They are NOT the
+    inferential estimate; the inferential estimate is always the model contrast.
+
+    Returns a tidy DataFrame, one row per (outcome, epoch, comparison).
+    """
+    epochs = tuple(epochs)
+    rows = []
+    for outcome in UNIFIED_OUTCOMES:
+        fit = fits[outcome.key]
+        fe_names = fit['fe_names']
+        for epoch in epochs:
+            for group in UNIFIED_TREATMENT_GROUPS:
+                weights = {_unified_group_coef(fe_names, group): 1.0}
+                if epoch != UNIFIED_REFERENCE_EPOCH:
+                    weights[_unified_epoch_interaction_coef(fe_names, group, epoch)] = 1.0
+                res = linear_contrast_test(fit['result'], weights, fit['n_mice'], alpha=alpha)
+                row = {
+                    'outcome': outcome.key, 'epoch': epoch,
+                    'comparison': f'{group}_vs_{UNIFIED_REFERENCE_GROUP}',
+                    'group': group,
+                    'estimate_log': res['estimate'], 'se': res['se'],
+                    'ci_low_log': res['ci_low'], 'ci_high_log': res['ci_high'],
+                    'ratio': float(np.exp(res['estimate'])),
+                    'ratio_ci_low': float(np.exp(res['ci_low'])),
+                    'ratio_ci_high': float(np.exp(res['ci_high'])),
+                    'df': res['df'], 't': res['t'], 'p_raw': res['p'],
+                }
+                if outcome.key == 'population_rate':
+                    # DESCRIPTIVE ONLY -- equal-mouse-weighted observed means, not model output.
+                    sub = df_me[df_me['epoch'] == epoch]
+                    mean_t = float(sub.loc[sub['group'] == group, 'population_rate'].mean())
+                    mean_c = float(sub.loc[sub['group'] == UNIFIED_REFERENCE_GROUP,
+                                           'population_rate'].mean())
+                    row['mean_population_rate_treatment'] = mean_t
+                    row['mean_population_rate_control'] = mean_c
+                    row['absolute_difference_events_per_s_per_cell'] = mean_t - mean_c
+                rows.append(row)
+
+    out = pd.DataFrame(rows)
+
+    # PAPER-FACING family: Holm within (outcome, epoch) across that epoch's two
+    # treatment-vs-control contrasts. Finite on every row -- the six families are the same shape
+    # and the same procedure, so no row is a special case.
+    out['p_holm_epoch'] = np.nan
+    out['holm_epoch_reject'] = False
+    # SENSITIVITY family: Holm within outcome across all six, populated on every row.
+    out['p_holm_six'] = np.nan
+    out['holm_six_reject'] = False
+
+    for (outcome_key, epoch), idx in out.groupby(['outcome', 'epoch'],
+                                                 observed=True).groups.items():
+        idx = list(idx)
+        if len(idx) != len(UNIFIED_TREATMENT_GROUPS):
+            raise RuntimeError(
+                f'unified_posthoc_contrasts: outcome {outcome_key!r} at epoch {epoch!r} produced '
+                f'{len(idx)} treatment-vs-control contrasts, expected exactly '
+                f'{len(UNIFIED_TREATMENT_GROUPS)}. Each epoch\'s Holm family is exactly its two '
+                f'treatment-vs-control comparisons.')
+        reject_epoch, padj_epoch = holm_correct(out.loc[idx, 'p_raw'].to_numpy(), alpha=alpha)
+        out.loc[idx, 'p_holm_epoch'] = padj_epoch
+        out.loc[idx, 'holm_epoch_reject'] = reject_epoch
+
+    for outcome_key, idx in out.groupby('outcome', observed=True).groups.items():
+        idx = list(idx)
+        if len(idx) != len(epochs) * len(UNIFIED_TREATMENT_GROUPS):
+            raise RuntimeError(
+                f'unified_posthoc_contrasts: outcome {outcome_key!r} produced {len(idx)} '
+                f'contrasts, expected {len(epochs) * len(UNIFIED_TREATMENT_GROUPS)} '
+                f'({len(epochs)} epochs x {len(UNIFIED_TREATMENT_GROUPS)} treatment groups). '
+                f'The multiplicity families are defined by that shape.')
+        reject_six, padj_six = holm_correct(out.loc[idx, 'p_raw'].to_numpy(), alpha=alpha)
+        out.loc[idx, 'p_holm_six'] = padj_six
+        out.loc[idx, 'holm_six_reject'] = reject_six
+    return out
+
+
+def unified_contrast_lookup(contrasts, outcome, epoch, group):
+    """The single row of `contrasts` for one (outcome, epoch, treatment group), as a Series.
+
+    Every paper-facing consumer -- the figure's brackets, its companion markdown, the forest, the
+    Results summary -- goes through here, so a panel cannot read a different row from the one its
+    caption describes. Raises rather than returning an empty match.
+    """
+    sel = contrasts[(contrasts['outcome'] == outcome) & (contrasts['epoch'] == epoch)
+                    & (contrasts['group'] == group)]
+    if len(sel) != 1:
+        raise RuntimeError(f'unified_contrast_lookup: expected exactly one row for '
+                           f'({outcome!r}, {epoch!r}, {group!r}), found {len(sel)}.')
+    return sel.iloc[0]
+
+
+def unified_interactions_table(fits):
+    """One row per outcome: the joint group x epoch Wald test. This is THE epoch-specificity
+    result for the paper -- the permutation interaction statistic remains internal."""
+    return pd.DataFrame([
+        {'outcome': outcome.key, 'response_col': fits[outcome.key]['response_col'],
+         'F': fits[outcome.key]['omnibus']['F'], 'df1': fits[outcome.key]['omnibus']['df1'],
+         'df2': fits[outcome.key]['omnibus']['df2'], 'p': fits[outcome.key]['omnibus']['p'],
+         'n_mice': fits[outcome.key]['n_mice'], 'method': fits[outcome.key]['method'],
+         'formula': fits[outcome.key]['formula']}
+        for outcome in UNIFIED_OUTCOMES])
+
+
+def format_unified_interaction(row):
+    """`group x epoch F(4, 16) = 1.23, P = 0.34` -- one wording, used by every figure annotation
+    and every text file, so the interaction can never be quoted two different ways."""
+    return (f'group x epoch F({int(row["df1"])}, {int(row["df2"])}) = {row["F"]:.2f}, '
+            f'P = {row["p"]:.3f}')
+
+
+# ── Diagnostics (descriptive; they gate nothing and add no inference) ─────────
+
+# Minimum absolute shift, in log units (~10%), before a leave-one-mouse-out estimate change is
+# worth mentioning at all. See unified_model_diagnostics for why a purely relative rule is useless
+# on a null contrast.
+_INFLUENCE_FLAG_ABS_LOG = 0.10
+
+def unified_model_diagnostics(fits, df_me, contrasts, save_dir,
+                              epochs=TFC_MATCHED_PROFILE_EPOCHS,
+                              filename_root='unified_lmm_diagnostics'):
+    """
+    Residual and leave-one-mouse-out diagnostics for both unified models.
+
+    ** Descriptive only. ** The main rate endpoint is a log-transformed mouse-level population
+    rate analysed with a Gaussian LMM, which is a modelling simplification (the distribution-aware
+    check is the negative-binomial count model, retained as a sensitivity analysis), so its
+    residual behaviour should be LOOKED AT. Nothing here gates the analysis or produces a
+    p-value that enters any family.
+
+    ** No normality test is used as an acceptance criterion. ** A mixed model's residuals are not
+    51 independent draws, and a residual-normality test crossing 0.05 is not a principled
+    pass/fail rule at this n. The plots are the diagnostic.
+
+    ** Leave-one-mouse-out reports ESTIMATES, not decisions. ** Whether an adjusted p-value
+    crosses 0.05 when one of 17 animals is dropped is expected behaviour near alpha and says
+    nothing about robustness; what matters is whether the effect ESTIMATE changes qualitatively.
+    Only that is flagged, and only as a note.
+
+    Writes <root>.png, <root>.txt, unified_lmm_residuals.csv, unified_lmm_influence.csv.
+    """
+    ensure_dirs(save_dir)
+    resid_rows = []
+    fig, axs = plt.subplots(len(UNIFIED_OUTCOMES), 2,
+                            figsize=(7.0, 3.0 * len(UNIFIED_OUTCOMES)))
+    axs = np.atleast_2d(axs)
+    for r, outcome in enumerate(UNIFIED_OUTCOMES):
+        fit = fits[outcome.key]
+        result = fit['result']
+        observed = df_me[outcome.response_col].to_numpy(dtype=float)
+        fitted = np.asarray(result.fittedvalues, dtype=float).reshape(-1)
+        resid = observed - fitted
+        for i, (_, meta) in enumerate(df_me.iterrows()):
+            resid_rows.append({'outcome': outcome.key, 'mouse': meta['mouse'],
+                               'group': meta['group'], 'epoch': meta['epoch'],
+                               'observed': observed[i], 'fitted': fitted[i],
+                               'resid': resid[i]})
+        axs[r, 0].scatter(fitted, resid, s=14, c='0.3', edgecolor='k', linewidth=0.3)
+        axs[r, 0].axhline(0.0, color='k', linewidth=0.8, linestyle='--')
+        axs[r, 0].set_xlabel('fitted', size='x-small')
+        axs[r, 0].set_ylabel(f'{outcome.label}\nresidual', size='x-small')
+        axs[r, 0].set_title('Residual vs fitted', size='small')
+        # STANDARDIZED before the Q-Q, so the reference line is the identity and a departure from
+        # it is readable as such. probplot(fit=False) returns the ordered sample VALUES, which on
+        # a residual in native units would be plotted against unit-normal quantiles and make even
+        # a perfectly normal residual look flat.
+        resid_sd = float(np.std(resid, ddof=1))
+        osm, osr = scipy_stats.probplot(resid / resid_sd if resid_sd > 0 else resid,
+                                        dist='norm', fit=False)
+        axs[r, 1].scatter(osm, osr, s=14, c='0.3', edgecolor='k', linewidth=0.3)
+        lim = [min(osm.min(), osr.min()), max(osm.max(), osr.max())]
+        axs[r, 1].plot(lim, lim, color='k', linewidth=0.8, linestyle='--')
+        axs[r, 1].set_xlabel('theoretical quantiles', size='x-small')
+        axs[r, 1].set_ylabel('standardized residual', size='x-small')
+        axs[r, 1].set_title(f'Normal Q-Q (residual SD {resid_sd:.3g})', size='small')
+        for ax in axs[r]:
+            ax.spines[['right', 'top']].set_visible(False)
+            ax.tick_params(labelsize='xx-small')
+    fig.suptitle('Unified LMM diagnostics — descriptive; no acceptance criterion', size='small')
+    fig.subplots_adjust(left=0.12, right=0.98, top=0.88, bottom=0.10, hspace=0.55, wspace=0.30)
+    save_fig(fig, os.path.join(save_dir, filename_root + '.png'))
+    plt.close(fig)
+    write_text(os.path.join(save_dir, 'unified_lmm_residuals.csv'),
+               pd.DataFrame(resid_rows).to_csv(index=False))
+
+    influence, notes = [], []
+    for mouse in sorted(df_me['mouse'].unique()):
+        sub = df_me[df_me['mouse'] != mouse]
+        lomo_fits = {o.key: fit_unified_group_epoch_model(sub, o.response_col)
+                     for o in UNIFIED_OUTCOMES}
+        lomo = unified_posthoc_contrasts(lomo_fits, sub, epochs=epochs)
+        for _, row in lomo.iterrows():
+            full = unified_contrast_lookup(contrasts, row['outcome'], row['epoch'], row['group'])
+            delta = row['estimate_log'] - full['estimate_log']
+            influence.append({
+                'omitted_mouse': mouse, 'omitted_method': lomo_fits[row['outcome']]['method'],
+                'outcome': row['outcome'], 'epoch': row['epoch'],
+                'comparison': row['comparison'], 'estimate_log': row['estimate_log'],
+                'ratio': row['ratio'], 'ratio_ci_low': row['ratio_ci_low'],
+                'ratio_ci_high': row['ratio_ci_high'],
+                'full_data_estimate_log': full['estimate_log'],
+                'delta_from_full_estimate': delta})
+            # A qualitative change: the estimate moves by more than half its full-data magnitude
+            # AND by more than _INFLUENCE_FLAG_ABS_LOG in absolute terms. Deliberately NOT "an
+            # adjusted p crossed 0.05". The absolute floor is not decoration: on a contrast that
+            # is essentially null, a relative rule alone fires constantly (a ratio of 0.99 moving
+            # to 1.05 is a >50% change in a log effect of -0.01) and buries the cases that matter.
+            if abs(delta) > max(_INFLUENCE_FLAG_ABS_LOG, 0.5 * abs(full['estimate_log'])):
+                notes.append(f"  {row['outcome']} / {row['epoch']} / {row['comparison']}: "
+                             f"omitting {mouse} moves the ratio "
+                             f"{full['ratio']:.3f} -> {row['ratio']:.3f}")
+    influence_df = pd.DataFrame(influence)
+    write_text(os.path.join(save_dir, 'unified_lmm_influence.csv'),
+               influence_df.to_csv(index=False))
+
+    lines = [
+        'Unified LMM diagnostics (descriptive)',
+        '=' * 60,
+        '',
+        'These outputs describe the two paper-facing models. None of them is a test, none enters '
+        'a multiplicity family, and none determines whether the models are accepted.',
+        '',
+        f'Residual plots: {filename_root}.png (residual-vs-fitted and normal Q-Q per outcome).',
+        'Per-row residuals: unified_lmm_residuals.csv.',
+        '',
+        'No residual-normality test is reported as an acceptance criterion: a mixed model\'s '
+        'residuals are not 51 independent observations, so a normality test crossing 0.05 would '
+        'not be a principled pass/fail rule here. Read the plots.',
+        '',
+        'Leave-one-mouse-out (unified_lmm_influence.csv)',
+        '-' * 60,
+        f'Each of the {df_me["mouse"].nunique()} animals is dropped in turn and BOTH models are '
+        'refit, giving that animal\'s effect on each of the twelve planned contrast ESTIMATES. '
+        'Significance-decision flips are deliberately not computed: at n = 17 an adjusted '
+        'p-value crossing 0.05 when one animal is removed is expected and is not evidence that '
+        'one animal drives a result.',
+        '',
+    ]
+    lines += ([f'Contrasts whose estimate moved by more than half the full-data effect and by '
+               f'more than {_INFLUENCE_FLAG_ABS_LOG} log units ({len(notes)}):'] + notes if notes
+              else [f'No omitted animal moved any contrast estimate by more than half the '
+                    f'full-data effect and more than {_INFLUENCE_FLAG_ABS_LOG} log units.'])
+    lines.append('')
+    write_text(os.path.join(save_dir, filename_root + '.txt'), '\n'.join(lines))
+    return influence_df
+
+
+# ── Synthetic verification of the whole unified path ─────────────────────────
+
+# Planted effects for verify_unified_tfc_synthetic, chosen so both expected conclusions sit far
+# from alpha. A regression test whose correctness depends on a realization landing at P = 0.049
+# rather than 0.051 tests the random seed, not the code.
+#
+# The treatment-vs-control simple effect is a BETWEEN-animal contrast, so its precision is set by
+# the between-animal SD and by n = 5/6 -- which is why the planted shift is large relative to
+# _SYNTHETIC_MOUSE_SD. The interaction, by contrast, is a WITHIN-animal comparison and is
+# precise; the trace-only arm is therefore detected easily.
+#
+# The global arm's requirement (a NULL interaction) is the one quantity here that cannot be made
+# arbitrarily safe by choosing effect sizes: under a true null the p-value is uniform, so the seed
+# is fixed and the realised value is recorded in the output file.
+_SYNTHETIC_SHIFT = 1.00           # log-scale treatment effect (~2.7x)
+_SYNTHETIC_MOUSE_SD = 0.15        # between-animal SD of the random intercept
+_SYNTHETIC_RESID_SD = 0.10        # within-animal residual SD
+_SYNTHETIC_GROUP_SIZES = (('mCherry', 6), ('hM3D', 5), ('hM4D', 6))
+
+
+def _synthetic_mouse_epoch_table(shift_epochs, epochs, rng):
+    """A synthetic mouse x epoch table in exactly build_mouse_epoch_unified_table's output shape,
+    with `_SYNTHETIC_SHIFT` planted on both treatment groups in `shift_epochs` only."""
+    rows = []
+    for group, n in _SYNTHETIC_GROUP_SIZES:
+        for m in range(n):
+            mouse = f'{group}_{m}'
+            intercept = rng.normal(0.0, _SYNTHETIC_MOUSE_SD)
+            for epoch in epochs:
+                effect = (_SYNTHETIC_SHIFT if (group != UNIFIED_REFERENCE_GROUP
+                                               and epoch in shift_epochs) else 0.0)
+                value = intercept + effect + rng.normal(0.0, _SYNTHETIC_RESID_SD)
+                rows.append({'mouse': mouse, 'group': group, 'epoch': epoch,
+                             'n_cells': 100, 'n_active_cells': 80,
+                             'mouse_mean_log_amplitude': value,
+                             'geometric_mean_amplitude': float(np.exp(value)),
+                             'total_events': 1000.0, 'total_cell_seconds': 2000.0,
+                             'population_rate': float(np.exp(value)),
+                             'log_population_rate': value})
+    out = pd.DataFrame(rows)
+    out['group'] = pd.Categorical(
+        out['group'], categories=[UNIFIED_REFERENCE_GROUP]
+        + [g for g in GROUP_ORDER if g != UNIFIED_REFERENCE_GROUP])
+    out['epoch'] = pd.Categorical(
+        out['epoch'], categories=[UNIFIED_REFERENCE_EPOCH]
+        + [e for e in epochs if e != UNIFIED_REFERENCE_EPOCH])
+    return out
+
+
+def verify_unified_tfc_synthetic(save_dir, epochs=TFC_MATCHED_PROFILE_EPOCHS, seed=0,
+                                 filename='unified_lmm_synthetic_verification.txt'):
+    """
+    Run the ACTUAL unified fitting/contrast code against two planted datasets whose correct
+    answers are known, and hard-fail if it does not recover them.
+
+    Design 1 -- an EQUAL treatment shift in all three epochs. The planned simple effects must
+    detect it, and the group x epoch interaction must stay null: a real effect that does not vary
+    across epochs must not manufacture epoch specificity.
+
+    Design 2 -- a TRACE-ONLY shift. The interaction must become significant: an effect that does
+    vary across epochs must be detected as varying.
+
+    Together these are the two ways the unified analysis could be wrong in the direction that
+    matters for the manuscript's claims. The margins required are deliberately wide (see
+    _SYNTHETIC_SHIFT and friends) so this is a test of the code and not of one lucky realization.
+
+    Runs on 51-row frames, so both designs cost milliseconds.
+    """
+    epochs = tuple(epochs)
+    lines = ['Synthetic verification of the unified TFC models',
+             '=' * 60, '',
+             f'Planted log-scale shift {_SYNTHETIC_SHIFT} on both treatment groups; '
+             f'between-mouse SD {_SYNTHETIC_MOUSE_SD}, residual SD {_SYNTHETIC_RESID_SD}; '
+             f'seed {seed}.', '']
+    for offset, (label, shift_epochs) in enumerate([('global (all epochs)', epochs),
+                                                    ('trace-only', (TFC_TRACE_EPOCH,))]):
+        # A fresh generator per design, so one arm's draws do not depend on the other's and either
+        # can be re-run in isolation and reproduce the number in this file.
+        df_syn = _synthetic_mouse_epoch_table(shift_epochs, epochs,
+                                              np.random.default_rng(seed + offset))
+        fits = {o.key: fit_unified_group_epoch_model(df_syn, o.response_col)
+                for o in UNIFIED_OUTCOMES}
+        require_common_unified_method(fits)
+        contrasts = unified_posthoc_contrasts(fits, df_syn, epochs=epochs)
+        p_inter = fits['amplitude']['omnibus']['p']
+        p_trace = float(unified_contrast_lookup(contrasts, 'amplitude',
+                                                TFC_TRACE_EPOCH, 'hM3D')['p_holm_epoch'])
+        ratio = float(unified_contrast_lookup(contrasts, 'amplitude',
+                                              TFC_TRACE_EPOCH, 'hM3D')['ratio'])
+        lines += [f'{label}:',
+                  f'  trace hM3D-vs-mCherry: ratio {ratio:.3f}, '
+                  f'within-epoch Holm-adjusted P at trace = {p_trace:.3g}',
+                  f'  group x epoch: {format_unified_interaction(unified_interactions_table(fits).iloc[0])}',
+                  '']
+        assert p_trace < 1e-3, (
+            f'verify_unified_tfc_synthetic [{label}]: the planted trace effect (ratio '
+            f'{np.exp(_SYNTHETIC_SHIFT):.2f}x) should be detected with a within-epoch '
+            f'Holm-adjusted P < 0.001 at trace, got {p_trace:.3g}.')
+        if shift_epochs == epochs:
+            assert p_inter > 0.2, (
+                f'verify_unified_tfc_synthetic [{label}]: an equal shift in every epoch must not '
+                f'produce epoch specificity; the group x epoch interaction should be clearly '
+                f'null (P > 0.2) but was P = {p_inter:.3g}.')
+        else:
+            assert p_inter < 0.01, (
+                f'verify_unified_tfc_synthetic [{label}]: a trace-only shift must be detected as '
+                f'epoch-dependent; the group x epoch interaction should be clearly significant '
+                f'(P < 0.01) but was P = {p_inter:.3g}.')
+    lines.append('All assertions passed.')
+    ensure_dirs(save_dir)
+    write_text(os.path.join(save_dir, filename), '\n'.join(lines))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Figures (one file per panel; assembled by the caller)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -2221,6 +2917,31 @@ def _panel_stat_fn():
     _draw_violin_triplet / draw_superplot_triplet. A single place where the family choice is
     applied, so no panel can quietly use a different one from its neighbours."""
     return functools.partial(do_pairwise_holm_plot, holm_family=PANEL_HOLM_FAMILY)
+
+
+def _precomputed_stat_fn(p_hm3d_vs_ctl, p_hm4d_vs_ctl):
+    """A stat_fn that returns ALREADY-COMPUTED p-values and looks at no data at all.
+
+    ** This is what makes a paper panel incapable of inventing its own statistic. ** The
+    draw_superplot_triplet / annotate_pairwise_brackets interface calls stat_fn with the per-mouse
+    arrays and annotates whatever comes back; the default (_panel_stat_fn) runs an independent
+    per-panel Welch test there. On the paper figures the numbers must instead be the unified
+    model's Holm-adjusted simple effects, so this closure ignores its arguments entirely and hands
+    back the two values looked up from unified_lmm_posthoc_contrasts.csv. There is no code path
+    by which a paper panel's asterisk disagrees with that table.
+
+    Returns the pair order annotate_pairwise_brackets expects -- [(Exc,Inh), (Exc,Ctl), (Inh,Ctl)]
+    -- with NaN in the first slot: hM3D-vs-hM4D is in neither Holm family and is not a paper
+    comparison, and a NaN is skipped by the bracket drawer rather than drawn as non-significant.
+
+    That NaN behaviour is also how a whole panel is left un-annotated: the paper distribution
+    figure passes (NaN, NaN) for every non-primary epoch, so pre-tone and post-shock render no
+    bracket at all while keeping the identical axis treatment as the trace column.
+    """
+    def _stat_fn(group_hM3D, group_hM4D, group_mCherry, ax, heights, annotate=True,
+                 tot_dh_incr=0.12, barh=0, group_order=None, test=None):
+        return np.array([np.nan, float(p_hm3d_vs_ctl), float(p_hm4d_vs_ctl)], dtype=float)
+    return _stat_fn
 
 
 def _mouse_values_per_group(df, value_col, group_order=DREADD_DISPLAY_ORDER, panel_name='panel'):
@@ -2305,7 +3026,7 @@ def _panel_contrasts(df_or_mouse_df, value_col, ci_scale, ci_unit, include_exc_v
 
 def write_decomposition_contrasts_markdown(contrasts_by_panel, save_dir, filename,
                                            figure_has_stars=True, no_star_note=None,
-                                           title='Decomposition panel contrasts'):
+                                           title='Decomposition panel contrasts', preamble=None):
     """Write the decomposition figure's per-panel effect estimates + 95% intervals to a markdown
     file next to the figure.
 
@@ -2319,16 +3040,18 @@ def write_decomposition_contrasts_markdown(contrasts_by_panel, save_dir, filenam
         plot_decomposition_grid, which is deliberately star-free. This is not a formatting
         detail -- the note it selects tells the reader how an interval here relates to what the
         figure shows, and the star note would be simply FALSE next to a figure with no stars.
-    no_star_note : replaces the default `figure_has_stars=False` paragraph. That default is
+    no_star_note : replaces whichever default paragraph `figure_has_stars` would select. That
+        `figure_has_stars=False` default is
         written about the four-component DECOMPOSITION and says so explicitly ("one exact
         decomposition, not independent phenotypes"), which is the right warning there and a
         false description of a star-free figure whose panels are one component across epochs or
         trial phases. A caller whose panels are not the decomposition supplies its own note
         rather than inheriting a wrong one.
+    preamble : replaces the default provenance paragraphs, which describe equal-mouse-weighted
+        WELCH intervals and are simply false beside model-derived ones. The paper lane, whose
+        payloads come from the unified LMM contrasts, supplies its own.
     """
-    lines = [
-        f'# {title}',
-        '',
+    default_preamble = [
         'Equal-mouse-weighted contrasts against the mCherry control (n = 5 hM3D / 6 hM4D / '
         '6 mCherry), Welch two-sample 95% intervals computed from the per-mouse means. Only '
         'per-mouse values enter these numbers; any cell-level display is descriptive.',
@@ -2337,7 +3060,15 @@ def write_decomposition_contrasts_markdown(contrasts_by_panel, save_dir, filenam
         'small base overstates the practical size of a change.',
         '',
     ]
-    if figure_has_stars:
+    lines = [f'# {title}', ''] + (default_preamble if preamble is None else [preamble, ''])
+    if preamble is not None:
+        # A caller supplying its own provenance paragraph has already said where its numbers come
+        # from; both defaults below describe how a WELCH interval relates to a separately computed
+        # Holm-corrected star, which is not the relationship on a figure whose intervals and stars
+        # come from one model. An explicit no_star_note still overrides.
+        if no_star_note is not None:
+            lines += [no_star_note, '']
+    elif figure_has_stars:
         lines += [
             '**These intervals are not multiplicity-corrected.** The asterisks on the figure are '
             f'Holm-corrected across the family set by `PANEL_HOLM_FAMILY` (currently '
@@ -2346,8 +3077,6 @@ def write_decomposition_contrasts_markdown(contrasts_by_panel, save_dir, filenam
             'the star describes the corrected decision.',
             '',
         ]
-    elif no_star_note is not None:
-        lines += [no_star_note, '']
     else:
         lines += [
             '**These intervals are not multiplicity-corrected, and the figure carries no '
@@ -2422,7 +3151,7 @@ def _draw_cell_superplot_panel(ax, df, value_col, ylabel, panel_name, title=None
                                group_order=DREADD_DISPLAY_ORDER, label_size='small',
                                yscale='auto', y_quantum=None, annotate='stats',
                                ci_scale=None, ci_unit='', bracket_mode='axes',
-                               jitter_width=0.34):
+                               jitter_width=0.34, stat_fn=None, mouse_means_override=None):
     """Draw one CELL-level SuperPlot panel: every cell shown, coloured by mouse, per-mouse means
     overlaid as large markers, statistics computed from the mouse means only.
 
@@ -2454,6 +3183,25 @@ def _draw_cell_superplot_panel(ax, df, value_col, ylabel, panel_name, title=None
                 spread within a group's column. Narrower than the 0.34 default tightens the
                 cloud into a slimmer strip, which reads better in a multi-panel row where each
                 panel's own footprint has also been narrowed (see plot_decomposition).
+    stat_fn   : override for the panel's statistic. Defaults to _panel_stat_fn() (an independent
+                per-panel Welch/Holm test on the per-mouse means), which is right for the internal
+                figures. The paper lane passes _precomputed_stat_fn so its asterisks come from the
+                unified models instead.
+    mouse_means_override : {group: {mouse: value}} to draw as the large markers INSTEAD of the
+                unweighted mean of that mouse's cell cloud.
+
+                ** The marker must be the value the model was fit on. ** For the paper's rate row
+                those differ: the population rate is total events over total cell-seconds, i.e. a
+                cell-seconds-WEIGHTED mean of the per-cell rates, and the model is fit on its log.
+                For the amplitude row the model response is the mean of cell-level LOG amplitudes,
+                whose exp() is the mouse's geometric mean amplitude -- again not the unweighted
+                mean of the raw cloud. Drawing the cloud mean beside a model fit on something else
+                would put two different quantities under one marker.
+
+                The override's mouse keys must match the cloud's exactly (asserted), and it must
+                be on the same scale as `value_col` -- see the paper lane's
+                _assert_markers_match_model, which checks that end to end against
+                unified_lmm_mouse_epoch_values.csv.
     """
     if bracket_mode != 'axes':
         raise ValueError("_draw_cell_superplot_panel: bracket_mode must be 'axes' -- "
@@ -2467,9 +3215,19 @@ def _draw_cell_superplot_panel(ax, df, value_col, ylabel, panel_name, title=None
             raise RuntimeError(f'{panel_name}: group {group} has {len(mice)} mouse/mice for '
                                f'{value_col!r}; need >=2 for a group comparison.')
         cell_values[group] = {m: sub.loc[sub['mouse'] == m, value_col].to_numpy() for m in mice}
-        mouse_means[group] = {m: float(np.mean(cell_values[group][m])) for m in mice}
+        if mouse_means_override is None:
+            mouse_means[group] = {m: float(np.mean(cell_values[group][m])) for m in mice}
+        else:
+            override = mouse_means_override[group]
+            if set(override) != set(mice):
+                raise RuntimeError(
+                    f'{panel_name}: mouse_means_override for group {group} covers '
+                    f'{sorted(override)} but the cell cloud covers {mice}. The marker and the '
+                    f'cloud must describe the same animals.')
+            mouse_means[group] = {m: float(override[m]) for m in mice}
     draw_superplot_triplet(ax, cell_values, mouse_means, group_order, GROUP_COLOURS,
-                           stat_fn=_panel_stat_fn(), ylabel=ylabel, yscale=yscale,
+                           stat_fn=(_panel_stat_fn() if stat_fn is None else stat_fn),
+                           ylabel=ylabel, yscale=yscale,
                            y_quantum=y_quantum, annotate=annotate, ci_scale=ci_scale,
                            ci_unit=ci_unit, jitter_width=jitter_width)
     ax.set_xticks(range(len(group_order)))
@@ -2900,7 +3658,8 @@ def plot_decomposition_grid(df_fine, save_dir, epochs=TFC_MATCHED_EPOCHS,
                             filename_root='decomposition_grid', interaction_q=None,
                             reduced_coverage_epochs=(TFC_POST_SHOCK_LATE_EPOCH,),
                             components=_DECOMPOSITION_COMPONENTS, include_exc_vs_inh=True,
-                            epoch_labels=None):
+                            epoch_labels=None, contrast_payloads=None, interaction_note=None,
+                            subtitle=None, contrasts_note=None, row_height=1.5):
     """
     The decomposition as EFFECT ESTIMATES, one row per component and one column per
     exposure-matched epoch: hM3D/Ctl and hM4D/Ctl with 95% intervals, and no significance stars
@@ -2954,26 +3713,60 @@ def plot_decomposition_grid(df_fine, save_dir, epochs=TFC_MATCHED_EPOCHS,
     include_exc_vs_inh : draw the third, grey, direct hM3D-vs-hM4D point per panel. On by default
                     because the internal grid IS read across conditions, which is exactly when a
                     reader tries to infer that contrast by eye from the two vs-control ones (see
-                    _panel_contrasts). Off for the paper figures: those 16 intervals are tier-3
-                    exploratory output (docs/sp_rates_lmm.md section 5.2) in no multiplicity
-                    family, and they are not this design's question.
+                    _panel_contrasts). Off for the paper figures: hM3D-vs-hM4D is in neither
+                    unified multiplicity family (see unified_posthoc_contrasts) and is exploratory
+                    internal output only -- docs/sp_rates_lmm.md section 5.2.
     epoch_labels  : {epoch key: column title}. Defaults to the raw epoch keys, which is right for
                     the internal figure -- they are what every stats filename and every other
                     reference to a window is keyed on. The paper lane passes readable window
                     names, since "pre_tone_matched" tells a reader nothing and the 20 s matching
                     is the reason the columns are comparable at all.
+    contrast_payloads : {(component key, epoch): payload} to draw INSTEAD of the equal-mouse-
+                    weighted Welch contrasts this function computes itself. The paper lane passes
+                    the UNIFIED LMM contrasts (see _unified_contrast_payloads), so the forest's
+                    points and intervals are the same model-derived numbers as the distribution
+                    figure's stars rather than a second estimate of the same quantity computed a
+                    different way. `df_fine` is then unused for the estimates and only the payload
+                    shape is required; `include_exc_vs_inh` must be False, since a model-derived
+                    payload carries no DREADD-vs-DREADD entry.
+    interaction_note : {component key: annotation string} replacing `interaction_q`'s float, for a
+                    caller whose epoch-specificity result is not a BH-adjusted permutation q. The
+                    paper lane passes the unified joint Wald test (format_unified_interaction);
+                    the internal grid keeps interaction_q. Passing both raises.
+    subtitle, contrasts_note : override the figure's second title line and the companion markdown's
+                    explanatory paragraph, which describe the internal figure's provenance and
+                    would be false next to model-derived intervals.
+    row_height    : inches per row. The row's epoch-specificity annotation lives on its y-LABEL,
+                    so it has only the row's own axes height to occupy; a short figure with few
+                    rows clips it. The four-row internal grid has height to spare at the default;
+                    the two-row paper forest asks for more.
     """
     epochs = tuple(epochs)
     epoch_labels = epoch_labels or {}
+    if interaction_q and interaction_note:
+        raise ValueError('plot_decomposition_grid: pass interaction_q OR interaction_note, not '
+                         'both -- a row must carry exactly one epoch-specificity annotation.')
     interaction_q = interaction_q or {}
+    interaction_note = interaction_note or {}
     rows = tuple(components)
-    contrasts = {}   # (component key, epoch) -> _panel_contrasts payload
-    for epoch in epochs:
-        frames = _decomposition_grid_frames(aggregate_over_trials(df_fine, epoch))
-        for spec in rows:
-            contrasts[(spec.key, epoch)] = _panel_contrasts(
-                frames[spec.frame], spec.col, spec.ci_scale, spec.ci_unit,
-                include_exc_vs_inh=include_exc_vs_inh)
+    if contrast_payloads is not None:
+        if include_exc_vs_inh:
+            raise ValueError('plot_decomposition_grid: include_exc_vs_inh is not available with '
+                             'supplied contrast_payloads -- the unified model-derived payloads '
+                             'carry no hM3D-vs-hM4D entry by design.')
+        missing = [(spec.key, e) for spec in rows for e in epochs
+                   if (spec.key, e) not in contrast_payloads]
+        if missing:
+            raise ValueError(f'plot_decomposition_grid: contrast_payloads is missing {missing}.')
+        contrasts = dict(contrast_payloads)
+    else:
+        contrasts = {}   # (component key, epoch) -> _panel_contrasts payload
+        for epoch in epochs:
+            frames = _decomposition_grid_frames(aggregate_over_trials(df_fine, epoch))
+            for spec in rows:
+                contrasts[(spec.key, epoch)] = _panel_contrasts(
+                    frames[spec.frame], spec.col, spec.ci_scale, spec.ci_unit,
+                    include_exc_vs_inh=include_exc_vs_inh)
 
     groups = [g for g in DREADD_DISPLAY_ORDER if g != 'mCherry']
     # The direct DREADD-vs-DREADD contrast sits below the two vs-control ones, in grey: it is a
@@ -2984,7 +3777,7 @@ def plot_decomposition_grid(df_fine, save_dir, epochs=TFC_MATCHED_EPOCHS,
     # apparent distance from the reference line. One scale per row makes the columns comparable,
     # which is the only way the "flat across epochs" reading is honest.
     fig, axs = plt.subplots(len(rows), len(epochs), sharey=True, sharex='row',
-                            figsize=(2.3 * len(epochs), 1.5 * len(rows) + 1.0))
+                            figsize=(2.3 * len(epochs), row_height * len(rows) + 1.0))
     axs = np.atleast_2d(axs)
 
     for r, spec in enumerate(rows):
@@ -3022,8 +3815,12 @@ def plot_decomposition_grid(df_fine, save_dir, epochs=TFC_MATCHED_EPOCHS,
                 # The row's ONE epoch-specificity number lives on the row's own label, so it
                 # cannot be mistaken for a per-column (per-epoch) claim.
                 q = interaction_q.get(spec.key)
-                q_txt = '' if q is None else f'\ngroup x epoch q = {q:.3f}'
-                ax.set_ylabel(f'{spec.label}{q_txt}', size='x-small')
+                note = interaction_note.get(spec.key)
+                if note is not None:
+                    ax.set_ylabel(f'{spec.label}\n{note}', size='x-small')
+                else:
+                    q_txt = '' if q is None else f'\ngroup x epoch q = {q:.3f}'
+                    ax.set_ylabel(f'{spec.label}{q_txt}', size='x-small')
             if r == 0:
                 flag = '\n(reduced coverage)' if epoch in reduced_coverage_epochs else ''
                 ax.set_title(f'{epoch_labels.get(epoch, epoch)}{flag}', size='x-small')
@@ -3038,8 +3835,10 @@ def plot_decomposition_grid(df_fine, save_dir, epochs=TFC_MATCHED_EPOCHS,
         else:
             axs[r, 0].set_xlim(row_lo - pad, row_hi + pad)
 
+    default_subtitle = ('Per-row group x epoch q: BH-adjusted joint permutation test for that '
+                        'component')
     title = ('Components of population calcium activity: effect estimates with 95% CI\n'
-             'Per-row group x epoch q: BH-adjusted joint permutation test for that component')
+             + (subtitle if subtitle is not None else default_subtitle))
     fig.suptitle(title, size='small')
     fig.subplots_adjust(left=0.17, right=0.98, top=0.82, bottom=0.08, hspace=0.80, wspace=0.18)
     _save_panel(fig, save_dir, filename_root)
@@ -3051,7 +3850,8 @@ def plot_decomposition_grid(df_fine, save_dir, epochs=TFC_MATCHED_EPOCHS,
     write_decomposition_contrasts_markdown(
         {f'{spec.label} — {epoch}': contrasts[(spec.key, epoch)]
          for spec in rows for epoch in epochs},
-        save_dir, filename_root + '_contrasts.md', figure_has_stars=False)
+        save_dir, filename_root + '_contrasts.md', figure_has_stars=False,
+        no_star_note=contrasts_note)
 
 
 # Display names for the paper figures' epoch columns. The internal output uses the raw epoch keys
@@ -3068,16 +3868,33 @@ _PAPER_EPOCH_LABELS = {
 # _DecompComponent, which defines what a component IS (frame, column, contrast scale) and is
 # shared with the joint epoch tests. Axis scale and quantization jitter are properties of how one
 # figure draws a component, not of the component.
+#
+# ** Cells and mouse markers must be on the SAME scale, and the marker must be the model's own
+# value. ** The unified models are fit on mouse_mean_log_amplitude and log_population_rate; both
+# rows are DISPLAYED on the natural scale, with the marker the exp() of the fitted response:
+#
+#   amplitude       cells = mean_amplitude (each cell's mean event-run integral)
+#                   marker = exp(mouse_mean_log_amplitude), that mouse's GEOMETRIC mean amplitude
+#   population rate cells = overall_rate (events/s for that cell)
+#                   marker = population_rate = total events / total cell-seconds
+#
+# The amplitude row previously plotted log_amplitude cells on a linear axis. Plotting raw
+# amplitudes with a log-scale marker on one axis -- or the reverse -- would put two different
+# quantities under one y-axis; _assert_markers_match_model checks the pairing that is actually
+# drawn against unified_lmm_mouse_epoch_values.csv.
 _PAPER_ROW_DISPLAY = {
-    # yscale='linear' because log_amplitude is ALREADY logged -- 'auto' would see all-positive
-    # values and apply a SECOND log (plotting rule 2 / correction #7).
-    'amplitude': {'yscale': 'linear', 'quantum': False,
-                  'ylabel': 'Log of mean per-event amplitude'},
+    # yscale='auto' -> log, which is what a heavy-right-tailed per-cell amplitude needs; the
+    # column is raw, not pre-logged, so this is a single log, not the double transform plotting
+    # rule 2 warns about.
+    'amplitude': {'yscale': 'auto', 'quantum': False, 'col': 'mean_amplitude',
+                  'marker_col': 'geometric_mean_amplitude',
+                  'ylabel': 'Per-event amplitude (a.u.)'},
     # A per-cell rate is a small integer count over a fixed window, so without sub-quantum jitter
     # the cloud collapses onto a few hard horizontal stripes -- real quantization, but it hides
     # the density that is the reason for drawing cells at all.
-    'population_rate': {'yscale': 'auto', 'quantum': True,
-                        'ylabel': 'Event rate (events/s)'},
+    'population_rate': {'yscale': 'auto', 'quantum': True, 'col': 'overall_rate',
+                        'marker_col': 'population_rate',
+                        'ylabel': 'Event rate (events/s/cell)'},
 }
 
 
@@ -3085,13 +3902,20 @@ _PAPER_ROW_DISPLAY = {
 # the companion contrasts file. The remaining fields are exactly what _draw_cell_superplot_panel
 # and _panel_contrasts each need, so a panel carries its own display AND contrast configuration
 # and the grid driver below needs to know nothing about what is being plotted.
-_GridPanel = collections.namedtuple('_GridPanel', 'key label df col yscale quantum ci_scale ci_unit')
+# stat_fn / mouse_values / contrast_payload default to None, which keeps the internal behaviour
+# (a per-panel Welch/Holm test, markers = the cloud mean, Welch contrasts in the companion file).
+# The paper lane sets all three from the unified model tables so that no number on a paper panel
+# is computed by the panel itself.
+_GridPanel = collections.namedtuple(
+    '_GridPanel', 'key label df col yscale quantum ci_scale ci_unit '
+                  'stat_fn mouse_values contrast_payload',
+    defaults=(None, None, None))
 
 
 def _draw_superplot_panel_grid(panels, row_ylabels, col_titles, save_dir, filename_root,
                                panel_name, annotate='stats', figure_has_stars=True,
                                no_star_note=None, contrasts_title='Decomposition panel contrasts',
-                               figsize_per_panel=(2.0, 3.0)):
+                               figsize_per_panel=(2.0, 3.0), contrasts_preamble=None):
     """Draw a rows x columns grid of cell-level SuperPlot panels sharing one y-scale per ROW,
     save it, and write the companion per-panel contrasts file.
 
@@ -3146,11 +3970,13 @@ def _draw_superplot_panel_grid(panels, row_ylabels, col_titles, save_dir, filena
             # stack is drawn above the axes in axes-fraction coordinates and the title sits there
             # too, so a zero pad puts the topmost asterisks through the column label.
             title='', yscale=panel.yscale, y_quantum=panel.quantum,
-            annotate=annotate, bracket_mode='axes', jitter_width=0.22)
+            annotate=annotate, bracket_mode='axes', jitter_width=0.22,
+            stat_fn=panel.stat_fn, mouse_means_override=panel.mouse_values)
         if r == 0:
             axs[r, c].set_title(col_titles[c], size='small', pad=26)
-        contrasts_by_panel[panel.label] = _panel_contrasts(
-            panel.df, panel.col, panel.ci_scale, panel.ci_unit)
+        contrasts_by_panel[panel.label] = (
+            _panel_contrasts(panel.df, panel.col, panel.ci_scale, panel.ci_unit)
+            if panel.contrast_payload is None else panel.contrast_payload)
 
     for r in range(n_rows):
         ax0 = axs[r, 0]
@@ -3178,44 +4004,172 @@ def _draw_superplot_panel_grid(panels, row_ylabels, col_titles, save_dir, filena
     write_decomposition_contrasts_markdown(contrasts_by_panel, save_dir,
                                            filename_root + '_contrasts.md',
                                            figure_has_stars=figure_has_stars,
-                                           no_star_note=no_star_note, title=contrasts_title)
+                                           no_star_note=no_star_note, title=contrasts_title,
+                                           preamble=contrasts_preamble)
     return contrasts_by_panel
 
 
-def plot_paper_epoch_distributions(df_matched, save_dir, epochs=TFC_MATCHED_PROFILE_EPOCHS,
+_PAPER_CONTRASTS_PREAMBLE = (
+    'Model-derived treatment-vs-control contrasts from the unified mouse-level mixed models '
+    '(`log(metric) ~ group * epoch + (1|mouse)`, n = 5 hM3D / 6 hM4D / 6 mCherry animals, one '
+    'value per animal per epoch). Every estimate, interval, P-value and asterisk below and on the '
+    'accompanying figure is one row of `stats/unified_lmm_posthoc_contrasts.csv`; nothing here is '
+    'computed by the panel.\n\n'
+    'Amplitude ratios are ratios of GEOMETRIC means of the cell-level mean event-run integrals '
+    '(the model response is the within-animal mean of cell-level log amplitudes). Rate ratios are '
+    'accompanied by the observed absolute difference in events/s/cell, which is descriptive: a '
+    'fold-change computed off a small base overstates the practical size of a change.\n\n'
+    'Within each epoch, hM3D and hM4D are compared with mCherry and those two '
+    'treatment-vs-control comparisons are Holm-corrected together (`p_holm_epoch`). The '
+    'procedure is the same in every epoch and every panel. A conservative six-comparison Holm '
+    'correction across all three epochs is retained as a SENSITIVITY analysis in `p_holm_six` of '
+    '`stats/unified_lmm_posthoc_contrasts.csv`; it determines no annotation and no manuscript '
+    'significance statement.\n\n'
+    'A significant comparison within one epoch does not imply that the treatment effect differs '
+    'from another epoch; epoch dependence was tested directly by the group x epoch interaction '
+    '(`stats/unified_lmm_interactions.csv`).'
+)
+
+_PAPER_DISTRIBUTION_STAR_NOTE = (
+    '**Every panel is annotated by the same procedure.** Within each epoch, hM3D and hM4D are '
+    'compared with mCherry using model-derived post-hoc contrasts, Holm-corrected across those '
+    'two treatment-versus-control comparisons (`p_holm_epoch`). Asterisks denote Holm-adjusted '
+    'P < 0.05 (*), P < 0.01 (**), P < 0.001 (***); a panel with no bracket is one where neither '
+    'adjusted P reached 0.05, not one that was exempted from testing. The presence of a star in '
+    'one column and not another is not itself a test of any difference between columns — epoch '
+    'dependence was assessed separately by the group x epoch joint Wald test.'
+)
+
+
+def _unified_contrast_payloads(contrasts, epochs=TFC_MATCHED_PROFILE_EPOCHS):
+    """{(outcome key, epoch): payload} in the shape the panel/forest/markdown code already
+    consumes, built from the unified model contrasts.
+
+    ** This adapter is why there is no second forest and no second markdown writer. ** The
+    existing drawing code speaks the dict shape mouse_contrast_ci returns; rather than duplicate
+    that code to accept a tidy frame, the tidy frame is translated once, here. The fields are the
+    model's: `diff` is the log-scale contrast, `ratio` its exponential, and the intervals are the
+    t-based model intervals -- not Welch intervals on the per-mouse means.
+    """
+    epochs = tuple(epochs)
+    payloads = {}
+    for outcome in UNIFIED_OUTCOMES:
+        for epoch in epochs:
+            entry = {}
+            for group in UNIFIED_TREATMENT_GROUPS:
+                row = unified_contrast_lookup(contrasts, outcome.key, epoch, group)
+                # 'p_holm' is what format_contrast_ci_lines renders as "Holm-adjusted P". It
+                # carries the paper-facing within-epoch value on EVERY row, because every row is a
+                # member of its own epoch's two-comparison family and they are all corrected the
+                # same way. The six-way sensitivity value travels separately as 'p_holm_six' and
+                # is never rendered as the decision.
+                entry[group] = {
+                    'diff': row['estimate_log'], 'diff_lo': row['ci_low_log'],
+                    'diff_hi': row['ci_high_log'], 'ratio': row['ratio'],
+                    'ratio_lo': row['ratio_ci_low'], 'ratio_hi': row['ratio_ci_high'],
+                    'p_raw': row['p_raw'],
+                    'p_holm': float(row['p_holm_epoch']),
+                    'p_holm_epoch': float(row['p_holm_epoch']),
+                    'p_holm_six': row['p_holm_six'],
+                    # The contrast is on a log response, so the 'diff' above is in log units --
+                    # the same statement mouse_contrast_ci(scale='log') makes about its output.
+                    'unit_is_log': True, 'n': None, 'n_ref': None,
+                }
+            payloads[(outcome.key, epoch)] = {
+                # 'log' tells format_contrast_ci_lines the difference is already on a log scale,
+                # so it reports exp(difference) as the ratio -- which is exactly what these are.
+                'scale': 'log', 'unit': '', 'contrasts': entry, 'exc_vs_inh': None}
+    return payloads
+
+
+def _assert_markers_match_model(mouse_epoch, marker_col, drawn, panel_key, epoch):
+    """Hard-fail unless the values about to be drawn as a panel's large markers ARE that panel's
+    rows of the unified mouse x epoch table.
+
+    Validation that the figure and the model describe the same quantity, made mechanical rather
+    than visual: the figure's whole claim is that its markers are the inferential dataset, and a
+    weighting or scale slip between the cloud collapse and the model response is exactly the kind
+    of error nobody spots by eye.
+    """
+    expected = mouse_epoch[mouse_epoch['epoch'] == epoch].set_index('mouse')[marker_col]
+    for group, per_mouse in drawn.items():
+        for mouse, value in per_mouse.items():
+            if mouse not in expected.index:
+                raise RuntimeError(f'_assert_markers_match_model [{panel_key}]: mouse {mouse!r} '
+                                   f'is drawn but absent from the unified table.')
+            if not np.isclose(value, float(expected.loc[mouse]), rtol=1e-9, atol=0.0):
+                raise RuntimeError(
+                    f'_assert_markers_match_model [{panel_key}]: mouse {mouse!r} ({group}) would '
+                    f'be drawn at {value!r} but the model was fit on {marker_col} = '
+                    f'{float(expected.loc[mouse])!r}. The marker must be the model\'s own value.')
+
+
+def _paper_panel_star_pvalues(contrasts, outcome_key, epoch):
+    """(hM3D-vs-Ctl, hM4D-vs-Ctl) p-values for one paper panel's asterisks -- that panel's own two
+    within-epoch Holm-adjusted values (`p_holm_epoch`).
+
+    ** This is the single place a paper asterisk is authorized, and it has no per-epoch branch. **
+    Every panel of the 2 x 3 figure goes through the same lookup and the same correction, so
+    visually equivalent panels are annotated by an identical procedure; whether a bracket is
+    actually drawn is decided downstream by the adjusted P against alpha, not by which column the
+    panel sits in. The six-way sensitivity correction (`p_holm_six`) can never reach a panel
+    through here.
+    """
+    out = []
+    for group in UNIFIED_TREATMENT_GROUPS:
+        row = unified_contrast_lookup(contrasts, outcome_key, epoch, group)
+        if not np.isfinite(row['p_holm_epoch']):
+            raise RuntimeError(
+                f'_paper_panel_star_pvalues: {outcome_key}/{epoch}/{group} has a non-finite '
+                f'p_holm_epoch ({row["p_holm_epoch"]!r}). Every paper panel must carry both of '
+                f'its epoch\'s treatment-vs-control Holm-adjusted P-values.')
+        out.append(float(row['p_holm_epoch']))
+    return tuple(out)
+
+
+def plot_paper_epoch_distributions(df_matched, mouse_epoch, contrasts, save_dir,
+                                   epochs=TFC_MATCHED_PROFILE_EPOCHS,
                                    rows=('amplitude', 'population_rate'),
                                    filename_root='tfc_amplitude_rate_by_epoch'):
     """
     The paper-facing distribution figure: per-event amplitude (top) and population event rate
     (bottom) for each DREADD group, across the three exposure-matched TFC windows.
 
-    ** This is a re-cut of output that already exists, not a new analysis. ** Every panel draws
-    the same quantities plot_decomposition draws and computes its statistics through the same
-    _draw_cell_superplot_panel path; what changes is the selection (two components, three epochs,
-    one figure) and the fact that the columns are directly comparable. No test is run here that is
-    not already run in the TFC_cond lane.
+    ** Every number on this figure comes from the unified models. ** The large markers are the
+    rows of `mouse_epoch` (build_mouse_epoch_unified_table) -- the exact values both LMMs are fit
+    on, asserted panel by panel -- and the asterisks are the within-epoch Holm-adjusted contrasts
+    from `contrasts` (unified_posthoc_contrasts), handed to the panels through
+    _precomputed_stat_fn so no panel can compute a statistic of its own. The per-cell clouds are
+    display: they show the within-animal distribution behind each marker and enter no calculation.
 
-    ** sharey='row' is the point of the figure, not tidiness. ** The scientific claim these panels
-    support is that the hM3D amplitude elevation is a GLOBAL shift rather than a trace-specific
-    one (the joint group x epoch test is null for every component -- see
-    fit_and_report_epoch_interaction). Three independently autoscaled columns would let a reader
-    read an epoch difference straight off the axis limits, which is the opposite of what the data
-    say. One y-scale per row makes "flat across epochs" an honest reading.
+    ** All six panels are annotated identically. ** Each takes its own epoch's two
+    treatment-vs-control contrasts, Holm-corrected within that epoch (_paper_panel_star_pvalues),
+    and draws a bracket wherever the adjusted P clears alpha. There is no per-epoch branch: a
+    panel without a bracket is one where neither comparison reached significance, not one that
+    was exempted from testing. No `p_holm_six` value reaches this figure.
+
+    ** Cells and markers share a scale. ** Both rows are drawn on the natural scale with a log
+    axis; the amplitude marker is exp(mouse_mean_log_amplitude), i.e. that animal's geometric mean
+    event amplitude, and the rate marker is total events over total cell-seconds. See
+    _PAPER_ROW_DISPLAY.
+
+    ** sharey='row' is the point of the figure, not tidiness. ** The figure exists to be read
+    across its three columns. Independently autoscaled columns would let a reader take an epoch
+    difference straight off the axis limits; one y-scale per row makes the comparison honest.
+    Whether the treatment effect actually differs across epochs is not read off these columns at
+    all -- it is the group x epoch interaction, reported once per outcome in
+    stats/unified_lmm_interactions.csv. A significant comparison in one column and not another
+    does not by itself establish an epoch difference.
 
     ** The input must be exposure-matched. ** Pass the frame restricted by
-    restrict_to_exposure_matched_trials -- not the raw df_fine. The rate row is duration-sensitive
-    (P(active) = 1 - e^(-lambda*T) rises with T at a fixed underlying rate) and trial 1's trace
-    window is 15 s rather than 20 s, so on unmatched trials part of the trace-vs-baseline
-    difference in that row would be pure exposure. Amplitude is a per-event quantity and does not
-    care, but the two rows must be drawn over the same cells to be read together.
-
-    Brackets are Holm-corrected vs-control pairwise tests computed from the PER-MOUSE means only
-    (draw_superplot_triplet never passes the cell cloud to stat_fn). Comparing stars BETWEEN
-    columns is the difference-of-significance fallacy -- epoch specificity has exactly one test
-    per component, reported on the companion forest figure and in paper_results_summary.md.
+    restrict_to_exposure_matched_trials -- not the raw df_fine -- and the SAME frame `mouse_epoch`
+    was built from. The rate row is duration-sensitive (P(active) = 1 - e^(-lambda*T) rises with T
+    at a fixed underlying rate) and trial 1's trace window is 15 s rather than 20 s, so on
+    unmatched trials part of the trace-vs-baseline difference in that row would be pure exposure.
     """
     epochs = tuple(epochs)
     specs = [_DECOMPOSITION_COMPONENTS_BY_KEY[k] for k in rows]
+    payloads = _unified_contrast_payloads(contrasts, epochs=epochs)
 
     panels = {}
     for c, epoch in enumerate(epochs):
@@ -3223,14 +4177,27 @@ def plot_paper_epoch_distributions(df_matched, save_dir, epochs=TFC_MATCHED_PROF
         for r, spec in enumerate(specs):
             display = _PAPER_ROW_DISPLAY[spec.key]
             sub = frames[spec.frame]
+            col = display['col']
             # One count = one quantum of rate. exposure_seconds is the same matched window for
             # every cell within a trial, so the median is that window pooled over trials.
             quantum = (1.0 / float(np.median(sub['exposure_seconds']))
                        if display['quantum'] else None)
+            marker_col = display['marker_col']
+            epoch_rows = mouse_epoch[mouse_epoch['epoch'] == epoch]
+            mouse_values = {
+                g: dict(zip(epoch_rows.loc[epoch_rows['group'] == g, 'mouse'],
+                            epoch_rows.loc[epoch_rows['group'] == g, marker_col]))
+                for g in DREADD_DISPLAY_ORDER}
+            _assert_markers_match_model(mouse_epoch, marker_col, mouse_values,
+                                        f'{spec.key}/{epoch}', epoch)
+            stars = _paper_panel_star_pvalues(contrasts, spec.key, epoch)
             panels[(r, c)] = _GridPanel(
                 key=f'{spec.key}/{epoch}', label=f'{spec.label} — {epoch}', df=sub,
-                col=spec.col, yscale=display['yscale'], quantum=quantum,
-                ci_scale=spec.ci_scale, ci_unit=spec.ci_unit)
+                col=col, yscale=display['yscale'], quantum=quantum,
+                ci_scale=spec.ci_scale, ci_unit=spec.ci_unit,
+                stat_fn=_precomputed_stat_fn(*stars),
+                mouse_values=mouse_values,
+                contrast_payload=payloads[(spec.key, epoch)])
 
     # Returned so the Results summary can quote the SAME payloads the panels were drawn from,
     # rather than recomputing the contrasts and risking a figure and its own summary disagreeing.
@@ -3239,7 +4206,10 @@ def plot_paper_epoch_distributions(df_matched, save_dir, epochs=TFC_MATCHED_PROF
         row_ylabels=[_PAPER_ROW_DISPLAY[spec.key]['ylabel'] for spec in specs],
         col_titles=[_PAPER_EPOCH_LABELS.get(e, e) for e in epochs],
         save_dir=save_dir, filename_root=filename_root,
-        panel_name='plot_paper_epoch_distributions', annotate='stats', figure_has_stars=True)
+        panel_name='plot_paper_epoch_distributions', annotate='stats', figure_has_stars=True,
+        contrasts_title='Paper figure contrasts — unified mixed models',
+        contrasts_preamble=_PAPER_CONTRASTS_PREAMBLE,
+        no_star_note=_PAPER_DISTRIBUTION_STAR_NOTE)
 
 
 # Column titles for the conditioning-phase figure's epoch rows. `pre_tone` is deliberately the
@@ -3405,11 +4375,14 @@ PAPER_METHODS_FILENAME = 'sp_rates_lmm_paper_methods.md'
 # a paper-sized figure set reads as a decision on record rather than as things having gone
 # missing -- every one of these is computed, kept, and available if a reviewer asks.
 _PAPER_SUPPLEMENT_ITEMS = (
-    'Event rate among ACTIVE cells, and total deconvolved amplitude-rate (a.u./s) -- the other '
-    'two terms of the decomposition identity (`decomposition*.png`).',
-    'The direct hM3D-vs-hM4D contrasts -- exploratory, uncorrected, in no multiplicity family '
-    '(docs/sp_rates_lmm.md section 5.2). Describe the two groups as showing divergent profiles; '
-    'do not report either as differing from control on this basis.',
+    'Fraction of cells active, event rate among ACTIVE cells, and total deconvolved '
+    'amplitude-rate (a.u./s) -- the other terms of the decomposition identity '
+    '(`decomposition*.png`, `decomposition_grid.png`). Fraction active has no unified '
+    'mouse-level model and therefore no paper-facing panel: every number on a paper figure comes '
+    'from one of the two unified models.',
+    'The direct hM3D-vs-hM4D contrasts -- exploratory, uncorrected, in no unified multiplicity '
+    'family (docs/sp_rates_lmm.md section 5.2). Describe the two groups as showing divergent '
+    'profiles; do not report either as differing from control on this basis.',
     'Amplitude ECDF and per-mouse 90th percentile -- where in the distribution the effect sits '
     '(`amplitude_ecdf.png`, `amplitude_p90.png`).',
     'Event-detection threshold sensitivity at thres in {1.5, 2.0, 3.0} (`threshold_sensitivity.png`).',
@@ -3422,106 +4395,262 @@ _PAPER_SUPPLEMENT_ITEMS = (
 )
 
 
-def write_paper_results_summary(save_dir, primary_contrasts, holm, perm_results,
-                                interactions, q_by_name, panel_contrasts, rate_contrasts,
-                                manip_contrasts, filename='paper_results_summary.md'):
-    """
-    Every number the Results paragraph needs, in one file.
+# ** The embedded statsmodels table is NOT the paper's inference. ** MixedLM's summary reports an
+# asymptotic z test per fixed-effect coefficient (`P>|z|`), which uses neither the animal-level
+# denominator df this analysis fixes at n_animals - 1 nor the contrast/joint-test structure the
+# manuscript actually reports. A coefficient is also not a simple effect at a non-reference epoch
+# (see unified_posthoc_contrasts). Both distinctions are stated at the one place a reader is most
+# likely to conflate them: bracketing the raw summary, so neither half can be read out of context.
+_STATSMODELS_PVALUE_NOTE = (
+    '--- READ BEFORE THE TABLE BELOW ---------------------------------------------------------\n'
+    "The coefficient table below is statsmodels' own output: its `P>|z|` column is an ASYMPTOTIC\n"
+    'Z TEST of each fixed-effect coefficient. It is diagnostic only.\n'
+    '\n'
+    'The paper-facing inferential P-values are computed separately from this same fit:\n'
+    '  - treatment-vs-control simple effects -> linear contrasts (linear_contrast_test),\n'
+    '  - group x epoch epoch-dependence     -> joint Wald F tests (joint_wald_test),\n'
+    'both on the common animal-level denominator convention t / F with df = n_animals - 1 = 16.\n'
+    'Read them from unified_lmm_posthoc_contrasts.csv (p_raw, p_holm_epoch, p_holm_six) and\n'
+    'unified_lmm_interactions.csv.\n'
+    '\n'
+    'DO NOT QUOTE A `P>|z|` VALUE FROM THE TABLE BELOW AS A MANUSCRIPT P-VALUE. Note also that a\n'
+    'group coefficient is the treatment-vs-control effect only AT THE REFERENCE EPOCH; at trace\n'
+    'and post-shock the simple effect is that coefficient plus the corresponding interaction\n'
+    'coefficient, with their covariance.\n'
+    '-----------------------------------------------------------------------------------------'
+)
+_STATSMODELS_PVALUE_FOOTER = (
+    '--- END OF STATSMODELS OUTPUT -----------------------------------------------------------\n'
+    'The `P>|z|` column above is an asymptotic z test and is diagnostic only; the manuscript\n'
+    'P-values are the t(df=16) contrasts and joint Wald F tests in the CSVs named above.\n'
+    '-----------------------------------------------------------------------------------------'
+)
 
-    ** Nothing here is computed for the first time. ** Each block reformats a result the TFC_cond
-    lane already produced; this file exists so that writing the manuscript does not mean
-    reassembling six numbers out of twenty stats files in three evidential tiers, and so that the
-    tier of each number travels WITH it. That last part is the point: the recurring failure mode
-    this module has documented (docs/sp_rates_lmm.md section 5.2) is a tier-3 estimate being
-    written up as "significant" once it has been separated from the file that said otherwise.
+
+def write_paper_results_summary(save_dir, mouse_epoch, fits, contrasts, interactions_table,
+                                primary_contrasts, holm, perm_results, interactions, q_by_name,
+                                rate_contrasts, manip_contrasts,
+                                filename='paper_results_summary.md'):
+    """
+    Every number the manuscript's Results paragraph needs, in one file, in two clearly separated
+    parts.
+
+    ** Part one is the analysis the paper reports. ** The two unified mixed models, all twelve
+    treatment-vs-control contrasts with their within-epoch Holm-adjusted P-values
+    (`p_holm_epoch`), the two group x epoch interaction tests, and the descriptive absolute
+    population-rate differences. This is the only part any manuscript sentence should quote, and
+    it is the only part any figure annotation comes from.
+
+    ** No six-comparison Holm P appears anywhere in Part 1. ** The conservative across-epoch
+    family lives under Part 2 with its own heading, so the paper-facing and the sensitivity
+    decision rules are typographically separate and a six-way adjusted P cannot be lifted out of
+    a Part 1 table and quoted as the reported result.
+
+    ** Part two is everything else this module computes. ** The cell-level amplitude model and its
+    three-member Holm family, the mouse-label permutation tests, the Bayesian negative-binomial
+    rate model, the BH-FDR family, the manipulation check, the supplement list. All of it is real,
+    kept, and useful as sensitivity evidence -- and none of it supplies a paper number. Keeping
+    the separation typographic rather than implicit is the point: the recurring failure mode this
+    module has documented is a secondary estimate being written up as the headline once it has
+    been separated from the file that said otherwise.
 
     Every null is reported with its interval and what that interval still admits. At n = 5/6/6 a
     non-significant result is weak evidence of absence, and an interval reaching 1.55 has not
     excluded a +55% effect.
     """
+    payloads = _unified_contrast_payloads(contrasts,
+                                          epochs=tuple(mouse_epoch['epoch'].cat.categories))
     lines = [
         '# TFC cellular results — paper summary',
         '',
-        'Per-event amplitude and event rate by DREADD group across the three exposure-matched '
-        '20 s TFC windows (pre-tone baseline, trace, post-shock). n = 5 hM3D / 6 hM4D / '
-        '6 mCherry animals; the mouse is the unit of inference throughout.',
+        'Per-event amplitude and population event rate by DREADD group across the three '
+        'exposure-matched 20 s TFC windows (pre-tone baseline, trace, post-shock). '
+        f'n = 5 hM3D / 6 hM4D / 6 mCherry animals; the inferential dataset is '
+        f'{len(mouse_epoch)} rows — one value per animal per epoch.',
         '',
-        '**This is a re-cut of the `TFC_cond` output, not a separate analysis.** The full '
-        'rationale, every sensitivity analysis, and the decision record live in '
-        '`docs/sp_rates_lmm.md` and in the METHODS template beside this file.',
+        '**Part 1 is the analysis the paper reports. Part 2 is sensitivity and supplementary '
+        'output and supplies no number in any manuscript sentence or on any paper figure.** The '
+        'full rationale and decision record live in `docs/sp_rates_lmm.md`.',
         '',
-        '## Primary — trace-period per-event amplitude',
+        '# Part 1 — paper-facing analysis',
         '',
-        f"Omnibus (mixed model, `log_amplitude ~ group + (1|mouse)`, cell-level, trials pooled): "
-        f"p = {holm['trace_amplitude']['p_raw']:.4g}, "
-        f"**Holm-corrected p = {holm['trace_amplitude']['p_holm']:.4g}** across the "
-        f"{len(holm)}-member confirmatory family"
-        f"{' (reject at alpha = 0.05)' if holm['trace_amplitude']['reject'] else ''}.",
+        'The same group x epoch mixed-effects model is fit for each outcome. Within each epoch, '
+        'hM3D and hM4D are compared with mCherry using model-derived post-hoc contrasts, with '
+        'Holm correction across the two treatment-versus-control comparisons in that epoch. The '
+        'group x epoch interaction tests whether the magnitude of the treatment effect differs '
+        'across epochs.',
         '',
-        'Equal-mouse-weighted contrasts vs mCherry:',
+        '## Unified mixed models',
+        '',
+        'Both outcomes are analysed with the SAME mouse-level linear mixed-effects model: DREADD '
+        'group, epoch and their interaction as fixed effects, animal as a random intercept, '
+        'reference levels mCherry and pre-tone. Amplitude is summarised per animal as the mean '
+        'over its active cells of log(cell mean event-run integral), so an exponentiated contrast '
+        'is a ratio of GEOMETRIC means. Population rate is total events over total cell-seconds '
+        'across all detected cells (zero-event cells included), log-transformed.',
+        '',
+    ]
+    for outcome in UNIFIED_OUTCOMES:
+        fit = fits[outcome.key]
+        lines.append(f"- **{outcome.label}**: `{fit['formula']} + (1|mouse)` "
+                     f"({fit['method']}, {fit['n_mice']} animals)")
+    lines += [
+        '',
+        '## Treatment-vs-control contrasts by epoch',
+        '',
+        'All twelve treatment-vs-control simple effects — 3 epochs x {hM3D, hM4D} vs mCherry, per '
+        'outcome. Each is a linear contrast of the same full group x epoch model (the group '
+        'coefficient alone at the reference epoch; that coefficient plus the corresponding '
+        'group x epoch coefficient elsewhere, with their covariance), on an animal-level '
+        f'denominator df = n_animals - 1 = {int(interactions_table["df2"].iloc[0])} used '
+        'consistently for the joint Wald and contrast inference.',
+        '',
+        'Within each epoch, the two treatment-vs-control comparisons are Holm-corrected together '
+        '(`p_holm_epoch`) — six two-member families, the same procedure in every epoch and both '
+        'outcomes. hM3D-vs-hM4D is in no family and is not computed here.',
+        '',
+        '**These are the only P-values that generate a figure asterisk or a manuscript '
+        'significance statement.**',
+        '',
+        '| outcome | epoch | comparison | ratio | 95% CI | raw P | Holm-adjusted P (within epoch) |',
+        '|---|---|---|---|---|---|---|',
+    ]
+    for _, row in contrasts.iterrows():
+        flag = ' (significant)' if row['holm_epoch_reject'] else ''
+        lines.append(
+            f"| {UNIFIED_OUTCOMES_BY_KEY[row['outcome']].label} | {row['epoch']} | "
+            f"{GROUP_LABELS.get(row['group'], row['group'])} vs Ctl | {row['ratio']:.3f} | "
+            f"[{row['ratio_ci_low']:.3f}, {row['ratio_ci_high']:.3f}] | {row['p_raw']:.4g} | "
+            f"**{row['p_holm_epoch']:.4g}**{flag} |")
+    lines += [
+        '',
+        '## Group x epoch interaction — does the treatment effect differ across epochs?',
+        '',
+        'Joint Wald test that all four group x epoch coefficients are zero, one per outcome. '
+        'This is the paper\'s single test of epoch dependence. A significant treatment-control '
+        'comparison within one epoch does not imply that the treatment effect differs from '
+        'another epoch.',
+        '',
+        '| outcome | F | df1 | df2 | P |',
+        '|---|---|---|---|---|',
+    ]
+    for _, row in interactions_table.iterrows():
+        lines.append(f"| {UNIFIED_OUTCOMES_BY_KEY[row['outcome']].label} | {row['F']:.3f} | "
+                     f"{int(row['df1'])} | {int(row['df2'])} | {row['p']:.4g} |")
+    lines += [
+        '',
+        'A non-significant interaction is **no evidence that the treatment effect differed across '
+        'the pre-tone, trace and post-shock epochs**. It is not evidence that the effect is '
+        'identical, global, tonic, or equivalent across them.',
+        '',
+        '## Absolute population-rate differences',
+        '',
+    ]
+    rate_rows = contrasts[contrasts['outcome'] == 'population_rate']
+    lines += [
+        'The population-rate effects above, as observed absolute differences in events/s per '
+        'cell (DESCRIPTIVE — equal-mouse-weighted observed means, no test; a rate ratio off a '
+        'small base overstates the practical size of a change):',
+        '',
+    ]
+    for _, row in rate_rows.iterrows():
+        lines.append(
+            f"- {row['epoch']}, {GROUP_LABELS.get(row['group'], row['group'])} vs Ctl: "
+            f"{row['absolute_difference_events_per_s_per_cell']:+.4f} events/s/cell "
+            f"({row['mean_population_rate_treatment']:.4f} vs "
+            f"{row['mean_population_rate_control']:.4f})")
+    lines += [
+        '',
+        '## The same contrasts as the figures render them',
+        '',
+        'The Holm-adjusted P on every line is that row\'s within-epoch value (`p_holm_epoch`) — '
+        'the same number the corresponding figure panel is annotated from.',
+        '',
+    ]
+    for outcome in UNIFIED_OUTCOMES:
+        for epoch in mouse_epoch['epoch'].cat.categories:
+            lines.append(f'**{outcome.label} — {epoch}**')
+            lines.append('')
+            lines += [f'- {ln}' if not ln.startswith('  ') else f'  - {ln.strip()}'
+                      for ln in format_contrast_ci_lines(
+                          payloads[(outcome.key, epoch)]['contrasts'], 'mCherry')]
+            lines.append('')
+
+    lines += [
+        '# Part 2 — sensitivity and supplementary analyses',
+        '',
+        '**Nothing below is a paper-facing result.** These analyses are retained in full because '
+        'they test whether the conclusions above survive different modelling choices, weightings '
+        'and distributional assumptions. None of them supplies an asterisk, an interval or a '
+        'P-value to any manuscript sentence or paper figure, and none should be reported '
+        'alongside the Part 1 numbers as though it were an alternative primary result.',
+        '',
+        '## Sensitivity — conservative six-comparison across-epoch Holm correction',
+        '',
+        'The same twelve model contrasts and the same raw P-values as Part 1, corrected more '
+        'conservatively: all six treatment-vs-control simple effects spanning the three epochs '
+        'are Holm-corrected together within each outcome (`p_holm_six` in '
+        '`unified_lmm_posthoc_contrasts.csv`), rather than two at a time within each epoch. It '
+        'is a wider definition of the inferential family, retained so the choice stays auditable. '
+        '**These adjusted P-values determine no figure annotation and no manuscript significance '
+        'statement.**',
+        '',
+        '| outcome | epoch | comparison | raw P | six-comparison Holm P |',
+        '|---|---|---|---|---|',
+    ]
+    for _, row in contrasts.iterrows():
+        flag = ' (significant)' if row['holm_six_reject'] else ''
+        lines.append(
+            f"| {UNIFIED_OUTCOMES_BY_KEY[row['outcome']].label} | {row['epoch']} | "
+            f"{GROUP_LABELS.get(row['group'], row['group'])} vs Ctl | {row['p_raw']:.4g} | "
+            f"{row['p_holm_six']:.4g}{flag} |")
+    lines += [
+        '',
+        '## Sensitivity — cell-level trace-period amplitude model (historical primary)',
+        '',
+        f"`log_amplitude ~ group + (1|mouse)` at the CELL level, trials pooled, 35 s pre-tone "
+        f"reference: p = {holm['trace_amplitude']['p_raw']:.4g}, Holm-corrected p = "
+        f"{holm['trace_amplitude']['p_holm']:.4g} across its own {len(holm)}-member family. This "
+        f"was the primary analysis before the unified models; it is kept as a sensitivity check "
+        f"on the mouse-level amplitude result and uses a different epoch definition and a "
+        f"different unit of aggregation.",
+        '',
+        'Equal-mouse-weighted Welch contrasts vs mCherry on the same endpoint:',
         '',
     ]
     lines += [f'- {ln}' if not ln.startswith('  ') else f'  - {ln.strip()}'
               for ln in format_contrast_ci_lines(primary_contrasts, 'mCherry')]
-    # The permutation p is the one to quote: cluster-robust SEs are anti-conservative at 17
-    # clusters (docs/sp_rates_lmm.md section 4.3).
     perm_lines = [f"- {k.replace('_', ' ')}: p = {v['p_two_sided']:.4g} ({v['n_perm']} draws)"
                   for k, v in perm_results.items() if k.endswith('_mean_mouseweighted')]
     if perm_lines:
-        lines += ['', 'Mouse-label permutation test on the same contrast (prefer this p to the '
-                      'model p — cluster-robust standard errors are anti-conservative at 17 '
-                      'clusters):', ''] + perm_lines
+        lines += ['', 'Mouse-label permutation test on that same cell-level contrast '
+                      '(distribution-free sensitivity check):', ''] + perm_lines
 
     lines += [
         '',
-        '## Epoch analysis — does the group effect differ across windows?',
+        '## Sensitivity — permutation group x epoch tests',
         '',
-        'One joint `group x epoch` test per component (mouse-label permutation over the 17 '
-        'animals, each keeping its whole profile across the three matched windows), BH-corrected '
-        'within the secondary family. This is the single answer to temporal specificity: '
-        'comparing per-epoch p-values against each other is the difference-of-significance '
-        'fallacy and is not a test of anything.',
+        'A mouse-label permutation interaction statistic per component, BH-corrected within the '
+        'secondary family. It answers the same question as the unified joint Wald tests in Part 1 '
+        'without a distributional assumption. The Part 1 tests are the reported ones.',
         '',
     ]
-    for key in PAPER_COMPONENT_KEYS:
-        if key not in interactions:
-            continue
-        res = interactions[key]
+    for key, res in interactions.items():
         q = q_by_name.get(f'epoch_specificity_{key}')
         q_txt = '' if q is None else f', q = {q:.3f}'
-        lines.append(f"- **{_DECOMPOSITION_COMPONENTS_BY_KEY[key].label}**: "
-                     f"p = {res['p_two_sided']:.3f}{q_txt} "
+        label = _DECOMPOSITION_COMPONENTS_BY_KEY[key].label
+        lines.append(f"- {label}: p = {res['p_two_sided']:.3f}{q_txt} "
                      f"({res['n_cells']} cells, {res['n_mice']} mice)")
-    lines += [
-        '',
-        'Reading: no component shows a group effect that changes across pre-tone, trace and '
-        'post-shock. The hM3D amplitude elevation is a **global shift across the session**, not '
-        'a trace-specific one. No figure, caption or sentence may imply a trace-specific effect; '
-        "the trace interval's privileged status rests on prior anatomy and behaviour.",
-        '',
-        '## Per-epoch effect estimates (the numbers the figures draw)',
-        '',
-        'Equal-mouse-weighted contrasts vs mCherry with Welch 95% intervals, exposure-matched '
-        'trials. Ratios and absolute differences together — a fold-change off a small base '
-        'overstates the practical size of a change.',
-        '',
-    ]
-    for panel_label, payload in panel_contrasts.items():
-        lines.append(f'**{panel_label}**')
-        lines.append('')
-        lines += [f'- {ln}' if not ln.startswith('  ') else f'  - {ln.strip()}'
-                  for ln in format_contrast_ci_lines(payload['contrasts'], 'mCherry',
-                                                     unit=payload['unit'])]
-        lines.append('')
 
     lines += [
-        '## Secondary — event rate (negative-binomial mixed model)',
+        '',
+        '## Sensitivity — negative-binomial count model of event rate',
         '',
         'Counts at the mouse x trial x epoch level with a `log(total cell-seconds)` exposure '
-        'offset, `(1|mouse) + (1|mouse:trial)`, dispersion estimated jointly. Posterior rate '
-        'ratios vs mCherry at each window, with highest-density intervals. **Secondary and '
-        'Bayesian**: there is no p-value here and none should be manufactured; report the '
-        'estimate and its interval.',
+        'offset, `(1|mouse) + (1|mouse:trial)`, dispersion estimated jointly, fit by MCMC. This '
+        'is the distribution-aware check on the Part 1 rate model, which treats log(population '
+        'rate) as Gaussian. It reports posterior intervals, not p-values; **no highest-density '
+        'interval here generates a figure asterisk or a Results claim.**',
         '',
         '| group | epoch | rate ratio vs Ctl | HDI |',
         '|---|---|---|---|',
@@ -3562,23 +4691,33 @@ def render_paper_tfc_amplitude_rate(PLOTS_DIR, df_matched, primary_contrasts, ho
                                     perm_results, interactions, q_by_name, rate_fit, delta_df,
                                     epochs=TFC_MATCHED_PROFILE_EPOCHS):
     """
-    The paper lane: two figures and one Results-ready numbers file, under
+    The paper lane: the two unified models, two figures, and one Results-ready numbers file, under
     PLOTS_DIR/sp_rates_lmm/paper/tfc_amplitude_rate/.
 
-    ** Re-cut, not re-analysis. ** Every input here is an object the TFC_cond lane already
-    produced. Nothing is re-fit, no event detection is re-run, no test is added, and neither
-    multiplicity family changes size. The TFC_cond output is untouched and remains the internal
-    record; this folder is what a manuscript figure set looks like.
+    ** This is where the paper-facing analysis is FIT. ** Everything the manuscript reports comes
+    from the two mouse-level models built here: the mouse x epoch inferential dataset
+    (build_mouse_epoch_unified_table), one `group * epoch + (1|mouse)` fit per outcome, one joint
+    Wald interaction test per outcome, and twelve treatment-vs-control contrasts Holm-corrected
+    two at a time WITHIN each epoch (`p_holm_epoch`; the six-comparison across-epoch correction is
+    retained beside them as `p_holm_six` sensitivity output). Both figures then read their
+    markers, intervals and asterisks straight out of those two tables and compute nothing
+    themselves; every panel is annotated by the same procedure.
 
-    ** Must be called after build_secondary_fdr_table. ** The forest annotates each row with that
-    component's BH-ADJUSTED q, which does not exist until the whole secondary family has been
-    fit — the same ordering constraint that already puts the internal decomposition grid last in
-    run_sp_rates_lmm.
+    The TFC_cond lane's own analyses are untouched, still run, and still write every file they
+    always did -- they are the sensitivity/internal record. Their objects are passed in here only
+    so the summary file can report them under its clearly-separated Part 2.
 
-    df_matched : df_fine restricted to exposure-matched (mouse, trial) pairs. The rate row is
-                 duration-sensitive and trial 1's trace window is 15 s rather than 20 s, so the
-                 columns are only comparable on matched trials.
+    ** Must be called after build_secondary_fdr_table. ** Part 2 of the summary quotes the
+    BH-adjusted q-values of the permutation epoch tests, which do not exist until the whole
+    secondary family has been fit.
+
+    df_matched : df_fine restricted to exposure-matched (mouse, trial) pairs. Both outcomes are
+                 derived from this one frame, so the two figure rows provably describe the same
+                 animals, epochs and trials. Trial 1's trace window is 15 s rather than 20 s, and
+                 the rate row is duration-sensitive, so the columns are only comparable on
+                 matched trials.
     """
+    epochs = tuple(epochs)
     paper_dir = os.path.join(PLOTS_DIR, 'sp_rates_lmm', 'paper', 'tfc_amplitude_rate')
     paper_stats_dir = os.path.join(paper_dir, 'stats')
     ensure_dirs(paper_dir, paper_stats_dir)
@@ -3587,22 +4726,63 @@ def render_paper_tfc_amplitude_rate(PLOTS_DIR, df_matched, primary_contrasts, ho
     # answers a reviewer who asks why a window is 20 s.
     _copy_analysis_methods_template(PAPER_METHODS_FILENAME, paper_dir)
 
-    print('[sp_rates_lmm] Paper figures: amplitude + rate across the matched TFC windows...')
-    panel_contrasts = plot_paper_epoch_distributions(df_matched, paper_dir, epochs=epochs)
+    # ---- The unified models -----------------------------------------------------------------
+    print('[sp_rates_lmm] Unified paper models: mouse-level amplitude + population rate...')
+    verify_unified_tfc_synthetic(paper_stats_dir, epochs=epochs)
+    df_paper = df_matched[df_matched['epoch'].isin(epochs)]
+    mouse_epoch = build_mouse_epoch_unified_table(df_paper, epochs=epochs)
+    write_text(os.path.join(paper_stats_dir, 'unified_lmm_mouse_epoch_values.csv'),
+               mouse_epoch.to_csv(index=False))
 
-    # The same grid the internal lane draws, restricted to the three paper components and with
-    # the exploratory DREADD-vs-DREADD point off. Not a second implementation -- see
-    # plot_decomposition_grid's components/include_exc_vs_inh arguments.
+    fits = {o.key: fit_unified_group_epoch_model(mouse_epoch, o.response_col)
+            for o in UNIFIED_OUTCOMES}
+    require_common_unified_method(fits)
+    contrasts = unified_posthoc_contrasts(fits, mouse_epoch, epochs=epochs)
+    interactions_table = unified_interactions_table(fits)
+
+    for outcome in UNIFIED_OUTCOMES:
+        write_text(os.path.join(paper_stats_dir, f'unified_lmm_{outcome.key}_summary.txt'),
+                   f"PAPER-FACING model: {outcome.label}\n"
+                   f"Response: {outcome.response_col} (one value per animal per epoch, "
+                   f"{len(mouse_epoch)} rows, {fits[outcome.key]['n_mice']} animals)\n"
+                   f"Group x epoch joint Wald: {fits[outcome.key]['omnibus']}\n"
+                   f"Contrasts, within-epoch Holm-adjusted p-values (p_holm_epoch) and the "
+                   f"six-comparison across-epoch sensitivity correction (p_holm_six): "
+                   f"unified_lmm_posthoc_contrasts.csv\n\n"
+                   f"{_STATSMODELS_PVALUE_NOTE}\n\n"
+                   f"{fits[outcome.key]['summary_text']}\n\n"
+                   f"{_STATSMODELS_PVALUE_FOOTER}\n")
+    write_text(os.path.join(paper_stats_dir, 'unified_lmm_interactions.csv'),
+               interactions_table.to_csv(index=False))
+    write_text(os.path.join(paper_stats_dir, 'unified_lmm_posthoc_contrasts.csv'),
+               contrasts.to_csv(index=False))
+    for _, row in interactions_table.iterrows():
+        print(f"[sp_rates_lmm]   {row['outcome']}: {format_unified_interaction(row)}")
+
+    unified_model_diagnostics(fits, mouse_epoch, contrasts, paper_stats_dir, epochs=epochs)
+
+    # ---- Figures, annotated entirely from the tables above ------------------------------------
+    print('[sp_rates_lmm] Paper figures: amplitude + rate across the matched TFC windows...')
+    plot_paper_epoch_distributions(df_paper, mouse_epoch, contrasts, paper_dir, epochs=epochs)
+
+    # The same forest drawing code the internal lane uses, given the UNIFIED contrasts instead of
+    # its own Welch ones -- so the forest's points and intervals are the same rows of
+    # unified_lmm_posthoc_contrasts.csv that the distribution figure's asterisks come from.
+    interaction_notes = {row['outcome']: format_unified_interaction(row)
+                         for _, row in interactions_table.iterrows()}
     plot_decomposition_grid(
-        df_matched, paper_dir, epochs=epochs,
+        df_paper, paper_dir, epochs=epochs,
         components=[_DECOMPOSITION_COMPONENTS_BY_KEY[k] for k in PAPER_COMPONENT_KEYS],
         include_exc_vs_inh=False, filename_root='tfc_decomposition_forest',
-        interaction_q={k: q_by_name[f'epoch_specificity_{k}'] for k in PAPER_COMPONENT_KEYS
-                       if f'epoch_specificity_{k}' in q_by_name},
+        contrast_payloads=_unified_contrast_payloads(contrasts, epochs=epochs),
+        interaction_note={k: interaction_notes[k] for k in PAPER_COMPONENT_KEYS},
+        subtitle='Mixed-model contrasts with 95% CI; per-row group x epoch joint Wald test',
+        contrasts_note=_PAPER_CONTRASTS_PREAMBLE, row_height=2.4,
         # Every column here is one of the three COMPLETE 20 s windows; post_shock_late, the one
         # window with reduced trial coverage, is not among them.
         reduced_coverage_epochs=(), epoch_labels=_PAPER_EPOCH_LABELS)
 
+    # ---- Sensitivity output reported under Part 2 of the summary -------------------------------
     rate_contrasts = summarize_rate_group_epoch_contrasts(rate_fit)
     write_text(os.path.join(paper_stats_dir, 'rate_group_epoch_contrasts.csv'),
                rate_contrasts.to_csv(index=False))
@@ -3612,10 +4792,12 @@ def render_paper_tfc_amplitude_rate(PLOTS_DIR, df_matched, primary_contrasts, ho
                                 panel_name='paper_manipulation_check', group_order=GROUP_ORDER),
         scale='log')
 
-    write_paper_results_summary(paper_stats_dir, primary_contrasts, holm, perm_results,
-                                interactions, q_by_name, panel_contrasts, rate_contrasts,
-                                manip_contrasts)
+    write_paper_results_summary(paper_stats_dir, mouse_epoch, fits, contrasts, interactions_table,
+                                primary_contrasts, holm, perm_results, interactions, q_by_name,
+                                rate_contrasts, manip_contrasts)
     print(f'[sp_rates_lmm] Paper figures written to {paper_dir}')
+    return {'mouse_epoch': mouse_epoch, 'fits': fits, 'contrasts': contrasts,
+            'interactions': interactions_table}
 
 
 def plot_manipulation_check(df_delta, dropout_df, save_dir, filename_root='manipulation_check'):
@@ -4344,10 +5526,16 @@ def run_sp_rates_lmm(PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond
                        if f'epoch_specificity_{k}' in _q_by_name})
 
     # ---- The paper lane -------------------------------------------------------------------------
-    # A manuscript-sized re-cut of everything above: two figures and one Results-ready numbers
-    # file under sp_rates_lmm/paper/. Nothing is re-fit and no test is added -- it reuses the
-    # objects already in scope. It goes last for the same reason the grid does: the forest carries
-    # BH-adjusted q-values, which do not exist until the secondary family is complete.
+    # ** This is where the PAPER-FACING analysis is fit. ** Everything above is the internal
+    # record: the cell-level amplitude model and its Holm family, the permutation tests, the
+    # Bayesian NB rate model, the BH-FDR family, the sensitivity analyses. The manuscript reports
+    # none of those directly -- it reports the two unified mouse-level models built here, which
+    # give per-event amplitude and population event rate one identical statistical treatment. The
+    # objects above are passed in so the summary can report them, clearly separated, as
+    # sensitivity evidence.
+    #
+    # It goes last because that summary quotes the BH-adjusted permutation q-values, which do not
+    # exist until the secondary family is complete.
     render_paper_tfc_amplitude_rate(PLOTS_DIR, df_grid, primary_contrasts, holm,
                                     perm_results, interactions, _q_by_name, rate_fit, delta_df)
 

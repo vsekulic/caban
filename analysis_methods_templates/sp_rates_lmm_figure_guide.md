@@ -155,7 +155,7 @@ visible because the product was split.
 | `manipulation_check` | **Does the tool work?** Within-cell LT2−LT1 amplitude delta, same day/FOV, difference-in-differences vs control; plus LT1→LT2 detection dropout | hM3D +0.474 vs Ctl, `F(2,16)=13.0, p=4.4e-4` — best-powered comparison in the dataset. Dropout hM3D 0.82 / hM4D 0.77 / Ctl 0.77: **no hM4D-specific cell loss**, which is what makes the hM4D amplitude null interpretable rather than an artifact |
 | `primary_trace_amplitude` | Triangulation: the primary effect at the level of the **17 animals**, not the model | Visible without the model — the requirement stated in Methods |
 | `primary_effect_forest`, `coprimary_effect_forest` | Fold-change + CI on the multiplicative scale | 1.53x [1.14, 2.05] |
-| `epoch_profile`, `epoch_delta_forest` | **Is the effect trace-specific?** Within-cell delta over each cell's own pre-tone baseline, every epoch | Co-primary is **NULL** (`F(2,16)=0.002, p=0.998`; trace 1.02x [0.87, 1.21]). The amplitude effect is a **global main effect present at every epoch**, not a trace-specific one. No claim of trace specificity may be made |
+| `epoch_profile`, `epoch_delta_forest` | **Is the effect trace-specific?** Within-cell delta over each cell's own pre-tone baseline, every epoch | Co-primary is **NULL** (`F(2,16)=0.002, p=0.998`; trace 1.02x [0.87, 1.21]) — no evidence that the amplitude effect differed between epochs. That is not evidence that it is identical, global or tonic across them, and no claim of trace specificity may be made either. The paper's version of this question is the unified group x epoch Wald test (Part 4) |
 | `decomposition_grid` | **Which component changed, and was it consistent across the session?** All four components x the matched epochs as effect estimates + 95% CI, three contrasts per panel (Exc/Ctl, Inh/Ctl, **Exc/Inh**), each row labelled with that component's BH-adjusted group x epoch q | Read the rows as a decomposition, never as four independent findings — they are one identity and their q-values are strongly dependent. This figure — not a comparison of per-epoch p-values — is what settles epoch specificity. **Use the grey Exc/Inh point** for any DREADD-vs-DREADD claim; the red and blue intervals share a reference and cannot be compared to each other by eye |
 | `amplitude_ecdf`, `amplitude_p90` | **Shape**, not just mean: bursting predicts a fattened right tail | hM3D p90 shifted +0.404, permutation p = 0.0067 — the effect is a tail shift, not only a mean shift |
 | `run_structure` | **Mechanism check**: is this genuinely burst-like, or an artifact of temporally clustered peaks merging into one run? | Run width hM3D 5.48 vs Ctl 4.87 frames (+0.61), permutation p = 0.096, BH q = 0.43. **Suggestive, not established** — report as such |
@@ -171,18 +171,22 @@ visible because the product was split.
 3. **Primary result** — hM3D enlarges per-event amplitude during conditioning (1.53x).
 4. **Where it sits in the activity budget** — the decomposition figure, and the hM3D/hM4D
    dissociation.
-5. **It is global, not trace-specific** — the **joint group x epoch permutation test**
-   (`secondary_epoch_interaction.txt`, visible on `decomposition_grid`), backed by the co-primary
-   null and the flat epoch profile. The trace interval's privileged status rests on prior anatomy
-   and on behaviour, not on this result.
+5. **Epoch dependence** — the paper's number is the **unified joint group x epoch Wald test**,
+   one per outcome, in `paper/tfc_amplitude_rate/stats/unified_lmm_interactions.csv` and on the
+   paper forest's row labels. The internal permutation version (`secondary_epoch_interaction.txt`,
+   visible on `decomposition_grid`) is the distribution-free sensitivity check. Write a null as
+   *"there was no evidence that the treatment effect differed across the pre-tone, trace and
+   post-shock epochs"* — never as evidence that the effect is identical, global or tonic. The
+   trace interval's privileged status rests on prior anatomy and on behaviour, not on this
+   result.
 
    **Do not argue this from a comparison of p-values.** "Significant in trace, not significant in
    the epoch deltas" is the difference-of-significance fallacy and a reviewer will say so. The
    epoch-specificity claim has exactly one supporting number per component — that component's
-   joint interaction q — and the difference-of-differences intervals beside it say what magnitude
-   of specificity the data still admit. Phrase the conclusion as "amplitude is elevated broadly
-   across epochs", never as "there is no effect during trace", which is the opposite of what the
-   primary endpoint found.
+   joint interaction test — and the difference-of-differences intervals beside it say what
+   magnitude of specificity the data still admit. Note also that "there is no effect during trace"
+   is the opposite of what the amplitude endpoint found; the null is about the DIFFERENCE between
+   epochs, not about any epoch.
 
    **Two more comparisons that are not licensed by looking at the grid:**
 
@@ -200,8 +204,9 @@ visible because the product was split.
 
 ## Part 2 — Results and Methods draft (Nature style)
 
-**Moved.** The manuscript draft lives in `docs/sp_rates_lmm.md` §11 — Methods (§11.1), Results
-(§11.2) and the list of placeholders still to resolve (§11.3).
+**Moved.** The manuscript draft lives in `docs/sp_rates_lmm.md` §M — Methods (§M.1), Results
+(§M.2) and the placeholder lookup table (§M.3). It is written from that document's Part A (the
+unified paper-facing models) only.
 
 It used to be duplicated here, and the two copies diverged: this one still quoted a
 Holm-corrected *P* of 0.018 from the retired two-test confirmatory family (it is 0.027 across
@@ -294,9 +299,11 @@ Two files, both descriptive:
 
 **The question it answers.** Every other epoch contrast in this module compares windows *within*
 a trial. This one splits *across* trials, which is orthogonal: given that the amplitude effect is
-a global shift rather than trace-specific, is it **tonic** (present from trial 1, a property of
+comparable across the within-trial windows, is it present from trial 1 (a property of
 the drug being on board) or does it **develop** as conditioning proceeds? If a group's open and
-filled points sit in the same place, it is tonic.
+filled points sit in the same place, the effect does not develop over conditioning. That is not
+the same as establishing a tonic drug effect, which would need a conditioning-naive, drug-on
+baseline this design does not provide.
 
 **Read the contrast, not the level.** Absolute amplitude falls ~31% from trial 1 to trial 5, in
 every group, consistent with photobleaching. That is a main effect of trial — it moves both
@@ -323,51 +330,88 @@ recordings are ragged, so report them with the estimate.
 
 ## Part 4 — The paper lane (`sp_rates_lmm/paper/tfc_amplitude_rate/`)
 
-Everything above describes the internal output. The two figures below are the manuscript-sized
-re-cut of it. They add no analysis — every number in them already exists in `TFC_cond/`. See
-§6.1 of `docs/sp_rates_lmm.md` for why the selection is what it is.
+Everything above describes the internal output. **This is where the analysis the manuscript
+reports actually lives.** Both figures below are annotated entirely from two tables — the
+mouse-level inferential dataset and the unified models' contrasts — and neither computes a
+statistic of its own. See §1 of `docs/sp_rates_lmm.md` for the models.
 
 ### `tfc_amplitude_rate_by_epoch.png` — the distributions
 
 Two rows (per-event amplitude; population event rate) × three columns (pre-tone 20 s baseline,
-trace, post-shock 20 s), on exposure-matched trials.
-
-**Read down a column** to see how the two quantities dissociate within one window: hM3D moves
-amplitude, hM4D moves rate. **Read across a row** to see that neither effect is confined to a
-window — the columns share one y-scale precisely so that this reading is honest.
-
-Do **not** compare the asterisks between columns. A contrast being starred in one window and not
-in the next is not evidence that the effect differs between them; that is the
-difference-of-significance fallacy, and it has exactly one proper test (below).
+trace, post-shock 20 s), on exposure-matched trials — the same trials for both rows.
 
 Small faint points are individual cells, colour-shaded by mouse; large black-edged markers are the
-per-mouse means. **Only the per-mouse means enter any statistic.** Brackets are Holm-corrected
-across the two treatment-versus-control contrasts. Amplitude is undefined for a cell with no
-events, so those cells are absent from the top row by definition, not by exclusion; they are
-retained in the rate row's denominator.
+**exact mouse-level values the models are fit on**, drawn on the natural scale. For amplitude that
+marker is `exp(mouse_mean_log_amplitude)` — that animal's geometric mean event amplitude, which is
+why it need not sit at the visual centre of its cloud. For rate it is total events over total
+cell-seconds, a cell-seconds-weighted mean of the cloud. Only these values enter any statistic;
+the clouds are description. Amplitude is undefined for a cell with no events, so those cells are
+absent from the top row by definition, not by exclusion; they are retained in the rate row's
+denominator.
 
-### `tfc_decomposition_forest.png` — the effect estimates
+**Every panel is annotated by the same procedure.** Brackets carry the `p_holm_epoch` values from
+`stats/unified_lmm_posthoc_contrasts.csv` — within each epoch, hM3D and hM4D are compared with
+mCherry and those two treatment-versus-control comparisons are Holm-corrected together. All six
+panels run that identical procedure, and a bracket is drawn wherever the adjusted P clears α, so
+a panel without one is a panel where neither comparison reached significance, not one that was
+exempted from testing. No hM3D-versus-hM4D bracket is drawn — it is in no correction family and is
+not the design's question — and no `p_holm_six` sensitivity value annotates this figure.
 
-Three rows (fraction active; population event rate; per-event amplitude) × the same three windows.
-Two points per panel: hM3D-versus-control and hM4D-versus-control, with 95% confidence intervals.
-Fraction active is a bounded proportion, so its row is a difference on a linear axis centred on 0;
-the other two are fold-changes on a log axis centred on 1.
+**Read down a column** to see how the two quantities dissociate within one window. **Read across a
+row** to compare the same quantity between windows — the columns share one y-scale precisely so
+that comparison is honest.
 
-**No significance stars anywhere, deliberately.** These three rows are one exact identity
-(`overall_rate = fraction_active x rate_active`, plus the amplitude term) computed over
-overlapping cells, not three independent phenotypes — counting significant cells across the grid
-is not a valid reading of it. Read the intervals.
+The presence of a bracket in one column and none in another is **not** evidence that the treatment
+effect differs between windows — the two comparisons were never tested against each other. Epoch
+dependence has exactly one test, the group × epoch interaction in
+`stats/unified_lmm_interactions.csv`, reported once per outcome.
 
-Each row label carries **one** `group x epoch` q-value: that component's joint permutation test
-for whether the group effect changes across windows. That number, not a comparison of columns, is
-the answer to temporal specificity. All are null: the dissociation is broad across the session.
+Suggested caption core: *Per-event amplitude and population event rate across exposure-matched
+pre-tone, trace and post-shock epochs. Small points indicate individual cells and large outlined
+points indicate animal-level values used in the mixed-effects models. Within each epoch, hM3D and
+hM4D were compared with mCherry using model-derived post-hoc contrasts with Holm correction across
+the two treatment-versus-control comparisons. Asterisks denote Holm-adjusted P < 0.05 (\*),
+P < 0.01 (\*\*), P < 0.001 (\*\*\*). Group × epoch interactions were assessed separately by joint
+Wald tests.*
 
-The direct hM3D-versus-hM4D contrast is **not** drawn here (it is on the internal grid). It is
-exploratory, uncorrected, and in no multiplicity family; the defensible sentence is that the two
-DREADDs show divergent recruitment profiles while neither differs conclusively from control.
+### `tfc_decomposition_forest.png` — the same effects as estimates
+
+Two rows (population event rate; per-event amplitude) × the same three windows. Two points per
+panel: hM3D-versus-control and hM4D-versus-control as ratios with 95% confidence intervals on a
+log axis centred on 1.
+
+**These are the same rows of `stats/unified_lmm_posthoc_contrasts.csv` that produce the asterisks
+on the distribution figure** — one model, one table, two views of it. Where the distribution
+figure shows the decision, this one shows the effect size and what its interval still admits,
+which is the part a null needs.
+
+All three epochs are kept here, including any that carry no bracket on the distribution figure:
+an estimate and its interval are scientifically informative whether or not the adjusted P cleared
+α. **No significance stars are placed on this figure** — it is an effect-size display. Its
+companion markdown may list the within-epoch `p_holm_epoch` values; the six-comparison sensitivity
+Holm P is never shown on the forest, and where both appear in a companion table they are labelled
+distinctly and never interchanged.
+
+Each row label carries that outcome's **joint group × epoch Wald test** — `F(4, 16)` and its P.
+That number, not a comparison of columns, is the answer to whether the treatment effect differs
+across windows. A null there is *no evidence that the effect differed across epochs*; it is not
+evidence that the effect is identical, global or tonic.
+
+Fraction active is not a row here: it has no unified mouse-level model, and including it would put
+a second, differently derived inferential source on a paper figure. It is unchanged on the
+internal four-component `decomposition_grid`. The direct hM3D-versus-hM4D contrast is likewise not
+drawn — exploratory, uncorrected, in no multiplicity family; the defensible sentence is that the
+two DREADDs show divergent recruitment profiles while neither is claimed to differ from the other.
 
 ### `stats/paper_results_summary.md`
 
-Every number a Results paragraph needs, with each one's evidential tier attached to it. Quote from
-here rather than from the individual `TFC_cond/stats/` files — the tier is the part that gets lost
-in transit, and it, not the p-value, decides whether something may be called significant.
+Every number a Results paragraph needs, split into **Part 1 — paper-facing analysis** (the two
+unified mixed models, all twelve treatment-versus-control contrasts by epoch with their
+within-epoch Holm-adjusted P values, the two group × epoch interaction tests, and the descriptive
+absolute population-rate differences) and **Part 2 — sensitivity and supplementary** (which is
+where the conservative six-comparison across-epoch Holm correction lives, and the only place it
+appears). Quote only from Part 1. Part 2's numbers are real and
+useful as robustness
+evidence, but the separation is the part that gets lost in transit: a sensitivity estimate written
+up as the headline once it has been detached from the file that said otherwise is this module's
+recurring failure mode.
