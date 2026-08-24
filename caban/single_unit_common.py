@@ -536,7 +536,7 @@ def reserve_top_fraction(ax, occupancy=0.80):
 
 def annotate_pairwise_brackets(ax, mouse_means_per_group, group_order, stat_fn,
                                base_frac=0.82, step_frac=0.075, barh_frac=0.018, fs=9,
-                               occupancy=0.80):
+                               occupancy=0.80, ns_label_pairs=()):
     """Holm-corrected pairwise significance brackets positioned in AXES-FRACTION coordinates, so
     they render identically on linear, log and symlog axes.
 
@@ -554,11 +554,22 @@ def annotate_pairwise_brackets(ax, mouse_means_per_group, group_order, stat_fn,
     The STATISTICS are not reimplemented: stat_fn is called with annotate=False and only its
     returned p-values are used, so these brackets show precisely the numbers a bracket-annotated
     mouse-level panel would, and the cell cloud never reaches it. Only significant contrasts get
-    a bracket, matching do_pairwise_holm_plot's own convention.
+    a bracket, matching do_pairwise_holm_plot's own convention -- unless a pair is named in
+    ``ns_label_pairs``, which is opt-in and empty by default.
 
     mouse_means_per_group : dict group -> 1-D array of per-mouse values. Keys must include
                             'hM3D', 'hM4D' and 'mCherry' (stat_fn's positional convention);
                             group_order sets only the x positions.
+    ns_label_pairs        : OPT-IN. Iterable of (group_a, group_b) pairs that get a bracket even
+                            when their p-value is >= 0.05, labelled with the p-value itself
+                            ('P = 0.078') instead of stars. Empty by default, which is exactly
+                            the behaviour every pre-existing call site has: only p < 0.05 is
+                            bracketed and only stars are drawn. Use it where a panel reports a
+                            named non-significant comparison rather than leaving the reader to
+                            infer it from an absent bracket; the p-values still come from
+                            stat_fn, so this changes what is DRAWN and never what is computed.
+                            A pair listed here whose p-value is NaN is still skipped -- NaN
+                            means "this comparison is not on this panel".
 
     Returns stat_fn's corrected p-values, in pair order [(Exc,Inh),(Exc,Ctl),(Inh,Ctl)].
     """
@@ -570,8 +581,10 @@ def annotate_pairwise_brackets(ax, mouse_means_per_group, group_order, stat_fn,
 
     pairs = [('hM3D', 'hM4D'), ('hM3D', 'mCherry'), ('hM4D', 'mCherry')]
     pvals = np.asarray(corrected, dtype=float)
-    significant = [(pair, p) for pair, p in zip(pairs, pvals) if np.isfinite(p) and p < 0.05]
-    if not significant:
+    ns_labelled = {frozenset(pair) for pair in ns_label_pairs}
+    drawn = [(pair, p) for pair, p in zip(pairs, pvals)
+             if np.isfinite(p) and (p < 0.05 or frozenset(pair) in ns_labelled)]
+    if not drawn:
         # Reserve headroom only when something will occupy it, so a panel with no significant
         # contrast is not silently rescaled to leave an empty band its neighbours use.
         return corrected
@@ -580,8 +593,8 @@ def annotate_pairwise_brackets(ax, mouse_means_per_group, group_order, stat_fn,
     blended = ax.get_xaxis_transform()   # x in data coords, y in axes fraction
     pos = {g: i for i, g in enumerate(group_order)}
     level = 0
-    for (g1, g2), p in significant:
-        stars = get_pval_str(p) or '*'
+    for (g1, g2), p in drawn:
+        stars = get_pval_str(p) or f'P = {p:.3f}'
         y = base_frac + level * step_frac
         lx, rx = pos[g1], pos[g2]
         ax.plot([lx, rx], [y + barh_frac, y + barh_frac], c='black', lw=1,
@@ -797,7 +810,7 @@ def _mixed_model_degeneracy(result, n_fixed):
     return None
 
 
-def fit_mixed_model(df, formula, group_col='mouse', extra_header=''):
+def fit_mixed_model(df, formula, group_col='mouse', extra_header='', method='lbfgs'):
     """Fit an arbitrary ``formula`` as a linear mixed model with a random intercept on
     ``group_col``, falling back to ``group_col``-clustered OLS if the mixed model does not
     converge OR converges to a degenerate solution (see :func:`_mixed_model_degeneracy`) — a
@@ -810,6 +823,17 @@ def fit_mixed_model(df, formula, group_col='mouse', extra_header=''):
 
     ``df`` must already have any categorical columns coded (e.g. via ``pd.Categorical`` with an
     explicit reference level) — this function does not touch column dtypes.
+
+    ``method`` is the NUMERICAL optimizer handed to ``MixedLM.fit`` — a str, or a list of them
+    tried in order (statsmodels' own escalation). It defaults to ``'lbfgs'``, which is what every
+    pre-existing call site here used and continues to use unchanged. It is exposed because lbfgs
+    silently returns a BOUNDARY solution (random-effect variance pinned at 0, non-finite
+    fixed-effect standard errors) on some frame shapes — notably a few hundred rows per group
+    across ~16 groups, which is what a cell-level table looks like — where bfgs/cg/powell all
+    reach the same interior optimum. Changing the optimizer changes neither the model, the
+    likelihood, nor the estimand: it is a numerical choice, not a statistical fallback, and a
+    degenerate or non-converged result still goes through :func:`_mixed_model_degeneracy`
+    exactly as before.
 
     Returns (result, method_used, summary_text). ``result`` is the fitted statsmodels object
     (``MixedLMResults`` or a cluster-robust ``RegressionResults``) — pass it to
@@ -832,7 +856,7 @@ def fit_mixed_model(df, formula, group_col='mouse', extra_header=''):
             # explicitly below rather than printed, so a degenerate fit is reported in the
             # returned text where the reader will actually see it.
             warnings.simplefilter('ignore')
-            result = model.fit(reml=True, method='lbfgs')
+            result = model.fit(reml=True, method=method)
         degenerate = _mixed_model_degeneracy(result, n_fixed=len(model.exog_names))
         if degenerate is not None:
             return _clustered_ols(degenerate)

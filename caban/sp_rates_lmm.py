@@ -41,7 +41,29 @@ Module layout
   Unified paper analysis      -- build_mouse_epoch_unified_table(), fit_unified_group_epoch_model(),
                                 require_common_unified_method(), unified_posthoc_contrasts(),
                                 unified_interactions_table(), unified_model_diagnostics(),
-                                verify_unified_tfc_synthetic(), render_paper_tfc_amplitude_rate()
+                                verify_unified_synthetic(), render_paper_tfc_amplitude_rate(),
+                                render_paper_recall_amplitude_rate()
+  Hierarchical cell companion -- build_recall_cell_amplitude_modulation(),
+   (recall Test_B; strictly     fit_hierarchical_cell_delta_model(),
+    additive)                   hierarchical_cell_amplitude_permutation(),
+                                fit_hierarchical_cell_unpaired_sensitivity(),
+                                build_recall_cell_epoch_count_table(),
+                                build_cell_epoch_rate_model(), fit_cell_epoch_rate_model(),
+                                hierarchical_cell_rate_prior_predictive(),
+                                hierarchical_cell_rate_posterior_predictive(),
+                                summarize_cell_rate_contrasts(),
+                                plot_hierarchical_cell_amplitude_modulation(),
+                                plot_hierarchical_cell_rate_modulation(),
+                                write_hierarchical_cell_vs_mouse_summary(),
+                                run_hierarchical_cell_suite()
+                                -- development tools, NOT part of a real-data run:
+                                verify_hierarchical_cell_synthetic(),
+                                verify_hierarchical_cell_rate_synthetic()
+  Recall pre->post modulation -- build_recall_modulation_by_mouse(),
+                                recall_modulation_contrasts(), recall_modulation_lookup(),
+                                recall_within_group_lookup(), write_recall_modulation_summary(),
+                                plot_recall_modulation(), plot_recall_prepost_trajectories(),
+                                verify_recall_modulation_synthetic()
   Event/run table construction -- _iter_event_windows() (shared traversal), build_epoch_event_table(),
                                   build_run_structure_table(), aggregate_over_trials(),
                                   filter_amplitude_rows(), build_mouse_trial_epoch_rate_table(),
@@ -66,6 +88,105 @@ Module layout
 
 CHANGELOG (post-review corrections, see analysis_methods_templates/sp_rates_lmm_methods.md and
 the plan this module was built from for the full rationale):
+  - THE HIERARCHICAL COMPANION IS NOW EXPLICITLY INVOKED, AND THE Test_B MODULATION FIGURE
+    REPORTS UNADJUSTED MODEL-DERIVED CONTRASTS. Two changes, neither of them statistical:
+    (1) RUNTIME. run_hierarchical_cell_analysis now defaults to FALSE, in run_sp_rates_lmm and in
+    render_paper_recall_amplitude_rate. The companion suite cost ~40 min of a routine pass --
+    exact mouse-label MixedLM enumerations over the paired-cell table, the hierarchical NB count
+    model, and the prior/posterior-predictive machinery -- against a few minutes for everything
+    else, and its evaluation is finished. Nothing was deleted: the suite, all eleven components
+    and every output file it has already written are intact, and passing True reruns it exactly
+    as before. Its paired-cell amplitude result is retained as SUPPLEMENTARY SENSITIVITY evidence
+    (it reproduced the mouse-level effect magnitude); its NB rate model is not usable as
+    sensitivity evidence at all, because it failed its own posterior-predictive adequacy check,
+    and it is deliberately NOT redesigned or replaced here.
+    (2) REPORTING. The Test_B modulation figure and the drafted wording in its companion markdown
+    now read `p_raw` -- the unadjusted contrast p-values of the SAME mouse-level
+    `log(metric) ~ group * epoch + (1|mouse)` fits, read out of the same contrast table, with no
+    value hard-coded anywhere. hM3D-vs-mCherry carries a star, hM3D-vs-hM4D is bracketed with its
+    p-value (annotate_pairwise_brackets gained an opt-in ns_label_pairs= whose default reproduces
+    its previous behaviour exactly), and hM4D-vs-mCherry is computed and tabulated as always but
+    not bracketed. The three-comparison Holm family is STILL COMPUTED and still written to the
+    CSV and the markdown as a multiplicity reference -- the record is not erased and nothing raw
+    is relabelled as adjusted; it simply no longer governs this figure. ** No model, estimator,
+    contrast, interval, omnibus, event or epoch definition, matched-trial construction, TFC
+    output or Test_B_1wk output changed. ** The group x epoch omnibus is still reported in each
+    panel title and still does not gate the contrasts.
+  - THE HIERARCHICAL CELL-LEVEL COMPANION ANALYSIS (recall lane, Test_B;
+    RECALL_HIERARCHICAL_CELL_SESSIONS, run_hierarchical_cell_suite). ** STRICTLY ADDITIVE:
+    NOTHING PRE-EXISTING CHANGED. ** No existing statistical path, estimator, model, contrast,
+    Holm family, omnibus test, output file, table or figure was replaced or altered -- in this
+    lane or in the TFC one. What changed is orchestration only, and as of the entry above this
+    suite is NO LONGER part of a routine pass: run_hierarchical_cell_analysis defaults to False
+    and the suite is an explicitly invoked companion/sensitivity analysis.
+    The paper-facing recall analysis collapses each animal to one scalar per epoch before fitting.
+    That stays primary. This asks the complementary question -- does the pre->post modulation
+    occur coherently across the cellular population WITHIN animals when the cell hierarchy is
+    modelled rather than collapsed? -- and writes into its own subdirectory
+    (paper/recall/Test_B/hierarchical_cells/) so its numbers cannot be confused with the primary
+    lane's. Amplitude: one PAIRED within-cell delta per eligible cell (log post - log pre, no
+    imputation, no pseudocount), estimated by `delta ~ group + (1|mouse)` and tested by EXACT
+    mouse-label randomization OF THAT MODEL'S COEFFICIENT -- the full three-group model refit
+    under every one of the 462/462/252 restricted relabelings, Holm across those three exact
+    p-values. The omnibus permutes a 2-df model-based statistic (Monte Carlo; the global space is
+    2,018,016). A design-based permutation of the 16 mouse-mean deltas is retained as a labelled
+    sensitivity in no family. Rate: a hierarchical NB count model over ALL cells including
+    zero-event cells, with frozen priors, a prior-predictive check BEFORE fitting, and
+    posterior-predictive zero/dispersion checks by group x epoch. ** Implementation validation
+    against planted synthetic truth is NOT part of a real-data run: ** the two verify_*_synthetic
+    functions are development tools, called by hand after changing this module, because an
+    execution that produces the reported numbers should compute those numbers and nothing else.
+    Both long-format models carry a
+    mouse-level epoch random slope, without which between-animal variation in the pre->post change
+    would land at the cell level and narrow the group x epoch terms.
+    ** No asymptotic cell-level p-value is paper-facing anywhere in this suite ** -- 16 animals
+    were randomized, not N cells, and every model summary says so in its own header. One gate
+    (run_hierarchical_cell_analysis), all-or-nothing, no result-dependent branching, and no
+    statistical fallback: a specified model that fails its predefined adequacy gate RAISES rather
+    than being replaced (fit_mixed_model's clustered-OLS fallback is explicitly barred here).
+    Output is staged and promoted only after every component succeeds, so a partial run cannot be
+    mistaken for a complete one. mouse_label_permutation_test gained an opt-in `exact=` parameter
+    whose default reproduces its previous behaviour exactly, single_unit_common.fit_mixed_model
+    gained an opt-in `method=` optimizer parameter defaulting to its previous 'lbfgs', and the NB
+    convergence-diagnostics block was extracted to _nb_convergence_diagnostics with a default that
+    emits byte-identical text for the TFC lane. See docs/sp_rates_lmm.md section A.7.2.
+  - THE PRE->POST MODULATION DECOMPOSITION (recall lane, Test_B; RECALL_MODULATION_SESSIONS). The
+    recall models already tested whether the pre-tone -> post-tone change differs among the groups
+    -- that IS the group x epoch joint Wald test -- but nothing showed the change itself, and the
+    individual pairwise comparisons the fitted model contains were never read out. Added:
+    build_recall_modulation_by_mouse (one change score per animal per outcome, pivoted from the
+    inferential table itself), recall_modulation_contrasts (each group's model-implied pre->post
+    change, DESCRIPTIVE; and the three pairwise comparisons of that change, with a within-outcome
+    Holm adjustment alongside the raw contrast p-values -- see the entry above for which of the
+    two the figure reports), a two-panel per-animal modulation figure whose brackets are looked up
+    from those contrasts, a descriptive pre/post trajectory figure, a companion markdown, and
+    verify_recall_modulation_synthetic. ** No model is fit and no statistic is computed on the
+    plotted change scores: ** every number is a linear contrast of the two fits the lane already
+    made, on the same animal-level df, and each panel and table carries the omnibus it decomposes.
+    All three groups and both outcomes are treated identically -- no group is a headline. Nothing
+    pre-existing changed: the within-epoch simple effects, their Holm families, the omnibus
+    definition and every existing figure and table are untouched.
+  - RECALL REPORTING BOILERPLATE (display only, no statistic changed). The statsmodels-summary
+    header/footer were module constants hard-coding the CONDITIONING lane's df = 16, its
+    `unified_lmm_*` filenames, its p_holm_six column and its trace/post-shock epochs -- all wrong
+    when emitted over a recall fit. They are now _statsmodels_pvalue_note/_footer, parameterized
+    per lane and fed the df read off the fit; the conditioning text is byte-identical to before.
+    format_unified_interaction also rendered a tiny p as the literally false `P = 0.000`; it now
+    reports `P < 0.001` via format_p_display.
+  - THE PAPER-FACING RECALL LANE (render_paper_recall_amplitude_rate). The unified analysis above
+    is now also run on Test_B (48 h) and Test_B_1wk, each SEPARATELY, over two duration-matched
+    20 s windows -- a pre-tone baseline and the post-tone retrieval window, the recall analogue of
+    the conditioning trace interval. Same event definition, same animal-level summarization, same
+    model, same within-epoch Holm family, same figure grammar; what differs is the epoch set and
+    the cohort, and both are read off the data (each session's denominator df is its own
+    n_animals_present - 1, not the conditioning model's 16). The group x epoch interaction is the
+    2-df joint test of whether the treatment effect changes from pre-tone to post-tone, and is the
+    ONLY test of retrieval preferentiality. The two sessions are never compared with each other:
+    the animal missing at 48 h is not the one missing at 1 week. To support this the unified
+    helpers took a `reference_epoch` parameter and derive their interaction count from the fitted
+    model; the TFC lane's behaviour is unchanged. See docs/sp_rates_lmm.md section A.7. The older
+    single-epoch Test_B/Test_B_1wk post-tone amplitude output is untouched and remains a Part B
+    secondary.
   - THE UNIFIED PAPER-FACING ANALYSIS. The paper figure's two rows used to be supported by three
     unrelated frameworks: a cell-level frequentist LMM for amplitude, a Bayesian negative-binomial
     model with HDIs for rate, per-panel Welch/Holm tests for the asterisks, and equal-mouse-
@@ -130,8 +251,13 @@ extraction, count-model posterior-predictive/zero diagnostics, peri-shock analys
 declared BH-FDR family for the frequentist secondaries.
 """
 import os
+import time
+import math
 import shutil
+import datetime
 import functools
+import itertools
+import traceback
 import collections
 
 import numpy as np
@@ -142,6 +268,7 @@ import statsmodels.formula.api as smf
 from statsmodels.stats.multitest import multipletests
 import bambi as bmb
 import arviz as az
+import pymc as pm
 
 from caban.utilities import find_event_runs_ca, find_event_runs_ca_S, MINISCOPE_FPS
 from caban.single_unit_common import (
@@ -408,6 +535,104 @@ TFC_RATE_MODEL_EPOCHS = (TFC_REFERENCE_EPOCH, 'tone', TFC_TRACE_EPOCH, TFC_POST_
 # analog of the true trace duration -- only this explicit 20 s call is.
 TESTB_POST_TONE_DURATION_S = 20.0
 TESTB_EPOCHS = ('pre_tone', 'tone', 'post_tone')
+
+# ── The paper-facing RECALL windows ──────────────────────────────────────────
+#
+# The recall question is whether the conditioning-day phenotype is still present during drug-free
+# retrieval, and whether any group difference is EVOKED by the tone/retrieval period rather than
+# already present at baseline. That needs two duration-matched windows around each tone and
+# nothing else:
+#
+#   pre_tone  : the 20 s ending at tone onset -- the within-session baseline the interaction is
+#               tested against.
+#   post_tone : the 20 s beginning at tone offset -- the retrieval analogue of the conditioning
+#               TRACE interval (the tone has ended, and CA1 activity is measured over the
+#               following 20 s with no shock).
+#
+# The TONE epoch itself is deliberately excluded: it is not the trace analogue, and adding it
+# would change the interaction from a 2-df test of "does the treatment effect change from
+# pre-tone to post-tone" into something else.
+#
+# Both are pinned to 20 s for the same reason TESTB_POST_TONE_DURATION_S is (see its comment):
+# neither get_testb_epoch_frames' own 35 s default nor TestBSession.post_tone_offsets (which runs
+# to the NEXT tone onset, ~200+ s) is the recall analogue of the true trace duration, and the two
+# epochs must be duration-matched because population event rate is duration-sensitive.
+TESTB_PRE_TONE_DURATION_S = 20.0
+RECALL_WINDOW_S = 20.0
+RECALL_EPOCHS = ('pre_tone', 'post_tone')
+RECALL_REFERENCE_EPOCH = 'pre_tone'
+RECALL_RESPONSE_EPOCH = 'post_tone'
+
+# Human-readable session names. Test_B and Test_B_1wk are analysed SEPARATELY and are never
+# compared with each other in this lane -- see render_paper_recall_amplitude_rate's docstring for
+# why (the two recall cohorts are not the same animals).
+RECALL_SESSION_LABELS = {'Test_B': '48-h recall (Test B)',
+                         'Test_B_1wk': '1-week recall (Test B 1wk)'}
+
+
+def get_recall_epoch_frames(session, epoch_name, trial_idx,
+                            pre_tone_duration_s=TESTB_PRE_TONE_DURATION_S,
+                            post_tone_duration_s=TESTB_POST_TONE_DURATION_S):
+    """
+    (onset, offset) for one of the two paper-facing RECALL windows, or None when the window is
+    not FULLY present on that trial.
+
+    Thin guard over get_testb_epoch_frames -- the window arithmetic lives there and is not
+    duplicated here. What this adds is the completeness check get_testb_epoch_frames does not
+    make: it happily returns a post-tone window that runs past the end of the recording (or into
+    the next tone), because its 35 s default is used elsewhere for descriptive purposes where a
+    short window is tolerable. It is NOT tolerable here: the recall analysis compares a
+    duration-matched pre/post pair, and a truncated post-tone window would make the rate outcome
+    partly a measure of window length.
+
+    ** A missing window returns None; an AMBIGUOUS one raises. ** The two are different problems.
+    A recording that stops 12 s after the last tone offset genuinely has no 20 s post-tone window
+    on that trial -- a definitional absence, exactly like `pre_tone` on TFC trial 0 or
+    `post_shock_late` on a truncated final trial, handled downstream by restricting each animal
+    to the trials where BOTH windows exist (restrict_to_exposure_matched_trials) and reporting the
+    resulting coverage. But a tone structure in which the 20 s pre-tone window would OVERLAP the
+    previous trial's 20 s post-tone window means the two epochs are not disjoint and the
+    pre-vs-post contrast is not the contrast this analysis claims to compute; that is a session
+    the analyst has to look at, so it raises rather than silently returning a shorter or
+    overlapping window.
+
+    Scoped to RECALL_EPOCHS: 'tone' is not part of this pass and asking for it here raises, so a
+    caller cannot quietly widen the model to three epochs through this function.
+    """
+    if epoch_name not in RECALL_EPOCHS:
+        raise ValueError(
+            f'get_recall_epoch_frames: {epoch_name!r} is not one of the paper-facing recall '
+            f'windows {RECALL_EPOCHS}. The tone epoch itself is deliberately excluded from this '
+            f'analysis; use get_testb_epoch_frames directly for descriptive tone-window work.')
+
+    frames = get_testb_epoch_frames(session, epoch_name, trial_idx,
+                                    pre_tone_duration_s=pre_tone_duration_s,
+                                    post_tone_duration_s=post_tone_duration_s)
+    if frames is None:
+        return None
+    onset, offset = frames
+
+    if epoch_name == 'pre_tone':
+        if trial_idx > 0:
+            prev_post_tone_end = (session.tone_offsets[trial_idx - 1]
+                                  + int(round(post_tone_duration_s * MINISCOPE_FPS)))
+            if onset < prev_post_tone_end:
+                raise RuntimeError(
+                    f'get_recall_epoch_frames: the {pre_tone_duration_s} s pre-tone window for '
+                    f'trial {trial_idx} of {session.mouse} starts at frame {onset}, before the '
+                    f'end of trial {trial_idx - 1}\'s {post_tone_duration_s} s post-tone window '
+                    f'(frame {prev_post_tone_end}). The two recall epochs must be disjoint for '
+                    f'the pre-vs-post contrast to mean what this analysis says it means. Check '
+                    f'the measured tone timing for this session rather than shortening a window.')
+        return onset, offset
+
+    # post_tone: the window must fit before whatever ends this trial -- the next tone onset, or
+    # (on the last trial) the end of the recording. TestBSession.post_tone_offsets is exactly
+    # that boundary, so the check is the same one on both.
+    trial_end = session.post_tone_offsets[trial_idx]
+    if offset > trial_end:
+        return None
+    return onset, offset
 
 # Sensitivity thresholds for the run-merging check (plan section 4): if the primary amplitude
 # contrast survives across all three, run-merging (temporally adjacent peaks collapsing into one
@@ -1420,6 +1645,42 @@ def build_secondary_fdr_table(secondary_pvalues, alpha=0.05):
             .sort_values('p_raw', ignore_index=True))
 
 
+def _nb_convergence_diagnostics(idata, var_names=None):
+    """Max r_hat / min ESS / divergence count for one fitted Bayesian model.
+
+    Factored out of fit_rate_group_epoch_model so the hierarchical cell-level rate model
+    (fit_cell_epoch_rate_model) reports convergence through the SAME code rather than a parallel
+    copy, per CLAUDE.md's dedup rule.
+
+    ``var_names=None`` (the default) summarizes EVERY parameter, which is exactly what
+    fit_rate_group_epoch_model did inline and what it continues to do -- that lane's emitted text
+    is unchanged. A caller passes ``var_names`` when the hard convergence GATE must be scoped to
+    the parameters the scientific claims rest on: a model with thousands of nuisance per-cell
+    random intercepts would otherwise have its pass/fail decided by whichever poorly-identified
+    singleton cell happened to mix worst, which is not a statement about the fixed effects,
+    the dispersion, or the contrasts being reported. Scoping the gate is not the same as hiding
+    the rest -- the caller is expected to summarize the unscoped block too and report it.
+
+    ``ess_tail`` is included alongside ``ess_bulk``: bulk ESS speaks to the posterior mean, tail
+    ESS to the interval endpoints, and this suite reports intervals.
+    """
+    summ = az.summary(idata) if var_names is None else az.summary(idata, var_names=var_names)
+    if len(summ) == 0:
+        raise RuntimeError(
+            f'_nb_convergence_diagnostics: var_names={var_names!r} matched NO parameters in the '
+            f'posterior, so this would be a convergence gate over an empty set -- which always '
+            f'passes and means nothing. Check the parameter names against the fitted model.')
+    return {
+        'max_rhat': float(summ['r_hat'].max()),
+        'min_ess_bulk': float(summ['ess_bulk'].min()),
+        'min_ess_tail': float(summ['ess_tail'].min()),
+        'n_divergent': int(idata.sample_stats['diverging'].values.sum()),
+        'n_params': int(len(summ)),
+        'worst_rhat_param': str(summ['r_hat'].idxmax()),
+        'worst_ess_bulk_param': str(summ['ess_bulk'].idxmin()),
+    }
+
+
 def fit_rate_group_epoch_model(df_mte, reference_group='mCherry', reference_epoch=TFC_REFERENCE_EPOCH,
                                epoch_categories=None, draws=1000, tune=1000, chains=4, seed=0):
     """
@@ -1499,14 +1760,8 @@ def fit_rate_group_epoch_model(df_mte, reference_group='mCherry', reference_epoc
     # dispersion, which is exactly the kind of change that can start producing divergences or
     # stuck chains -- so max r-hat, min ESS and the divergence count travel with every fit rather
     # than being something a reader has to go and check separately.
-    diagnostics = {}
-    for name, idata in (('full', idata_full), ('reduced', idata_reduced)):
-        summ = az.summary(idata)
-        diagnostics[name] = {
-            'max_rhat': float(summ['r_hat'].max()),
-            'min_ess_bulk': float(summ['ess_bulk'].min()),
-            'n_divergent': int(idata.sample_stats['diverging'].values.sum()),
-        }
+    diagnostics = {name: _nb_convergence_diagnostics(idata)
+                   for name, idata in (('full', idata_full), ('reduced', idata_reduced))}
     diag_text = '\n'.join(
         f"  {name}: max r_hat={d['max_rhat']:.4f}, min ess_bulk={d['min_ess_bulk']:.0f}, "
         f"divergences={d['n_divergent']}"
@@ -1613,8 +1868,74 @@ def report_decomposition_additivity(rate_group_coef, amplitude_group_coef):
 # Small-n inference: mouse-label permutation
 # ─────────────────────────────────────────────────────────────────────────────
 
+def n_distinct_relabelings(group_labels):
+    """Number of DISTINCT group relabelings of `group_labels` that preserve the observed group
+    sizes -- the multinomial coefficient n! / prod_g n_g!.
+
+    Exposed (rather than inlined into the enumerator) so a call site can report and ASSERT the
+    size of the randomization space it is testing over: with a 6/5/5 cohort a pairwise-restricted
+    space is C(11,6)=462 or C(10,5)=252 and the global one is 2,018,016, and those numbers belong
+    in the output next to the p-value. Computed from the observed sizes, never hard-coded.
+    """
+    counts = collections.Counter(list(group_labels))
+    total = sum(counts.values())
+    out = math.factorial(total)
+    for k in counts.values():
+        out //= math.factorial(k)
+    return int(out)
+
+
+def _iter_group_relabelings(group_labels):
+    """Yield every distinct size-preserving relabeling of `group_labels`, as a list of labels
+    positionally aligned with the input.
+
+    Enumeration (not sampling): the groups are taken in a fixed sorted order and each in turn is
+    assigned to every combination of the still-unassigned positions, so each distinct multiset
+    permutation is produced exactly once. The observed labeling is among them, which is what makes
+    the resulting p-value a genuine exact randomization p-value rather than a conditional one.
+    """
+    labels = list(group_labels)
+    counts = collections.Counter(labels)
+    groups = sorted(counts)
+    n = len(labels)
+
+    def _rec(positions, gi, acc):
+        if gi == len(groups) - 1:
+            arr = list(acc)
+            for p in positions:
+                arr[p] = groups[gi]
+            yield arr
+            return
+        g = groups[gi]
+        for chosen in itertools.combinations(positions, counts[g]):
+            arr = list(acc)
+            chosen_set = set(chosen)
+            for p in chosen:
+                arr[p] = g
+            yield from _rec([p for p in positions if p not in chosen_set], gi + 1, arr)
+
+    yield from _rec(list(range(n)), 0, [None] * n)
+
+
+def _permutation_heartbeat(label, i, total, t0, every):
+    """Progress line for a long permutation loop: how far along, and how much longer.
+
+    Display only -- it computes nothing and changes no result. It exists because the exact
+    pairwise enumerations and the Monte Carlo omnibus each refit a mixed model hundreds to
+    thousands of times, which is minutes of total silence otherwise.
+    """
+    if not every or i == 0 or i % every or i >= total:
+        return
+    elapsed = time.perf_counter() - t0
+    rate = elapsed / i
+    print(f'[hier   perm]     {label}: {i}/{total} ({100.0 * i / total:.0f}%), '
+          f'{elapsed / 60:.1f} min elapsed, ~{rate * (total - i) / 60:.1f} min left', flush=True)
+
+
 def mouse_label_permutation_test(stat_fn, mice_per_group, n_perm=20000, seed=0,
-                                 restrict_to_groups=None):
+                                 restrict_to_groups=None, exact=False,
+                                 exact_max_relabelings=3_000_000,
+                                 progress_label=None, progress_every=None):
     """
     Monte Carlo permutation test: shuffle GROUP LABELS across mice (holding each mouse's own
     cell/event data fixed) and recompute stat_fn under each shuffle, building a null distribution
@@ -1667,7 +1988,32 @@ def mouse_label_permutation_test(stat_fn, mice_per_group, n_perm=20000, seed=0,
                      side. This parameter exists so the choice is visible and documented at the
                      call site rather than being an easily-missed dict comprehension.)
 
-    Returns dict(observed, p_two_sided, n_perm, n_finite, null=ndarray of length n_perm).
+    exact          : False (default) keeps the Monte Carlo path above EXACTLY as it was -- every
+                     pre-existing call site in this module is unchanged and no reported number
+                     moves. True instead ENUMERATES every distinct size-preserving relabeling
+                     (_iter_group_relabelings) and computes
+
+                         p = #{|stat| >= |observed|} / n_relabelings
+
+                     with NO +1/+1 correction: the observed labeling is itself one of the
+                     enumerated draws, so the ratio is already the exact randomization p-value and
+                     the Monte Carlo correction would only bias it upward.
+
+                     ** Exactness is bought by the RESTRICTION, not by patience. ** The global
+                     6/5/5 space holds 2,018,016 relabelings, enumerable only for a statistic
+                     costing microseconds; a pairwise-restricted space holds 462 or 252, which is
+                     enumerable even when stat_fn refits a mixed model on every draw. Raises if
+                     the space exceeds `exact_max_relabelings` rather than silently starting a
+                     computation that will not finish.
+
+    exact_max_relabelings : guard on the enumerated space size (default 3,000,000).
+
+    progress_label, progress_every : DISPLAY ONLY. When both are given, a progress line is printed
+                     every `progress_every` draws. Default None/None prints nothing and leaves
+                     every existing call site's behaviour byte-identical. Nothing about the
+                     statistic, the null distribution or the p-value depends on them.
+
+    Returns dict(observed, p_two_sided, n_perm, n_finite, null=ndarray, exact, n_relabelings).
     """
     if restrict_to_groups is not None:
         restrict_to_groups = tuple(restrict_to_groups)
@@ -1688,12 +2034,39 @@ def mouse_label_permutation_test(stat_fn, mice_per_group, n_perm=20000, seed=0,
 
     observed = stat_fn(true_assignment)
 
-    rng = np.random.default_rng(seed)
-    null = np.empty(n_perm, dtype=float)
-    for i in range(n_perm):
-        shuffled = rng.permutation(group_labels)
-        perm_assignment = dict(zip(mouse_list, shuffled))
-        null[i] = stat_fn(perm_assignment)
+    if exact:
+        n_relabelings = n_distinct_relabelings(group_labels)
+        if n_relabelings > exact_max_relabelings:
+            raise ValueError(
+                f'mouse_label_permutation_test(exact=True): the randomization space holds '
+                f'{n_relabelings} distinct relabelings, above exact_max_relabelings='
+                f'{exact_max_relabelings}. Restrict exchangeability (restrict_to_groups), raise '
+                f'the cap deliberately if the statistic is cheap enough, or use the Monte Carlo '
+                f'path -- do not start an enumeration that will not finish.')
+        null = np.empty(n_relabelings, dtype=float)
+        n_seen = 0
+        _t0 = time.perf_counter()
+        for i, shuffled in enumerate(_iter_group_relabelings(group_labels)):
+            null[i] = stat_fn(dict(zip(mouse_list, shuffled)))
+            n_seen += 1
+            _permutation_heartbeat(progress_label, i, n_relabelings, _t0, progress_every)
+        if n_seen != n_relabelings:
+            raise RuntimeError(
+                f'mouse_label_permutation_test(exact=True): the enumerator produced {n_seen} '
+                f'relabelings but the multinomial coefficient for these group sizes is '
+                f'{n_relabelings}. One of the two is wrong; refusing to report a p-value over an '
+                f'enumeration that is not the space it claims to be.')
+        n_perm = n_relabelings
+    else:
+        n_relabelings = None
+        rng = np.random.default_rng(seed)
+        null = np.empty(n_perm, dtype=float)
+        _t0 = time.perf_counter()
+        for i in range(n_perm):
+            shuffled = rng.permutation(group_labels)
+            perm_assignment = dict(zip(mouse_list, shuffled))
+            null[i] = stat_fn(perm_assignment)
+            _permutation_heartbeat(progress_label, i, n_perm, _t0, progress_every)
 
     # ** Non-finite draws must be removed, not compared. ** A stat_fn returns NaN for a
     # degenerate split (see make_contrast_stat / make_group_epoch_interaction_stat), and
@@ -1714,11 +2087,18 @@ def mouse_label_permutation_test(stat_fn, mice_per_group, n_perm=20000, seed=0,
             f'mouse_label_permutation_test: only {n_finite} of {n_perm} permutations produced a '
             f'finite statistic. The null distribution is too degenerate to test against; fix the '
             f'statistic or drop the test rather than reporting a p-value from it.')
-    # +1/+1 (conventional Monte Carlo correction) so a finite number of draws never reports p=0.
     n_as_extreme = int(np.sum(np.abs(null[finite]) >= np.abs(observed)))
-    p_two_sided = (n_as_extreme + 1) / (n_finite + 1)
+    if exact:
+        # NO +1/+1 here: the observed labeling is one of the enumerated draws, so the ratio is
+        # already the exact randomization p-value. Adding the Monte Carlo correction on top would
+        # double-count the observed draw and bias every exact p upward.
+        p_two_sided = n_as_extreme / n_finite
+    else:
+        # +1/+1 (conventional Monte Carlo correction) so a finite number of draws never reports p=0.
+        p_two_sided = (n_as_extreme + 1) / (n_finite + 1)
     return {'observed': observed, 'p_two_sided': float(p_two_sided), 'n_perm': n_perm,
-            'n_finite': n_finite, 'null': null}
+            'n_finite': n_finite, 'null': null, 'exact': bool(exact),
+            'n_relabelings': n_relabelings}
 
 
 def make_contrast_stat(df, value_col, group_a, group_b, reduce_fn=None, weight='cell'):
@@ -2303,10 +2683,12 @@ def fit_lt1_lt2_manipulation_check(df_delta, reference='mCherry'):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def build_mouse_epoch_unified_table(df_matched, epochs=TFC_MATCHED_PROFILE_EPOCHS):
+def build_mouse_epoch_unified_table(df_matched, epochs=TFC_MATCHED_PROFILE_EPOCHS,
+                                    reference_epoch=UNIFIED_REFERENCE_EPOCH):
     """
     The inferential dataset for the paper: ONE row per (mouse, epoch), carrying both paper-facing
-    outcomes. With a complete cohort this is 17 mice x 3 epochs = 51 rows.
+    outcomes. With a complete cohort this is 17 mice x 3 epochs = 51 rows for the TFC lane, and
+    n_animals_present x 2 rows for a recall session (see render_paper_recall_amplitude_rate).
 
     ** Both outcomes come off ONE frame, so they cannot silently diverge. ** Amplitude and rate
     are presented as parallel rows of one figure, so they must be computed from the same animals,
@@ -2336,9 +2718,12 @@ def build_mouse_epoch_unified_table(df_matched, epochs=TFC_MATCHED_PROFILE_EPOCH
     pseudocount would put an arbitrary constant inside a log on the response scale, where its size
     determines the answer.
 
-    Categorical dtypes are set here with the REFERENCE LEVEL FIRST (mCherry, pre_tone_matched) so
-    the model's reference never depends on alphabetical category order; fit_mixed_model
-    deliberately does not touch dtypes.
+    Categorical dtypes are set here with the REFERENCE LEVEL FIRST (mCherry, and `reference_epoch`
+    -- pre_tone_matched for TFC, pre_tone for recall) so the model's reference never depends on
+    alphabetical category order; fit_mixed_model deliberately does not touch dtypes. The same
+    `reference_epoch` must be passed to fit_unified_group_epoch_model and
+    unified_posthoc_contrasts, or the contrasts would be built around a different baseline from
+    the one the model was fit with.
 
     Returns a DataFrame with columns
         mouse, group, epoch, n_cells, n_active_cells,
@@ -2346,6 +2731,9 @@ def build_mouse_epoch_unified_table(df_matched, epochs=TFC_MATCHED_PROFILE_EPOCH
         total_events, total_cell_seconds, population_rate, log_population_rate
     """
     epochs = tuple(epochs)
+    if reference_epoch not in epochs:
+        raise ValueError(f'build_mouse_epoch_unified_table: reference_epoch '
+                         f'{reference_epoch!r} is not among the epochs {epochs}.')
     rows = []
     for epoch in epochs:
         pooled = aggregate_over_trials(df_matched, epoch)
@@ -2409,17 +2797,18 @@ def build_mouse_epoch_unified_table(df_matched, epochs=TFC_MATCHED_PROFILE_EPOCH
         categories=[UNIFIED_REFERENCE_GROUP] + [g for g in GROUP_ORDER
                                                 if g != UNIFIED_REFERENCE_GROUP])
     out['epoch'] = pd.Categorical(
-        out['epoch'], categories=[UNIFIED_REFERENCE_EPOCH] + [e for e in epochs
-                                                              if e != UNIFIED_REFERENCE_EPOCH])
+        out['epoch'], categories=[reference_epoch] + [e for e in epochs
+                                                      if e != reference_epoch])
     return out.sort_values(['group', 'mouse', 'epoch']).reset_index(drop=True)
 
 
-def _unified_formula(response_col):
+def _unified_formula(response_col, reference_epoch=UNIFIED_REFERENCE_EPOCH):
     return (f'{response_col} ~ C(group, Treatment(reference="{UNIFIED_REFERENCE_GROUP}"))'
-            f' * C(epoch, Treatment(reference="{UNIFIED_REFERENCE_EPOCH}"))')
+            f' * C(epoch, Treatment(reference="{reference_epoch}"))')
 
 
-def fit_unified_group_epoch_model(df_me, response_col):
+def fit_unified_group_epoch_model(df_me, response_col,
+                                  reference_epoch=UNIFIED_REFERENCE_EPOCH):
     """
     Fit `response_col ~ group * epoch + (1|mouse)` on the mouse x epoch table -- IDENTICALLY for
     both paper-facing outcomes, which is the entire point of this function existing rather than
@@ -2430,24 +2819,35 @@ def fit_unified_group_epoch_model(df_me, response_col):
     using either, because a fallback taken by ONE outcome would break the claim that amplitude and
     rate received the same treatment.
 
-    The omnibus is the joint Wald test that all four group x epoch coefficients are zero, with
+    The omnibus is the joint Wald test that EVERY group x epoch coefficient is zero, with
     df2 = n_mice - 1 (joint_wald_test's animal-level convention -- the same denominator df the
     post-hoc contrasts use, so the interaction test and its simple effects are one procedure).
+    Its df1 is (n_groups - 1) x (n_epochs - 1): 4 for the three-epoch TFC model, 2 for the
+    two-epoch recall model, where it is exactly the test of whether the treatment-vs-control
+    difference changes from pre-tone to post-tone.
+
+    ** n_mice is read off `df_me`, never assumed. ** The recall sessions are each missing a
+    DIFFERENT animal, so the denominator df of a recall model is that session's own
+    n_animals_present - 1 and is not interchangeable with the conditioning model's 16.
 
     Returns dict(result, method, summary_text, formula, n_mice, fe_names, interaction_names,
     omnibus, response_col).
     """
-    formula = _unified_formula(response_col)
+    formula = _unified_formula(response_col, reference_epoch=reference_epoch)
     n_mice = int(df_me['mouse'].nunique())
+    n_groups = int(df_me['group'].nunique())
+    n_epochs = int(df_me['epoch'].nunique())
     result, method, text = fit_mixed_model(df_me, formula, group_col='mouse')
     fe_names, _params = _fe_names_and_params(result)
     # Read the interaction coefficients off the FITTED model rather than reconstructing
     # statsmodels' dummy-name format, which depends on the formula.
     interaction_names = [n for n in fe_names if ':' in n]
-    if len(interaction_names) != 4:
-        raise RuntimeError(f'fit_unified_group_epoch_model: expected 4 group x epoch coefficients '
-                           f'(3 groups x 3 epochs), found {len(interaction_names)}: '
-                           f'{interaction_names}. Available: {fe_names}')
+    expected_interactions = (n_groups - 1) * (n_epochs - 1)
+    if len(interaction_names) != expected_interactions:
+        raise RuntimeError(f'fit_unified_group_epoch_model: expected {expected_interactions} '
+                           f'group x epoch coefficients ({n_groups} groups x {n_epochs} epochs), '
+                           f'found {len(interaction_names)}: {interaction_names}. '
+                           f'Available: {fe_names}')
     omnibus = joint_wald_test(result, interaction_names, n_mice)
     return {'result': result, 'method': method, 'summary_text': text, 'formula': formula,
             'n_mice': n_mice, 'fe_names': fe_names, 'interaction_names': interaction_names,
@@ -2489,6 +2889,21 @@ def _unified_group_coef(fe_names, group):
     return matches[0]
 
 
+def _unified_epoch_coef(fe_names, epoch):
+    """The main-effect coefficient name for `epoch` -- the reference group's pre->post change.
+
+    The epoch counterpart of _unified_group_coef, and matched the same way: an interaction term
+    also contains the epoch name, so ':' terms are excluded. Used by the modulation contrasts,
+    where the control group's own pre->post change IS this coefficient and each treatment group's
+    is this coefficient plus that group's interaction term.
+    """
+    matches = [n for n in fe_names if f'[T.{epoch}]' in n and ':' not in n]
+    if len(matches) != 1:
+        raise RuntimeError(f'_unified_epoch_coef: expected exactly one main-effect coefficient '
+                           f'for epoch {epoch!r}, found {matches} in {fe_names}.')
+    return matches[0]
+
+
 def _unified_epoch_interaction_coef(fe_names, group, epoch):
     """The `group x epoch` coefficient name for this (group, epoch) pair."""
     matches = [n for n in fe_names if ':' in n and f'[T.{group}]' in n and f'[T.{epoch}]' in n]
@@ -2499,7 +2914,8 @@ def _unified_epoch_interaction_coef(fe_names, group, epoch):
 
 
 def unified_posthoc_contrasts(fits, df_me, epochs=TFC_MATCHED_PROFILE_EPOCHS,
-                              alpha=0.05):
+                              reference_epoch=UNIFIED_REFERENCE_EPOCH,
+                              across_epoch_family=True, alpha=0.05):
     """
     The planned treatment-vs-control simple effects, from the fitted models -- the single
     authoritative source for every effect estimate, interval, p-value and asterisk on the
@@ -2524,6 +2940,15 @@ def unified_posthoc_contrasts(fits, df_me, epochs=TFC_MATCHED_PROFILE_EPOCHS,
     outcome -- the more expansive definition of the family -- and is reported as a SENSITIVITY
     analysis. It supplies no figure asterisk and no Part 1 number in paper_results_summary.md.
     Both families are computed from the same twelve raw contrasts; only the grouping differs.
+
+    ** `across_epoch_family` is the TFC lane's sensitivity correction and is scoped to it. ** The
+    six-comparison family exists because the conditioning analysis reports three epochs and the
+    wider definition of the family had to stay auditable after the multiplicity structure was
+    settled post-inspection. The RECALL lane has two epochs and two comparisons per epoch, its
+    epochs are a baseline and its single response window rather than three co-equal displayed
+    windows, and no such wider family was ever declared for it -- so it passes False and the
+    `p_holm_six` columns are simply absent there rather than present under a name that would be
+    numerically wrong (there are four, not six). Consumers read `p_holm_six` with `.get`.
 
     ** A simple effect is a CONTRAST, not a coefficient. ** At the reference epoch the
     treatment-vs-control difference is the group main coefficient alone; at any other epoch it is
@@ -2551,7 +2976,7 @@ def unified_posthoc_contrasts(fits, df_me, epochs=TFC_MATCHED_PROFILE_EPOCHS,
         for epoch in epochs:
             for group in UNIFIED_TREATMENT_GROUPS:
                 weights = {_unified_group_coef(fe_names, group): 1.0}
-                if epoch != UNIFIED_REFERENCE_EPOCH:
+                if epoch != reference_epoch:
                     weights[_unified_epoch_interaction_coef(fe_names, group, epoch)] = 1.0
                 res = linear_contrast_test(fit['result'], weights, fit['n_mice'], alpha=alpha)
                 row = {
@@ -2583,9 +3008,10 @@ def unified_posthoc_contrasts(fits, df_me, epochs=TFC_MATCHED_PROFILE_EPOCHS,
     # and the same procedure, so no row is a special case.
     out['p_holm_epoch'] = np.nan
     out['holm_epoch_reject'] = False
-    # SENSITIVITY family: Holm within outcome across all six, populated on every row.
-    out['p_holm_six'] = np.nan
-    out['holm_six_reject'] = False
+    if across_epoch_family:
+        # SENSITIVITY family: Holm within outcome across all six, populated on every row.
+        out['p_holm_six'] = np.nan
+        out['holm_six_reject'] = False
 
     for (outcome_key, epoch), idx in out.groupby(['outcome', 'epoch'],
                                                  observed=True).groups.items():
@@ -2600,7 +3026,8 @@ def unified_posthoc_contrasts(fits, df_me, epochs=TFC_MATCHED_PROFILE_EPOCHS,
         out.loc[idx, 'p_holm_epoch'] = padj_epoch
         out.loc[idx, 'holm_epoch_reject'] = reject_epoch
 
-    for outcome_key, idx in out.groupby('outcome', observed=True).groups.items():
+    for outcome_key, idx in (out.groupby('outcome', observed=True).groups.items()
+                             if across_epoch_family else ()):
         idx = list(idx)
         if len(idx) != len(epochs) * len(UNIFIED_TREATMENT_GROUPS):
             raise RuntimeError(
@@ -2641,11 +3068,31 @@ def unified_interactions_table(fits):
         for outcome in UNIFIED_OUTCOMES])
 
 
+# Below this, three-decimal fixed-point formatting renders a real p-value as the literally false
+# 'P = 0.000'. Reported as an inequality instead -- the convention every journal uses and the one
+# thing a fixed-point format cannot express.
+_P_DISPLAY_FLOOR = 0.001
+
+
+def format_p_display(p, decimals=3):
+    """`0.0789` -> `P = 0.079`; anything below _P_DISPLAY_FLOOR -> `P < 0.001`.
+
+    A tiny p-value printed at three decimals reads `P = 0.000`, which claims a p-value of exactly
+    zero. One formatter so no caller re-invents the threshold.
+    """
+    p = float(p)
+    if not np.isfinite(p):
+        raise ValueError(f'format_p_display: p must be finite, got {p!r}.')
+    if p < _P_DISPLAY_FLOOR:
+        return f'P < {_P_DISPLAY_FLOOR:g}'
+    return f'P = {p:.{decimals}f}'
+
+
 def format_unified_interaction(row):
     """`group x epoch F(4, 16) = 1.23, P = 0.34` -- one wording, used by every figure annotation
     and every text file, so the interaction can never be quoted two different ways."""
     return (f'group x epoch F({int(row["df1"])}, {int(row["df2"])}) = {row["F"]:.2f}, '
-            f'P = {row["p"]:.3f}')
+            f'{format_p_display(row["p"])}')
 
 
 # ── Diagnostics (descriptive; they gate nothing and add no inference) ─────────
@@ -2657,7 +3104,11 @@ _INFLUENCE_FLAG_ABS_LOG = 0.10
 
 def unified_model_diagnostics(fits, df_me, contrasts, save_dir,
                               epochs=TFC_MATCHED_PROFILE_EPOCHS,
-                              filename_root='unified_lmm_diagnostics'):
+                              reference_epoch=UNIFIED_REFERENCE_EPOCH,
+                              across_epoch_family=True,
+                              filename_root='unified_lmm_diagnostics',
+                              residuals_csv='unified_lmm_residuals.csv',
+                              influence_csv='unified_lmm_influence.csv'):
     """
     Residual and leave-one-mouse-out diagnostics for both unified models.
 
@@ -2676,7 +3127,9 @@ def unified_model_diagnostics(fits, df_me, contrasts, save_dir,
     nothing about robustness; what matters is whether the effect ESTIMATE changes qualitatively.
     Only that is flagged, and only as a note.
 
-    Writes <root>.png, <root>.txt, unified_lmm_residuals.csv, unified_lmm_influence.csv.
+    Writes <filename_root>.png, <filename_root>.txt, <residuals_csv> and <influence_csv>. The
+    filenames are parameters because the recall lane writes its own copies of these into its own
+    stats directory under `unified_recall_*` names, matching the rest of that lane's output.
     """
     ensure_dirs(save_dir)
     resid_rows = []
@@ -2719,15 +3172,18 @@ def unified_model_diagnostics(fits, df_me, contrasts, save_dir,
     fig.subplots_adjust(left=0.12, right=0.98, top=0.88, bottom=0.10, hspace=0.55, wspace=0.30)
     save_fig(fig, os.path.join(save_dir, filename_root + '.png'))
     plt.close(fig)
-    write_text(os.path.join(save_dir, 'unified_lmm_residuals.csv'),
+    write_text(os.path.join(save_dir, residuals_csv),
                pd.DataFrame(resid_rows).to_csv(index=False))
 
     influence, notes = [], []
     for mouse in sorted(df_me['mouse'].unique()):
         sub = df_me[df_me['mouse'] != mouse]
-        lomo_fits = {o.key: fit_unified_group_epoch_model(sub, o.response_col)
+        lomo_fits = {o.key: fit_unified_group_epoch_model(sub, o.response_col,
+                                                          reference_epoch=reference_epoch)
                      for o in UNIFIED_OUTCOMES}
-        lomo = unified_posthoc_contrasts(lomo_fits, sub, epochs=epochs)
+        lomo = unified_posthoc_contrasts(lomo_fits, sub, epochs=epochs,
+                                         reference_epoch=reference_epoch,
+                                         across_epoch_family=across_epoch_family)
         for _, row in lomo.iterrows():
             full = unified_contrast_lookup(contrasts, row['outcome'], row['epoch'], row['group'])
             delta = row['estimate_log'] - full['estimate_log']
@@ -2749,8 +3205,10 @@ def unified_model_diagnostics(fits, df_me, contrasts, save_dir,
                              f"omitting {mouse} moves the ratio "
                              f"{full['ratio']:.3f} -> {row['ratio']:.3f}")
     influence_df = pd.DataFrame(influence)
-    write_text(os.path.join(save_dir, 'unified_lmm_influence.csv'),
+    write_text(os.path.join(save_dir, influence_csv),
                influence_df.to_csv(index=False))
+    n_contrasts = len(contrasts)
+    n_mice_diag = int(df_me['mouse'].nunique())
 
     lines = [
         'Unified LMM diagnostics (descriptive)',
@@ -2760,19 +3218,19 @@ def unified_model_diagnostics(fits, df_me, contrasts, save_dir,
         'a multiplicity family, and none determines whether the models are accepted.',
         '',
         f'Residual plots: {filename_root}.png (residual-vs-fitted and normal Q-Q per outcome).',
-        'Per-row residuals: unified_lmm_residuals.csv.',
+        f'Per-row residuals: {residuals_csv}.',
         '',
         'No residual-normality test is reported as an acceptance criterion: a mixed model\'s '
-        'residuals are not 51 independent observations, so a normality test crossing 0.05 would '
-        'not be a principled pass/fail rule here. Read the plots.',
+        f'residuals are not {len(df_me)} independent observations, so a normality test crossing '
+        '0.05 would not be a principled pass/fail rule here. Read the plots.',
         '',
-        'Leave-one-mouse-out (unified_lmm_influence.csv)',
+        f'Leave-one-mouse-out ({influence_csv})',
         '-' * 60,
-        f'Each of the {df_me["mouse"].nunique()} animals is dropped in turn and BOTH models are '
-        'refit, giving that animal\'s effect on each of the twelve planned contrast ESTIMATES. '
-        'Significance-decision flips are deliberately not computed: at n = 17 an adjusted '
-        'p-value crossing 0.05 when one animal is removed is expected and is not evidence that '
-        'one animal drives a result.',
+        f'Each of the {n_mice_diag} animals is dropped in turn and BOTH models are '
+        f'refit, giving that animal\'s effect on each of the {n_contrasts} planned contrast '
+        f'ESTIMATES. Significance-decision flips are deliberately not computed: at n = '
+        f'{n_mice_diag} an adjusted p-value crossing 0.05 when one animal is removed is expected '
+        'and is not evidence that one animal drives a result.',
         '',
     ]
     lines += ([f'Contrasts whose estimate moved by more than half the full-data effect and by '
@@ -2786,7 +3244,7 @@ def unified_model_diagnostics(fits, df_me, contrasts, save_dir,
 
 # ── Synthetic verification of the whole unified path ─────────────────────────
 
-# Planted effects for verify_unified_tfc_synthetic, chosen so both expected conclusions sit far
+# Planted effects for verify_unified_synthetic, chosen so both expected conclusions sit far
 # from alpha. A regression test whose correctness depends on a realization landing at P = 0.049
 # rather than 0.051 tests the random seed, not the code.
 #
@@ -2804,17 +3262,30 @@ _SYNTHETIC_RESID_SD = 0.10        # within-animal residual SD
 _SYNTHETIC_GROUP_SIZES = (('mCherry', 6), ('hM3D', 5), ('hM4D', 6))
 
 
-def _synthetic_mouse_epoch_table(shift_epochs, epochs, rng):
+def _synthetic_mouse_epoch_table(shift_epochs, epochs, rng,
+                                 reference_epoch=UNIFIED_REFERENCE_EPOCH,
+                                 group_sizes=_SYNTHETIC_GROUP_SIZES,
+                                 shift_fn=None):
     """A synthetic mouse x epoch table in exactly build_mouse_epoch_unified_table's output shape,
-    with `_SYNTHETIC_SHIFT` planted on both treatment groups in `shift_epochs` only."""
+    with `_SYNTHETIC_SHIFT` planted on both treatment groups in `shift_epochs` only.
+
+    `group_sizes` is a parameter so a recall session can plant ITS OWN cohort (one animal fewer,
+    and a different one in each session) rather than the conditioning cohort's 6/5/6.
+
+    `shift_fn(group, epoch) -> log-scale offset` overrides the planted effect entirely, for
+    designs that need a DIFFERENT shift per group -- which the modulation checks do, since a
+    verification that plants the same effect on hM3D and hM4D cannot distinguish a correct
+    hM3D-vs-hM4D contrast from one wired to the wrong coefficient. The default reproduces the
+    original rule exactly, so verify_unified_synthetic is unaffected."""
     rows = []
-    for group, n in _SYNTHETIC_GROUP_SIZES:
+    for group, n in group_sizes:
         for m in range(n):
             mouse = f'{group}_{m}'
             intercept = rng.normal(0.0, _SYNTHETIC_MOUSE_SD)
             for epoch in epochs:
-                effect = (_SYNTHETIC_SHIFT if (group != UNIFIED_REFERENCE_GROUP
-                                               and epoch in shift_epochs) else 0.0)
+                effect = (shift_fn(group, epoch) if shift_fn is not None
+                          else (_SYNTHETIC_SHIFT if (group != UNIFIED_REFERENCE_GROUP
+                                                     and epoch in shift_epochs) else 0.0))
                 value = intercept + effect + rng.normal(0.0, _SYNTHETIC_RESID_SD)
                 rows.append({'mouse': mouse, 'group': group, 'epoch': epoch,
                              'n_cells': 100, 'n_active_cells': 80,
@@ -2828,70 +3299,86 @@ def _synthetic_mouse_epoch_table(shift_epochs, epochs, rng):
         out['group'], categories=[UNIFIED_REFERENCE_GROUP]
         + [g for g in GROUP_ORDER if g != UNIFIED_REFERENCE_GROUP])
     out['epoch'] = pd.Categorical(
-        out['epoch'], categories=[UNIFIED_REFERENCE_EPOCH]
-        + [e for e in epochs if e != UNIFIED_REFERENCE_EPOCH])
+        out['epoch'], categories=[reference_epoch]
+        + [e for e in epochs if e != reference_epoch])
     return out
 
 
-def verify_unified_tfc_synthetic(save_dir, epochs=TFC_MATCHED_PROFILE_EPOCHS, seed=0,
-                                 filename='unified_lmm_synthetic_verification.txt'):
+def verify_unified_synthetic(save_dir, epochs=TFC_MATCHED_PROFILE_EPOCHS,
+                             reference_epoch=UNIFIED_REFERENCE_EPOCH,
+                             response_epoch=TFC_TRACE_EPOCH,
+                             across_epoch_family=True,
+                             group_sizes=_SYNTHETIC_GROUP_SIZES,
+                             model_label='TFC', seed=0,
+                             filename='unified_lmm_synthetic_verification.txt'):
     """
     Run the ACTUAL unified fitting/contrast code against two planted datasets whose correct
     answers are known, and hard-fail if it does not recover them.
 
-    Design 1 -- an EQUAL treatment shift in all three epochs. The planned simple effects must
-    detect it, and the group x epoch interaction must stay null: a real effect that does not vary
-    across epochs must not manufacture epoch specificity.
+    Design 1 -- an EQUAL treatment shift in EVERY epoch. The planned simple effects must detect
+    it, and the group x epoch interaction must stay null: a real effect that does not vary across
+    epochs must not manufacture epoch specificity.
 
-    Design 2 -- a TRACE-ONLY shift. The interaction must become significant: an effect that does
-    vary across epochs must be detected as varying.
+    Design 2 -- a shift in `response_epoch` ONLY. The interaction must become significant: an
+    effect that does vary across epochs must be detected as varying.
 
     Together these are the two ways the unified analysis could be wrong in the direction that
     matters for the manuscript's claims. The margins required are deliberately wide (see
     _SYNTHETIC_SHIFT and friends) so this is a test of the code and not of one lucky realization.
 
-    Runs on 51-row frames, so both designs cost milliseconds.
+    ** The same two designs are the recall lane's verification. ** The recall models reuse this
+    machinery with two epochs and a session-specific cohort, where the second design is exactly
+    the claim that matters there: a post-tone-only group shift must show up as a significant
+    group x epoch interaction and a uniform shift must not. `response_epoch`, `epochs`,
+    `reference_epoch` and `group_sizes` are therefore parameters rather than TFC constants.
+
+    Runs on tables of a few dozen rows, so both designs cost milliseconds.
     """
     epochs = tuple(epochs)
-    lines = ['Synthetic verification of the unified TFC models',
+    lines = [f'Synthetic verification of the unified {model_label} models',
              '=' * 60, '',
              f'Planted log-scale shift {_SYNTHETIC_SHIFT} on both treatment groups; '
              f'between-mouse SD {_SYNTHETIC_MOUSE_SD}, residual SD {_SYNTHETIC_RESID_SD}; '
+             f'cohort {dict(group_sizes)}; epochs {epochs} (reference {reference_epoch!r}); '
              f'seed {seed}.', '']
     for offset, (label, shift_epochs) in enumerate([('global (all epochs)', epochs),
-                                                    ('trace-only', (TFC_TRACE_EPOCH,))]):
+                                                    (f'{response_epoch}-only', (response_epoch,))]):
         # A fresh generator per design, so one arm's draws do not depend on the other's and either
         # can be re-run in isolation and reproduce the number in this file.
         df_syn = _synthetic_mouse_epoch_table(shift_epochs, epochs,
-                                              np.random.default_rng(seed + offset))
-        fits = {o.key: fit_unified_group_epoch_model(df_syn, o.response_col)
+                                              np.random.default_rng(seed + offset),
+                                              reference_epoch=reference_epoch,
+                                              group_sizes=group_sizes)
+        fits = {o.key: fit_unified_group_epoch_model(df_syn, o.response_col,
+                                                     reference_epoch=reference_epoch)
                 for o in UNIFIED_OUTCOMES}
         require_common_unified_method(fits)
-        contrasts = unified_posthoc_contrasts(fits, df_syn, epochs=epochs)
+        contrasts = unified_posthoc_contrasts(fits, df_syn, epochs=epochs,
+                                              reference_epoch=reference_epoch,
+                                              across_epoch_family=across_epoch_family)
         p_inter = fits['amplitude']['omnibus']['p']
-        p_trace = float(unified_contrast_lookup(contrasts, 'amplitude',
-                                                TFC_TRACE_EPOCH, 'hM3D')['p_holm_epoch'])
-        ratio = float(unified_contrast_lookup(contrasts, 'amplitude',
-                                              TFC_TRACE_EPOCH, 'hM3D')['ratio'])
+        row = unified_contrast_lookup(contrasts, 'amplitude', response_epoch, 'hM3D')
+        p_response = float(row['p_holm_epoch'])
+        ratio = float(row['ratio'])
         lines += [f'{label}:',
-                  f'  trace hM3D-vs-mCherry: ratio {ratio:.3f}, '
-                  f'within-epoch Holm-adjusted P at trace = {p_trace:.3g}',
+                  f'  {response_epoch} hM3D-vs-mCherry: ratio {ratio:.3f}, '
+                  f'within-epoch Holm-adjusted P at {response_epoch} = {p_response:.3g}',
                   f'  group x epoch: {format_unified_interaction(unified_interactions_table(fits).iloc[0])}',
                   '']
-        assert p_trace < 1e-3, (
-            f'verify_unified_tfc_synthetic [{label}]: the planted trace effect (ratio '
-            f'{np.exp(_SYNTHETIC_SHIFT):.2f}x) should be detected with a within-epoch '
-            f'Holm-adjusted P < 0.001 at trace, got {p_trace:.3g}.')
+        assert p_response < 1e-3, (
+            f'verify_unified_synthetic [{model_label}/{label}]: the planted {response_epoch} '
+            f'effect (ratio {np.exp(_SYNTHETIC_SHIFT):.2f}x) should be detected with a '
+            f'within-epoch Holm-adjusted P < 0.001 at {response_epoch}, got {p_response:.3g}.')
         if shift_epochs == epochs:
             assert p_inter > 0.2, (
-                f'verify_unified_tfc_synthetic [{label}]: an equal shift in every epoch must not '
-                f'produce epoch specificity; the group x epoch interaction should be clearly '
-                f'null (P > 0.2) but was P = {p_inter:.3g}.')
+                f'verify_unified_synthetic [{model_label}/{label}]: an equal shift in every epoch '
+                f'must not produce epoch specificity; the group x epoch interaction should be '
+                f'clearly null (P > 0.2) but was P = {p_inter:.3g}.')
         else:
             assert p_inter < 0.01, (
-                f'verify_unified_tfc_synthetic [{label}]: a trace-only shift must be detected as '
-                f'epoch-dependent; the group x epoch interaction should be clearly significant '
-                f'(P < 0.01) but was P = {p_inter:.3g}.')
+                f'verify_unified_synthetic [{model_label}/{label}]: a {response_epoch}-only shift '
+                f'must be detected as epoch-dependent; the group x epoch interaction should be '
+                f'clearly significant (P < 0.01) but was P = {p_inter:.3g}.')
     lines.append('All assertions passed.')
     ensure_dirs(save_dir)
     write_text(os.path.join(save_dir, filename), '\n'.join(lines))
@@ -2919,7 +3406,7 @@ def _panel_stat_fn():
     return functools.partial(do_pairwise_holm_plot, holm_family=PANEL_HOLM_FAMILY)
 
 
-def _precomputed_stat_fn(p_hm3d_vs_ctl, p_hm4d_vs_ctl):
+def _precomputed_stat_fn(p_hm3d_vs_ctl, p_hm4d_vs_ctl, p_hm3d_vs_hm4d=np.nan):
     """A stat_fn that returns ALREADY-COMPUTED p-values and looks at no data at all.
 
     ** This is what makes a paper panel incapable of inventing its own statistic. ** The
@@ -2931,16 +3418,24 @@ def _precomputed_stat_fn(p_hm3d_vs_ctl, p_hm4d_vs_ctl):
     by which a paper panel's asterisk disagrees with that table.
 
     Returns the pair order annotate_pairwise_brackets expects -- [(Exc,Inh), (Exc,Ctl), (Inh,Ctl)]
-    -- with NaN in the first slot: hM3D-vs-hM4D is in neither Holm family and is not a paper
-    comparison, and a NaN is skipped by the bracket drawer rather than drawn as non-significant.
+    -- with the first slot defaulting to NaN: on the ABSOLUTE-value paper panels hM3D-vs-hM4D is in
+    neither Holm family and is not a paper comparison, and a NaN is skipped by the bracket drawer
+    rather than drawn as non-significant.
 
-    That NaN behaviour is also how a whole panel is left un-annotated: the paper distribution
+    ** `p_hm3d_vs_hm4d` may be supplied only where that comparison is a declared member of the
+    panel's OWN correction family. ** It is on the recall modulation panels, whose question is
+    symmetric across the three groups and whose Holm family is exactly the three pairwise
+    comparisons of the pre->post change (recall_modulation_contrasts). It is not on any
+    absolute-value panel, which is why the default keeps those call sites unchanged.
+
+    The NaN behaviour is also how a whole panel is left un-annotated: the paper distribution
     figure passes (NaN, NaN) for every non-primary epoch, so pre-tone and post-shock render no
     bracket at all while keeping the identical axis treatment as the trace column.
     """
     def _stat_fn(group_hM3D, group_hM4D, group_mCherry, ax, heights, annotate=True,
                  tot_dh_incr=0.12, barh=0, group_order=None, test=None):
-        return np.array([np.nan, float(p_hm3d_vs_ctl), float(p_hm4d_vs_ctl)], dtype=float)
+        return np.array([float(p_hm3d_vs_hm4d), float(p_hm3d_vs_ctl), float(p_hm4d_vs_ctl)],
+                        dtype=float)
     return _stat_fn
 
 
@@ -3111,7 +3606,7 @@ def write_decomposition_contrasts_markdown(contrasts_by_panel, save_dir, filenam
 def _draw_mouse_violin_panel(ax, values_per_group, ylabel, title=None,
                              group_order=DREADD_DISPLAY_ORDER, label_size='small',
                              annotate='stats', ci_scale='linear', ci_unit='',
-                             bracket_mode='data'):
+                             bracket_mode='data', stat_fn=None, ns_label_pairs=()):
     """Draw one mouse-level violin+scatter panel -- the established DREADD comparison style
     (caban.analysis._draw_violin_triplet), in CLAUDE.md's mCherry/hM3D/hM4D display order. Shared
     by every mouse-level group-comparison panel below so the spine/tick/label/title treatment is
@@ -3129,15 +3624,24 @@ def _draw_mouse_violin_panel(ax, values_per_group, ylabel, title=None,
     ci_scale, ci_unit : passed to annotate_contrast_ci when annotate='ci'. Note ci_scale='log'
                means "these values are ALREADY log-transformed", not "put the axis on a log
                scale" -- same distinction as _draw_cell_superplot_panel's yscale.
+    stat_fn  : override for the panel's statistic, exactly as on _draw_cell_superplot_panel.
+               Defaults to _panel_stat_fn() (an independent per-panel Welch/Holm test on the
+               per-mouse values), which is right for the internal figures. The recall modulation
+               panels pass _precomputed_stat_fn so their brackets come from the fitted models
+               instead of from a second test on the same numbers.
+    ns_label_pairs : passed through to annotate_pairwise_brackets (bracket_mode='axes' only);
+               pairs named here are bracketed with their p-value even when it is >= 0.05. Empty
+               by default, so every other panel is unchanged. See that function's docstring.
     """
     ax.spines[['right', 'top']].set_visible(False)
+    panel_stat_fn = _panel_stat_fn() if stat_fn is None else stat_fn
     draw_brackets_here = annotate == 'stats' and bracket_mode == 'data'
     _draw_violin_triplet(ax, values_per_group, 0, group_order, GROUP_COLOURS,
-                         stat_fn=(_panel_stat_fn() if draw_brackets_here else no_stat_annotation),
+                         stat_fn=(panel_stat_fn if draw_brackets_here else no_stat_annotation),
                          ylabel=ylabel)
     if annotate == 'stats' and bracket_mode == 'axes':
         annotate_pairwise_brackets(ax, {g: v.ravel() for g, v in values_per_group.items()},
-                                   group_order, _panel_stat_fn())
+                                   group_order, panel_stat_fn, ns_label_pairs=ns_label_pairs)
     elif annotate == 'ci':
         annotate_contrast_ci(ax, {g: v.ravel() for g, v in values_per_group.items()},
                              scale=ci_scale, unit=ci_unit)
@@ -3659,7 +4163,8 @@ def plot_decomposition_grid(df_fine, save_dir, epochs=TFC_MATCHED_EPOCHS,
                             reduced_coverage_epochs=(TFC_POST_SHOCK_LATE_EPOCH,),
                             components=_DECOMPOSITION_COMPONENTS, include_exc_vs_inh=True,
                             epoch_labels=None, contrast_payloads=None, interaction_note=None,
-                            subtitle=None, contrasts_note=None, row_height=1.5):
+                            subtitle=None, contrasts_note=None, contrasts_preamble=None,
+                            row_height=1.5):
     """
     The decomposition as EFFECT ESTIMATES, one row per component and one column per
     exposure-matched epoch: hM3D/Ctl and hM4D/Ctl with 95% intervals, and no significance stars
@@ -3736,6 +4241,10 @@ def plot_decomposition_grid(df_fine, save_dir, epochs=TFC_MATCHED_EPOCHS,
     subtitle, contrasts_note : override the figure's second title line and the companion markdown's
                     explanatory paragraph, which describe the internal figure's provenance and
                     would be false next to model-derived intervals.
+    contrasts_preamble : override the companion markdown's DEFAULT provenance paragraphs, which
+                    describe equal-mouse-weighted WELCH intervals over the conditioning cohort and
+                    are simply false beside model-derived ones from a different cohort. The recall
+                    lane supplies its own, naming that session's own animals and stats files.
     row_height    : inches per row. The row's epoch-specificity annotation lives on its y-LABEL,
                     so it has only the row's own axes height to occupy; a short figure with few
                     rows clips it. The four-row internal grid has height to spare at the default;
@@ -3851,7 +4360,7 @@ def plot_decomposition_grid(df_fine, save_dir, epochs=TFC_MATCHED_EPOCHS,
         {f'{spec.label} — {epoch}': contrasts[(spec.key, epoch)]
          for spec in rows for epoch in epochs},
         save_dir, filename_root + '_contrasts.md', figure_has_stars=False,
-        no_star_note=contrasts_note)
+        no_star_note=contrasts_note, preamble=contrasts_preamble)
 
 
 # Display names for the paper figures' epoch columns. The internal output uses the raw epoch keys
@@ -4070,7 +4579,9 @@ def _unified_contrast_payloads(contrasts, epochs=TFC_MATCHED_PROFILE_EPOCHS):
                     'p_raw': row['p_raw'],
                     'p_holm': float(row['p_holm_epoch']),
                     'p_holm_epoch': float(row['p_holm_epoch']),
-                    'p_holm_six': row['p_holm_six'],
+                    # Absent on the recall lane, which declares no across-epoch sensitivity
+                    # family (see unified_posthoc_contrasts' across_epoch_family).
+                    'p_holm_six': row.get('p_holm_six', np.nan),
                     # The contrast is on a log response, so the 'diff' above is in log units --
                     # the same statement mouse_contrast_ci(scale='log') makes about its output.
                     'unit_is_log': True, 'n': None, 'n_ref': None,
@@ -4130,7 +4641,10 @@ def _paper_panel_star_pvalues(contrasts, outcome_key, epoch):
 def plot_paper_epoch_distributions(df_matched, mouse_epoch, contrasts, save_dir,
                                    epochs=TFC_MATCHED_PROFILE_EPOCHS,
                                    rows=('amplitude', 'population_rate'),
-                                   filename_root='tfc_amplitude_rate_by_epoch'):
+                                   filename_root='tfc_amplitude_rate_by_epoch',
+                                   epoch_labels=None, contrasts_preamble=None,
+                                   contrasts_title='Paper figure contrasts — unified mixed models',
+                                   no_star_note=None):
     """
     The paper-facing distribution figure: per-event amplitude (top) and population event rate
     (bottom) for each DREADD group, across the three exposure-matched TFC windows.
@@ -4168,6 +4682,13 @@ def plot_paper_epoch_distributions(df_matched, mouse_epoch, contrasts, save_dir,
     unmatched trials part of the trace-vs-baseline difference in that row would be pure exposure.
     """
     epochs = tuple(epochs)
+    # Defaults resolved here rather than in the signature so the recall lane can supply its own
+    # column labels and its own provenance paragraph without either figure inheriting text that
+    # describes the other one's epochs, cohort or stats filenames.
+    epoch_labels = _PAPER_EPOCH_LABELS if epoch_labels is None else epoch_labels
+    contrasts_preamble = (_PAPER_CONTRASTS_PREAMBLE if contrasts_preamble is None
+                          else contrasts_preamble)
+    no_star_note = _PAPER_DISTRIBUTION_STAR_NOTE if no_star_note is None else no_star_note
     specs = [_DECOMPOSITION_COMPONENTS_BY_KEY[k] for k in rows]
     payloads = _unified_contrast_payloads(contrasts, epochs=epochs)
 
@@ -4204,12 +4725,12 @@ def plot_paper_epoch_distributions(df_matched, mouse_epoch, contrasts, save_dir,
     return _draw_superplot_panel_grid(
         panels,
         row_ylabels=[_PAPER_ROW_DISPLAY[spec.key]['ylabel'] for spec in specs],
-        col_titles=[_PAPER_EPOCH_LABELS.get(e, e) for e in epochs],
+        col_titles=[epoch_labels.get(e, e) for e in epochs],
         save_dir=save_dir, filename_root=filename_root,
         panel_name='plot_paper_epoch_distributions', annotate='stats', figure_has_stars=True,
-        contrasts_title='Paper figure contrasts — unified mixed models',
-        contrasts_preamble=_PAPER_CONTRASTS_PREAMBLE,
-        no_star_note=_PAPER_DISTRIBUTION_STAR_NOTE)
+        contrasts_title=contrasts_title,
+        contrasts_preamble=contrasts_preamble,
+        no_star_note=no_star_note)
 
 
 # Column titles for the conditioning-phase figure's epoch rows. `pre_tone` is deliberately the
@@ -4391,7 +4912,10 @@ _PAPER_SUPPLEMENT_ITEMS = (
     'Early-vs-late post-shock within-cell contrast (Puhger et al. 2024 internal control) '
     '-- descriptive, spends no alpha.',
     'Cross-registration subset sensitivity, and the LT1->LT2 detection-dropout measurement.',
-    'Recall sessions: Test_B (48 h) and Test_B_1wk post-tone amplitude.',
+    'The older single-epoch Test_B / Test_B_1wk post-tone CELL-LEVEL amplitude omnibus '
+    '(`Test_B*/post_tone_amplitude.*`, BH-FDR secondary family). This is NOT the paper-facing '
+    'recall analysis -- that is the unified pre-tone/post-tone lane under '
+    '`paper/recall/{Test_B,Test_B_1wk}/`, which has its own summary files.',
 )
 
 
@@ -4401,30 +4925,60 @@ _PAPER_SUPPLEMENT_ITEMS = (
 # manuscript actually reports. A coefficient is also not a simple effect at a non-reference epoch
 # (see unified_posthoc_contrasts). Both distinctions are stated at the one place a reader is most
 # likely to conflate them: bracketing the raw summary, so neither half can be read out of context.
-_STATSMODELS_PVALUE_NOTE = (
-    '--- READ BEFORE THE TABLE BELOW ---------------------------------------------------------\n'
-    "The coefficient table below is statsmodels' own output: its `P>|z|` column is an ASYMPTOTIC\n"
-    'Z TEST of each fixed-effect coefficient. It is diagnostic only.\n'
-    '\n'
-    'The paper-facing inferential P-values are computed separately from this same fit:\n'
-    '  - treatment-vs-control simple effects -> linear contrasts (linear_contrast_test),\n'
-    '  - group x epoch epoch-dependence     -> joint Wald F tests (joint_wald_test),\n'
-    'both on the common animal-level denominator convention t / F with df = n_animals - 1 = 16.\n'
-    'Read them from unified_lmm_posthoc_contrasts.csv (p_raw, p_holm_epoch, p_holm_six) and\n'
-    'unified_lmm_interactions.csv.\n'
-    '\n'
-    'DO NOT QUOTE A `P>|z|` VALUE FROM THE TABLE BELOW AS A MANUSCRIPT P-VALUE. Note also that a\n'
-    'group coefficient is the treatment-vs-control effect only AT THE REFERENCE EPOCH; at trace\n'
-    'and post-shock the simple effect is that coefficient plus the corresponding interaction\n'
-    'coefficient, with their covariance.\n'
-    '-----------------------------------------------------------------------------------------'
-)
-_STATSMODELS_PVALUE_FOOTER = (
-    '--- END OF STATSMODELS OUTPUT -----------------------------------------------------------\n'
-    'The `P>|z|` column above is an asymptotic z test and is diagnostic only; the manuscript\n'
-    'P-values are the t(df=16) contrasts and joint Wald F tests in the CSVs named above.\n'
-    '-----------------------------------------------------------------------------------------'
-)
+#
+# ** Parameterized because the two lanes are not interchangeable. ** The conditioning lane's
+# df = 16, its CSVs are `unified_lmm_*` and it carries a p_holm_six sensitivity column; the recall
+# lane's df is that session's own n_animals_present - 1, its CSVs are `unified_recall_*` and it
+# declares no across-epoch family. Emitting the conditioning text over a recall fit -- which is
+# what a shared constant did -- pointed a reader at the wrong df and at files that do not exist in
+# that directory.
+
+# The non-reference-epoch sentence's tail, PRE-WRAPPED per lane so each file's line breaks are its
+# own. The conditioning wording is byte-identical to what the shared constant emitted.
+_TFC_NON_REFERENCE_EPOCH_PHRASE = 'at trace\nand post-shock'
+_RECALL_NON_REFERENCE_EPOCH_PHRASE = 'at\npost-tone'
+
+
+def _statsmodels_pvalue_note(df2, contrasts_csv, interactions_csv, holm_cols,
+                             non_reference_epoch_phrase):
+    """The header block bracketing a raw statsmodels summary in a paper-facing text file.
+
+    df2                          - the animal-level denominator df this lane's inference uses,
+                                   passed in from the fit rather than written as a literal.
+    contrasts_csv,
+    interactions_csv             - where THIS lane's manuscript P-values actually live.
+    holm_cols                    - the adjusted-P column names present in that contrasts CSV.
+    non_reference_epoch_phrase   - pre-wrapped naming of this lane's non-reference epoch(s).
+    """
+    return (
+        '--- READ BEFORE THE TABLE BELOW ---------------------------------------------------------\n'
+        "The coefficient table below is statsmodels' own output: its `P>|z|` column is an ASYMPTOTIC\n"
+        'Z TEST of each fixed-effect coefficient. It is diagnostic only.\n'
+        '\n'
+        'The paper-facing inferential P-values are computed separately from this same fit:\n'
+        '  - treatment-vs-control simple effects -> linear contrasts (linear_contrast_test),\n'
+        '  - group x epoch epoch-dependence     -> joint Wald F tests (joint_wald_test),\n'
+        f'both on the common animal-level denominator convention t / F with df = n_animals - 1 = {int(df2)}.\n'
+        f'Read them from {contrasts_csv} ({", ".join(holm_cols)}) and\n'
+        f'{interactions_csv}.\n'
+        '\n'
+        'DO NOT QUOTE A `P>|z|` VALUE FROM THE TABLE BELOW AS A MANUSCRIPT P-VALUE. Note also that a\n'
+        f'group coefficient is the treatment-vs-control effect only AT THE REFERENCE EPOCH; '
+        f'{non_reference_epoch_phrase} the simple effect is that coefficient plus the corresponding interaction\n'
+        'coefficient, with their covariance.\n'
+        '-----------------------------------------------------------------------------------------'
+    )
+
+
+def _statsmodels_pvalue_footer(df2):
+    """The closing block of the same bracket. Same df convention, stated again at the point a
+    reader leaving the table is most likely to carry a `P>|z|` value away with them."""
+    return (
+        '--- END OF STATSMODELS OUTPUT -----------------------------------------------------------\n'
+        'The `P>|z|` column above is an asymptotic z test and is diagnostic only; the manuscript\n'
+        f'P-values are the t(df={int(df2)}) contrasts and joint Wald F tests in the CSVs named above.\n'
+        '-----------------------------------------------------------------------------------------'
+    )
 
 
 def write_paper_results_summary(save_dir, mouse_epoch, fits, contrasts, interactions_table,
@@ -4728,7 +5282,7 @@ def render_paper_tfc_amplitude_rate(PLOTS_DIR, df_matched, primary_contrasts, ho
 
     # ---- The unified models -----------------------------------------------------------------
     print('[sp_rates_lmm] Unified paper models: mouse-level amplitude + population rate...')
-    verify_unified_tfc_synthetic(paper_stats_dir, epochs=epochs)
+    verify_unified_synthetic(paper_stats_dir, epochs=epochs)
     df_paper = df_matched[df_matched['epoch'].isin(epochs)]
     mouse_epoch = build_mouse_epoch_unified_table(df_paper, epochs=epochs)
     write_text(os.path.join(paper_stats_dir, 'unified_lmm_mouse_epoch_values.csv'),
@@ -4740,6 +5294,13 @@ def render_paper_tfc_amplitude_rate(PLOTS_DIR, df_matched, primary_contrasts, ho
     contrasts = unified_posthoc_contrasts(fits, mouse_epoch, epochs=epochs)
     interactions_table = unified_interactions_table(fits)
 
+    # One df for both outcomes -- require_common_unified_method above has already established that
+    # the two fits are the same procedure on the same animals, so a per-outcome df would be a
+    # distinction without a difference. Read off the fit, never written as a literal.
+    tfc_df2 = fits[UNIFIED_OUTCOMES[0].key]['n_mice'] - 1
+    tfc_pvalue_note = _statsmodels_pvalue_note(
+        tfc_df2, 'unified_lmm_posthoc_contrasts.csv', 'unified_lmm_interactions.csv',
+        ('p_raw', 'p_holm_epoch', 'p_holm_six'), _TFC_NON_REFERENCE_EPOCH_PHRASE)
     for outcome in UNIFIED_OUTCOMES:
         write_text(os.path.join(paper_stats_dir, f'unified_lmm_{outcome.key}_summary.txt'),
                    f"PAPER-FACING model: {outcome.label}\n"
@@ -4749,9 +5310,9 @@ def render_paper_tfc_amplitude_rate(PLOTS_DIR, df_matched, primary_contrasts, ho
                    f"Contrasts, within-epoch Holm-adjusted p-values (p_holm_epoch) and the "
                    f"six-comparison across-epoch sensitivity correction (p_holm_six): "
                    f"unified_lmm_posthoc_contrasts.csv\n\n"
-                   f"{_STATSMODELS_PVALUE_NOTE}\n\n"
+                   f"{tfc_pvalue_note}\n\n"
                    f"{fits[outcome.key]['summary_text']}\n\n"
-                   f"{_STATSMODELS_PVALUE_FOOTER}\n")
+                   f"{_statsmodels_pvalue_footer(tfc_df2)}\n")
     write_text(os.path.join(paper_stats_dir, 'unified_lmm_interactions.csv'),
                interactions_table.to_csv(index=False))
     write_text(os.path.join(paper_stats_dir, 'unified_lmm_posthoc_contrasts.csv'),
@@ -4798,6 +5359,3693 @@ def render_paper_tfc_amplitude_rate(PLOTS_DIR, df_matched, primary_contrasts, ho
     print(f'[sp_rates_lmm] Paper figures written to {paper_dir}')
     return {'mouse_epoch': mouse_epoch, 'fits': fits, 'contrasts': contrasts,
             'interactions': interactions_table}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# The paper-facing RECALL lane: Test_B and Test_B_1wk, each analysed on its own
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# ** Same statistical logic as the conditioning analysis, applied to retrieval. ** One mouse-level
+# value per animal per epoch, the same `log(metric) ~ group * epoch + (1|mouse)` for both
+# outcomes, the same within-epoch Holm family, the same model-derived contrasts, the same joint
+# Wald interaction test -- so the manuscript can describe conditioning and recall in one sentence
+# about method. What differs is only the epoch set (a 20 s pre-tone baseline and the 20 s
+# post-tone retrieval window) and the cohort (each recall session is missing one animal).
+#
+# ** The two recall sessions are NEVER compared with each other here. ** See
+# render_paper_recall_amplitude_rate.
+
+RECALL_PAPER_METHODS_FILENAME = 'sp_rates_lmm_recall_paper_methods.md'
+
+_RECALL_EPOCH_LABELS = {
+    RECALL_REFERENCE_EPOCH: 'Pre-tone\n(20 s baseline)',
+    RECALL_RESPONSE_EPOCH: 'Post-tone\n(20 s retrieval)',
+}
+
+# Output filename stem per recall session, so both sessions' files are self-identifying if they
+# are ever copied out of their directories.
+_RECALL_FILE_PREFIX = {'Test_B': 'testb', 'Test_B_1wk': 'testb_1wk'}
+
+# Which recall sessions get the pre->post MODULATION decomposition (the per-mouse change scores,
+# their three pairwise between-group contrasts and the two new figures). Scoped to the 48-h session
+# in this pass, as the analysis was specified; the machinery below is session-agnostic, so
+# extending it to Test_B_1wk is adding the key here and nothing else. It is a constant rather than
+# an argument because a per-call flag invites two sessions being rendered under different rules by
+# accident.
+RECALL_MODULATION_SESSIONS = ('Test_B',)
+
+# The interpretation rules from the recall plan, stated literally. The point of routing this
+# through a lookup rather than prose written once per run is that the reading of a result is FIXED
+# in advance and cannot drift toward whichever sentence the observed numbers would flatter.
+#
+# ** The simple effects and the interaction are read SEPARATELY, and only the simple effects are
+# per-group. ** The group x epoch test is a JOINT 2-df Wald test over both treatment groups'
+# interaction coefficients; it says whether the treatment-vs-control differences changed from
+# pre-tone to post-tone, and it does NOT localize that change to one group. Attaching its verdict
+# to an individual group's line would be a claim the test does not make -- so the per-group
+# sentences below describe only that group's two within-epoch comparisons, and the interaction
+# gets its own sentence per outcome.
+#
+# Key is (pre-tone significant, post-tone significant).
+_RECALL_SIMPLE_EFFECT_READING = {
+    (False, True):
+        'differed from control during the post-tone retrieval window but not during the pre-tone '
+        'baseline',
+    (True, True):
+        'differed from control during both the pre-tone baseline and the post-tone retrieval '
+        'window',
+    (True, False):
+        'differed from control during the pre-tone baseline but not during the post-tone '
+        'retrieval window (a difference in significance is not a significant difference)',
+    (False, False):
+        'was not detectably different from control in either window — at this n a null is weak '
+        'evidence of absence, so read the intervals above',
+}
+
+# Read once per outcome, from the joint test alone.
+_RECALL_INTERACTION_READING = {
+    False:
+        'The group x epoch interaction was not significant: **there is no evidence that the '
+        'treatment-vs-control differences changed from pre-tone to post-tone.** Any difference '
+        'seen in the post-tone window is therefore not established as retrieval-evoked; it may '
+        'reflect a group difference already present around recall. This is not evidence that the '
+        'effect is identical, global or tonic across the two windows.',
+    True:
+        'The group x epoch interaction was significant: the treatment-vs-control differences '
+        'changed between the pre-tone and post-tone windows. Because the test is a joint 2-df '
+        'test over both treatment groups, it establishes that at least one treatment group\'s '
+        'effect differed between windows; it does not by itself attribute that change to a '
+        'particular group.',
+}
+
+
+def _recall_contrasts_preamble(session_label, n_by_group, stats_prefix):
+    """The provenance paragraph for a recall figure's companion contrasts file.
+
+    Written per session because it states that session's OWN cohort: the conditioning lane's
+    'n = 5 hM3D / 6 hM4D / 6 mCherry' is wrong for both recall sessions, and each recall session
+    is missing a different animal, so neither can inherit the other's either.
+    """
+    cohort = ' / '.join(f'{n} {GROUP_LABELS.get(g, g)}' for g, n in n_by_group.items())
+    return (
+        f'{session_label}. Model-derived treatment-vs-control contrasts from the unified '
+        f'mouse-level mixed models (`log(metric) ~ group * epoch + (1|mouse)`, n = {cohort} '
+        f'animals present in this session, one value per animal per epoch). Every estimate, '
+        f'interval, P-value and asterisk below and on the accompanying figure is one row of '
+        f'`stats/{stats_prefix}_posthoc_contrasts.csv`; nothing here is computed by the panel.'
+        '\n\n'
+        'Epochs are two duration-matched 20 s windows around each tone: the baseline ending at '
+        'tone onset, and the retrieval window beginning at tone offset. Analyses are restricted '
+        'within each animal to tone trials on which BOTH windows are completely observed '
+        f'(`stats/{stats_prefix}_trial_coverage.csv`); amplitude and rate use that identical '
+        'trial set.\n\n'
+        'Amplitude ratios are ratios of GEOMETRIC means of the cell-level mean event-run '
+        'integrals (the model response is the within-animal mean of cell-level log amplitudes). '
+        'Rate ratios are accompanied by the observed absolute difference in events/s/cell, which '
+        'is descriptive: a fold-change computed off a small base overstates the practical size of '
+        'a change.\n\n'
+        'Within each epoch, hM3D and hM4D are compared with mCherry and those two '
+        'treatment-vs-control comparisons are Holm-corrected together (`p_holm_epoch`). The '
+        'procedure is the same in both epochs and every panel.\n\n'
+        'A significant comparison in the post-tone window does not by itself establish that the '
+        'effect is retrieval-evoked; that is the group x epoch interaction '
+        f'(`stats/{stats_prefix}_interactions.csv`) and nothing else.\n\n'
+        '**No CNO was present at recall.** A group difference here is a persistent consequence of '
+        'the conditioning-day manipulation, not evidence of ongoing receptor activation.')
+
+
+def build_recall_trial_coverage(session_key, df_recall_fine, df_matched):
+    """Per-animal tone-trial coverage for one recall session: how many tone trials carried BOTH
+    complete 20 s windows, and which ones.
+
+    Written to a CSV rather than left implicit because the restriction is real and animal-specific
+    -- a recording that stops shortly after the last tone offset loses that trial's post-tone
+    window entirely -- and a reader has to be able to see how much of each animal's session
+    survived it. `restrict_to_exposure_matched_trials` already reports the counts; this attaches
+    the group and the retained trial indices so the file stands on its own.
+    """
+    total = (df_recall_fine.groupby(['mouse', 'group'], observed=True)['trial'].nunique()
+             .rename('n_tone_trials_present'))
+    kept = (df_matched.groupby(['mouse', 'group'], observed=True)['trial']
+            .agg(n_trials_retained='nunique',
+                 trials_retained=lambda s: ','.join(str(t) for t in sorted(set(s)))))
+    out = pd.concat([total, kept], axis=1).reset_index()
+    out.insert(0, 'session', session_key)
+    if out['n_trials_retained'].isna().any():
+        missing = out.loc[out['n_trials_retained'].isna(), 'mouse'].tolist()
+        raise RuntimeError(
+            f'build_recall_trial_coverage: animal(s) {missing} in {session_key} have no tone '
+            f'trial with BOTH complete 20 s windows, so they cannot contribute a pre/post pair. '
+            f'The recall model needs a complete animal x epoch grid; investigate the recording '
+            f'rather than dropping the animal silently.')
+    return out
+
+
+# ── Pre->post MODULATION: a representation and pairwise decomposition of the interaction ─────
+#
+# ** This adds no model. ** Every number below is a linear contrast of the two models already fit
+# by fit_unified_group_epoch_model, read through the same linear_contrast_test on the same
+# animal-level df. The group x epoch joint Wald test remains the omnibus question -- does the
+# pre->post change differ among the three groups -- and these contrasts are its pairwise
+# decomposition, reported beside it and never in place of it.
+#
+# ** Symmetric across groups and across outcomes. ** All three pairwise comparisons of the change
+# are computed for both outcomes, Holm-corrected within an outcome, and drawn by one procedure. No
+# group is a headline and no raw P is privileged; a decomposition that singled one group out would
+# be a different (and unstated) inferential structure.
+#
+# ** Three questions that this lane must keep apart. ** (A) Is there a group difference WITHIN an
+# epoch -- the existing unified_posthoc_contrasts. (B) Does a group change from pre to post at all
+# -- the within-group estimates below, DESCRIPTIVE, and not a treatment comparison. (C) Does the
+# pre->post change DIFFER between two groups -- the pairwise contrasts below, which is the
+# interaction. (A) and (C) can disagree in both directions (equal post-tone values over unequal
+# baselines is a large modulation difference and no absolute difference), which is why they are
+# tabulated separately and why the synthetic verification plants exactly that case.
+
+# The pairwise comparisons of the pre->post change, as (group_a, group_b) with the estimate signed
+# a - b. All three, in one place, so the contrast table, the Holm family and the figure's brackets
+# cannot disagree about what the set of comparisons is. ALL THREE are always computed and
+# tabulated, for both outcomes -- what the figure draws is a separate, narrower question below.
+RECALL_MODULATION_PAIRS = (('hM3D', 'mCherry'), ('hM4D', 'mCherry'), ('hM3D', 'hM4D'))
+
+# Which of those comparisons the modulation FIGURE brackets, per outcome, and which of them are
+# bracketed with their p-value even when it is >= 0.05 (annotate_pairwise_brackets' ns_label_pairs).
+# The brackets show the UNADJUSTED model-derived contrast p-values; hM4D-vs-mCherry is left off the
+# figure entirely, and every comparison stays in the contrast table regardless. Drawing is a
+# display choice; nothing here changes a computed value or which comparisons exist.
+RECALL_MODULATION_FIGURE_PAIRS = (('hM3D', 'mCherry'), ('hM3D', 'hM4D'))
+RECALL_MODULATION_NS_LABEL_PAIRS = {'amplitude': (('hM3D', 'hM4D'),), 'population_rate': ()}
+
+
+def build_recall_modulation_by_mouse(mouse_epoch, reference_epoch=RECALL_REFERENCE_EPOCH,
+                                     response_epoch=RECALL_RESPONSE_EPOCH):
+    """
+    One row per (animal, outcome): that animal's pre->post CHANGE on the model's own log scale.
+
+    ** Derived from the inferential table itself, not recomputed from the event data. ** The
+    values pivoted here are literally the rows the models were fit on
+    (build_mouse_epoch_unified_table / `<prefix>_mouse_epoch_values.csv`), so the change scores a
+    reader sees plotted are differences of the numbers the model saw, and there is no second
+    aggregation path that could weight a cell or a trial differently.
+
+    ** Both outcomes come off the one frame. ** Same reasoning as build_mouse_epoch_unified_table:
+    the amplitude and rate panels of the modulation figure are read against each other, so they
+    must describe the same animals and the same retained trials by construction.
+
+    `delta_log` is post - pre in log units; `fold_change_post_vs_pre` is its exponential -- 1.0 is
+    no change, >1 an increase, <1 a decrease. For amplitude that fold change is a ratio of the
+    animal's GEOMETRIC mean event amplitudes (the response is a mean of cell-level logs); for rate
+    it is a ratio of population event rates.
+
+    Returns a DataFrame with columns
+        mouse, group, outcome, response_col, pre_tone_value_log, post_tone_value_log,
+        delta_log, fold_change_post_vs_pre
+    """
+    rows = []
+    for outcome in UNIFIED_OUTCOMES:
+        for (mouse, group), sub in mouse_epoch.groupby(['mouse', 'group'], observed=True):
+            pre = sub[sub['epoch'] == reference_epoch]
+            post = sub[sub['epoch'] == response_epoch]
+            if len(pre) != 1 or len(post) != 1:
+                raise RuntimeError(
+                    f'build_recall_modulation_by_mouse: animal {mouse!r} ({group}) has '
+                    f'{len(pre)} {reference_epoch!r} and {len(post)} {response_epoch!r} rows; a '
+                    f'change score needs exactly one of each. The inferential table is supposed '
+                    f'to be a complete animal x epoch grid.')
+            pre_value = float(pre.iloc[0][outcome.response_col])
+            post_value = float(post.iloc[0][outcome.response_col])
+            delta = post_value - pre_value
+            if not np.isfinite(delta):
+                raise RuntimeError(
+                    f'build_recall_modulation_by_mouse: animal {mouse!r} ({group}) has a '
+                    f'non-finite {outcome.key} change ({post_value} - {pre_value}).')
+            rows.append({
+                'mouse': mouse, 'group': group, 'outcome': outcome.key,
+                'response_col': outcome.response_col,
+                'pre_tone_value_log': pre_value, 'post_tone_value_log': post_value,
+                'delta_log': delta,
+                'fold_change_post_vs_pre': float(np.exp(delta)),
+            })
+
+    out = pd.DataFrame(rows)
+    # The two arithmetic identities the whole table rests on, checked rather than trusted: a sign
+    # slip in either would flip the direction of every panel and every contrast reading.
+    if not np.allclose(out['delta_log'],
+                       out['post_tone_value_log'] - out['pre_tone_value_log'],
+                       rtol=0.0, atol=1e-12):
+        raise RuntimeError('build_recall_modulation_by_mouse: delta_log is not post - pre.')
+    if not np.allclose(out['fold_change_post_vs_pre'], np.exp(out['delta_log']),
+                       rtol=1e-12, atol=0.0):
+        raise RuntimeError('build_recall_modulation_by_mouse: fold_change_post_vs_pre is not '
+                           'exp(delta_log).')
+    n_mice = int(mouse_epoch['mouse'].nunique())
+    if len(out) != n_mice * len(UNIFIED_OUTCOMES):
+        raise RuntimeError(f'build_recall_modulation_by_mouse: got {len(out)} rows for {n_mice} '
+                           f'animals x {len(UNIFIED_OUTCOMES)} outcomes.')
+    out['group'] = pd.Categorical(out['group'], categories=list(DREADD_DISPLAY_ORDER))
+    return out.sort_values(['outcome', 'group', 'mouse']).reset_index(drop=True)
+
+
+def recall_modulation_contrasts(fits, reference_epoch=RECALL_REFERENCE_EPOCH,
+                                response_epoch=RECALL_RESPONSE_EPOCH, alpha=0.05):
+    """
+    The pre->post change per group, and the three pairwise comparisons of that change, for BOTH
+    outcomes -- all as linear contrasts of the already-fitted models.
+
+    ** Within-group changes are DESCRIPTIVE. ** In a treatment-reference parameterization the
+    control group's pre->post change IS the epoch main coefficient, and a treatment group's is
+    that coefficient plus its own group x epoch coefficient (a contrast, with covariance -- not
+    something readable off the summary table). They characterize the trajectory and explain the
+    shape of the interaction. They are not the treatment comparison: "hM3D changed and mCherry
+    did not" is not a test that the two changed differently.
+
+    ** The pairwise comparisons of the change ARE the interaction. ** Against the reference group
+    each is a single group x epoch coefficient; between the two treatment groups it is the
+    DIFFERENCE of their two interaction coefficients, which needs their covariance and is
+    therefore a contrast rather than a subtraction of two published standard errors. All three are
+    asserted below to equal exactly those linear combinations.
+
+    ** `p_raw` -- the unadjusted model-derived contrast p-value -- is what the modulation figure's
+    brackets and the drafted wording read. ** A three-comparison Holm adjustment WITHIN one
+    outcome is also computed and reported beside it (`p_holm_modulation`,
+    `holm_modulation_reject`; two independent three-member families, one per outcome, the same
+    shape as unified_posthoc_contrasts' rule that amplitude and rate never share a correction).
+    It is retained as a MULTIPLICITY REFERENCE for auditability -- it is not the governing
+    decision rule for this lane and drives no annotation. Both columns keep their names and
+    values; every text that quotes one says which it is.
+
+    Returns (within_group_df, pairwise_df).
+    """
+    within_rows, pairwise_rows = [], []
+    for outcome in UNIFIED_OUTCOMES:
+        fit = fits[outcome.key]
+        fe_names, result, n_mice = fit['fe_names'], fit['result'], fit['n_mice']
+        epoch_coef = _unified_epoch_coef(fe_names, response_epoch)
+        inter = {g: _unified_epoch_interaction_coef(fe_names, g, response_epoch)
+                 for g in UNIFIED_TREATMENT_GROUPS}
+
+        for group in DREADD_DISPLAY_ORDER:
+            weights = {epoch_coef: 1.0}
+            if group != UNIFIED_REFERENCE_GROUP:
+                weights[inter[group]] = 1.0
+            res = linear_contrast_test(result, weights, n_mice, alpha=alpha)
+            within_rows.append({
+                'block': 'within_group', 'outcome': outcome.key, 'group': group,
+                'delta_log': res['estimate'], 'se': res['se'],
+                'ci_low_log': res['ci_low'], 'ci_high_log': res['ci_high'],
+                'post_pre_ratio': float(np.exp(res['estimate'])),
+                'ratio_ci_low': float(np.exp(res['ci_low'])),
+                'ratio_ci_high': float(np.exp(res['ci_high'])),
+                't': res['t'], 'df': res['df'], 'p_raw': res['p'],
+            })
+
+        for group_a, group_b in RECALL_MODULATION_PAIRS:
+            # Signed a - b. A group's own "interaction coefficient" is 0 for the reference group,
+            # which is exactly why the vs-control comparisons come out as a single coefficient.
+            weights = {}
+            for group, sign in ((group_a, 1.0), (group_b, -1.0)):
+                if group != UNIFIED_REFERENCE_GROUP:
+                    weights[inter[group]] = weights.get(inter[group], 0.0) + sign
+            res = linear_contrast_test(result, weights, n_mice, alpha=alpha)
+            pairwise_rows.append({
+                'block': 'pairwise', 'outcome': outcome.key,
+                'comparison': f'{group_a}_vs_{group_b}',
+                'group_a': group_a, 'group_b': group_b,
+                'estimate_log': res['estimate'], 'se': res['se'],
+                'ci_low_log': res['ci_low'], 'ci_high_log': res['ci_high'],
+                'relative_modulation_ratio': float(np.exp(res['estimate'])),
+                'ratio_ci_low': float(np.exp(res['ci_low'])),
+                'ratio_ci_high': float(np.exp(res['ci_high'])),
+                't': res['t'], 'df': res['df'], 'p_raw': res['p'],
+            })
+
+        # The contrast estimates must BE the coefficients they are documented to be. Cheap, and it
+        # is the one failure mode -- a coefficient-name mismatch picking up the wrong term -- that
+        # would produce a plausible-looking wrong answer rather than an exception.
+        # Names and values off the SAME call, so the two cannot fall out of order.
+        _names, _params = _fe_names_and_params(result)
+        params = dict(zip(_names, np.asarray(_params, dtype=float)))
+        expected = {
+            f'hM3D_vs_{UNIFIED_REFERENCE_GROUP}': params[inter['hM3D']],
+            f'hM4D_vs_{UNIFIED_REFERENCE_GROUP}': params[inter['hM4D']],
+            'hM3D_vs_hM4D': params[inter['hM3D']] - params[inter['hM4D']],
+        }
+        for row in pairwise_rows[-len(RECALL_MODULATION_PAIRS):]:
+            want = expected[row['comparison']]
+            if not np.isclose(row['estimate_log'], want, rtol=1e-10, atol=1e-12):
+                raise RuntimeError(
+                    f'recall_modulation_contrasts: {outcome.key} {row["comparison"]} estimated '
+                    f'{row["estimate_log"]!r} but the fitted coefficients imply {want!r}. The '
+                    f'modulation contrast is not the group x epoch term it is documented to be.')
+
+    within_group_df = pd.DataFrame(within_rows)
+    pairwise_df = pd.DataFrame(pairwise_rows)
+
+    pairwise_df['p_holm_modulation'] = np.nan
+    pairwise_df['holm_modulation_reject'] = False
+    for outcome_key, idx in pairwise_df.groupby('outcome', observed=True).groups.items():
+        idx = list(idx)
+        if len(idx) != len(RECALL_MODULATION_PAIRS):
+            raise RuntimeError(
+                f'recall_modulation_contrasts: outcome {outcome_key!r} produced {len(idx)} '
+                f'pairwise modulation contrasts, expected exactly '
+                f'{len(RECALL_MODULATION_PAIRS)}. The Holm family is defined by that shape.')
+        reject, padj = holm_correct(pairwise_df.loc[idx, 'p_raw'].to_numpy(), alpha=alpha)
+        pairwise_df.loc[idx, 'p_holm_modulation'] = padj
+        pairwise_df.loc[idx, 'holm_modulation_reject'] = reject
+    return within_group_df, pairwise_df
+
+
+def recall_modulation_lookup(pairwise_df, outcome, group_a, group_b):
+    """The single pairwise-modulation row for one (outcome, group_a, group_b), as a Series.
+
+    The modulation counterpart of unified_contrast_lookup, and there for the same reason: the
+    panel's brackets, the markdown tables and the drafted paragraph all go through one accessor,
+    so a figure cannot annotate itself from a different row than its companion text describes.
+    Raises rather than returning an empty match.
+    """
+    sel = pairwise_df[(pairwise_df['outcome'] == outcome)
+                      & (pairwise_df['group_a'] == group_a)
+                      & (pairwise_df['group_b'] == group_b)]
+    if len(sel) != 1:
+        raise RuntimeError(f'recall_modulation_lookup: expected exactly one row for '
+                           f'({outcome!r}, {group_a!r}, {group_b!r}), found {len(sel)}.')
+    return sel.iloc[0]
+
+
+def recall_within_group_lookup(within_group_df, outcome, group):
+    """The single within-group pre->post row for one (outcome, group), as a Series."""
+    sel = within_group_df[(within_group_df['outcome'] == outcome)
+                          & (within_group_df['group'] == group)]
+    if len(sel) != 1:
+        raise RuntimeError(f'recall_within_group_lookup: expected exactly one row for '
+                           f'({outcome!r}, {group!r}), found {len(sel)}.')
+    return sel.iloc[0]
+
+
+# How a within-group pre->post estimate is READ, fixed in advance and keyed only on whether its
+# interval excludes zero and in which direction. The reason this is a lookup rather than prose
+# written per run is the one this module applies everywhere: an estimate whose interval spans zero
+# licenses "no detectable change" and nothing stronger, and that must not become "increased"
+# because the point estimate happened to land above 1.0.
+_MODULATION_WITHIN_GROUP_READING = {
+    +1: 'increased from pre-tone to post-tone',
+    0: 'showed no detectable pre-tone to post-tone change',
+    -1: 'decreased from pre-tone to post-tone',
+}
+
+_MODULATION_PAIRWISE_READING = {
+    True: 'differed',
+    False: 'did not detectably differ',
+}
+
+
+def _modulation_direction(row):
+    """+1 / 0 / -1 for a within-group change whose 95% interval excludes zero above, spans it, or
+    excludes it below. The key into _MODULATION_WITHIN_GROUP_READING."""
+    if row['ci_low_log'] > 0.0:
+        return +1
+    if row['ci_high_log'] < 0.0:
+        return -1
+    return 0
+
+
+def write_recall_modulation_summary(save_dir, session_key, session_label, interactions_table,
+                                    within_group_df, pairwise_df, stats_prefix,
+                                    filename=None):
+    """
+    The paper-facing account of the pre->post modulation decomposition, for ONE recall session.
+
+    ** The omnibus is printed before any pairwise row, in every outcome's section. ** The pairwise
+    contrasts are a decomposition of the group x epoch joint Wald test, and a decomposition read
+    without the test it decomposes is how a 3-df family of comparisons turns into a headline. The
+    ordering here is the mechanism that prevents it.
+
+    ** The three questions are separated typographically, not just described. ** Absolute
+    within-epoch group differences live in `<prefix>_posthoc_contrasts.csv` and are not restated
+    here; the within-group changes are labelled DESCRIPTIVE; the pairwise comparisons of those
+    changes are labelled as the inferential question and carry the Holm-adjusted P.
+    """
+    filename = filename or f'{stats_prefix}_modulation_contrasts.md'
+    inter = {row['outcome']: row for _, row in interactions_table.iterrows()}
+    df2 = int(interactions_table['df2'].iloc[0])
+
+    lines = [
+        f'# {session_label} — pre-tone → post-tone modulation',
+        '',
+        'Each animal\'s **change** in activity across the tone, and the between-group comparisons '
+        'of that change. Every number here is a linear contrast of the two mixed models already '
+        f'fit for this session (`log(metric) ~ group * epoch + (1|animal)`, '
+        f'`stats/{stats_prefix}_{{amplitude,population_rate}}_summary.txt`). **No new model is fit '
+        'and no test is computed on the plotted change scores.** This is a representation and a '
+        'pairwise decomposition of the group × epoch interaction, not a replacement for it.',
+        '',
+        '## Three questions this file keeps apart',
+        '',
+        '| question | answered by |',
+        '|---|---|',
+        '| **A.** Do the groups differ *within* an epoch (absolute pre-tone or post-tone level)? '
+        f'| the existing within-epoch contrasts, `stats/{stats_prefix}_posthoc_contrasts.csv` |',
+        '| **B.** Does a group change at all from pre-tone to post-tone? '
+        '| the within-group estimates below — **descriptive** |',
+        '| **C.** Does the pre→post change *differ between* groups? '
+        '| the pairwise modulation contrasts below, and their omnibus |',
+        '',
+        'A and C are different questions and can disagree in both directions. Two groups with '
+        'identical post-tone levels reached from different baselines differ in modulation and not '
+        'in absolute level; two groups that decline in parallel from different baselines differ '
+        'in absolute level and not in modulation. Neither pattern is evidence about the other.',
+        '',
+        f'All contrasts use this session\'s own animal-level denominator df = n_animals − 1 = '
+        f'{df2}, the same convention as the joint Wald tests, and are t-based. statsmodels\' '
+        'asymptotic `P>|z|` values are not used anywhere.',
+        '',
+    ]
+
+    for outcome in UNIFIED_OUTCOMES:
+        row_int = inter[outcome.key]
+        lines += [
+            f'## {outcome.label}',
+            '',
+            '### Omnibus — does the pre→post change differ among the three groups?',
+            '',
+            f'**{format_unified_interaction(row_int)}** '
+            f'(joint Wald test of the {int(row_int["df1"])} group × post-tone coefficients).',
+            '',
+            'This is the general test. A non-significant omnibus is **not** evidence that the '
+            'groups modulate identically, and a significant pairwise comparison beneath a '
+            'non-significant omnibus is weak evidence that should be described as such.',
+            '',
+            '### B. Within-group pre→post change — DESCRIPTIVE',
+            '',
+            'Model-implied change for each group; these characterize the trajectory and explain '
+            'the shape of the interaction. **They are not the treatment comparison** — that one '
+            'group\'s interval excludes zero and another\'s does not is not a test that the two '
+            'differ.',
+            '',
+            f'| group | Δ log | post/pre {outcome.ratio_label} | 95% CI | t | P (raw) |',
+            '|---|---|---|---|---|---|',
+        ]
+        for group in DREADD_DISPLAY_ORDER:
+            row = recall_within_group_lookup(within_group_df, outcome.key, group)
+            lines.append(
+                f"| {GROUP_LABELS.get(group, group)} | {row['delta_log']:+.3f} | "
+                f"{row['post_pre_ratio']:.3f} | "
+                f"[{row['ratio_ci_low']:.3f}, {row['ratio_ci_high']:.3f}] | "
+                f"{row['t']:.2f} | {row['p_raw']:.4g} |")
+
+        lines += [
+            '',
+            '### C. Pairwise comparisons of the change — the inferential question',
+            '',
+            'Difference of the two groups\' pre→post changes, signed *a* − *b*. Against mCherry '
+            'this is that group\'s group × post-tone coefficient; between hM3D and hM4D it is the '
+            'difference of their two interaction coefficients **including their covariance**. '
+            'The `ratio` column is exp(Δ log) — a ratio OF the two groups\' post/pre '
+            f'{outcome.ratio_label}s: a value of 1.50 means group *a*\'s post/pre ratio is 1.50 '
+            'times group *b*\'s.',
+            '',
+            '**The reported values are the unadjusted model-derived contrasts — the `P (raw)` '
+            'column.** That is what the modulation figure\'s brackets and the drafted paragraph '
+            'below read. A Holm adjustment across the three pairwise comparisons within this '
+            'outcome (amplitude and rate as separate families, as everywhere else in this '
+            'analysis) is also tabulated as a **multiplicity reference**, for transparency; it is '
+            'not the governing decision rule for this lane. Do not describe a value taken from '
+            'the raw column as Holm-adjusted, or either column as prospectively preregistered.',
+            '',
+            '| comparison | Δ log | 95% CI (log) | ratio | 95% ratio CI | t | df | '
+            'P (raw, reported) | Holm-adjusted P (multiplicity reference) |',
+            '|---|---|---|---|---|---|---|---|---|',
+        ]
+        for group_a, group_b in RECALL_MODULATION_PAIRS:
+            row = recall_modulation_lookup(pairwise_df, outcome.key, group_a, group_b)
+            flag = ' (rejects at Holm 0.05)' if row['holm_modulation_reject'] else ''
+            lines.append(
+                f"| {GROUP_LABELS.get(group_a, group_a)} vs {GROUP_LABELS.get(group_b, group_b)} "
+                f"| {row['estimate_log']:+.3f} "
+                f"| [{row['ci_low_log']:+.3f}, {row['ci_high_log']:+.3f}] "
+                f"| {row['relative_modulation_ratio']:.3f} "
+                f"| [{row['ratio_ci_low']:.3f}, {row['ratio_ci_high']:.3f}] "
+                f"| {row['t']:.2f} | {int(row['df'])} | **{row['p_raw']:.4g}** "
+                f"| {row['p_holm_modulation']:.4g}{flag} |")
+        lines.append('')
+
+    # ---- The drafted paragraph, with this run's own numbers already substituted ---------------
+    lines += [
+        f'# Drafted Results paragraph — {session_label} modulation',
+        '',
+        '*Generated from this run\'s fitted values. The reading of each estimate is fixed in '
+        'advance by its interval (see `_MODULATION_WITHIN_GROUP_READING`), so the wording does '
+        'not depend on which sentence the numbers would flatter.*',
+        '',
+    ]
+    for outcome in UNIFIED_OUTCOMES:
+        row_int = inter[outcome.key]
+        trajectory = ', '.join(
+            f"{GROUP_LABELS.get(g, g)} mice "
+            f"{_MODULATION_WITHIN_GROUP_READING[_modulation_direction(w)]} "
+            f"({w['post_pre_ratio']:.2f}-fold, 95% CI {w['ratio_ci_low']:.2f}–"
+            f"{w['ratio_ci_high']:.2f})"
+            for g, w in ((g, recall_within_group_lookup(within_group_df, outcome.key, g))
+                         for g in DREADD_DISPLAY_ORDER))
+        pairwise_text = '; '.join(
+            f"{GROUP_LABELS.get(a, a)} versus {GROUP_LABELS.get(b, b)} "
+            f"{_MODULATION_PAIRWISE_READING[bool(r['p_raw'] < 0.05)]} "
+            f"({r['relative_modulation_ratio']:.2f}-fold, 95% CI {r['ratio_ci_low']:.2f}–"
+            f"{r['ratio_ci_high']:.2f}; unadjusted model-derived P = {r['p_raw']:.3g}; "
+            f"Holm-adjusted P = {r['p_holm_modulation']:.3g})"
+            for a, b, r in ((a, b, recall_modulation_lookup(pairwise_df, outcome.key, a, b))
+                            for a, b in RECALL_MODULATION_PAIRS))
+        lines += [
+            f'**{outcome.label}.** Across the tone, {trajectory}. Comparing those changes between '
+            f'groups: {pairwise_text}. The omnibus test of whether pre-to-post modulation differed '
+            f'among the three groups was {format_unified_interaction(row_int)}.',
+            '',
+        ]
+
+    lines += [
+        '**Interpretive constraints.**',
+        '',
+        '- **No CNO was present at recall.** A modulation difference is a persistent consequence '
+        'of the conditioning-day manipulation, not evidence of ongoing receptor activation. Do '
+        'not write that receptor activation occurred during recall.',
+        '- A group whose within-group interval spans zero "showed no detectable change"; it did '
+        'not "increase" or "decrease". Where one group declines and another does not, the '
+        'supportable wording is that the decline was absent or attenuated in the second group, '
+        'not that the second group increased.',
+        '- The pairwise contrasts decompose the omnibus; they are not three independent tests, '
+        'which is why the omnibus is quoted beside them. Their reported P-values are the '
+        '**unadjusted** model-derived contrasts; the Holm-adjusted values across the three '
+        'comparisons within each outcome are tabulated above as a multiplicity reference. Report '
+        'each for what it is — do not call a raw value adjusted, and do not present either as a '
+        'prospectively preregistered decision. The omnibus does not gate the contrasts.',
+        '- These contrasts do not replace the absolute within-epoch comparisons in '
+        f'`stats/{stats_prefix}_posthoc_contrasts.csv`, which answer a different question.',
+        f'- This file describes {session_key} only. The two recall sessions do not contain the '
+        'same animals and are never compared.',
+        '',
+    ]
+
+    ensure_dirs(save_dir)
+    write_text(os.path.join(save_dir, filename), '\n'.join(lines))
+
+
+# Planted magnitudes for the modulation verification. Wide relative to _SYNTHETIC_RESID_SD so the
+# checks test the CODE and not one lucky realization; the null arms' margins are correspondingly
+# generous, since a p-value under a true null is uniform and no seed makes it safe.
+_MODULATION_SYNTHETIC_DECLINE = -0.60     # every group's planted pre->post change, log units
+_MODULATION_SYNTHETIC_RESCUE = 0.60       # added back for a group whose decline is abolished
+_MODULATION_SYNTHETIC_SPREAD = 0.80       # hM3D/hM4D separation with mCherry planted midway
+_MODULATION_SYNTHETIC_BASELINE = 0.50     # pre-tone baseline offset, design 4
+
+
+def verify_recall_modulation_synthetic(save_dir, epochs=RECALL_EPOCHS,
+                                       reference_epoch=RECALL_REFERENCE_EPOCH,
+                                       response_epoch=RECALL_RESPONSE_EPOCH,
+                                       group_sizes=_SYNTHETIC_GROUP_SIZES,
+                                       model_label='Test_B recall', seed=0,
+                                       filename='unified_recall_modulation_synthetic_verification.txt'):
+    """
+    Run the ACTUAL modulation code -- the same fits, the same recall_modulation_contrasts, the
+    same Holm family -- against four designs (five planted datasets) whose correct answers are
+    known, and hard-fail if it does not recover them. Both outcomes, every design.
+
+    Design 1 -- an IDENTICAL pre->post decline in all three groups. All three pairwise modulation
+    contrasts must be ~0 and the omnibus must stay null: a real change that every group shares is
+    not a group difference in modulation.
+
+    Design 2 -- ONE group's decline abolished, the other two declining together. That group's two
+    contrasts must be clearly positive and the omnibus significant, while the contrast between the
+    two unaffected groups stays ~0. Run twice, once with hM3D affected and once with hM4D, so the
+    check itself is symmetric: a version that only ever plants the effect on hM3D would pass even
+    if the two interaction coefficients were swapped.
+
+    Design 3 -- hM3D and hM4D separated with mCherry planted midway. The hM3D-vs-hM4D contrast
+    must recover the full planted separation, which is what exercises the two-coefficient contrast
+    and its covariance term; each group-vs-control contrast must recover half of it.
+
+    Design 4 -- EQUAL absolute post-tone values reached from UNEQUAL pre-tone baselines. The
+    post-tone within-epoch simple effect must be ~0 while the modulation contrast is clearly
+    non-zero. This is the case that makes the point of the whole file: question A (absolute
+    difference within an epoch) and question C (difference in the pre->post change) are not the
+    same question, and a reader who conflates them reads this design backwards.
+
+    Runs on tables of a few dozen rows, so all four designs cost milliseconds.
+    """
+    epochs = tuple(epochs)
+    decline, rescue = _MODULATION_SYNTHETIC_DECLINE, _MODULATION_SYNTHETIC_RESCUE
+    spread, baseline = _MODULATION_SYNTHETIC_SPREAD, _MODULATION_SYNTHETIC_BASELINE
+
+    def _post_only(per_group):
+        """shift_fn planting `per_group[group]` at the response epoch and 0 elsewhere."""
+        return lambda group, epoch: (per_group[group] if epoch == response_epoch else 0.0)
+
+    def _baselines(per_group_pre, per_group_post):
+        return lambda group, epoch: (per_group_pre[group] if epoch == reference_epoch
+                                     else per_group_post[group])
+
+    # (label, shift_fn, expected pairwise Δ per comparison, expect a significant omnibus)
+    designs = [
+        ('shared decline in all three groups',
+         _post_only({'mCherry': decline, 'hM3D': decline, 'hM4D': decline}),
+         {('hM3D', 'mCherry'): 0.0, ('hM4D', 'mCherry'): 0.0, ('hM3D', 'hM4D'): 0.0},
+         False),
+        ('decline abolished in hM3D only',
+         _post_only({'mCherry': decline, 'hM3D': decline + rescue, 'hM4D': decline}),
+         {('hM3D', 'mCherry'): rescue, ('hM4D', 'mCherry'): 0.0, ('hM3D', 'hM4D'): rescue},
+         True),
+        ('decline abolished in hM4D only',
+         _post_only({'mCherry': decline, 'hM3D': decline, 'hM4D': decline + rescue}),
+         {('hM3D', 'mCherry'): 0.0, ('hM4D', 'mCherry'): rescue, ('hM3D', 'hM4D'): -rescue},
+         True),
+        ('hM3D and hM4D separated, mCherry midway',
+         _post_only({'mCherry': decline, 'hM3D': decline + spread / 2.0,
+                     'hM4D': decline - spread / 2.0}),
+         {('hM3D', 'mCherry'): spread / 2.0, ('hM4D', 'mCherry'): -spread / 2.0,
+          ('hM3D', 'hM4D'): spread},
+         True),
+        ('equal post-tone levels from unequal pre-tone baselines',
+         _baselines({'mCherry': 0.0, 'hM3D': baseline, 'hM4D': baseline},
+                    {'mCherry': 0.0, 'hM3D': 0.0, 'hM4D': 0.0}),
+         {('hM3D', 'mCherry'): -baseline, ('hM4D', 'mCherry'): -baseline,
+          ('hM3D', 'hM4D'): 0.0},
+         True),
+    ]
+
+    lines = [f'Synthetic verification of the {model_label} pre->post MODULATION decomposition',
+             '=' * 78, '',
+             'The same fits, the same recall_modulation_contrasts and the same three-comparison '
+             'within-outcome',
+             f'Holm family the run itself uses. Between-animal SD {_SYNTHETIC_MOUSE_SD}, residual '
+             f'SD {_SYNTHETIC_RESID_SD};',
+             f'cohort {dict(group_sizes)}; epochs {epochs} (reference {reference_epoch!r}); '
+             f'seed {seed}.', '']
+
+    # Wide enough that a correct implementation clears it at this noise level, tight enough that a
+    # coefficient wired to the wrong term does not.
+    estimate_tol = 0.20
+
+    for offset, (label, shift_fn, expected, expect_significant_omnibus) in enumerate(designs):
+        df_syn = _synthetic_mouse_epoch_table(
+            (response_epoch,), epochs, np.random.default_rng(seed + offset),
+            reference_epoch=reference_epoch, group_sizes=group_sizes, shift_fn=shift_fn)
+        fits = {o.key: fit_unified_group_epoch_model(df_syn, o.response_col,
+                                                     reference_epoch=reference_epoch)
+                for o in UNIFIED_OUTCOMES}
+        require_common_unified_method(fits)
+        _within, pairwise = recall_modulation_contrasts(
+            fits, reference_epoch=reference_epoch, response_epoch=response_epoch)
+        posthoc = unified_posthoc_contrasts(fits, df_syn, epochs=epochs,
+                                            reference_epoch=reference_epoch,
+                                            across_epoch_family=False)
+        interactions = unified_interactions_table(fits)
+
+        lines.append(f'{label}:')
+        for outcome in UNIFIED_OUTCOMES:
+            p_inter = float(fits[outcome.key]['omnibus']['p'])
+            lines.append(f'  {outcome.label}: '
+                         f'{format_unified_interaction(interactions[interactions["outcome"] == outcome.key].iloc[0])}')
+            for (group_a, group_b), want in expected.items():
+                row = recall_modulation_lookup(pairwise, outcome.key, group_a, group_b)
+                lines.append(f'    {group_a} vs {group_b}: planted {want:+.3f}, estimated '
+                             f'{row["estimate_log"]:+.3f} (ratio '
+                             f'{row["relative_modulation_ratio"]:.3f}, Holm-adjusted P '
+                             f'{row["p_holm_modulation"]:.3g})')
+                assert abs(row['estimate_log'] - want) < estimate_tol, (
+                    f'verify_recall_modulation_synthetic [{model_label}/{label}/{outcome.key}]: '
+                    f'the {group_a}-vs-{group_b} modulation contrast should recover the planted '
+                    f'{want:+.3f} log units but estimated {row["estimate_log"]:+.3f}.')
+            if expect_significant_omnibus:
+                assert p_inter < 0.01, (
+                    f'verify_recall_modulation_synthetic [{model_label}/{label}/{outcome.key}]: '
+                    f'a group-dependent pre->post change must be detected by the group x epoch '
+                    f'omnibus (P < 0.01), got P = {p_inter:.3g}.')
+            else:
+                assert p_inter > 0.2, (
+                    f'verify_recall_modulation_synthetic [{model_label}/{label}/{outcome.key}]: '
+                    f'a decline shared by all three groups must not manufacture a group '
+                    f'difference in modulation; the omnibus should be clearly null (P > 0.2) but '
+                    f'was P = {p_inter:.3g}.')
+
+            # Design 4 is the one that separates question A from question C, so it carries the
+            # extra assertion: identical post-tone levels means NO absolute post-tone difference,
+            # while the modulation contrast is large.
+            if label.startswith('equal post-tone levels'):
+                for group in UNIFIED_TREATMENT_GROUPS:
+                    simple = unified_contrast_lookup(posthoc, outcome.key, response_epoch, group)
+                    lines.append(f'    [question A] {group} vs mCherry at {response_epoch}: '
+                                 f'{simple["estimate_log"]:+.3f} log units (P '
+                                 f'{simple["p_raw"]:.3g}) -- absolute levels were planted equal')
+                    assert abs(simple['estimate_log']) < estimate_tol, (
+                        f'verify_recall_modulation_synthetic [{model_label}/{label}/'
+                        f'{outcome.key}]: post-tone levels were planted EQUAL, so the absolute '
+                        f'{group}-vs-mCherry simple effect should be ~0, got '
+                        f'{simple["estimate_log"]:+.3f}.')
+        lines.append('')
+
+    lines += [
+        'All assertions passed.',
+        '',
+        'The last design is the point of this file. Equal post-tone levels reached from unequal',
+        'pre-tone baselines give NO absolute post-tone group difference and a LARGE difference in',
+        'pre->post modulation. The within-epoch contrasts and the modulation contrasts answer',
+        'different questions, and neither is evidence about the other.',
+    ]
+    ensure_dirs(save_dir)
+    write_text(os.path.join(save_dir, filename), '\n'.join(lines))
+
+
+def _modulation_values_per_group(modulation_df, outcome_key,
+                                 group_order=DREADD_DISPLAY_ORDER):
+    """{group: (n_mice, 1) array of per-animal delta_log} for one outcome -- the shape
+    _draw_mouse_violin_panel consumes. Mirrors _mouse_values_per_group, but the collapse to one
+    value per animal has already happened (build_recall_modulation_by_mouse), so this only
+    reshapes; it does not average anything."""
+    sub = modulation_df[modulation_df['outcome'] == outcome_key]
+    values = {}
+    for group in group_order:
+        vals = sub.loc[sub['group'] == group, 'delta_log'].to_numpy(dtype=float)
+        if len(vals) < 2:
+            raise RuntimeError(f'_modulation_values_per_group: group {group} has {len(vals)} '
+                               f'animal(s) for {outcome_key!r}; need >=2 for a group comparison.')
+        values[group] = vals.reshape(-1, 1)
+    return values
+
+
+def _assert_modulation_markers_match_table(modulation_df, outcome_key, values_per_group):
+    """Hard-fail unless the values about to be plotted ARE that outcome's rows of the modulation
+    table.
+
+    The modulation counterpart of _assert_markers_match_model, and there for the same reason: the
+    panel's whole claim is that each point is one animal's model-scale change score, and a
+    reshaping or outcome-keying slip between the table and the panel is exactly the kind of error
+    nobody catches by eye.
+    """
+    sub = modulation_df[modulation_df['outcome'] == outcome_key]
+    for group, drawn in values_per_group.items():
+        expected = np.sort(sub.loc[sub['group'] == group, 'delta_log'].to_numpy(dtype=float))
+        got = np.sort(np.asarray(drawn, dtype=float).reshape(-1))
+        if got.shape != expected.shape or not np.allclose(got, expected, rtol=1e-12, atol=0.0):
+            raise RuntimeError(
+                f'_assert_modulation_markers_match_table [{outcome_key}, {group}]: the panel '
+                f'would draw {got!r} but the modulation table holds {expected!r}.')
+
+
+def plot_recall_modulation(modulation_df, pairwise_df, interactions_table, save_dir,
+                           session_label, stats_prefix, filename_root):
+    """
+    The per-animal pre->post CHANGE, one panel per outcome, with the model's own pairwise
+    comparisons of that change as the brackets.
+
+    ** One point per animal, and no cell cloud. ** This panel is explicitly a change-score view:
+    the quantity plotted is a difference of two of that animal's model rows, which has no
+    cell-level counterpart to draw beneath it. The absolute per-cell distributions are the
+    business of the `_amplitude_rate_by_epoch` figure.
+
+    ** The brackets are looked up, never computed. ** `_precomputed_stat_fn` is handed this
+    outcome's modulation P-values and ignores the plotted arrays entirely, so there is no code
+    path by which a bracket disagrees with `stats/<prefix>_modulation_contrasts.csv`. A Welch test
+    on these five-to-six change scores would be a different (and unstated) statistic that happens
+    to sit on the same axes.
+
+    ** The displayed P-values are the UNADJUSTED model-derived contrasts (`p_raw`). ** They are
+    linear contrasts of the same fitted `log(metric) ~ group * epoch + (1|mouse)` model the rest
+    of this lane reports, read out of the contrast table. The three-comparison Holm-adjusted
+    values (`p_holm_modulation`) are still computed and still written to the CSV and the companion
+    markdown as a MULTIPLICITY REFERENCE, but they are not what this figure or the drafted wording
+    reads and they are not a decision rule here. Nothing displayed is described as adjusted.
+
+    ** Which comparisons are drawn is a display choice, set by RECALL_MODULATION_FIGURE_PAIRS. **
+    hM4D-vs-mCherry is computed and tabulated for both outcomes like the other two but carries no
+    bracket here (NaN into _precomputed_stat_fn, which the bracket drawer skips). A comparison in
+    RECALL_MODULATION_NS_LABEL_PAIRS is bracketed with its P-value even when P >= 0.05, so a
+    reported null is shown as a number rather than left to be inferred from a missing bracket.
+
+    ** Every panel carries its own omnibus in its title. ** The pairwise contrasts decompose the
+    joint Wald test; showing a star without it is how a decomposition becomes a headline.
+
+    ** Log-difference, not a post/pre ratio axis. ** The fitted interaction is additive on the log
+    scale, so the difference the brackets describe is the quantity actually plotted. The
+    multiplicative reading is one exp() away and is tabulated in the companion markdown.
+    """
+    inter = {row['outcome']: row for _, row in interactions_table.iterrows()}
+    fig, axs = plt.subplots(1, len(UNIFIED_OUTCOMES),
+                            figsize=(3.1 * len(UNIFIED_OUTCOMES), 3.6))
+    axs = np.atleast_1d(axs)
+    for ax, outcome in zip(axs, UNIFIED_OUTCOMES):
+        values_per_group = _modulation_values_per_group(modulation_df, outcome.key)
+        _assert_modulation_markers_match_table(modulation_df, outcome.key, values_per_group)
+        pairwise = {(a, b): recall_modulation_lookup(pairwise_df, outcome.key, a, b)
+                    for a, b in RECALL_MODULATION_PAIRS}
+        _draw_mouse_violin_panel(
+            ax, values_per_group,
+            ylabel=f'Δ log {outcome.label.lower()}\n(post-tone − pre-tone)',
+            title=f'{outcome.label}\n{format_unified_interaction(inter[outcome.key])}',
+            annotate='stats', bracket_mode='axes',
+            ns_label_pairs=RECALL_MODULATION_NS_LABEL_PAIRS[outcome.key],
+            stat_fn=_precomputed_stat_fn(*(
+                float(pairwise[pair]['p_raw']) if pair in RECALL_MODULATION_FIGURE_PAIRS
+                else np.nan
+                for pair in (('hM3D', 'mCherry'), ('hM4D', 'mCherry'), ('hM3D', 'hM4D')))))
+        # No change is zero on this scale, and it is the only reference the eye needs; without it
+        # a panel of small negative deltas reads as "no effect" purely from the axis limits.
+        ax.axhline(0.0, color='k', linewidth=0.8, linestyle='--', zorder=1)
+
+    fig.suptitle(f'{session_label} — per-animal pre-tone → post-tone modulation', size='medium')
+    fig.text(0.5, 0.015,
+             # Three short lines: this figure is ~6.2 in wide, and a caption line much past ~110
+             # characters is clipped at both edges rather than wrapped.
+             'One point per animal. Brackets are UNADJUSTED model-derived contrast P-values from '
+             'the fitted model —\nnot multiplicity-adjusted, not prospectively preregistered; no '
+             'statistic is computed from the plotted\nvalues. Holm-adjusted values are retained '
+             f'in `stats/{stats_prefix}_modulation_contrasts.csv` as a reference.',
+             ha='center', size='xx-small')
+    fig.subplots_adjust(left=0.13, bottom=0.20, right=0.98, top=0.80, wspace=0.42)
+    ensure_dirs(save_dir)
+    save_fig(fig, os.path.join(save_dir, filename_root + '.png'))
+    plt.close(fig)
+
+
+def plot_recall_prepost_trajectories(modulation_df, save_dir, session_label, stats_prefix,
+                                     filename_root, group_order=DREADD_DISPLAY_ORDER):
+    """
+    The mechanism behind the change scores: each animal's pre-tone and post-tone value joined by a
+    line, one facet per group, one row per outcome.
+
+    ** Descriptive by design; no statistics are drawn here. ** The inferential statements are the
+    model-derived pairwise modulation contrasts and their omnibus, in
+    `stats/<prefix>_modulation_contrasts.csv`. Putting a test on this panel would invite reading
+    a per-group paired comparison as the treatment effect, which is question B, not question C.
+
+    Values are on the NATURAL scale -- exp() of the model rows -- because the point of this panel
+    is to show where each animal started and finished, and a reader knows amplitudes and rates in
+    their own units. For amplitude that is the animal's geometric mean event amplitude, the
+    exponential of the mean of its cell-level log amplitudes.
+    """
+    fig, axs = plt.subplots(len(UNIFIED_OUTCOMES), len(group_order), sharey='row',
+                            figsize=(2.1 * len(group_order), 2.9 * len(UNIFIED_OUTCOMES)))
+    axs = np.atleast_2d(axs).reshape(len(UNIFIED_OUTCOMES), len(group_order))
+    for r, outcome in enumerate(UNIFIED_OUTCOMES):
+        sub_outcome = modulation_df[modulation_df['outcome'] == outcome.key]
+        for c, group in enumerate(group_order):
+            ax = axs[r, c]
+            ax.spines[['right', 'top']].set_visible(False)
+            sub = sub_outcome[sub_outcome['group'] == group]
+            for _, row in sub.iterrows():
+                ax.plot([0, 1],
+                        [np.exp(row['pre_tone_value_log']), np.exp(row['post_tone_value_log'])],
+                        color=GROUP_COLOURS[group], marker='o', markersize=4,
+                        markeredgecolor='k', markeredgewidth=0.3, linewidth=1.0, alpha=0.85)
+            ax.set_xticks([0, 1])
+            ax.set_xticklabels(['pre', 'post'], size='small')
+            ax.set_xlim(-0.35, 1.35)
+            if r == 0:
+                ax.set_title(f'{GROUP_LABELS.get(group, group)} (n = {len(sub)})', size='small')
+            if c == 0:
+                ax.set_ylabel(outcome.label, size='small')
+            ax.tick_params(labelsize='x-small')
+
+    fig.suptitle(f'{session_label} — per-animal pre-tone → post-tone trajectories',
+                 size='medium')
+    fig.text(0.5, 0.015,
+             'Descriptive. One line per animal, natural scale. The inferential statistics are the '
+             'model-derived pairwise\nmodulation contrasts and their group × epoch omnibus in '
+             f'`stats/{stats_prefix}_modulation_contrasts.csv`.',
+             ha='center', size='xx-small')
+    fig.subplots_adjust(left=0.14, bottom=0.14, right=0.98, top=0.88, wspace=0.20, hspace=0.35)
+    ensure_dirs(save_dir)
+    save_fig(fig, os.path.join(save_dir, filename_root + '.png'))
+    plt.close(fig)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# HIERARCHICAL CELL-LEVEL COMPANION / SENSITIVITY ANALYSIS  (recall, Test_B)
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# ** WHY THIS EXISTS. ** The paper-facing recall lane collapses each animal to ONE scalar per
+# epoch before fitting (build_mouse_epoch_unified_table). That is a valid hierarchical analysis
+# and it stays the primary one. It is not the ONLY valid one, and it discards two things:
+#
+#   * the WITHIN-CELL PAIRING. An animal's pre-tone value is a mean over the cells active in
+#     pre-tone and its post-tone value is a mean over the cells active in post-tone -- different
+#     cell sets -- so cell-identity variance never cancels out of the change score.
+#   * the WITHIN-MOUSE CELLULAR HETEROGENEITY that says whether an animal's shift is coherent
+#     across its population or carried by a handful of cells.
+#
+# This suite is the companion analysis that keeps both while leaving treatment assignment where
+# it actually is: at the MOUSE. It replaces nothing. Every existing recall and TFC model,
+# contrast, Holm family, omnibus, table and figure is untouched.
+#
+# ** WHAT MAKES IT A HIERARCHICAL TEST RATHER THAN A BETTER-COMPUTED MOUSE MEAN. ** The estimator
+# is a paired-cell mixed model (delta ~ group + (1|mouse)), and the INFERENCE is the exact
+# mouse-label randomization OF THAT MODEL'S OWN COEFFICIENT: the model is refit under every
+# relabeling of the mouse group labels, so the hierarchy sits inside the statistic being tested
+# instead of being replaced by an average taken before the model. A design-based permutation of
+# the 16 mouse-mean deltas is retained beside it as a labelled SENSITIVITY -- model-free and a
+# useful check, but it collapses each animal to one number and so carries no cellular hierarchy.
+#
+# ** THE HAZARD THIS IS BUILT AGAINST. ** Thousands of cells are not thousands of randomized
+# units. NO asymptotic cell-level p-value from any model here is paper-facing; every reported p
+# comes from permuting the 16 MOUSE labels, with every cell staying attached to its own animal.
+# n is 16 mice. Cell counts are descriptive and are always reported as such.
+#
+# ** IMPLEMENTATION VALIDATION IS NOT PART OF A REAL-DATA RUN. ** verify_hierarchical_cell_
+# synthetic() and verify_hierarchical_cell_rate_synthetic() plant a known truth in SIMULATED data
+# and check that this machinery recovers it. They validate the CODE, not the experiment, and they
+# are DEVELOPMENT TOOLS: run them by hand after changing this module. They are deliberately not
+# called by run_hierarchical_cell_suite(), because a real-data execution should compute the real
+# result and nothing else -- self-testing on synthetic data does not belong in the run that
+# produces the numbers, and it was dominating the runtime of one.
+#
+# ** ONE PREDEFINED FLOW, NO FALLBACKS, NO RESULT-DEPENDENT BRANCHING. ** run_hierarchical_cell_
+# suite() is all-or-nothing over the ANALYSIS components: every component in
+# _HIERARCHICAL_CELL_COMPONENTS runs on every pass. If a specified model fails
+# to fit or fails its predefined adequacy gate, the suite RAISES and reports the diagnostics. It
+# never substitutes a simpler model, a pooled-cell test or a Gaussian approximation -- including
+# fit_mixed_model's own documented clustered-OLS fallback, which is correct for the other lanes
+# and is explicitly barred here (clustered OLS over cell rows with 16 clusters is precisely the
+# anti-conservative cell-level inference this analysis exists to avoid).
+
+RECALL_HIERARCHICAL_CELL_SESSIONS = ('Test_B',)
+HIERARCHICAL_CELL_METHODS_FILENAME = 'sp_rates_lmm_recall_hierarchical_cells_methods.md'
+HIERARCHICAL_CELL_DIRNAME = 'hierarchical_cells'
+HIERARCHICAL_CELL_STATS_PREFIX = 'hierarchical_cell'
+HIERARCHICAL_CELL_REFERENCE_GROUP = 'mCherry'
+HIERARCHICAL_CELL_DELTA_COL = 'delta_log_amplitude_cell'
+
+# The three pairwise comparisons, in (a, b) order, which are ALSO exactly the Holm family. The
+# question here is symmetric across the three groups -- unlike the absolute-level paper panels,
+# where hM3D-vs-hM4D is in no family -- so all three enter one correction and all three get a
+# bracket. Same structure as RECALL_MODULATION_PAIRS, and deliberately the same shape.
+HIERARCHICAL_CELL_PAIRS = (('hM3D', 'mCherry'), ('hM4D', 'mCherry'), ('hM3D', 'hM4D'))
+
+# Monte Carlo settings for the OMNIBUS only (the pairwise tests are exact -- see
+# hierarchical_cell_amplitude_permutation). Frozen for production; a development pass may lower
+# n_perm, and the value actually used is written into the output so it can never be mistaken for
+# a reported run.
+HIERARCHICAL_CELL_N_PERM_OMNIBUS = 2000
+HIERARCHICAL_CELL_SEED = 0
+
+# ** NUMERICAL optimizer for this suite's mixed models -- frozen, and not a statistical choice. **
+# fit_mixed_model's default 'lbfgs' silently returns a BOUNDARY solution on frames of this shape
+# (a few hundred cell rows in each of ~16 mice): the mouse variance is pinned at 0 and the
+# fixed-effect standard errors come back non-finite, which _mixed_model_degeneracy correctly
+# rejects -- and which would then take the clustered-OLS fallback this suite bars, so the run
+# would simply stop. bfgs/cg/powell all reach the same interior optimum on the same likelihood.
+# The list is statsmodels' own deterministic escalation over OPTIMIZERS; the model, the
+# likelihood and the estimand are identical in every case, and a genuinely degenerate or
+# non-converged fit still hard-fails. This is frozen here rather than chosen per fit so no run can
+# pick an optimizer after seeing a result. The other lanes keep 'lbfgs' and their numbers are
+# untouched.
+HIERARCHICAL_CELL_LMM_OPTIMIZER = ['bfgs', 'cg', 'powell']
+
+
+def build_recall_cell_amplitude_modulation(df_matched, reference_epoch=RECALL_REFERENCE_EPOCH,
+                                           response_epoch=RECALL_RESPONSE_EPOCH):
+    """
+    One PAIRED pre->post modulation value per eligible cell, plus the per-animal eligibility
+    table that says which cells those were.
+
+    ** Everything upstream is inherited, nothing is retuned. ** `df_matched` is the recall lane's
+    OWN retained-trial frame (restrict_to_exposure_matched_trials over the two 20 s windows), so
+    the event definition, threshold, windows, trials, cohort and ROI set are identical to the
+    paper-facing analysis by construction rather than by a downstream check.
+
+    Per epoch: aggregate_over_trials pools each cell's events across the retained trials and
+    filter_amplitude_rows drops the cells with no event in that epoch and takes log of each
+    cell's mean event-run integral -- the module's existing convention, applied unchanged. A cell
+    is ELIGIBLE when amplitude is defined in BOTH epochs, and
+
+        delta_log_amplitude_cell = log(mean_amp_post) - log(mean_amp_pre).
+
+    ** NO imputation and NO pseudocount. ** Amplitude is conditional on an event by construction,
+    so a cell with no events in an epoch has no defined amplitude there; that is definitional, not
+    missing data, and a zero or a pseudocount would put an arbitrary constant inside a log where
+    its size determines the answer.
+
+    ** THE ESTIMAND IS CONDITIONAL, AND THAT IS REPORTED, NOT BURIED. ** What this quantity
+    estimates is the pre->post amplitude modulation OF NEURONS WITH MEASURABLE EVENT AMPLITUDE IN
+    BOTH EPOCHS. It is not an estimate over all detected cells and is never generalized to them.
+    The restriction is unavoidable for a PAIRED quantity, but it is a real one: the eligible set is
+    selected on activity in both windows and that selection could itself differ by group, which is
+    why the eligibility table is a reported result rather than bookkeeping and why
+    `fraction_eligible_both` travels with the estimate everywhere it is quoted. The analysis that
+    includes zero-event cells is the RATE path (build_recall_cell_epoch_count_table), and that is
+    one of the reasons it exists.
+
+    Returns (delta_df, eligibility_df):
+      delta_df       -- mouse, group, cell_id, n_events_pre/post, mean_amp_pre/post,
+                        log_amp_pre/post, delta_log_amplitude_cell
+      eligibility_df -- mouse, group, n_cells_total, n_cells_amp_defined_pre,
+                        n_cells_amp_defined_post, n_cells_amp_defined_both, fraction_eligible_both
+    """
+    pooled, amp = {}, {}
+    for epoch in (reference_epoch, response_epoch):
+        pooled[epoch] = aggregate_over_trials(df_matched, epoch)
+        amp[epoch] = filter_amplitude_rows(pooled[epoch])
+
+    # Every detected ROI appears in every window of a retained trial (build_epoch_event_table
+    # emits explicit zero-event rows), so the two epochs must cover the same cell set. Checked,
+    # not assumed: if they ever diverge, `n_cells_total` would silently mean different things in
+    # the two columns of the eligibility table.
+    cells_pre = set(map(tuple, pooled[reference_epoch][['mouse', 'cell']].to_numpy()))
+    cells_post = set(map(tuple, pooled[response_epoch][['mouse', 'cell']].to_numpy()))
+    if cells_pre != cells_post:
+        raise RuntimeError(
+            f'build_recall_cell_amplitude_modulation: the {reference_epoch!r} and '
+            f'{response_epoch!r} epoch-pooled tables cover different (mouse, cell) sets '
+            f'({len(cells_pre)} vs {len(cells_post)}; symmetric difference '
+            f'{len(cells_pre ^ cells_post)}). Both windows are present on every retained trial by '
+            f'construction, so this is a data or aggregation problem, not something to intersect '
+            f'away.')
+
+    pre = amp[reference_epoch][['mouse', 'group', 'cell', 'n_events', 'mean_amplitude',
+                                'log_amplitude']]
+    post = amp[response_epoch][['mouse', 'group', 'cell', 'n_events', 'mean_amplitude',
+                                'log_amplitude']]
+    delta_df = pre.merge(post, on=['mouse', 'group', 'cell'], how='inner',
+                         suffixes=('_pre', '_post'))
+    if delta_df.empty:
+        raise RuntimeError(
+            'build_recall_cell_amplitude_modulation: no cell has amplitude defined in BOTH '
+            'epochs, so no paired modulation value exists. Check the threshold and the windows '
+            'rather than relaxing the pairing.')
+    delta_df = delta_df.rename(columns={
+        'cell': 'cell_id',
+        'n_events_pre': 'n_events_pre', 'n_events_post': 'n_events_post',
+        'mean_amplitude_pre': 'mean_amp_pre', 'mean_amplitude_post': 'mean_amp_post',
+        'log_amplitude_pre': 'log_amp_pre', 'log_amplitude_post': 'log_amp_post'})
+    delta_df[HIERARCHICAL_CELL_DELTA_COL] = delta_df['log_amp_post'] - delta_df['log_amp_pre']
+
+    # The identities the whole analysis rests on, asserted rather than trusted. A sign slip or a
+    # merge that duplicated rows would flip or inflate every downstream estimate silently.
+    if not np.allclose(delta_df[HIERARCHICAL_CELL_DELTA_COL],
+                       np.log(delta_df['mean_amp_post']) - np.log(delta_df['mean_amp_pre']),
+                       rtol=0.0, atol=1e-12):
+        raise RuntimeError('build_recall_cell_amplitude_modulation: delta is not '
+                           'log(post) - log(pre).')
+    if not (delta_df['n_events_pre'] > 0).all() or not (delta_df['n_events_post'] > 0).all():
+        raise RuntimeError('build_recall_cell_amplitude_modulation: a paired cell has zero events '
+                           'in an epoch; amplitude is undefined there and it must not be paired.')
+    if not np.isfinite(delta_df[HIERARCHICAL_CELL_DELTA_COL]).all():
+        raise RuntimeError('build_recall_cell_amplitude_modulation: non-finite paired delta.')
+    per_cell = delta_df.groupby(['mouse', 'cell_id'], observed=True).size()
+    if (per_cell != 1).any():
+        raise RuntimeError('build_recall_cell_amplitude_modulation: a (mouse, cell) appears more '
+                           'than once in the paired table.')
+    mouse_per_cell = delta_df.groupby('cell_id', observed=True)['mouse'].nunique()
+    if (mouse_per_cell > 1).any():
+        # Expected and harmless -- `cell` is a SESSION-LOCAL unit_id, so the same integer occurs
+        # in several animals. Recorded here so nobody later treats cell_id as a global key: every
+        # grouping in this suite is keyed on (mouse, cell_id), never cell_id alone.
+        pass
+
+    rows = []
+    for (mouse, group), sub in pooled[reference_epoch].groupby(['mouse', 'group'], observed=True):
+        n_pre = int((amp[reference_epoch]['mouse'] == mouse).sum())
+        n_post = int((amp[response_epoch]['mouse'] == mouse).sum())
+        n_both = int((delta_df['mouse'] == mouse).sum())
+        n_total = int(len(sub))
+        if n_both == 0:
+            raise RuntimeError(
+                f'build_recall_cell_amplitude_modulation: animal {mouse!r} ({group}) has no cell '
+                f'with amplitude defined in both epochs ({n_pre} pre, {n_post} post of {n_total} '
+                f'cells). It cannot contribute to the paired analysis; investigate the recording '
+                f'rather than letting the cohort shrink silently.')
+        rows.append({'mouse': mouse, 'group': group, 'n_cells_total': n_total,
+                     'n_cells_amp_defined_pre': n_pre, 'n_cells_amp_defined_post': n_post,
+                     'n_cells_amp_defined_both': n_both,
+                     'fraction_eligible_both': n_both / n_total})
+    eligibility_df = pd.DataFrame(rows)
+    eligibility_df['group'] = pd.Categorical(eligibility_df['group'],
+                                             categories=list(DREADD_DISPLAY_ORDER))
+    eligibility_df = eligibility_df.sort_values(['group', 'mouse']).reset_index(drop=True)
+
+    delta_df['group'] = pd.Categorical(delta_df['group'], categories=list(DREADD_DISPLAY_ORDER))
+    delta_df = delta_df.sort_values(['group', 'mouse', 'cell_id']).reset_index(drop=True)
+    return delta_df, eligibility_df
+
+
+def _hierarchical_delta_formula():
+    return (f'{HIERARCHICAL_CELL_DELTA_COL} ~ '
+            f'C(group, Treatment("{HIERARCHICAL_CELL_REFERENCE_GROUP}"))')
+
+
+def fit_hierarchical_cell_delta_model(delta_df):
+    """
+    THE PRIMARY AMPLITUDE ESTIMATOR: `delta_log_amplitude_cell ~ group + (1|mouse)` over the
+    paired cells, fit through the module's own fit_mixed_model.
+
+    ** This is not a diagnostic. ** Its group coefficients are the reported effect estimates, and
+    the SAME coefficients are the statistics the randomization test is built on
+    (hierarchical_cell_amplitude_permutation) -- which is what keeps estimate, interval and
+    p-value describing one model specification instead of three.
+
+    ** The clustered-OLS fallback is barred here. ** fit_mixed_model falls back to mouse-clustered
+    OLS on non-convergence or a degenerate fit -- correct for the lanes that documented it, and
+    exactly wrong here: clustered OLS over thousands of cell rows with 16 clusters is the
+    anti-conservative cell-level inference this whole suite exists to avoid. A fallback therefore
+    RAISES rather than being reported under this function's name.
+
+    ** The summary's own P>|z| column is asymptotic over CELLS and is not paper-facing. ** 16
+    animals were randomized, not N cells. The file this fit is written into says so in its header,
+    and the inference lives in the permutation CSV.
+
+    Returns dict(result, method, summary_text, formula, n_mice, n_cells, fe_names, coef_names,
+    omnibus).
+    """
+    formula = _hierarchical_delta_formula()
+    result, method, text = fit_mixed_model(delta_df, formula, group_col='mouse',
+                                           method=HIERARCHICAL_CELL_LMM_OPTIMIZER)
+    if method != 'mixedlm':
+        raise RuntimeError(
+            f'fit_hierarchical_cell_delta_model: fit_mixed_model fell back to {method!r} instead '
+            f'of the specified random-intercept mixed model. This suite permits NO statistical '
+            f'fallback -- clustered OLS over {len(delta_df)} cell rows with '
+            f'{delta_df["mouse"].nunique()} clusters is precisely the cell-level inference this '
+            f'analysis is built against. Stopping so the failure is visible; the fit text was:\n'
+            f'{text}')
+    fe_names, _params = _fe_names_and_params(result)
+    coef_names = dict(zip([g for g in GROUP_ORDER if g != HIERARCHICAL_CELL_REFERENCE_GROUP],
+                          _nonref_group_coef_names(fe_names, HIERARCHICAL_CELL_REFERENCE_GROUP)))
+    n_mice = int(delta_df['mouse'].nunique())
+    omnibus = joint_wald_test(result, list(coef_names.values()), n_mice)
+    return {'result': result, 'method': method, 'summary_text': text, 'formula': formula,
+            'n_mice': n_mice, 'n_cells': int(len(delta_df)), 'fe_names': fe_names,
+            'coef_names': coef_names, 'omnibus': omnibus}
+
+
+def _hierarchical_pair_weights(coef_names, group_a, group_b):
+    """{coefficient name: weight} for one pairwise comparison of the paired-cell model.
+
+    Against the reference group a comparison is a single coefficient; between the two treatment
+    groups it is their DIFFERENCE, which needs the coefficients' covariance and is therefore a
+    linear contrast, not a subtraction of two published SEs (see linear_contrast_test).
+    """
+    ref = HIERARCHICAL_CELL_REFERENCE_GROUP
+    if group_b == ref:
+        return {coef_names[group_a]: 1.0}
+    if group_a == ref:
+        return {coef_names[group_b]: -1.0}
+    return {coef_names[group_a]: 1.0, coef_names[group_b]: -1.0}
+
+
+def _make_hierarchical_model_stat(delta_df, true_assignment, weights, kind='contrast',
+                                  coef_names=None):
+    """
+    stat_fn factory for mouse_label_permutation_test whose statistic is the FITTED PAIRED-CELL
+    MODEL, refit on every relabeling.
+
+    ** The full three-group model is refit every time -- never a two-group subset. ** The reported
+    estimate and interval come from the three-group fit, so the statistic being permuted has to
+    come from the same specification or the interval would describe a different model from the one
+    that was tested. When mouse_label_permutation_test is called with restrict_to_groups=(a, b) it
+    hands this closure a mapping covering ONLY those two groups' mice; the third group's mice keep
+    their true labels (taken from `true_assignment`) and stay in the fit. The restriction is on the
+    RANDOMIZATION, not on the data.
+
+    kind='contrast' returns the linear combination of group coefficients given by `weights`;
+    kind='wald' returns the 2-df joint Wald F over both group coefficients (the omnibus statistic).
+
+    Cost is one MixedLM fit per draw, which is affordable only over a restricted exact space
+    (462/462/252 here) or a modest Monte Carlo sample -- see hierarchical_cell_amplitude_
+    permutation for which test uses which.
+    """
+    base = delta_df[['mouse', HIERARCHICAL_CELL_DELTA_COL]].copy()
+    mice = list(dict.fromkeys(base['mouse'].tolist()))
+    formula = _hierarchical_delta_formula()
+    n_mice = len(mice)
+    state = {'n_fallback': 0, 'fallback_examples': []}
+
+    def stat_fn(mouse_to_group):
+        assignment = dict(true_assignment)
+        assignment.update(mouse_to_group)
+        df = base.copy()
+        df['group'] = df['mouse'].map(assignment)
+        if df['group'].isna().any():
+            missing = sorted(df.loc[df['group'].isna(), 'mouse'].unique())
+            raise RuntimeError(f'_make_hierarchical_model_stat: mice {missing} have no group '
+                               f'under this relabeling.')
+        result, method, text = fit_mixed_model(df, formula, group_col='mouse',
+                                               method=HIERARCHICAL_CELL_LMM_OPTIMIZER)
+        if method != 'mixedlm':
+            # Counted AND raised: letting a clustered-OLS draw into the null distribution would
+            # quietly mix two estimators inside one randomization test.
+            state['n_fallback'] += 1
+            if len(state['fallback_examples']) < 3:
+                state['fallback_examples'].append(dict(assignment))
+            raise RuntimeError(
+                f'_make_hierarchical_model_stat: a permuted refit fell back to {method!r} '
+                f'(occurrence {state["n_fallback"]}). No fallback estimator may enter this null '
+                f'distribution. Offending relabeling: {dict(assignment)}\n{text}')
+        names, params = _fe_names_and_params(result)
+        if kind == 'wald':
+            return float(joint_wald_test(result, list(coef_names.values()), n_mice)['F'])
+        missing = [n for n in weights if n not in names]
+        if missing:
+            raise RuntimeError(f'_make_hierarchical_model_stat: coefficient(s) {missing} absent '
+                               f'from the permuted fit. Available: {names}')
+        return float(sum(w * float(params[n]) for n, w in weights.items()))
+
+    stat_fn.state = state
+    return stat_fn
+
+
+def hierarchical_cell_amplitude_permutation(delta_df, fit, mice_per_group,
+                                            n_perm_omnibus=HIERARCHICAL_CELL_N_PERM_OMNIBUS,
+                                            seed=HIERARCHICAL_CELL_SEED, alpha=0.05,
+                                            include_global_null_sensitivity=True):
+    """
+    Mouse-label randomization inference for the paired-cell amplitude analysis.
+
+    ** PAIRWISE (primary): EXACT randomization of the model coefficient. ** For each of the three
+    comparisons the statistic is the fitted three-group `delta ~ group + (1|mouse)` contrast --
+    beta_Exc, beta_Inh, or beta_Exc - beta_Inh -- and exchangeability is restricted to the two
+    groups being compared, with the third group's mice keeping their true labels and staying in
+    every fit. With a 6/5/5 cohort those restricted spaces hold C(11,6)=462, C(11,6)=462 and
+    C(10,5)=252 relabelings, so the model is refit for EVERY one of them and the p-values are
+    exact -- no Monte Carlo error. The three exact p-values are the Holm family
+    (`p_holm_pairwise`) and are what the figure's brackets read.
+
+    ** OMNIBUS: Monte Carlo randomization of a 2-df MODEL-BASED statistic. ** The joint Wald test
+    of both group coefficients of the same fit, permuted under the GLOBAL null. Two million mixed-
+    model refits is not attempted; this is Monte Carlo at a frozen seed and `n_perm_omnibus`, both
+    reported. H0 is that those coefficients are jointly zero -- i.e. that mean pre->post cellular
+    modulation does not differ by assigned group. It tests THOSE COEFFICIENTS, not the shape,
+    spread or tails of the cellular distribution.
+
+    ** DESIGN-BASED SENSITIVITY, demoted from primary but always run. ** The exact permutation of
+    the 16 mouse-mean deltas (make_contrast_stat weight='mouse') over the same restricted spaces,
+    plus its cell-weighted variant and its global-null counterpart. Model-free, and therefore a
+    genuine check on the model-based result -- but it collapses each animal to one number before
+    testing, so it carries no cellular hierarchy and is not the primary. It is in NO Holm family.
+    No equivalence between it and the model-based statistic is claimed: the model's GLS weighting
+    and equal-mouse weighting coincide only at equal cluster sizes, and cells per mouse vary here.
+
+    ** Interval provenance is explicit. ** `estimate_lmm`/`ci_lmm_*` is the model contrast with its
+    own Wald interval; `estimate_mouse_weighted`/`ci_mouse_weighted_*` is the design-based estimate
+    with an interval computed over the same 16 mouse means (mouse_contrast_ci). Neither interval is
+    ever attached to the other estimate. The randomization p-values carry no interval of their own.
+
+    include_global_null_sensitivity : True for every REPORTED run. Set False only by the synthetic
+    verification suite, which validates the primary path and the restricted-null sensitivity and
+    has no use for the global-null column. That column costs an exact enumeration of all 2,018,016
+    global relabelings per comparison -- seconds for one reported run, but tens of minutes across a
+    synthetic suite that calls this function seven times. This is a COMPUTATIONAL scoping of a
+    verification run, the same allowance the reduced sampler settings get in
+    verify_hierarchical_cell_rate_synthetic. It never applies to a reported analysis and never
+    touches a primary statistic.
+
+    Returns a DataFrame with one `omnibus` row and, per comparison, one `pairwise_primary` row and
+    one `pairwise_sensitivity` row.
+    """
+    result, coef_names, n_mice = fit['result'], fit['coef_names'], fit['n_mice']
+    present = {g: [m for m in mice_per_group.get(g, []) if m in set(delta_df['mouse'])]
+               for g in GROUP_ORDER}
+    present = {g: ms for g, ms in present.items() if ms}
+    true_assignment = {m: g for g, ms in present.items() for m in ms}
+    if set(true_assignment) != set(delta_df['mouse']):
+        raise RuntimeError('hierarchical_cell_amplitude_permutation: the paired-cell table and '
+                           'mice_per_group cover different animals.')
+
+    mouse_delta = {g: delta_df[delta_df['group'] == g].groupby('mouse', observed=True)
+                   [HIERARCHICAL_CELL_DELTA_COL].mean().to_numpy(dtype=float)
+                   for g in DREADD_DISPLAY_ORDER if g in present}
+
+    rows = []
+
+    # ---- omnibus: 2-df model-based statistic, global null, Monte Carlo -----------------------
+    omnibus_stat = _make_hierarchical_model_stat(delta_df, true_assignment, weights=None,
+                                                 kind='wald', coef_names=coef_names)
+    print(f'[hier   perm] omnibus: {n_perm_omnibus} Monte Carlo mixed-model refits '
+          f'(global null, seed {seed})...', flush=True)
+    _t = time.perf_counter()
+    omnibus_perm = mouse_label_permutation_test(omnibus_stat, present, n_perm=n_perm_omnibus,
+                                                seed=seed, progress_label='omnibus',
+                                                progress_every=max(1, n_perm_omnibus // 10))
+    print(f'[hier   perm] omnibus done in {(time.perf_counter() - _t) / 60:.1f} min: '
+          f'P = {omnibus_perm["p_two_sided"]:.4g}', flush=True)
+    rows.append({
+        'block': 'omnibus', 'group_a': 'all', 'group_b': 'all',
+        'statistic_kind': 'joint Wald F on both group coefficients of delta ~ group + (1|mouse)',
+        'estimate_lmm': float(fit['omnibus']['F']), 'ci_lmm_low': np.nan, 'ci_lmm_high': np.nan,
+        'p_raw': float(omnibus_perm['p_two_sided']), 'p_holm_pairwise': np.nan,
+        'estimate_mouse_weighted': np.nan, 'ci_mouse_weighted_low': np.nan,
+        'ci_mouse_weighted_high': np.nan, 'p_raw_design_based': np.nan,
+        'p_raw_global_null': float(omnibus_perm['p_two_sided']),
+        'estimate_cell_weighted': np.nan, 'null_type': 'global',
+        'n_relabelings': np.nan, 'exact': False, 'n_perm': int(omnibus_perm['n_perm']),
+        'seed': seed, 'n_mice_a': n_mice, 'n_mice_b': n_mice,
+        'n_cells_a': int(len(delta_df)), 'n_cells_b': int(len(delta_df)),
+        'asymptotic_p_not_for_inference': float(fit['omnibus']['p']),
+    })
+
+    # ---- pairwise ----------------------------------------------------------------------------
+    for group_a, group_b in HIERARCHICAL_CELL_PAIRS:
+        weights = _hierarchical_pair_weights(coef_names, group_a, group_b)
+        contrast = linear_contrast_test(result, weights, n_groups=n_mice, alpha=alpha)
+
+        model_stat = _make_hierarchical_model_stat(delta_df, true_assignment, weights)
+        n_space = n_distinct_relabelings([group_a] * len(present[group_a])
+                                         + [group_b] * len(present[group_b]))
+        print(f'[hier   perm] {group_a} vs {group_b}: EXACT enumeration, {n_space} '
+              f'three-group model refits...', flush=True)
+        _t = time.perf_counter()
+        model_perm = mouse_label_permutation_test(model_stat, present, seed=seed,
+                                                  restrict_to_groups=(group_a, group_b),
+                                                  exact=True,
+                                                  progress_label=f'{group_a} vs {group_b}',
+                                                  progress_every=max(1, n_space // 5))
+        print(f'[hier   perm] {group_a} vs {group_b} done in '
+              f'{(time.perf_counter() - _t) / 60:.1f} min: exact P = '
+              f'{model_perm["p_two_sided"]:.4g}', flush=True)
+        expected = n_distinct_relabelings([group_a] * len(present[group_a])
+                                          + [group_b] * len(present[group_b]))
+        if int(model_perm['n_relabelings']) != expected:
+            raise RuntimeError(
+                f'hierarchical_cell_amplitude_permutation: {group_a} vs {group_b} enumerated '
+                f'{model_perm["n_relabelings"]} relabelings but the multinomial coefficient for '
+                f'{len(present[group_a])}/{len(present[group_b])} mice is {expected}.')
+
+        print(f'[hier   perm] {group_a} vs {group_b}: design-based sensitivity '
+              f'(model-free, exact)...', flush=True)
+        design_stat = make_contrast_stat(delta_df, HIERARCHICAL_CELL_DELTA_COL,
+                                         group_a, group_b, weight='mouse')
+        design_perm = mouse_label_permutation_test(design_stat, present, seed=seed,
+                                                   restrict_to_groups=(group_a, group_b),
+                                                   exact=True)
+        design_global = (mouse_label_permutation_test(design_stat, present, seed=seed, exact=True)
+                         if include_global_null_sensitivity else None)
+        cell_stat = make_contrast_stat(delta_df, HIERARCHICAL_CELL_DELTA_COL, group_a, group_b,
+                                       weight='cell')
+        cell_perm = mouse_label_permutation_test(cell_stat, present, seed=seed,
+                                                 restrict_to_groups=(group_a, group_b), exact=True)
+        ci = mouse_contrast_ci({group_a: mouse_delta[group_a], group_b: mouse_delta[group_b]},
+                               reference=group_b, scale='log', alpha=alpha)[group_a]
+
+        rows.append({
+            'block': 'pairwise_primary', 'group_a': group_a, 'group_b': group_b,
+            'statistic_kind': 'three-group MixedLM contrast ' + ' + '.join(
+                f'{w:+g}*{n}' for n, w in weights.items()),
+            'estimate_lmm': contrast['estimate'], 'ci_lmm_low': contrast['ci_low'],
+            'ci_lmm_high': contrast['ci_high'],
+            'p_raw': float(model_perm['p_two_sided']), 'p_holm_pairwise': np.nan,
+            'estimate_mouse_weighted': np.nan, 'ci_mouse_weighted_low': np.nan,
+            'ci_mouse_weighted_high': np.nan, 'p_raw_design_based': np.nan,
+            'p_raw_global_null': np.nan, 'estimate_cell_weighted': np.nan,
+            'null_type': f'pairwise ({group_a}, {group_b})',
+            'n_relabelings': int(model_perm['n_relabelings']), 'exact': True,
+            'n_perm': int(model_perm['n_perm']), 'seed': seed,
+            'n_mice_a': len(present[group_a]), 'n_mice_b': len(present[group_b]),
+            'n_cells_a': int((delta_df['group'] == group_a).sum()),
+            'n_cells_b': int((delta_df['group'] == group_b).sum()),
+            'asymptotic_p_not_for_inference': contrast['p'],
+        })
+        rows.append({
+            'block': 'pairwise_sensitivity', 'group_a': group_a, 'group_b': group_b,
+            'statistic_kind': 'design-based: difference of group means of the per-mouse mean '
+                              'paired-cell delta (model-free)',
+            'estimate_lmm': np.nan, 'ci_lmm_low': np.nan, 'ci_lmm_high': np.nan,
+            'p_raw': np.nan, 'p_holm_pairwise': np.nan,
+            'estimate_mouse_weighted': float(design_perm['observed']),
+            'ci_mouse_weighted_low': ci['diff_lo'], 'ci_mouse_weighted_high': ci['diff_hi'],
+            'p_raw_design_based': float(design_perm['p_two_sided']),
+            'p_raw_global_null': (float(design_global['p_two_sided'])
+                                  if design_global is not None else np.nan),
+            'estimate_cell_weighted': float(cell_perm['observed']),
+            'p_raw_cell_weighted': float(cell_perm['p_two_sided']),
+            'null_type': f'pairwise ({group_a}, {group_b}); global-null column alongside',
+            'n_relabelings': int(design_perm['n_relabelings']), 'exact': True,
+            'n_perm': int(design_perm['n_perm']), 'seed': seed,
+            'n_mice_a': len(present[group_a]), 'n_mice_b': len(present[group_b]),
+            'n_cells_a': int((delta_df['group'] == group_a).sum()),
+            'n_cells_b': int((delta_df['group'] == group_b).sum()),
+            'asymptotic_p_not_for_inference': np.nan,
+        })
+
+    out = pd.DataFrame(rows)
+    # Holm over EXACTLY the three primary (model-based, exact) p-values. The design-based and
+    # global-null columns are labelled sensitivities and enter no family: correcting both would
+    # correct one question twice and halve the family's power (docs/sp_rates_lmm.md section 4.3).
+    primary = out['block'] == 'pairwise_primary'
+    _reject, p_adj = holm_correct(out.loc[primary, 'p_raw'].to_numpy(dtype=float), alpha=alpha)
+    out.loc[primary, 'p_holm_pairwise'] = p_adj
+    return out
+
+
+def _post_indicator(epoch_series, response_epoch=RECALL_RESPONSE_EPOCH):
+    """0/1 column for the post-tone epoch. Explicit rather than relying on a dummy-coded factor,
+    because it is used as a random-SLOPE variable, where a categorical would be read on the wrong
+    scale -- the same reasoning behind fit_rate_group_epoch_model's pasted `mouse_trial` label."""
+    return (epoch_series.astype(str) == response_epoch).astype(float)
+
+
+def fit_hierarchical_cell_unpaired_sensitivity(df_matched, save_dir,
+                                               reference_epoch=RECALL_REFERENCE_EPOCH,
+                                               response_epoch=RECALL_RESPONSE_EPOCH,
+                                               filename=None):
+    """
+    SENSITIVITY: the long-format amplitude model over ALL epoch-defined cells, not just the paired
+    intersection --
+
+        log_mean_amplitude_cell_epoch ~ group * epoch
+            + (1|mouse) + (0 + post_indicator|mouse) + (1|mouse:cell)
+
+    where a cell contributes only the epochs in which its amplitude is defined.
+
+    ** What it is for. ** The primary analysis conditions on cells active in BOTH windows (see
+    build_recall_cell_amplitude_modulation). This asks whether that restriction is what produces
+    the answer. Predefined and fit on every pass OF THE SUITE -- it is not switched on by what the
+    primary produced. (The suite itself is explicitly invoked; see run_hierarchical_cell_suite.)
+
+    ** Why the mouse epoch random slope is required HERE and not in the primary. ** This is a
+    `group * epoch` model, so between-mouse variation in the pre->post CHANGE -- the very effect
+    being compared across groups -- has nowhere to go without it, and the group x epoch terms
+    would get intervals that are too narrow, with cells acting as replicates for the epoch
+    contrast. The primary model is fit on the within-cell delta directly, where (1|mouse) already
+    IS the mouse-specific modulation effect and no slope term is meaningful.
+
+    Random effects are independent variance components: a mouse intercept, an uncorrelated
+    mouse-level post-tone slope, and a cell intercept nested within mouse. No cell-level epoch
+    slope -- that would be a further large expansion this analysis does not claim to resolve.
+
+    ** Its asymptotic p-values are cell-level and enter NO family. ** Stated in the file header,
+    not left to the reader.
+
+    ** No silent simplification of the random-effect structure. ** Both requested variance
+    components must appear in the fitted model or this raises -- a (1|mouse)-only fit must never
+    be reported under this function's label. A variance estimate at or near the ZERO BOUNDARY is
+    NOT a failure and does not raise: it is a legitimate statement about the data (little variance
+    at that level), qualitatively different from the term having been dropped, and is reported
+    explicitly as a boundary estimate.
+    """
+    epochs = (reference_epoch, response_epoch)
+    frames = []
+    for epoch in epochs:
+        amp = filter_amplitude_rows(aggregate_over_trials(df_matched, epoch))
+        frames.append(amp.assign(epoch=epoch))
+    df = pd.concat(frames, ignore_index=True)
+    df = df.rename(columns={'log_amplitude': 'log_mean_amplitude_cell_epoch'})
+    df['post_indicator'] = _post_indicator(df['epoch'], response_epoch)
+    df['group'] = pd.Categorical(
+        df['group'], categories=[HIERARCHICAL_CELL_REFERENCE_GROUP]
+        + [g for g in GROUP_ORDER if g != HIERARCHICAL_CELL_REFERENCE_GROUP])
+    df['epoch'] = pd.Categorical(df['epoch'], categories=list(epochs))
+    df['cell_key'] = df['cell'].astype(str)
+
+    formula = (f'log_mean_amplitude_cell_epoch ~ '
+               f'C(group, Treatment("{HIERARCHICAL_CELL_REFERENCE_GROUP}"))'
+               f' * C(epoch, Treatment("{reference_epoch}"))')
+    vc_formula = {'mouse_post_slope': '0 + post_indicator', 'mouse_cell': '0 + C(cell_key)'}
+    model = smf.mixedlm(formula, data=df, groups=df['mouse'], re_formula='1',
+                        vc_formula=vc_formula)
+    result = model.fit(reml=True, method=HIERARCHICAL_CELL_LMM_OPTIMIZER)
+
+    # The requested structure must be PRESENT. This checks the model that was built, not the size
+    # of what it estimated.
+    param_index = [str(n) for n in result.params.index]
+    missing = [name for name in vc_formula if not any(name in p for p in param_index)]
+    if missing:
+        raise RuntimeError(
+            f'fit_hierarchical_cell_unpaired_sensitivity: variance component(s) {missing} are '
+            f'absent from the fitted model ({param_index}). A reduced random-effect structure '
+            f'must never be reported under a (1|mouse) + (0+post|mouse) + (1|mouse:cell) label.')
+    if not result.converged:
+        raise RuntimeError(
+            'fit_hierarchical_cell_unpaired_sensitivity: the mixed model did not converge. No '
+            'simplified structure is substituted; stopping so the failure is visible.')
+
+    boundary_notes = []
+    for name in list(vc_formula) + ['Group Var']:
+        matches = [p for p in param_index if name in p]
+        for p in matches:
+            val = float(result.params[p])
+            if val <= 1e-8:
+                boundary_notes.append(
+                    f'  {p} = {val:.3g} -- AT/NEAR THE ZERO BOUNDARY. This is a statement about '
+                    f'the data (these data support little variance at that level), NOT evidence '
+                    f'that the term was dropped: it is present in the fitted model, which is '
+                    f'checked separately. Read the corresponding fixed effects with that in mind.')
+    header = (
+        'SENSITIVITY -- hierarchical cell-level companion analysis, recall Test_B.\n'
+        'Long-format amplitude model over ALL epoch-defined cells (a cell contributes only the\n'
+        'epochs in which its amplitude is defined), the counterpart to the PAIRED primary\n'
+        'analysis, which conditions on cells active in both epochs. Its purpose is to check\n'
+        'whether that conditioning drives the result.\n\n'
+        f'Formula: {formula}\n'
+        f'Random effects: (1|mouse) + (0 + post_indicator|mouse) + (1|mouse:cell)\n'
+        f'  vc_formula = {vc_formula}\n'
+        f'Optimizer: {HIERARCHICAL_CELL_LMM_OPTIMIZER} (numerical only; see '
+        f'HIERARCHICAL_CELL_LMM_OPTIMIZER)\n'
+        f'N rows = {len(df)} cell x epoch observations, N cells = '
+        f'{df.groupby(["mouse", "cell"], observed=True).ngroups}, N mice = '
+        f'{df["mouse"].nunique()}\n\n'
+        '** THE P-VALUES BELOW ARE ASYMPTOTIC OVER CELLS AND ARE NOT A PAPER-FACING INFERENCE. **\n'
+        '16 animals were randomized, not N cells. This model supplies an ESTIMATE and a\n'
+        'structural check only; it is a member of NO multiplicity family, and no figure reads a\n'
+        'star from it. The inference for this suite is the mouse-label randomization in\n'
+        f'{HIERARCHICAL_CELL_STATS_PREFIX}_amplitude_permutation.csv.\n')
+    if boundary_notes:
+        header += '\nBOUNDARY VARIANCE ESTIMATES (reported, not treated as failure):\n' \
+                  + '\n'.join(boundary_notes) + '\n'
+    text = f'{header}\n{result.summary()}\n'
+    if filename is None:
+        filename = f'{HIERARCHICAL_CELL_STATS_PREFIX}_amplitude_unpaired_sensitivity.txt'
+    write_text(os.path.join(save_dir, filename), text)
+    return {'result': result, 'summary_text': text, 'formula': formula, 'n_rows': int(len(df)),
+            'boundary_notes': boundary_notes}
+
+
+def build_recall_cell_epoch_count_table(df_matched, epochs=RECALL_EPOCHS):
+    """
+    The cell x epoch COUNT table the hierarchical rate model is fit on: one row per
+    (mouse, group, cell_id, epoch) with `n_events` and `exposure_seconds`, over the same retained
+    trials as everything else in this lane.
+
+    ** Every detected cell is here, zero-event cells included. ** That is the whole point of a
+    population rate, and it is what distinguishes this path from the paired-amplitude one, whose
+    estimand is conditional on cells being active in both windows. Built from
+    aggregate_over_trials BEFORE filter_amplitude_rows, so no activity filter is applied at all.
+
+    ** No log of a zero rate and no pseudocount. ** The counts stay counts and the model carries
+    the log link and the exposure offset itself, so a zero is an observation rather than something
+    that has to be smoothed before it can be modelled.
+    """
+    frames = []
+    for epoch in epochs:
+        pooled = aggregate_over_trials(df_matched, epoch)
+        frames.append(pooled.assign(epoch=epoch))
+    out = pd.concat(frames, ignore_index=True).rename(columns={'cell': 'cell_id'})
+    out = out[['mouse', 'group', 'cell_id', 'epoch', 'n_events', 'exposure_seconds']]
+    if (out['exposure_seconds'] <= 0).any():
+        raise RuntimeError('build_recall_cell_epoch_count_table: non-positive exposure.')
+    if not (out['n_events'] >= 0).all():
+        raise RuntimeError('build_recall_cell_epoch_count_table: negative event count.')
+    n_expected = out.groupby('epoch', observed=True).size().unique()
+    if len(n_expected) != 1:
+        raise RuntimeError(
+            f'build_recall_cell_epoch_count_table: the epochs cover different numbers of cells '
+            f'{n_expected}. Both windows exist on every retained trial by construction.')
+    out['group'] = pd.Categorical(out['group'], categories=list(DREADD_DISPLAY_ORDER))
+    return out.sort_values(['group', 'mouse', 'cell_id', 'epoch']).reset_index(drop=True)
+
+
+# ── The hierarchical cell-level RATE model ───────────────────────────────────────────────────
+#
+# The rate counterpart of the amplitude hierarchy: same group x epoch modulation question, asked
+# on the cell-level COUNT structure with every zero-event cell retained, instead of on one
+# collapsed population rate per animal. It is a REQUIRED component of this suite, not a
+# contingency selected if the mouse-level rate analysis looks insufficient -- that analysis
+# remains authoritative and untouched.
+
+HIERARCHICAL_CELL_RATE_HDI_PROB = 0.95   # this suite's own choice; RATE_CONTRAST_HDI_PROB (0.94)
+                                         # belongs to the TFC lane and is left alone.
+
+# ** PRIORS ARE PART OF THIS MODEL AND ARE FROZEN BEFORE THE REAL DATA IS FITTED. ** Bambi assigns
+# priors automatically from the data when none are given, which would make them a silent,
+# data-dependent input to a model whose posterior intervals are the reported result. They are
+# therefore stated here explicitly and written into the model's own output file, so a reported
+# number is never separated from the prior that produced it.
+#
+# Scale: the log-exposure offset makes the intercept a log(events/second), so a unit change is a
+# factor of e.
+#   Intercept  Normal(-3, 2)   -- centred on ~0.05 events/s, the order of magnitude of sparse CA1
+#                                 calcium-event rates on this event definition, with a 95% prior
+#                                 interval of roughly 0.001-2.7 events/s. This encodes what a
+#                                 calcium event IS, not what these data show.
+#   common     Normal(0, 1)    -- group, epoch and group x epoch effects up to roughly e^+-2
+#                                 (0.14x-7.4x), wide relative to any effect this field reports
+#                                 while excluding physically impossible ones.
+#   RE sigmas  HalfNormal(0.5) on the two MOUSE-level terms (between-animal spread in baseline
+#                                 rate and in the pre->post change is the smaller of the two
+#                                 scales, and the epoch slope over 16 animals is the least
+#                                 well-identified parameter in the model, so it is the one most in
+#                                 need of regularization);
+#              HalfNormal(1)   on the CELL intercept, because between-cell rate heterogeneity
+#                                 within an animal genuinely is large.
+#   alpha      Gamma(2, 0.5)   -- NB dispersion, kept away from both the zero boundary and the
+#                                 Poisson limit. Its meaning depends on the parameterization,
+#                                 which is CONFIRMED programmatically rather than assumed --
+#                                 see _confirm_nb_alpha_parameterization.
+#
+# ** THESE WERE REVISED ONCE, AT SPECIFICATION TIME, ON PRIOR SIMULATIONS ONLY. ** The first
+# frozen set -- Intercept Normal(0, 5), common Normal(0, 2.5), all three RE sigmas HalfNormal(1) --
+# FAILED its own prior-predictive check before any model was fit to the real data: it implied a
+# median per-cell rate of 1.23 events/s and a 99th percentile of 4.5e6 events/s, which is not a
+# wide prior but a physically impossible one (a cell cannot emit millions of calcium events per
+# second). It was revised here, re-frozen, and re-checked. That is exactly the sequence
+# hierarchical_cell_rate_prior_predictive exists to force, and it happened on prior draws alone --
+# no posterior, and no real data, was consulted.
+HIERARCHICAL_CELL_RATE_PRIORS = {
+    'Intercept': bmb.Prior('Normal', mu=-3.0, sigma=2.0),
+    'common': bmb.Prior('Normal', mu=0.0, sigma=1.0),
+    '1|mouse': bmb.Prior('Normal', mu=0.0, sigma=bmb.Prior('HalfNormal', sigma=0.5)),
+    'post_indicator|mouse': bmb.Prior('Normal', mu=0.0,
+                                      sigma=bmb.Prior('HalfNormal', sigma=0.5)),
+    '1|mouse_cell': bmb.Prior('Normal', mu=0.0, sigma=bmb.Prior('HalfNormal', sigma=1.0)),
+    'alpha': bmb.Prior('Gamma', alpha=2.0, beta=0.5),
+}
+
+# Plausibility band the prior-predictive check is read against, in events/second per cell, for
+# this event definition (one contiguous supra-threshold run of S) over 20 s windows. Stated as a
+# constant so the check has a written criterion rather than an impression.
+HIERARCHICAL_CELL_RATE_PLAUSIBLE_HZ = (1e-4, 5.0)
+
+# ** FROZEN PRODUCTION SAMPLER CONFIGURATION. ** Module constants, not call-site defaults, so the
+# reported fit cannot drift.
+#
+# target_accept: the project has no existing standard -- fit_rate_group_epoch_model passes none
+# and inherits PyMC's 0.8 -- so rather than inherit a default silently this suite fixes 0.95,
+# appropriate for a hierarchy carrying a per-cell random intercept and a mouse-level slope, where
+# 0.8 is the classic source of divergences. The TFC lane is NOT changed and its numbers do not
+# move.
+#
+# mp_ctx='spawn': NOT a statistical choice -- a process-management one, and it is here because its
+# absence cost a three-hour hang. PyMC's default `fork` start method forks the calling process;
+# run from a notebook kernel holding a loaded `ds` (~18.6 GB across ~30 threads) it deadlocked
+# outright -- parent blocked in poll(), four chain workers created and then never scheduled, ZERO
+# CPU across all five processes for 2h52m, nothing sampled. Forking a large multi-threaded process
+# is a classic hang, and it had nothing to do with this model: the design matrices are sparse
+# (0.9 MB total), the model builds in 0.7 s, its gradient compiles in 8.7 s, and one gradient
+# evaluation costs 3.73 ms. `spawn` starts each worker fresh instead of inheriting that address
+# space. Same model, same priors, same random_seed, same per-chain draws -- only the way the four
+# chains are launched changes.
+#
+# ** No idata_kwargs={'log_likelihood': True} here, deliberately. ** The TFC lane's
+# fit_rate_group_epoch_model needs the pointwise log-likelihood because it runs az.compare/LOO
+# between a full and a reduced model. THIS suite does no model comparison and no LOO: its
+# diagnostics are r_hat/ESS/divergences, its contrasts are posterior transforms, and its adequacy
+# check is posterior-predictive. Requesting it would compute and store a 4000 x n_obs array
+# (~492 MB here) that nothing ever reads -- the idiom was copied across from the TFC lane by
+# mistake. Dropping it changes no reported quantity.
+# progressbar=True is DISPLAY ONLY and affects no result. It is on because this is the single
+# longest step in the suite and PyMC's bar is the only thing that reports draws/s and an ETA
+# while it runs; with it off, a stalled sampler is indistinguishable from a slow one.
+HIERARCHICAL_CELL_RATE_SAMPLER = dict(
+    draws=1000, tune=1000, chains=4, random_seed=HIERARCHICAL_CELL_SEED,
+    target_accept=0.95, progressbar=True, mp_ctx='spawn',
+)
+
+# ** CONVERGENCE GATE -- SCOPE FIXED BEFORE FITTING. ** Hard-failed on the parameters the
+# scientific claims rest on; the thousands of nuisance per-cell intercepts are summarized in full
+# and REPORTED but do not define failure, because a few poorly-identified singleton cells would
+# otherwise condemn a model that is fine everywhere that matters. Divergences are gated GLOBALLY:
+# a divergence is a property of the sampler's trajectory, not of any one parameter, so it is never
+# scoped away.
+HIERARCHICAL_CELL_RATE_GATE = dict(max_rhat=1.01, min_ess_bulk=400.0, min_ess_tail=400.0,
+                                   max_divergences=0)
+
+
+def _confirm_nb_alpha_parameterization(seed=HIERARCHICAL_CELL_SEED, n=400000):
+    """Determine the installed backend's negative-binomial `alpha` convention empirically.
+
+    ** Not a formality. ** A Gamma(2, 0.5) prior that is weakly informative under
+    Var = mu + mu^2/alpha is strongly informative under its reciprocal Var = mu + alpha*mu^2, so
+    the frozen dispersion prior cannot be interpreted -- or defended -- without knowing which one
+    is in force. Read off the sampler rather than from memory or a docstring, and written into the
+    model's summary file.
+
+    Returns (convention_string, measured_variance, expected_under_that_convention).
+    """
+    mu, alpha = 5.0, 2.0
+    draws = pm.draw(pm.NegativeBinomial.dist(mu=mu, alpha=alpha), draws=n,
+                    random_seed=seed)
+    measured = float(np.var(draws))
+    quadratic = mu + mu ** 2 / alpha     # Var = mu + mu^2/alpha  (pymc/bambi convention)
+    reciprocal = mu + alpha * mu ** 2    # Var = mu + alpha*mu^2
+    if abs(measured - quadratic) < abs(measured - reciprocal):
+        return ('Var = mu + mu^2/alpha  (larger alpha -> closer to Poisson)', measured, quadratic)
+    return ('Var = mu + alpha*mu^2  (larger alpha -> more overdispersed)', measured, reciprocal)
+
+
+def _cell_rate_model_frame(counts_df, reference_epoch=RECALL_REFERENCE_EPOCH,
+                           response_epoch=RECALL_RESPONSE_EPOCH):
+    """Model frame for the cell-level NB rate model: adds the log-exposure offset, the 0/1
+    post-tone indicator used as the mouse-level random SLOPE variable, and the pasted
+    `mouse_cell` grouping label.
+
+    `mouse_cell` is `mouse + '_c' + cell_id`, not `cell_id`: cell ids are SESSION-LOCAL unit_ids
+    and the same integer occurs in every animal, so grouping on the bare id would pool unrelated
+    neurons across mice into one random effect. Same reasoning as fit_rate_group_epoch_model's
+    pasted `mouse_trial`.
+    """
+    df = counts_df.copy()
+    df['log_exposure'] = np.log(df['exposure_seconds'].to_numpy(dtype=float))
+    df['post_indicator'] = _post_indicator(df['epoch'], response_epoch)
+    df['mouse_cell'] = df['mouse'].astype(str) + '_c' + df['cell_id'].astype(str)
+    df['group'] = df['group'].astype(str)
+    df['epoch'] = df['epoch'].astype(str)
+    df['n_events'] = df['n_events'].astype(int)
+    if df.groupby(['mouse_cell', 'epoch'], observed=True).size().max() != 1:
+        raise RuntimeError('_cell_rate_model_frame: a (mouse_cell, epoch) appears more than once.')
+    return df
+
+
+def _cell_rate_formula(reference_group=HIERARCHICAL_CELL_REFERENCE_GROUP,
+                       reference_epoch=RECALL_REFERENCE_EPOCH):
+    group_term = f"C(group, Treatment('{reference_group}'))"
+    epoch_term = f"C(epoch, Treatment('{reference_epoch}'))"
+    return (f"n_events ~ {group_term} * {epoch_term} + offset(log_exposure) "
+            f"+ (1|mouse) + (0 + post_indicator|mouse) + (1|mouse_cell)"), group_term, epoch_term
+
+
+def build_cell_epoch_rate_model(counts_df, reference_group=HIERARCHICAL_CELL_REFERENCE_GROUP,
+                                reference_epoch=RECALL_REFERENCE_EPOCH,
+                                response_epoch=RECALL_RESPONSE_EPOCH):
+    """
+    Build (do not fit) the hierarchical Negative-Binomial cell-count model, with the frozen priors
+    attached and verified.
+
+        n_events ~ group * epoch + offset(log(exposure))
+                 + (1|mouse) + (0 + post_indicator|mouse) + (1|mouse_cell)
+
+    ** Why the mouse-level epoch random slope is part of the frozen structure. ** (1|mouse) +
+    (1|mouse_cell) model mouse and cell heterogeneity in BASELINE rate only. The quantity being
+    compared across treatment groups is the pre->post CHANGE, and mice differ in that change too.
+    Without a mouse-level epoch random effect, that between-mouse variation lands in the residual
+    /cell level and the group x epoch fixed effects -- the entire scientific target -- get
+    posterior intervals that are too narrow, with cells effectively serving as replicates for the
+    epoch contrast. That is the count-model form of the same pseudoreplication the amplitude path
+    guards against, so it is specified in advance rather than added after seeing a result.
+
+    The slope is INDEPENDENT (uncorrelated) of the mouse intercept: with 16 mice there is little
+    information about an intercept-slope correlation, and an unstructured 2x2 mouse covariance is
+    the part of this model most likely to sample badly. There is deliberately NO cell-level epoch
+    slope -- a further large expansion this analysis does not claim to resolve.
+
+    Reference levels are named explicitly via C(col, Treatment('level')): formulae does not honour
+    a pandas Categorical's category order the way patsy does (confirmed empirically in
+    fit_rate_group_epoch_model, and unchanged here).
+
+    Raises if any frozen prior failed to attach -- a silent fall-back to a Bambi default would
+    make the priors data-dependent again, which is the whole thing this guards against.
+
+    Returns dict(model, df, formula, group_term, epoch_term, priors_applied).
+    """
+    df = _cell_rate_model_frame(counts_df, reference_epoch, response_epoch)
+    formula, group_term, epoch_term = _cell_rate_formula(reference_group, reference_epoch)
+    model = bmb.Model(formula, data=df, family='negativebinomial',
+                      priors=HIERARCHICAL_CELL_RATE_PRIORS)
+    model.build()
+
+    # ** Verify every frozen prior actually attached. ** Read off the BUILT model, never assumed:
+    # a prior that silently fails to attach leaves a Bambi data-dependent default in its place,
+    # which is precisely what specifying them was for.
+    mu_component = model.components['mu']
+    applied = {name: str(term.prior) for name, term in mu_component.terms.items()}
+    applied['alpha'] = str(model.constant_components['alpha'].prior)
+
+    expected = {'Intercept': HIERARCHICAL_CELL_RATE_PRIORS['Intercept'],
+                '1|mouse': HIERARCHICAL_CELL_RATE_PRIORS['1|mouse'],
+                'post_indicator|mouse': HIERARCHICAL_CELL_RATE_PRIORS['post_indicator|mouse'],
+                '1|mouse_cell': HIERARCHICAL_CELL_RATE_PRIORS['1|mouse_cell'],
+                'alpha': HIERARCHICAL_CELL_RATE_PRIORS['alpha']}
+    for name, prior in expected.items():
+        if name not in applied:
+            raise RuntimeError(
+                f'build_cell_epoch_rate_model: the frozen prior {name!r} matches no term in the '
+                f'built model (terms: {sorted(applied)}).')
+        if applied[name] != str(prior):
+            raise RuntimeError(
+                f'build_cell_epoch_rate_model: term {name!r} carries {applied[name]} but the '
+                f'frozen prior is {prior}. The model must not fall back to a Bambi default.')
+    # The 'common' catch-all must have reached every fixed effect except the intercept and offset.
+    common_expected = str(HIERARCHICAL_CELL_RATE_PRIORS['common'])
+    for name in (group_term, epoch_term, f'{group_term}:{epoch_term}'):
+        if applied.get(name) != common_expected:
+            raise RuntimeError(
+                f'build_cell_epoch_rate_model: fixed effect {name!r} carries '
+                f'{applied.get(name)} rather than the frozen common prior {common_expected}.')
+    return {'model': model, 'df': df, 'formula': formula, 'group_term': group_term,
+            'epoch_term': epoch_term, 'priors_applied': applied}
+
+
+def hierarchical_cell_rate_prior_predictive(built, save_dir, draws=500,
+                                            seed=HIERARCHICAL_CELL_SEED, filename=None):
+    """
+    PRIOR-PREDICTIVE simulation, run BEFORE the inferential fit.
+
+    ** Mandatory, and it is about the priors, not the data. ** Priors specified on a log-rate scale
+    are easy to state and hard to feel: the question this answers is whether they imply event
+    rates a CA1 pyramidal cell could plausibly show over a 20 s window, or whether they put
+    substantial mass on physically absurd ones. If the implied rates are not plausible the priors
+    are revised and RE-FROZEN before the real model is fit -- a revision made at specification
+    time on prior simulations only, never after seeing a posterior.
+
+    Reports quantiles of the implied per-cell event RATE (counts / exposure) and of the raw counts.
+    Written out rather than inspected interactively, so what the priors implied is on the record
+    beside what the posterior said.
+    """
+    model, df = built['model'], built['df']
+    idata = model.prior_predictive(draws=draws, random_seed=seed)
+    var = list(idata.prior_predictive.data_vars)[0]
+    counts = np.asarray(idata.prior_predictive[var].values, dtype=float).reshape(-1, len(df))
+    exposure = df['exposure_seconds'].to_numpy(dtype=float)
+    rates = counts / exposure[None, :]
+    qs = [0.01, 0.05, 0.25, 0.5, 0.75, 0.95, 0.99]
+    rate_q = np.quantile(rates, qs)
+    count_q = np.quantile(counts, qs)
+    lo_hz, hi_hz = HIERARCHICAL_CELL_RATE_PLAUSIBLE_HZ
+    median_rate = float(np.median(rates))
+    p95_rate = float(np.quantile(rates, 0.95))
+    # A written criterion, not an impression: the prior's CENTRAL mass must sit in a plausible
+    # band for this event definition, and its upper bulk must not be physically impossible. The
+    # tails of a deliberately wide prior are allowed to be wide; the middle is not allowed to be
+    # absurd.
+    plausible = (lo_hz <= median_rate <= hi_hz) and (p95_rate <= hi_hz * 100)
+    verdict = (
+        f'** PRIOR-PREDICTIVE VERDICT: PLAUSIBLE. ** Median implied rate {median_rate:.4g} '
+        f'events/s sits\ninside the stated band {lo_hz:g}-{hi_hz:g} events/s and the upper bulk is '
+        f'not physically absurd.\n'
+        if plausible else
+        f'** PRIOR-PREDICTIVE VERDICT: IMPLAUSIBLE. ** Median implied rate {median_rate:.4g} '
+        f'events/s\n(95th percentile {p95_rate:.4g}) against a stated plausible band of '
+        f'{lo_hz:g}-{hi_hz:g} events/s.\nThe priors must be REVISED AND RE-FROZEN before the '
+        f'inferential fit -- at specification\ntime, on prior draws only, never after seeing a '
+        f'posterior.\n')
+    text = (
+        'PRIOR-PREDICTIVE CHECK -- hierarchical cell-level rate model (recall Test_B).\n'
+        'Run BEFORE the inferential fit. This is a check on the FROZEN PRIORS, not on the data:\n'
+        'do they imply biologically plausible per-cell event rates over the 20 s windows?\n\n'
+        f'Formula: {built["formula"]}\n'
+        f'Prior draws: {draws} (seed {seed}) over {len(df)} cell x epoch rows.\n\n'
+        'Frozen priors:\n'
+        + '\n'.join(f'  {k}: {v}' for k, v in HIERARCHICAL_CELL_RATE_PRIORS.items()) + '\n\n'
+        f'Stated plausibility band for this event definition: '
+        f'{lo_hz:g}-{hi_hz:g} events/s per cell.\n\n'
+        f'{verdict}\n'
+        f'Implied per-cell event RATE (events/s), quantiles {qs}:\n'
+        f'  {np.array2string(rate_q, precision=4, suppress_small=True)}\n'
+        f'Implied per-cell COUNT per window, quantiles {qs}:\n'
+        f'  {np.array2string(count_q, precision=2, suppress_small=True)}\n'
+        f'  median rate {np.median(rates):.4g} events/s; '
+        f'fraction of prior-predictive counts that are zero: {float((counts == 0).mean()):.3f}\n\n'
+        'Reading it: the prior is deliberately wide, so the tails are wide too. What matters is\n'
+        'that the central mass sits in a plausible range for sparse CA1 calcium events and that\n'
+        'the prior does not concentrate on absurd rates. If it does, the priors are revised and\n'
+        're-frozen HERE, before the inferential fit -- never after seeing the posterior.\n\n'
+        'HISTORY: the first frozen prior set (Intercept Normal(0, 5), fixed effects Normal(0, 2.5),\n'
+        'all three random-effect SDs HalfNormal(1)) FAILED this check -- median implied rate 1.23\n'
+        'events/s, 99th percentile 4.5e6 events/s -- and was revised to the set above before any\n'
+        'model was fit to the real data. See HIERARCHICAL_CELL_RATE_PRIORS.\n')
+    if filename is None:
+        filename = f'{HIERARCHICAL_CELL_STATS_PREFIX}_rate_prior_predictive.txt'
+    write_text(os.path.join(save_dir, filename), text)
+    if not plausible:
+        raise RuntimeError(
+            f'hierarchical_cell_rate_prior_predictive: the frozen priors imply a median per-cell '
+            f'event rate of {median_rate:.4g} events/s (95th pct {p95_rate:.4g}) against a stated '
+            f'plausible band of {lo_hz:g}-{hi_hz:g}. Revise and re-freeze '
+            f'HIERARCHICAL_CELL_RATE_PRIORS before fitting -- this is a specification-time '
+            f'decision made on prior draws, and it must not be made after seeing a posterior. '
+            f'Full report: {filename}')
+    return {'idata': idata, 'rate_quantiles': rate_q, 'count_quantiles': count_q, 'text': text,
+            'plausible': plausible, 'median_rate_hz': median_rate}
+
+
+def _cell_rate_gated_var_names(built):
+    """The parameters the hard convergence gate is evaluated over -- fixed effects, the NB
+    dispersion, every random-effect SCALE hyperparameter, the mouse-level intercepts and slopes.
+    Deliberately excludes the thousands of individual `mouse_cell` intercepts, which are
+    summarized and reported separately but do not define model failure (see
+    HIERARCHICAL_CELL_RATE_GATE)."""
+    return ['Intercept', built['group_term'], built['epoch_term'],
+            f'{built["group_term"]}:{built["epoch_term"]}',
+            'alpha',
+            '1|mouse', '1|mouse_sigma',
+            'post_indicator|mouse', 'post_indicator|mouse_sigma',
+            '1|mouse_cell_sigma']
+
+
+def fit_cell_epoch_rate_model(built, sampler=None):
+    """
+    Fit the hierarchical NB cell-count model and apply the predefined convergence gate.
+
+    ** Required component, fixed configuration, no fallback. ** The sampler settings are the
+    frozen HIERARCHICAL_CELL_RATE_SAMPLER; a caller may override them only for the synthetic
+    verification suite, which is not a reported inferential fit. If sampling fails, or the gate
+    fails, this RAISES with the full diagnostics. No substitute model is fit -- not a Poisson, not
+    a quasi-Poisson, not a Gaussian approximation, not a reduced random-effect structure, not a
+    pooled-cell test. A replacement rate path would be a separate decision, frozen from the
+    beginning, not something improvised at the point of failure.
+
+    ** The gate's SCOPE is fixed in advance ** (_cell_rate_gated_var_names): fixed effects, the NB
+    dispersion, every random-effect scale hyperparameter, and the mouse-level intercepts and
+    slopes. The thousands of individual `mouse_cell` intercepts are summarized in full and
+    reported -- including how many exceed the thresholds and which -- but do not define failure,
+    because a handful of poorly-identified singleton cells would otherwise condemn a model that is
+    fine everywhere the claims live. Divergences are gated GLOBALLY at zero.
+
+    Returns dict(idata, diagnostics_gated, diagnostics_cell_block, gate_pass, gate_text).
+    """
+    model = built['model']
+    fit_kwargs = dict(HIERARCHICAL_CELL_RATE_SAMPLER if sampler is None else sampler)
+    idata = model.fit(**fit_kwargs)
+
+    gated_names = _cell_rate_gated_var_names(built)
+    present = [n for n in gated_names if n in idata.posterior]
+    missing = [n for n in gated_names if n not in idata.posterior]
+    if missing:
+        raise RuntimeError(
+            f'fit_cell_epoch_rate_model: gated parameter(s) {missing} are absent from the '
+            f'posterior ({sorted(idata.posterior.data_vars)}). A convergence gate over a subset '
+            f'that does not exist is a gate in name only.')
+    gated = _nb_convergence_diagnostics(idata, var_names=present)
+    cell_block = _nb_convergence_diagnostics(idata, var_names=['1|mouse_cell'])
+    cell_summary = az.summary(idata, var_names=['1|mouse_cell'])
+    n_cell_over_rhat = int((cell_summary['r_hat'] > HIERARCHICAL_CELL_RATE_GATE['max_rhat']).sum())
+    n_cell_under_ess = int(
+        (cell_summary['ess_bulk'] < HIERARCHICAL_CELL_RATE_GATE['min_ess_bulk']).sum())
+
+    failures = []
+    if gated['max_rhat'] > HIERARCHICAL_CELL_RATE_GATE['max_rhat']:
+        failures.append(f"max r_hat {gated['max_rhat']:.4f} > "
+                        f"{HIERARCHICAL_CELL_RATE_GATE['max_rhat']} "
+                        f"(worst: {gated['worst_rhat_param']})")
+    if gated['min_ess_bulk'] < HIERARCHICAL_CELL_RATE_GATE['min_ess_bulk']:
+        failures.append(f"min ess_bulk {gated['min_ess_bulk']:.0f} < "
+                        f"{HIERARCHICAL_CELL_RATE_GATE['min_ess_bulk']:.0f} "
+                        f"(worst: {gated['worst_ess_bulk_param']})")
+    if gated['min_ess_tail'] < HIERARCHICAL_CELL_RATE_GATE['min_ess_tail']:
+        failures.append(f"min ess_tail {gated['min_ess_tail']:.0f} < "
+                        f"{HIERARCHICAL_CELL_RATE_GATE['min_ess_tail']:.0f}")
+    # Divergences are NOT scoped -- a divergence belongs to the sampler's trajectory, not to a
+    # parameter, so it cannot be attributed to the nuisance block and set aside.
+    n_div = int(idata.sample_stats['diverging'].values.sum())
+    if n_div > HIERARCHICAL_CELL_RATE_GATE['max_divergences']:
+        failures.append(f"{n_div} divergences > "
+                        f"{HIERARCHICAL_CELL_RATE_GATE['max_divergences']} (gated globally)")
+
+    gate_text = (
+        'CONVERGENCE GATE (scope fixed before fitting; see HIERARCHICAL_CELL_RATE_GATE)\n'
+        f'  Gated over {gated["n_params"]} parameters: fixed effects, NB alpha, random-effect\n'
+        f'  scale hyperparameters, mouse intercepts and mouse epoch slopes.\n'
+        f'    max r_hat      = {gated["max_rhat"]:.4f}  (worst: {gated["worst_rhat_param"]})\n'
+        f'    min ess_bulk   = {gated["min_ess_bulk"]:.0f}  '
+        f'(worst: {gated["worst_ess_bulk_param"]})\n'
+        f'    min ess_tail   = {gated["min_ess_tail"]:.0f}\n'
+        f'    divergences    = {n_div}   (gated GLOBALLY, never scoped away)\n'
+        f'  REPORTED BUT NOT GATED -- the {cell_block["n_params"]} individual mouse_cell '
+        f'intercepts:\n'
+        f'    max r_hat      = {cell_block["max_rhat"]:.4f}  '
+        f'(worst: {cell_block["worst_rhat_param"]})\n'
+        f'    min ess_bulk   = {cell_block["min_ess_bulk"]:.0f}\n'
+        f'    {n_cell_over_rhat} cell intercepts exceed r_hat '
+        f'{HIERARCHICAL_CELL_RATE_GATE["max_rhat"]}; {n_cell_under_ess} fall below ess_bulk '
+        f'{HIERARCHICAL_CELL_RATE_GATE["min_ess_bulk"]:.0f}.\n'
+        f'    These are reported so a SYSTEMATICALLY badly-mixed random-effect block stays '
+        f'visible;\n    they are excluded from the pass/fail decision, not from the record.\n')
+    if failures:
+        raise RuntimeError(
+            'fit_cell_epoch_rate_model: the hierarchical NB rate model FAILED its predefined '
+            'convergence gate:\n  - ' + '\n  - '.join(failures) + '\n\n' + gate_text +
+            '\nNo substitute model is fit and no weaker test is run in its place. Stopping so '
+            'the failure is visible and can be diagnosed.')
+    return {'idata': idata, 'diagnostics_gated': gated, 'diagnostics_cell_block': cell_block,
+            'n_divergent': n_div, 'n_cell_over_rhat': n_cell_over_rhat,
+            'n_cell_under_ess': n_cell_under_ess, 'gate_text': gate_text,
+            'sampler': fit_kwargs}
+
+
+def summarize_cell_rate_contrasts(idata, built, hdi_prob=HIERARCHICAL_CELL_RATE_HDI_PROB):
+    """
+    Posterior contrasts of the hierarchical NB rate model, formed DRAW BY DRAW so the posterior
+    covariance between coefficients is preserved (a delta-method or SE-subtraction version of the
+    hM3D-vs-hM4D comparison would be neither).
+
+    ** Two DIFFERENT quantities, kept apart because conflating them is easy and wrong: **
+
+      block='modulation'  -- the pre->post MODULATION ratio-of-ratios, which is the group x epoch
+                             question this suite asks and is the INTERACTION ALONE:
+                                 exp(beta_int[Exc]), exp(beta_int[Inh]),
+                                 exp(beta_int[Exc] - beta_int[Inh]).
+                             "How much more did this group's event rate change from pre to post
+                             than the comparison group's did."
+
+      block='post_tone_simple_effect' -- the ABSOLUTE post-tone group-vs-control rate ratio,
+                             exp(beta_group + beta_int). "How much higher was this group's rate
+                             than control's during post-tone." This is what
+                             summarize_rate_group_epoch_contrasts computes for the TFC lane; that
+                             function's sampling and HDI mechanics are the model for this one, but
+                             its CONTRAST DEFINITION is not the modulation quantity and must not
+                             be read as it.
+
+    ** No frequentist p-value is manufactured from any of this. ** A posterior is not a star: this
+    supplies no asterisk to any figure and changes no existing paper-facing number.
+    """
+    posterior = idata.posterior
+    group_term, epoch_term = built['group_term'], built['epoch_term']
+    interaction_term = f'{group_term}:{epoch_term}'
+    for name in (group_term, interaction_term):
+        if name not in posterior:
+            raise KeyError(f'summarize_cell_rate_contrasts: {name!r} is not in the posterior '
+                           f'({sorted(posterior.data_vars)}).')
+
+    def _draws(term, level):
+        return np.asarray(posterior[term].sel({f'{term}_dim': level}).values).ravel()
+
+    treatments = [g for g in DREADD_DISPLAY_ORDER if g != HIERARCHICAL_CELL_REFERENCE_GROUP]
+    inter_level = {g: f'{g}, {RECALL_RESPONSE_EPOCH}' for g in treatments}
+    beta_int = {g: _draws(interaction_term, inter_level[g]) for g in treatments}
+    beta_group = {g: _draws(group_term, g) for g in treatments}
+
+    rows = []
+    for group_a, group_b in HIERARCHICAL_CELL_PAIRS:
+        if group_b == HIERARCHICAL_CELL_REFERENCE_GROUP:
+            log_ratio = beta_int[group_a]
+            definition = f'exp(interaction[{group_a}])'
+        else:
+            log_ratio = beta_int[group_a] - beta_int[group_b]
+            definition = f'exp(interaction[{group_a}] - interaction[{group_b}])'
+        draws = np.exp(log_ratio)
+        lo, hi = az.hdi(draws, hdi_prob=hdi_prob)
+        rows.append({'block': 'modulation', 'group_a': group_a, 'group_b': group_b,
+                     'quantity': 'pre->post modulation ratio-of-ratios', 'definition': definition,
+                     'posterior_median': float(np.median(draws)), 'hdi_low': float(lo),
+                     'hdi_high': float(hi), 'hdi_prob': hdi_prob,
+                     'p_direction': float(max((log_ratio > 0).mean(), (log_ratio < 0).mean()))})
+
+    for group in treatments:
+        draws = np.exp(beta_group[group] + beta_int[group])
+        lo, hi = az.hdi(draws, hdi_prob=hdi_prob)
+        rows.append({'block': 'post_tone_simple_effect', 'group_a': group,
+                     'group_b': HIERARCHICAL_CELL_REFERENCE_GROUP,
+                     'quantity': 'ABSOLUTE post-tone rate ratio vs control',
+                     'definition': f'exp(group[{group}] + interaction[{group}])',
+                     'posterior_median': float(np.median(draws)), 'hdi_low': float(lo),
+                     'hdi_high': float(hi), 'hdi_prob': hdi_prob,
+                     'p_direction': np.nan})
+
+    out = pd.DataFrame(rows)
+    out['note'] = ('modulation = interaction only (the group x epoch question); '
+                   'post_tone_simple_effect = absolute post-tone level. Different quantities.')
+    return out
+
+
+def hierarchical_cell_rate_posterior_predictive(idata, built, save_dir, save_figure=True,
+                                                filename=None, figure_root=None):
+    """
+    POSTERIOR-PREDICTIVE adequacy checks, by group x epoch: the count distribution, the ZERO
+    FRACTION, and overdispersion (variance-to-mean).
+
+    ** Part of adequacy, not an optional extra. ** Convergence diagnostics say the sampler
+    explored the posterior of THIS model; they say nothing about whether this model can produce
+    data that look like the observed counts. A negative-binomial that cannot reproduce the
+    observed fraction of silent cells is not describing the population it is being used to make
+    statements about, and that has to be visible next to the estimates rather than discoverable.
+
+    A model that fails these checks is REPORTED AS INADEQUATE in plain words beside its estimates.
+    The estimates are not quietly presented as though the model fit.
+
+    Returns dict(table, text, inadequate) -- `table` carries, per group x epoch, the observed
+    statistic, its posterior-predictive interval and a Bayesian p-value (the posterior-predictive
+    probability of a replicate at least as extreme; values near 0 or 1 indicate misfit).
+    """
+    model, df = built['model'], built['df']
+    if 'posterior_predictive' not in idata:
+        model.predict(idata, kind='response')
+    var = list(idata.posterior_predictive.data_vars)[0]
+    rep = np.asarray(idata.posterior_predictive[var].values, dtype=float).reshape(-1, len(df))
+    obs = df['n_events'].to_numpy(dtype=float)
+
+    def _stats(x):
+        mean = x.mean(axis=-1)
+        var_ = x.var(axis=-1)
+        return {'zero_fraction': (x == 0).mean(axis=-1), 'mean_count': mean,
+                'variance_to_mean': np.divide(var_, mean, out=np.full_like(mean, np.nan),
+                                              where=mean > 0),
+                'max_count': x.max(axis=-1)}
+
+    rows = []
+    for (group, epoch), sub in df.groupby(['group', 'epoch'], observed=True):
+        idx = sub.index.to_numpy()
+        obs_stats = _stats(obs[idx][None, :])
+        rep_stats = _stats(rep[:, idx])
+        for stat in ('zero_fraction', 'mean_count', 'variance_to_mean', 'max_count'):
+            o = float(obs_stats[stat][0])
+            r = np.asarray(rep_stats[stat], dtype=float)
+            r = r[np.isfinite(r)]
+            bayes_p = float((r >= o).mean()) if r.size else np.nan
+            lo, hi = (float(np.quantile(r, 0.025)), float(np.quantile(r, 0.975))) \
+                if r.size else (np.nan, np.nan)
+            rows.append({'group': group, 'epoch': epoch, 'statistic': stat, 'n_cells': len(idx),
+                         'observed': o, 'ppc_median': float(np.median(r)) if r.size else np.nan,
+                         'ppc_lo_2.5': lo, 'ppc_hi_97.5': hi, 'bayes_p': bayes_p,
+                         'observed_in_interval': bool(lo <= o <= hi) if np.isfinite(lo) else False})
+    table = pd.DataFrame(rows)
+
+    key = table[table['statistic'].isin(['zero_fraction', 'variance_to_mean'])]
+    failed = key[~key['observed_in_interval']]
+    inadequate = len(failed) > 0
+    verdict = (
+        '** MODEL ADEQUACY: FAILED. ** The observed value falls OUTSIDE the 95% '
+        'posterior-predictive\ninterval for the following group x epoch cells:\n'
+        + failed[['group', 'epoch', 'statistic', 'observed', 'ppc_lo_2.5', 'ppc_hi_97.5']]
+        .to_string(index=False)
+        + '\n\nThis model does not reproduce the observed count structure it is being used to\n'
+          'make statements about. Its estimates below are reported WITH this failure, not as\n'
+          'though the model fit. Convergence diagnostics do not substitute for this check.\n'
+        if inadequate else
+        '** MODEL ADEQUACY: PASSED. ** Every observed zero fraction and variance-to-mean ratio\n'
+        'falls inside its 95% posterior-predictive interval, per group x epoch.\n')
+    text = (
+        'POSTERIOR-PREDICTIVE CHECKS -- hierarchical cell-level NB rate model (recall Test_B).\n'
+        'Observed vs replicated counts BY GROUP x EPOCH: zero fraction, mean count,\n'
+        'variance-to-mean (overdispersion) and maximum count.\n\n'
+        f'Formula: {built["formula"]}\n'
+        f'{len(df)} cell x epoch rows, {rep.shape[0]} posterior-predictive replicates.\n\n'
+        f'{verdict}\n'
+        'bayes_p is the posterior-predictive probability of a replicate at least as large as the\n'
+        'observation; values near 0 or 1 indicate misfit, values near 0.5 indicate agreement.\n\n'
+        f'{table.to_string(index=False)}\n')
+    if filename is None:
+        filename = f'{HIERARCHICAL_CELL_STATS_PREFIX}_rate_posterior_predictive.txt'
+    write_text(os.path.join(save_dir, filename), text)
+
+    if save_figure:
+        zero = table[table['statistic'] == 'zero_fraction']
+        fig, ax = plt.subplots(figsize=(4.6, 3.2))
+        ax.spines[['right', 'top']].set_visible(False)
+        xs = np.arange(len(zero))
+        ax.vlines(xs, zero['ppc_lo_2.5'], zero['ppc_hi_97.5'], color='0.6', linewidth=3,
+                  label='95% posterior-predictive')
+        ax.plot(xs, zero['observed'], 'o', color='k', markersize=5, label='observed')
+        ax.set_xticks(xs)
+        ax.set_xticklabels([f'{g}\n{e}' for g, e in zip(zero['group'], zero['epoch'])],
+                           size='xx-small')
+        ax.set_ylabel('fraction of cells with zero events', size='small')
+        ax.set_title('Posterior-predictive zero fraction\nhierarchical cell-level NB rate model',
+                     size='small')
+        ax.legend(fontsize='xx-small', frameon=False)
+        fig.tight_layout()
+        if figure_root is None:
+            figure_root = f'{HIERARCHICAL_CELL_STATS_PREFIX}_rate_posterior_predictive'
+        save_fig(fig, os.path.join(save_dir, figure_root + '.png'))
+        plt.close(fig)
+    return {'table': table, 'text': text, 'inadequate': inadequate, 'verdict': verdict}
+
+
+def _hierarchical_pairwise_lookup(perm_df, block, group_a, group_b, column):
+    """One value out of the permutation table, by (block, comparison, column). Raises on a miss
+    rather than returning NaN: a figure whose bracket silently became NaN because a lookup key
+    drifted would render as 'not significant', which is a wrong claim, not a missing one."""
+    sub = perm_df[(perm_df['block'] == block) & (perm_df['group_a'] == group_a)
+                  & (perm_df['group_b'] == group_b)]
+    if len(sub) != 1:
+        raise RuntimeError(f'_hierarchical_pairwise_lookup: {len(sub)} rows for block={block!r} '
+                           f'{group_a} vs {group_b}; expected exactly 1.')
+    return float(sub.iloc[0][column])
+
+
+def plot_hierarchical_cell_amplitude_modulation(delta_df, perm_df, eligibility_df, save_dir,
+                                                session_label, filename_root):
+    """
+    Cell-level SuperPlot of the PAIRED pre->post amplitude modulation.
+
+    ** The cloud is descriptive; the brackets are looked up. ** Every eligible cell is drawn, faint
+    and coloured by mouse, with each animal's mean cell delta as a large black-edged marker. Those
+    markers are a DESCRIPTIVE summary: the primary statistic is the paired-cell MixedLM
+    coefficient, which is not the unweighted mean of the markers, and the footer says so. The
+    brackets come from _precomputed_stat_fn fed the three Holm-adjusted EXACT randomization
+    p-values of that model coefficient, so no statistic is ever computed from the plotted arrays.
+
+    ** All three brackets are populated ** because all three comparisons are declared members of
+    this panel's own Holm family -- exactly the condition _precomputed_stat_fn's docstring sets for
+    supplying the hM3D-vs-hM4D slot. The question here is symmetric across the three groups,
+    unlike the absolute-level paper panels where that comparison is in no family.
+
+    ** yscale='linear' is mandatory. ** The plotted column is already a log-scale DIFFERENCE and
+    takes both signs; 'auto' would apply a second log (see _draw_cell_superplot_panel's warning).
+
+    The footer states n = 16 mice, the eligible-cell count and the eligibility fraction, and that
+    the estimand is conditional on cells with amplitude defined in BOTH epochs -- never
+    'n = thousands of cells'.
+    """
+    n_mice = int(delta_df['mouse'].nunique())
+    n_cells = int(len(delta_df))
+    frac = eligibility_df['fraction_eligible_both']
+    omnibus_p = _hierarchical_pairwise_lookup(perm_df, 'omnibus', 'all', 'all', 'p_raw')
+    stat_fn = _precomputed_stat_fn(
+        _hierarchical_pairwise_lookup(perm_df, 'pairwise_primary', 'hM3D', 'mCherry',
+                                      'p_holm_pairwise'),
+        _hierarchical_pairwise_lookup(perm_df, 'pairwise_primary', 'hM4D', 'mCherry',
+                                      'p_holm_pairwise'),
+        _hierarchical_pairwise_lookup(perm_df, 'pairwise_primary', 'hM3D', 'hM4D',
+                                      'p_holm_pairwise'))
+
+    fig, ax = plt.subplots(figsize=(5.4, 4.4))
+    _draw_cell_superplot_panel(
+        ax, delta_df, HIERARCHICAL_CELL_DELTA_COL,
+        ylabel='Δ log per-event amplitude\n(post-tone − pre-tone), per cell',
+        panel_name='hierarchical_cell_amplitude_modulation',
+        title='Paired cell-level modulation\nomnibus permutation '
+              f'{format_p_display(omnibus_p)}',
+        yscale='linear', annotate='stats', ci_scale='log', bracket_mode='axes',
+        stat_fn=stat_fn)
+    # No change is zero on this scale, and it is the only reference the eye needs.
+    ax.axhline(0.0, color='k', linewidth=0.8, linestyle='--', zorder=1)
+
+    fig.suptitle(f'{session_label} — hierarchical cell-level companion analysis', size='small')
+    fig.text(0.5, 0.015,
+             f'n = {n_mice} mice — the unit of treatment assignment and of inference. '
+             f'{n_cells} eligible cells drawn descriptively\n'
+             f'(per-animal eligible fraction {frac.min():.2f}–{frac.max():.2f}); the estimand is '
+             f'CONDITIONAL on cells with amplitude defined in BOTH epochs.\n'
+             f'Cell cloud and per-mouse markers are descriptive. Brackets are Holm-adjusted exact '
+             f'mouse-label randomization P-values\nof the paired-cell mixed-model coefficient '
+             f'(`stats/{HIERARCHICAL_CELL_STATS_PREFIX}_amplitude_permutation.csv`); no statistic '
+             f'is computed from the plotted values.',
+             ha='center', size='xx-small')
+    fig.subplots_adjust(left=0.17, bottom=0.30, right=0.97, top=0.83)
+    ensure_dirs(save_dir)
+    save_fig(fig, os.path.join(save_dir, filename_root + '.png'))
+    plt.close(fig)
+
+
+def plot_hierarchical_cell_rate_modulation(counts_df, contrasts_df, save_dir, session_label,
+                                           filename_root,
+                                           reference_epoch=RECALL_REFERENCE_EPOCH,
+                                           response_epoch=RECALL_RESPONSE_EPOCH):
+    """
+    Cell-level pre->post EVENT-RATE change, zeros retained.
+
+    ** Zeros are the point. ** The paired-amplitude panel above necessarily shows only cells active
+    in both windows; this one shows every detected cell, including those that were silent in one
+    or both epochs, which is the structure the count model is fit on.
+
+    ** No stars. ** _precomputed_stat_fn is handed NaNs, so no bracket is drawn: the inferential
+    statement here is a posterior, and a posterior is not an asterisk. The NB model's modulation
+    rate ratios and their 95% HDIs go in the footer and the companion markdown instead.
+
+    `y_quantum` is set from the window exposure -- a per-cell count over a fixed window lands on a
+    handful of hard horizontal lines otherwise (see draw_superplot_triplet's y_quantum).
+    """
+    wide = counts_df.pivot_table(index=['mouse', 'group', 'cell_id'], columns='epoch',
+                                 values=['n_events', 'exposure_seconds'], observed=True)
+    rate_pre = wide[('n_events', reference_epoch)] / wide[('exposure_seconds', reference_epoch)]
+    rate_post = wide[('n_events', response_epoch)] / wide[('exposure_seconds', response_epoch)]
+    cells = pd.DataFrame({'delta_rate_hz': (rate_post - rate_pre).to_numpy()},
+                         index=wide.index).reset_index()
+    cells['group'] = pd.Categorical(cells['group'], categories=list(DREADD_DISPLAY_ORDER))
+    exposure = float(counts_df['exposure_seconds'].median())
+
+    modulation = contrasts_df[contrasts_df['block'] == 'modulation']
+    ratio_note = '; '.join(
+        f"{row['group_a']} vs {row['group_b']}: {row['posterior_median']:.3f} "
+        f"[{row['hdi_low']:.3f}, {row['hdi_high']:.3f}]"
+        for _, row in modulation.iterrows())
+
+    fig, ax = plt.subplots(figsize=(5.4, 4.4))
+    _draw_cell_superplot_panel(
+        ax, cells, 'delta_rate_hz',
+        ylabel='Δ event rate (events/s)\n(post-tone − pre-tone), per cell',
+        panel_name='hierarchical_cell_rate_modulation',
+        title='Cell-level rate modulation\n(all detected cells; zeros retained)',
+        yscale='linear', y_quantum=1.0 / exposure, annotate='stats', bracket_mode='axes',
+        stat_fn=_precomputed_stat_fn(np.nan, np.nan, np.nan))
+    ax.axhline(0.0, color='k', linewidth=0.8, linestyle='--', zorder=1)
+
+    fig.suptitle(f'{session_label} — hierarchical cell-level companion analysis', size='small')
+    fig.text(0.5, 0.015,
+             f'n = {cells["mouse"].nunique()} mice; {len(cells)} cells drawn descriptively, '
+             f'including zero-event cells.\nDeliberately carries NO significance brackets: the '
+             f'inferential statement is the hierarchical NB count model\'s\nposterior, and a '
+             f'posterior is not a star. Posterior pre→post modulation rate ratio [95% HDI] —\n'
+             f'{ratio_note}.\n'
+             f'See `stats/{HIERARCHICAL_CELL_STATS_PREFIX}_rate_contrasts.csv` and '
+             f'`..._rate_nb_summary.txt`.',
+             ha='center', size='xx-small')
+    fig.subplots_adjust(left=0.17, bottom=0.32, right=0.97, top=0.83)
+    ensure_dirs(save_dir)
+    save_fig(fig, os.path.join(save_dir, filename_root + '.png'))
+    plt.close(fig)
+    return cells
+
+
+def write_hierarchical_cell_vs_mouse_summary(save_dir, session_key, session_label, fit, perm_df,
+                                             eligibility_df, interactions_table, pairwise_df,
+                                             rate_contrasts=None, rate_fit=None, ppc=None,
+                                             filename='hierarchical_cell_vs_mouse_level_summary.md'):
+    """
+    The two analyses side by side, per comparison, with every existing number READ from the frames
+    the recall lane already produced -- never hard-coded.
+
+    ** The purpose is a question, not a verdict: ** does using cell-level hierarchical information
+    materially sharpen, weaken, or leave unchanged the biological conclusion? The smaller p-value
+    is NOT automatically preferred, and the file says so. The mouse-level analysis remains the
+    primary paper-facing one; this is companion evidence.
+    """
+    def _existing(outcome, group_a, group_b):
+        return recall_modulation_lookup(pairwise_df, outcome, group_a, group_b)
+
+    amp_omnibus = interactions_table[interactions_table['outcome'] == 'amplitude'].iloc[0]
+    rate_omnibus = interactions_table[interactions_table['outcome'] == 'population_rate'].iloc[0]
+    new_omnibus = _hierarchical_pairwise_lookup(perm_df, 'omnibus', 'all', 'all', 'p_raw')
+    n_mice = fit['n_mice']
+
+    lines = [
+        f'# Hierarchical cell-level companion analysis vs the mouse-summary analysis '
+        f'— {session_label}',
+        '',
+        '**This is a companion / sensitivity analysis. It replaces nothing.** The mouse-level '
+        'models, their contrasts, their Holm families, their omnibus tests and every existing '
+        'figure and table are unchanged and remain the paper-facing analysis. Everything in the '
+        '"hierarchical-cell" column below is additive evidence.',
+        '',
+        f'**n = {n_mice} mice** in both analyses — that is the number of independently assigned '
+        f'experimental units, and it does not change because cells were modelled. Cell counts '
+        f'below are descriptive.',
+        '',
+        '## Amplitude',
+        '',
+        '### Omnibus',
+        '',
+        '| analysis | test | result |',
+        '|---|---|---|',
+        f'| mouse-summary (existing, authoritative) | group × epoch joint Wald | '
+        f'{format_unified_interaction(amp_omnibus)} |',
+        f'| hierarchical-cell (companion) | mouse-label permutation of the 2-df joint Wald '
+        f'statistic of `delta ~ group + (1\\|mouse)` | {format_p_display(new_omnibus)} |',
+        '',
+        '### Pairwise',
+        '',
+        '| comparison | mouse-summary ratio [95% CI] | mouse-summary raw P | mouse-summary Holm P '
+        '| hierarchical Δlog estimate [95% CI] | exact randomization raw P | Holm P | '
+        'design-based sensitivity P |',
+        '|---|---|---|---|---|---|---|---|',
+    ]
+    for group_a, group_b in HIERARCHICAL_CELL_PAIRS:
+        old = _existing('amplitude', group_a, group_b)
+        est = _hierarchical_pairwise_lookup(perm_df, 'pairwise_primary', group_a, group_b,
+                                            'estimate_lmm')
+        lo = _hierarchical_pairwise_lookup(perm_df, 'pairwise_primary', group_a, group_b,
+                                           'ci_lmm_low')
+        hi = _hierarchical_pairwise_lookup(perm_df, 'pairwise_primary', group_a, group_b,
+                                           'ci_lmm_high')
+        p_raw = _hierarchical_pairwise_lookup(perm_df, 'pairwise_primary', group_a, group_b,
+                                              'p_raw')
+        p_holm = _hierarchical_pairwise_lookup(perm_df, 'pairwise_primary', group_a, group_b,
+                                               'p_holm_pairwise')
+        p_design = _hierarchical_pairwise_lookup(perm_df, 'pairwise_sensitivity', group_a, group_b,
+                                                 'p_raw_design_based')
+        lines.append(
+            f'| {group_a} vs {group_b} | {old["relative_modulation_ratio"]:.3f} '
+            f'[{old["ratio_ci_low"]:.3f}, {old["ratio_ci_high"]:.3f}] | '
+            f'{format_p_display(float(old["p_raw"]))} | '
+            f'{format_p_display(float(old["p_holm_modulation"]))} | '
+            f'{est:.3f} [{lo:.3f}, {hi:.3f}] (ratio {np.exp(est):.3f}) | '
+            f'{format_p_display(p_raw)} | {format_p_display(p_holm)} | '
+            f'{format_p_display(p_design)} |')
+
+    lines += [
+        '',
+        '**Interval provenance.** The hierarchical Δlog estimate and its CI are the paired-cell '
+        'MixedLM contrast and its own Wald interval — the same specification the randomization '
+        'test permutes. The design-based sensitivity column is a *different estimator* (the '
+        'difference of group means of the 16 per-mouse mean cell deltas) with its own '
+        'equal-mouse-weighted interval, tabulated in the permutation CSV; the two are never '
+        'cross-paired. The randomization P-values carry no interval of their own.',
+        '',
+        '**Estimand.** The mouse-summary amplitude value at each epoch averages over the cells '
+        'active *in that epoch*. The hierarchical-cell estimate is **conditional on cells with '
+        'measurable amplitude in BOTH epochs** — the price of within-cell pairing, and a real '
+        'restriction, since eligibility is selected on activity in both windows and could itself '
+        'differ by group. Per-animal eligible fractions:',
+        '',
+        '| group | mice | eligible fraction (min–median–max) | eligible cells |',
+        '|---|---|---|---|',
+    ]
+    for group in DREADD_DISPLAY_ORDER:
+        sub = eligibility_df[eligibility_df['group'] == group]
+        if sub.empty:
+            continue
+        f = sub['fraction_eligible_both']
+        lines.append(f'| {group} | {len(sub)} | {f.min():.3f} – {f.median():.3f} – {f.max():.3f} '
+                     f'| {int(sub["n_cells_amp_defined_both"].sum())} |')
+
+    lines += [
+        '',
+        '## Population rate',
+        '',
+        '| analysis | test | result |',
+        '|---|---|---|',
+        f'| mouse-summary (existing, authoritative) | group × epoch joint Wald on one collapsed '
+        f'population rate per animal per epoch | {format_unified_interaction(rate_omnibus)} |',
+    ]
+    if rate_contrasts is not None:
+        lines.append(
+            '| hierarchical-cell (companion) | Bayesian NB count model over all cells including '
+            'zero-event cells, `n_events ~ group * epoch + offset(log exposure) + (1\\|mouse) + '
+            '(0 + post\\|mouse) + (1\\|mouse:cell)` | posterior modulation rate ratios below |')
+        lines += [
+            '',
+            '**No frequentist P is manufactured from the posterior**, and this model supplies no '
+            'star to any figure and changes no existing paper-facing number.',
+            '',
+            '| comparison | pre→post modulation rate ratio [95% HDI] | definition |',
+            '|---|---|---|',
+        ]
+        for _, row in rate_contrasts[rate_contrasts['block'] == 'modulation'].iterrows():
+            lines.append(f'| {row["group_a"]} vs {row["group_b"]} | '
+                         f'{row["posterior_median"]:.3f} [{row["hdi_low"]:.3f}, '
+                         f'{row["hdi_high"]:.3f}] | `{row["definition"]}` |')
+        lines += [
+            '',
+            '| group | ABSOLUTE post-tone rate ratio vs control [95% HDI] |',
+            '|---|---|',
+        ]
+        for _, row in rate_contrasts[
+                rate_contrasts['block'] == 'post_tone_simple_effect'].iterrows():
+            lines.append(f'| {row["group_a"]} | {row["posterior_median"]:.3f} '
+                         f'[{row["hdi_low"]:.3f}, {row["hdi_high"]:.3f}] |')
+        lines += [
+            '',
+            'The two blocks are **different quantities**: the modulation ratio is the interaction '
+            'alone (how much more this group\'s rate changed pre→post than the comparison '
+            'group\'s), the post-tone ratio is the absolute level during post-tone. They can '
+            'point in different directions and neither is a restatement of the other.',
+        ]
+        if rate_fit is not None:
+            d = rate_fit['diagnostics_gated']
+            lines += [
+                '',
+                f'**Convergence (gated scope):** max r_hat {d["max_rhat"]:.4f}, min ess_bulk '
+                f'{d["min_ess_bulk"]:.0f}, min ess_tail {d["min_ess_tail"]:.0f}, '
+                f'{rate_fit["n_divergent"]} divergences. The individual `mouse_cell` intercepts '
+                f'are reported in the model summary but do not define the gate.',
+            ]
+        if ppc is not None:
+            adequacy = ('FAILED — see the posterior-predictive file; the estimates above are '
+                        'reported WITH that failure, not as though the model fit.'
+                        if ppc['inadequate'] else
+                        'passed (observed zero fraction and variance-to-mean inside their 95% '
+                        'posterior-predictive intervals, per group × epoch).')
+            lines += ['', f'**Posterior-predictive adequacy:** {adequacy}']
+    else:
+        lines.append('| hierarchical-cell (companion) | hierarchical NB count model | '
+                     'not available in this run |')
+
+    lines += [
+        '',
+        '## Reading this comparison',
+        '',
+        'The question is whether retaining cell-level hierarchical information **sharpens, '
+        'weakens, or leaves unchanged** the biological conclusion — not which column produced the '
+        'smaller number. A smaller P here is not automatically the better answer, and it is not '
+        'grounds for replacing the mouse-level result: the two analyses answer slightly different '
+        'questions on slightly different cell sets, and the hierarchical one buys its precision '
+        'from within-cell pairing, not from additional animals.',
+        '',
+        '**What legitimises the cell information.** Cells contribute information about each '
+        'animal\'s cellular response distribution, while treatment assignment stays at the mouse: '
+        'the model is refit under relabelings of the 16 **mouse** labels, with every cell fixed to '
+        'its own animal. What would be pseudoreplication — treating thousands of cells as '
+        'independently randomized treatment replicates — is exactly what the randomization scheme '
+        'prevents, and is why no asymptotic cell-level z-value from any model here is reported as '
+        'an inferential result.',
+        '',
+        f'**No CNO was present at recall.** All {session_key} measurements are drug-free.',
+        '',
+    ]
+    text = '\n'.join(lines) + '\n'
+    write_text(os.path.join(save_dir, filename), text)
+    return text
+
+
+_HIER_SYNTH_MOUSE_SD = 0.20      # between-animal SD of the per-mouse mean cell delta
+_HIER_SYNTH_CELL_SD = 0.50       # within-animal, between-cell SD of the paired delta
+_HIER_SYNTH_SHIFT = 0.60         # planted group shift, log units (~1.8x)
+_HIER_SYNTH_ONE_MOUSE_SHIFT = 6.0   # deliberately absurd, and confined to ONE animal
+_HIER_SYNTH_CELLS = 150
+_HIER_SYNTH_ALPHA = 0.05
+
+
+def _synthetic_cell_delta_table(group_sizes, shift_by_group, rng, n_cells=_HIER_SYNTH_CELLS,
+                                mouse_sd=_HIER_SYNTH_MOUSE_SD, cell_sd=_HIER_SYNTH_CELL_SD,
+                                one_mouse_shift=None):
+    """Synthetic paired-cell delta table with a KNOWN planted structure: a per-group shift, a
+    between-animal random intercept, and between-cell noise within each animal.
+
+    `one_mouse_shift` adds a shift to exactly ONE animal (the first hM3D mouse) instead of to a
+    group -- the design that separates a real treatment effect from a single-animal outlier.
+    """
+    rows, mice_per_group = [], {}
+    for group, n in group_sizes:
+        mice_per_group[group] = []
+        for i in range(n):
+            mouse = f'{group}_{i}'
+            mice_per_group[group].append(mouse)
+            mouse_effect = rng.normal(0.0, mouse_sd)
+            extra = (one_mouse_shift
+                     if (one_mouse_shift is not None and group == 'hM3D' and i == 0) else 0.0)
+            deltas = (shift_by_group.get(group, 0.0) + mouse_effect + extra
+                      + rng.normal(0.0, cell_sd, size=n_cells))
+            for cell_id, d in enumerate(deltas):
+                rows.append({'mouse': mouse, 'group': group, 'cell_id': cell_id,
+                             HIERARCHICAL_CELL_DELTA_COL: float(d)})
+    df = pd.DataFrame(rows)
+    df['group'] = pd.Categorical(df['group'], categories=list(DREADD_DISPLAY_ORDER))
+    return df, mice_per_group
+
+
+def verify_hierarchical_cell_synthetic(save_dir, group_sizes, seed=HIERARCHICAL_CELL_SEED,
+                                       n_perm_omnibus=500, n_cells=_HIER_SYNTH_CELLS,
+                                       filename=None):
+    """
+    Synthetic verification of the PAIRED-AMPLITUDE path, run on the statistic this suite actually
+    reports -- the paired-cell MixedLM coefficient with exact mouse-label randomization -- with
+    the design-based sensitivity reported beside it.
+
+    ** DEVELOPMENT TOOL -- NOT CALLED BY run_hierarchical_cell_suite(). ** This validates the
+    CODE against a known planted truth in SIMULATED data; it says nothing about the experiment and
+    produces no real-data result. Run it by hand after changing the paired-amplitude path:
+
+        verify_hierarchical_cell_synthetic(some_dir, (('mCherry', 6), ('hM3D', 5), ('hM4D', 5)))
+
+    It is deliberately absent from the real-data run: an execution that produces the reported
+    numbers should compute those numbers and nothing else. (It also costs ~19 min, which is most
+    of a real Test_B pass.) Nothing about it is or ever was contingent on what a real fit produced.
+
+    Four designs, each hard-failing if the machinery does not behave:
+
+      1. NULL -- no group difference in cell delta. Omnibus and all three pairwise randomization
+         p-values must be non-significant.
+      2. COHERENT GROUP SHIFT across cells in several mice -- must be detected.
+      3. HUGE DELTA CONFINED TO ONE MOUSE -- must NOT reach significance. A cell-level test would
+         call this overwhelming evidence; the mouse-label randomization cannot, because that
+         animal's LABEL is the thing that moves. This is the design that distinguishes a treatment
+         effect from one unusual animal.
+      4. CELLS-PER-MOUSE SCALING at a FIXED number of mice -- the same null regenerated at
+         increasing cells per animal. The randomization p must NOT drift toward zero (calibration
+         is a function of 16 mice, not of cell count) while the model's within-mouse precision
+         does improve. This is the pseudoreplication guard and the most important of the four: the
+         MixedLM's own asymptotic P>|z| WOULD shrink with cell count here, and the file prints
+         both side by side so the difference is visible rather than asserted.
+    """
+    rng = np.random.default_rng(seed)
+    lines = ['SYNTHETIC VERIFICATION -- hierarchical cell-level PAIRED AMPLITUDE path',
+             '=' * 78,
+             'Implementation validation on simulated data with a KNOWN planted structure. This is',
+             'a DEVELOPMENT TOOL and is NOT part of a real-data run: it validates the code, not',
+             'the experiment, and produces no real-data result.',
+             '',
+             'Primary statistic: the three-group MixedLM contrast of '
+             f'`{_hierarchical_delta_formula()} + (1|mouse)`,',
+             'with EXACT mouse-label randomization restricted to the two groups compared.',
+             'Design-based sensitivity (per-mouse mean delta) reported beside it.',
+             f'Cohort: {dict(group_sizes)}; {n_cells} cells/mouse; mouse SD '
+             f'{_HIER_SYNTH_MOUSE_SD}, cell SD {_HIER_SYNTH_CELL_SD}; seed {seed}.',
+             f'Omnibus: Monte Carlo, n_perm={n_perm_omnibus}.', '']
+    failures = []
+
+    def _run(shift_by_group, one_mouse_shift=None, cells=n_cells):
+        df, mpg = _synthetic_cell_delta_table(group_sizes, shift_by_group, rng, n_cells=cells,
+                                              one_mouse_shift=one_mouse_shift)
+        fit = fit_hierarchical_cell_delta_model(df)
+        # include_global_null_sensitivity=False: this suite validates the PRIMARY path and the
+        # restricted-null sensitivity. The global-null column would add an exact enumeration of
+        # 2,018,016 relabelings per comparison per design, for a labelled sensitivity number this
+        # verification makes no assertion about. Computational scoping of a verification run only
+        # -- reported runs always compute it.
+        perm = hierarchical_cell_amplitude_permutation(
+            df, fit, mpg, n_perm_omnibus=n_perm_omnibus, seed=seed,
+            include_global_null_sensitivity=False)
+        return df, fit, perm
+
+    def _single_exact_pairwise(df, fit, mpg, group_a, group_b):
+        """Just ONE exact model-based pairwise randomization test, for a design that reports only
+        that. Identical machinery to the primary path -- the full three-group model refit under
+        every restricted relabeling -- without computing the two comparisons and the omnibus the
+        design says nothing about."""
+        present = {g: ms for g, ms in mpg.items() if ms}
+        true_assignment = {m: g for g, ms in present.items() for m in ms}
+        weights = _hierarchical_pair_weights(fit['coef_names'], group_a, group_b)
+        stat = _make_hierarchical_model_stat(df, true_assignment, weights)
+        return mouse_label_permutation_test(stat, present, seed=seed,
+                                            restrict_to_groups=(group_a, group_b), exact=True)
+
+    def _report(label, perm, fit):
+        lines.append(f'--- {label}')
+        omn = _hierarchical_pairwise_lookup(perm, 'omnibus', 'all', 'all', 'p_raw')
+        lines.append(f'    omnibus permutation P = {omn:.4f}   '
+                     f'(model asymptotic F P = {fit["omnibus"]["p"]:.3g}, NOT used)')
+        for a, b in HIERARCHICAL_CELL_PAIRS:
+            lines.append(
+                f'    {a:>7} vs {b:<8} est {_hierarchical_pairwise_lookup(perm, "pairwise_primary", a, b, "estimate_lmm"):+.3f}'
+                f'  exact P {_hierarchical_pairwise_lookup(perm, "pairwise_primary", a, b, "p_raw"):.4f}'
+                f'  Holm {_hierarchical_pairwise_lookup(perm, "pairwise_primary", a, b, "p_holm_pairwise"):.4f}'
+                f'  | design-based P '
+                f'{_hierarchical_pairwise_lookup(perm, "pairwise_sensitivity", a, b, "p_raw_design_based"):.4f}')
+        return omn
+
+    # --- 1. null ------------------------------------------------------------------------------
+    _df, fit1, perm1 = _run({})
+    omn1 = _report('DESIGN 1: NULL (no group difference planted)', perm1, fit1)
+    if omn1 <= _HIER_SYNTH_ALPHA:
+        failures.append(f'design 1 (null): omnibus P={omn1:.4f} is significant under a true null.')
+    for a, b in HIERARCHICAL_CELL_PAIRS:
+        p = _hierarchical_pairwise_lookup(perm1, 'pairwise_primary', a, b, 'p_holm_pairwise')
+        if p <= _HIER_SYNTH_ALPHA:
+            failures.append(f'design 1 (null): {a} vs {b} Holm P={p:.4f} under a true null.')
+
+    # --- 2. coherent group shift --------------------------------------------------------------
+    _df, fit2, perm2 = _run({'hM3D': _HIER_SYNTH_SHIFT})
+    _report(f'DESIGN 2: COHERENT GROUP SHIFT (+{_HIER_SYNTH_SHIFT} in every hM3D mouse\'s cells)',
+            perm2, fit2)
+    p2 = _hierarchical_pairwise_lookup(perm2, 'pairwise_primary', 'hM3D', 'mCherry', 'p_raw')
+    if p2 > _HIER_SYNTH_ALPHA:
+        failures.append(f'design 2 (coherent shift): hM3D vs mCherry raw exact P={p2:.4f} -- a '
+                        f'shift planted in every mouse of a group was NOT detected.')
+
+    # --- 3. one mouse only --------------------------------------------------------------------
+    _df3, fit3, perm3 = _run({}, one_mouse_shift=_HIER_SYNTH_ONE_MOUSE_SHIFT)
+    _report(f'DESIGN 3: HUGE SHIFT IN ONE MOUSE ONLY (+{_HIER_SYNTH_ONE_MOUSE_SHIFT} in one hM3D '
+            f'animal)', perm3, fit3)
+    p3 = _hierarchical_pairwise_lookup(perm3, 'pairwise_primary', 'hM3D', 'mCherry', 'p_raw')
+    lines.append(f'    ** THE POINT OF THIS DESIGN: ** one animal carries an enormous, entirely '
+                 f'real cell-level\n    effect. A test treating cells as replicates would call '
+                 f'this overwhelming. The exact\n    mouse-label randomization gives P = {p3:.4f} '
+                 f'-- it cannot be extreme, because the smallest\n    attainable P when the '
+                 f'signal rides on ONE label is bounded by that label\'s own\n    exchangeability.')
+    if p3 <= _HIER_SYNTH_ALPHA:
+        failures.append(
+            f'design 3 (one mouse): raw exact P={p3:.4f} is significant. A shift confined to a '
+            f'single animal is masquerading as treatment evidence, which is the exact failure '
+            f'this suite exists to prevent.')
+
+    # --- 4. cells-per-mouse scaling at fixed n mice --------------------------------------------
+    lines.append('')
+    lines.append('--- DESIGN 4: CELLS PER MOUSE SCALING AT FIXED n MICE (true null throughout)')
+    lines.append('    More cells must improve WITHIN-MOUSE estimation and buy NO treatment-level')
+    lines.append('    evidence. Two things are asserted, and both are printed rather than claimed:')
+    lines.append('      (a) the mean WITHIN-MOUSE standard error MUST shrink -- more cells really')
+    lines.append('          do estimate each animal\'s own modulation better;')
+    lines.append('      (b) the GROUP-CONTRAST standard error must NOT shrink with it, because it')
+    lines.append('          is bounded below by BETWEEN-MOUSE variance, which no number of cells')
+    lines.append('          reduces; and the randomization P must not drift toward 0 under a true')
+    lines.append('          null. If (a) held while (b) failed, cells would be acting as')
+    lines.append('          independent treatment replicates -- pseudoreplication.')
+    lines.append('')
+    lines.append('      cells/mouse   randomization P   contrast P (mouse df)      contrast SE')
+    scaling = []
+    for cells in (50, 500, 5000):
+        df4, mpg4 = _synthetic_cell_delta_table(group_sizes, {}, rng, n_cells=cells)
+        fit4 = fit_hierarchical_cell_delta_model(df4)
+        # Only the hM3D-vs-mCherry exact test is reported by this design, so only it is computed.
+        # Same machinery as the primary path; at 5000 cells/mouse the frame is ~80k rows and
+        # computing the comparisons this design says nothing about would dominate the runtime.
+        p_perm = float(_single_exact_pairwise(df4, fit4, mpg4, 'hM3D', 'mCherry')['p_two_sided'])
+        contrast = linear_contrast_test(
+            fit4['result'], _hierarchical_pair_weights(fit4['coef_names'], 'hM3D', 'mCherry'),
+            n_groups=fit4['n_mice'])
+        within = df4.groupby('mouse', observed=True)[HIERARCHICAL_CELL_DELTA_COL].sem().mean()
+        scaling.append((cells, p_perm, contrast['p'], contrast['se'], float(within)))
+        lines.append(f'      {cells:>11}   {p_perm:>15.4f}   {contrast["p"]:>18.3g}   '
+                     f'{contrast["se"]:>14.4f}   (mean within-mouse SEM {within:.4f})')
+    lines.append('')
+    lines.append(f'    within-mouse SEM fell {scaling[0][4]:.4f} -> {scaling[-1][4]:.4f} '
+                 f'(factor {scaling[0][4] / scaling[-1][4]:.1f}) as cells rose 100x,')
+    lines.append(f'    while the group-contrast SE went {scaling[0][3]:.4f} -> '
+                 f'{scaling[-1][3]:.4f} -- it is a BETWEEN-mouse quantity and stays put.')
+    lines.append('    That gap IS the guard: cells sharpen the per-animal estimate and buy no')
+    lines.append('    treatment-level precision. Note the asymptotic P column is also mouse-level')
+    lines.append('    here (linear_contrast_test uses df = n_mice - 1, this codebase\'s')
+    lines.append('    convention), so it does not shrink either; the naive cell-level P that')
+    lines.append('    WOULD shrink is the MixedLM summary\'s own P>|z|, which this suite never')
+    lines.append('    reports for exactly that reason.')
+    if scaling[-1][4] >= scaling[0][4]:
+        failures.append('design 4: the mean within-mouse standard error did not shrink as cells '
+                        'per mouse increased -- more cells are not improving within-mouse '
+                        'estimation, so the model is not using them as claimed.')
+    # (b) The group-contrast SE is a BETWEEN-mouse quantity. If it tracked the within-mouse SEM
+    # downward as cells were added, the contrast would be drawing precision from cell count at a
+    # fixed number of animals, which is the definition of the failure this suite guards against.
+    se_first, se_last = scaling[0][3], scaling[-1][3]
+    sem_ratio = scaling[-1][4] / scaling[0][4]
+    if se_last < 0.5 * se_first:
+        failures.append(
+            f'design 4: the GROUP-CONTRAST standard error fell from {se_first:.4f} to '
+            f'{se_last:.4f} ({100 * (1 - se_last / se_first):.0f}%) as cells per mouse rose 100x '
+            f'under a TRUE NULL, while the within-mouse SEM fell by a factor of '
+            f'{1 / sem_ratio:.1f}. A between-mouse contrast SE must not track cell count like '
+            f'that -- cells are buying treatment-level precision they cannot legitimately buy.')
+    if scaling[-1][1] <= _HIER_SYNTH_ALPHA:
+        failures.append(
+            f'design 4: at {scaling[-1][0]} cells/mouse the randomization P fell to '
+            f'{scaling[-1][1]:.4f} under a TRUE NULL. Adding cells at a fixed number of mice is '
+            f'behaving like adding independent treatment replicates -- pseudoreplication.')
+
+    lines += ['', '=' * 78]
+    if failures:
+        lines.append('FAILED:')
+        lines += [f'  - {f}' for f in failures]
+    else:
+        lines.append('ALL FOUR DESIGNS PASSED.')
+    text = '\n'.join(lines) + '\n'
+    if filename is None:
+        filename = f'{HIERARCHICAL_CELL_STATS_PREFIX}_synthetic_verification.txt'
+    write_text(os.path.join(save_dir, filename), text)
+    if failures:
+        raise RuntimeError('verify_hierarchical_cell_synthetic: the paired-amplitude machinery '
+                           'failed its synthetic checks:\n  - ' + '\n  - '.join(failures)
+                           + f'\n\nFull report: {filename}')
+    return text
+
+
+# Dev-only. mp_ctx='spawn' for the same reason as the production config: this is often run from
+# a notebook, where forking a large kernel deadlocks.
+_NB_SYNTH_SAMPLER = dict(draws=400, tune=400, chains=2, random_seed=HIERARCHICAL_CELL_SEED,
+                         target_accept=0.9, progressbar=False, mp_ctx='spawn')
+
+
+def _synthetic_cell_count_table(group_sizes, interaction_by_group, rng, n_cells=60,
+                                exposure_s=100.0, baseline_rate=0.05, mouse_sd=0.25,
+                                cell_sd=0.8, slope_sd=0.0, alpha=2.0):
+    """Simulate a cell x epoch count table from the count model's OWN generative structure, with
+    every planted parameter known.
+
+    `slope_sd` is the between-mouse SD of the pre->post log-rate change -- the quantity the
+    mouse-level epoch random slope exists to absorb. `cell_sd` is tuned so the table carries a
+    realistic fraction of zero-event cells rather than a convenient one.
+    """
+    rows = []
+    for group, n in group_sizes:
+        for i in range(n):
+            mouse = f'{group}_{i}'
+            mouse_effect = rng.normal(0.0, mouse_sd)
+            mouse_slope = rng.normal(0.0, slope_sd) if slope_sd > 0 else 0.0
+            cell_effects = rng.normal(0.0, cell_sd, size=n_cells)
+            for cell_id in range(n_cells):
+                for epoch in RECALL_EPOCHS:
+                    post = 1.0 if epoch == RECALL_RESPONSE_EPOCH else 0.0
+                    log_mu = (np.log(baseline_rate * exposure_s) + mouse_effect
+                              + cell_effects[cell_id]
+                              + post * (mouse_slope + interaction_by_group.get(group, 0.0)))
+                    mu = float(np.exp(log_mu))
+                    # NB with Var = mu + mu^2/alpha (the confirmed convention), sampled as a
+                    # gamma-Poisson mixture so the simulation does not depend on a backend RNG.
+                    lam = rng.gamma(shape=alpha, scale=mu / alpha)
+                    rows.append({'mouse': mouse, 'group': group, 'cell_id': cell_id,
+                                 'epoch': epoch, 'n_events': int(rng.poisson(lam)),
+                                 'exposure_seconds': exposure_s})
+    df = pd.DataFrame(rows)
+    df['group'] = pd.Categorical(df['group'], categories=list(DREADD_DISPLAY_ORDER))
+    return df
+
+
+def verify_hierarchical_cell_rate_synthetic(save_dir, group_sizes, seed=HIERARCHICAL_CELL_SEED,
+                                            n_cells=40, sampler=None, filename=None):
+    """
+    Synthetic verification of the hierarchical NB COUNT path.
+
+    ** DEVELOPMENT TOOL -- NOT CALLED BY run_hierarchical_cell_suite(). ** This validates the
+    CODE against a known planted truth in SIMULATED data; it says nothing about the experiment and
+    produces no real-data result. Run it by hand after changing the count path:
+
+        verify_hierarchical_cell_rate_synthetic(some_dir,
+                                                (('mCherry', 6), ('hM3D', 5), ('hM4D', 5)))
+
+    It is deliberately absent from the real-data run: an execution that produces the reported
+    numbers should compute those numbers and nothing else. Nothing about it is or ever was
+    contingent on what a real fit produced.
+
+    Four designs, simulated from the model's own generative structure at realistic zero fractions:
+
+      1. NULL INTERACTION -- no group difference in the pre->post change. Every modulation
+         ratio's HDI must cover 1.
+      2. PLANTED GROUP-SPECIFIC MODULATION -- a known interaction on hM3D. Its HDI must cover the
+         planted value AND exclude 1 (the effect is planted large enough that it should).
+      3. MOUSE-TO-MOUSE SLOPE HETEROGENEITY -- mice given genuinely different pre->post slopes
+         within a group. The `post_indicator|mouse` SD must recover near its planted value, and
+         the group x epoch interval must be WIDER than in a matched simulation with no slope
+         heterogeneity. That is the direct check that the mouse epoch random slope does the job it
+         was added for: without it, that between-mouse variation would be absorbed by the cell
+         level and the interaction interval would be too narrow.
+      4. REALISTIC ZEROS -- the posterior-predictive zero fraction must match the simulated one,
+         validating the adequacy check against a known truth before it is read on real data.
+
+    Reduced sampler settings are permitted HERE ONLY -- none of these is a reported inferential
+    fit -- and the settings used are printed in the file.
+    """
+    rng = np.random.default_rng(seed)
+    fit_kwargs = dict(_NB_SYNTH_SAMPLER if sampler is None else sampler)
+    convention, measured, expected = _confirm_nb_alpha_parameterization(seed=seed)
+    lines = ['SYNTHETIC VERIFICATION -- hierarchical cell-level NB RATE path',
+             '=' * 78,
+             'Implementation validation on simulated data from the model\'s own generative',
+             'structure, with every planted parameter known. This is a DEVELOPMENT TOOL and is',
+             'NOT part of a real-data run; it validates the code, not the experiment.',
+             '',
+             f'NB parameterization confirmed empirically: {convention}',
+             f'  (measured Var {measured:.3f} vs expected {expected:.3f} at mu=5, alpha=2)',
+             f'Cohort {dict(group_sizes)}, {n_cells} cells/mouse x 2 epochs; seed {seed}.',
+             f'Sampler (REDUCED -- verification only, not a reported fit): {fit_kwargs}', '']
+    failures = []
+
+    def _fit(df, label):
+        built = build_cell_epoch_rate_model(df)
+        model = built['model']
+        idata = model.fit(**fit_kwargs)
+        contrasts = summarize_cell_rate_contrasts(idata, built)
+        zero_obs = float((df['n_events'] == 0).mean())
+        lines.append(f'--- {label}')
+        lines.append(f'    observed zero fraction in the simulated table: {zero_obs:.3f}')
+        for _, row in contrasts[contrasts['block'] == 'modulation'].iterrows():
+            lines.append(f'    modulation {row["group_a"]:>7} vs {row["group_b"]:<8} '
+                         f'ratio {row["posterior_median"]:.3f} '
+                         f'[{row["hdi_low"]:.3f}, {row["hdi_high"]:.3f}]')
+        return built, idata, contrasts, zero_obs
+
+    def _mod(contrasts, group_a, group_b='mCherry'):
+        sub = contrasts[(contrasts['block'] == 'modulation') & (contrasts['group_a'] == group_a)
+                        & (contrasts['group_b'] == group_b)]
+        return float(sub.iloc[0]['posterior_median']), float(sub.iloc[0]['hdi_low']), \
+            float(sub.iloc[0]['hdi_high'])
+
+    # --- 1. null interaction ------------------------------------------------------------------
+    df1 = _synthetic_cell_count_table(group_sizes, {}, rng, n_cells=n_cells)
+    _b1, _i1, c1, _z1 = _fit(df1, 'DESIGN 1: NULL INTERACTION')
+    for group_a, group_b in HIERARCHICAL_CELL_PAIRS:
+        sub = c1[(c1['block'] == 'modulation') & (c1['group_a'] == group_a)
+                 & (c1['group_b'] == group_b)].iloc[0]
+        if not (sub['hdi_low'] <= 1.0 <= sub['hdi_high']):
+            failures.append(f'design 1 (null interaction): {group_a} vs {group_b} HDI '
+                            f'[{sub["hdi_low"]:.3f}, {sub["hdi_high"]:.3f}] excludes 1.')
+
+    # --- 2. planted group-specific modulation --------------------------------------------------
+    planted = 0.8
+    df2 = _synthetic_cell_count_table(group_sizes, {'hM3D': planted}, rng, n_cells=n_cells)
+    _b2, _i2, c2, _z2 = _fit(df2, f'DESIGN 2: PLANTED hM3D MODULATION '
+                                  f'(log {planted}, ratio {np.exp(planted):.3f})')
+    med, lo, hi = _mod(c2, 'hM3D')
+    lines.append(f'    planted ratio {np.exp(planted):.3f}; recovered {med:.3f} [{lo:.3f}, '
+                 f'{hi:.3f}]')
+    if not (lo <= np.exp(planted) <= hi):
+        failures.append(f'design 2: the HDI [{lo:.3f}, {hi:.3f}] does not cover the planted ratio '
+                        f'{np.exp(planted):.3f} -- the contrast is not recovering truth.')
+    if lo <= 1.0 <= hi:
+        failures.append(f'design 2: the HDI [{lo:.3f}, {hi:.3f}] still covers 1 at a planted '
+                        f'ratio of {np.exp(planted):.3f}.')
+
+    # --- 3. mouse-to-mouse slope heterogeneity -------------------------------------------------
+    slope_sd = 0.6
+    df3 = _synthetic_cell_count_table(group_sizes, {}, rng, n_cells=n_cells, slope_sd=slope_sd)
+    b3, i3, c3, _z3 = _fit(df3, f'DESIGN 3: MOUSE EPOCH-SLOPE HETEROGENEITY (planted SD '
+                                f'{slope_sd})')
+    recovered_sd = float(az.summary(i3, var_names=['post_indicator|mouse_sigma'])['mean'].iloc[0])
+    width3 = np.mean([hi - lo for _, lo, hi in
+                      [_mod(c3, g) for g in ('hM3D', 'hM4D')]])
+    width1 = np.mean([hi - lo for _, lo, hi in
+                      [_mod(c1, g) for g in ('hM3D', 'hM4D')]])
+    lines.append(f'    planted post_indicator|mouse SD {slope_sd}; recovered posterior mean '
+                 f'{recovered_sd:.3f}')
+    lines.append(f'    mean modulation-HDI width WITH slope heterogeneity {width3:.3f} vs '
+                 f'{width1:.3f} without')
+    lines.append('    (the interval MUST widen: that between-mouse variation in the pre->post')
+    lines.append('     change is exactly what the mouse epoch slope exists to absorb, and')
+    lines.append('     without it the group x epoch interval would be too narrow.)')
+    if not (0.4 * slope_sd <= recovered_sd <= 2.5 * slope_sd):
+        failures.append(f'design 3: planted mouse epoch-slope SD {slope_sd} recovered as '
+                        f'{recovered_sd:.3f} -- outside the tolerance band, so the slope term is '
+                        f'not estimating what it claims to.')
+    if width3 <= width1:
+        failures.append(f'design 3: the modulation HDI did NOT widen under genuine mouse-to-mouse '
+                        f'slope heterogeneity ({width3:.3f} vs {width1:.3f}). The mouse epoch '
+                        f'slope is not absorbing that variation, which is the whole reason it is '
+                        f'in the frozen structure.')
+
+    # --- 4. realistic zeros --------------------------------------------------------------------
+    built4 = build_cell_epoch_rate_model(df1)
+    idata4 = built4['model'].fit(**fit_kwargs)
+    ppc4 = hierarchical_cell_rate_posterior_predictive(
+        idata4, built4, save_dir, save_figure=False,
+        filename=f'{HIERARCHICAL_CELL_STATS_PREFIX}_rate_synthetic_posterior_predictive.txt')
+    zero_rows = ppc4['table'][ppc4['table']['statistic'] == 'zero_fraction']
+    lines.append('')
+    lines.append('--- DESIGN 4: REALISTIC ZEROS (posterior-predictive zero fraction vs truth)')
+    lines.append(f'    simulated overall zero fraction {float((df1["n_events"] == 0).mean()):.3f}')
+    for _, row in zero_rows.iterrows():
+        lines.append(f'    {row["group"]:>7} {row["epoch"]:<10} observed {row["observed"]:.3f}  '
+                     f'ppc [{row["ppc_lo_2.5"]:.3f}, {row["ppc_hi_97.5"]:.3f}]  '
+                     f'{"OK" if row["observed_in_interval"] else "OUTSIDE"}')
+    outside = zero_rows[~zero_rows['observed_in_interval']]
+    if len(outside):
+        failures.append(f'design 4: the posterior-predictive zero fraction missed the simulated '
+                        f'truth in {len(outside)} of {len(zero_rows)} group x epoch cells, so the '
+                        f'zero check cannot be trusted on real data.')
+
+    lines += ['', '=' * 78]
+    if failures:
+        lines.append('FAILED:')
+        lines += [f'  - {f}' for f in failures]
+    else:
+        lines.append('ALL FOUR DESIGNS PASSED.')
+    text = '\n'.join(lines) + '\n'
+    if filename is None:
+        filename = f'{HIERARCHICAL_CELL_STATS_PREFIX}_rate_synthetic_verification.txt'
+    write_text(os.path.join(save_dir, filename), text)
+    if failures:
+        raise RuntimeError('verify_hierarchical_cell_rate_synthetic: the NB count machinery '
+                           'failed its synthetic checks:\n  - ' + '\n  - '.join(failures)
+                           + f'\n\nFull report: {filename}')
+    return text
+
+
+_HIERARCHICAL_CELL_COMPONENTS = (
+    'paired cell amplitude table + eligibility',
+    'paired-cell MixedLM (primary estimator)',
+    'mouse-label randomization inference (exact pairwise + MC omnibus + design-based sensitivity)',
+    'unpaired amplitude sensitivity model',
+    'cell x epoch count table',
+    'NB prior-predictive check',
+    'hierarchical NB rate model + convergence gate',
+    'NB posterior-predictive adequacy checks',
+    'amplitude modulation figure',
+    'rate modulation figure',
+    'comparison against the mouse-summary analysis',
+)
+
+
+def run_hierarchical_cell_suite(recall_dir, session_key, session_label, df_matched, mice_per_group,
+                                interactions_table, pairwise_df,
+                                n_perm_omnibus=HIERARCHICAL_CELL_N_PERM_OMNIBUS,
+                                seed=HIERARCHICAL_CELL_SEED,
+                                rate_sampler=None):
+    """
+    Run the WHOLE hierarchical cell-level companion suite for one recall session, atomically.
+
+    ** EXPLICITLY INVOKED, not part of a routine pass. ** This suite costs ~40 min against a few
+    minutes for the rest of the analysis, so run_hierarchical_cell_analysis defaults to False and
+    a normal run_sp_rates_lmm() never reaches here. Pass run_hierarchical_cell_analysis=True (to
+    run_sp_rates_lmm or render_paper_recall_amplitude_rate), or call this directly, to rerun the
+    sensitivity analysis. It is a companion to the mouse-level recall lane, which remains the
+    paper-facing analysis and is complete without it.
+
+    ** One predefined analysis, all-or-nothing. ** Every component in
+    _HIERARCHICAL_CELL_COMPONENTS runs on every pass. There is no per-component switch and no
+    result-dependent branch: nothing here is activated because another component was or was not
+    significant, and no model is substituted if a specified one fails.
+
+    ** Analyses and their diagnostics only. ** The components are the paired-cell construction,
+    the hierarchical amplitude fit and its mouse-label randomization inference, the declared
+    amplitude sensitivity model, the hierarchical rate fit with its prior/posterior-predictive and
+    convergence diagnostics, and the figures and reports. Implementation validation against
+    planted synthetic truth (verify_hierarchical_cell_synthetic,
+    verify_hierarchical_cell_rate_synthetic) is NOT here -- those are development tools, called by
+    hand. A run that produces the reported numbers computes those numbers and nothing else.
+
+    ** Atomic output. ** Everything is written to a sibling `<dir>__staging/` directory and the
+    previous complete output is replaced wholesale only after EVERY component has succeeded. So:
+    a run that raises leaves the previous complete `hierarchical_cells/` untouched and the partial
+    staging directory on disk for inspection; there is no window in which the promoted directory
+    holds a mixture of two passes; and a stale rate figure from an earlier run cannot survive
+    beside fresh amplitude output, because promotion replaces the directory rather than
+    overwriting file by file.
+
+    On failure a FAILED.txt naming the component, the exception and the traceback is written into
+    the staging directory and the exception is then RE-RAISED. The artifact is a record, not a
+    handler -- nothing is swallowed.
+
+    Returns dict of the frames and fits produced.
+    """
+    final_dir = os.path.join(recall_dir, HIERARCHICAL_CELL_DIRNAME)
+    staging_dir = os.path.join(recall_dir, HIERARCHICAL_CELL_DIRNAME + '__staging')
+    if os.path.isdir(staging_dir):
+        shutil.rmtree(staging_dir)
+    stats_dir = os.path.join(staging_dir, 'stats')
+    ensure_dirs(staging_dir, stats_dir)
+    prefix = _RECALL_FILE_PREFIX.get(session_key, session_key.lower())
+    sp = HIERARCHICAL_CELL_STATS_PREFIX
+    # Plain forward iterator over the component list: _advance() records the component just
+    # finished and names the next one. Hand-written indices drifted the moment a component was
+    # removed, and a stale index misattributes the failing step in FAILED.txt -- the one place it
+    # has to be right.
+    _remaining = iter(_HIERARCHICAL_CELL_COMPONENTS)
+    completed, current = [], next(_remaining)
+    _n_components = len(_HIERARCHICAL_CELL_COMPONENTS)
+    _t_step = [time.perf_counter()]
+    _t_suite = time.perf_counter()
+
+    def _step_start():
+        # DISPLAY ONLY. This suite has two multi-minute steps (the randomization block and the NB
+        # fit) that otherwise run in total silence, which is how a deadlock went unnoticed for
+        # nearly three hours. Every component announces itself with a wall-clock stamp so a
+        # pasted log says exactly where a run is and how long each step took.
+        print(f'[hier {len(completed) + 1:>2}/{_n_components} '
+              f'{datetime.datetime.now():%H:%M:%S}] START {current}', flush=True)
+        _t_step[0] = time.perf_counter()
+
+    def _advance():
+        nonlocal current
+        print(f'[hier {len(completed) + 1:>2}/{_n_components} '
+              f'{datetime.datetime.now():%H:%M:%S}] DONE  {current} '
+              f'({time.perf_counter() - _t_step[0]:.1f} s)', flush=True)
+        completed.append(current)
+        current = next(_remaining, 'done')
+        if current != 'done':
+            _step_start()
+
+    print(f'[sp_rates_lmm]   {session_key} hierarchical cell-level companion suite '
+          f'({_n_components} components, all required)...', flush=True)
+    _step_start()
+    try:
+        _copy_analysis_methods_template(HIERARCHICAL_CELL_METHODS_FILENAME, staging_dir)
+
+        # ---- amplitude: paired cell table -----------------------------------------------------
+        delta_df, eligibility_df = build_recall_cell_amplitude_modulation(df_matched)
+        delta_df.insert(0, 'session', session_key)
+        write_text(os.path.join(stats_dir, f'{sp}_amplitude_modulation.csv'),
+                   delta_df.to_csv(index=False))
+        write_text(os.path.join(stats_dir, f'{sp}_eligibility.csv'),
+                   eligibility_df.to_csv(index=False))
+        print(f'[sp_rates_lmm]     {len(delta_df)} paired cells over '
+              f'{delta_df["mouse"].nunique()} animals; eligible fraction '
+              f'{eligibility_df["fraction_eligible_both"].min():.2f}'
+              f'–{eligibility_df["fraction_eligible_both"].max():.2f}')
+        _advance()
+
+        # ---- amplitude: the primary estimator -------------------------------------------------
+        fit = fit_hierarchical_cell_delta_model(delta_df.drop(columns=['session']))
+        write_text(os.path.join(stats_dir, f'{sp}_amplitude_lmm_summary.txt'),
+                   'PRIMARY ESTIMATOR -- hierarchical cell-level companion analysis, recall '
+                   f'{session_key}.\n'
+                   f'Paired within-cell pre->post modulation: {fit["formula"]} + (1|mouse)\n'
+                   f'{fit["n_cells"]} paired cells in {fit["n_mice"]} animals.\n'
+                   f'Optimizer: {HIERARCHICAL_CELL_LMM_OPTIMIZER} (numerical only).\n\n'
+                   '** THE P>|z| COLUMN BELOW IS ASYMPTOTIC OVER CELLS AND IS NOT A PAPER-FACING\n'
+                   'INFERENCE. ** 16 animals were randomized, not N cells. The inference for these\n'
+                   'same coefficients is the EXACT mouse-label randomization in\n'
+                   f'{sp}_amplitude_permutation.csv, which refits this model under every\n'
+                   'size-preserving relabeling of the mouse group labels.\n\n'
+                   'ESTIMAND: the pre->post amplitude modulation of neurons with measurable event\n'
+                   f'amplitude in BOTH epochs (see {sp}_eligibility.csv). Not an estimate '
+                   f'over all\n'
+                   'detected cells, and not generalized to them. The analysis that includes\n'
+                   f'zero-event cells is the rate path ({sp}_rate_*).\n\n'
+                   f'Group x epoch omnibus (asymptotic, NOT used for inference): '
+                   f'{fit["omnibus"]}\n\n{fit["summary_text"]}\n')
+        _advance()
+
+        # ---- amplitude: randomization inference -----------------------------------------------
+        perm_df = hierarchical_cell_amplitude_permutation(
+            delta_df.drop(columns=['session']), fit, mice_per_group,
+            n_perm_omnibus=n_perm_omnibus, seed=seed)
+        perm_df.insert(0, 'session', session_key)
+        write_text(os.path.join(stats_dir, f'{sp}_amplitude_permutation.csv'),
+                   perm_df.to_csv(index=False))
+        for _, row in perm_df[perm_df['block'] == 'pairwise_primary'].iterrows():
+            print(f'[sp_rates_lmm]     {row["group_a"]}-vs-{row["group_b"]}: '
+                  f'Δlog {row["estimate_lmm"]:+.3f} '
+                  f'[{row["ci_lmm_low"]:.3f}, {row["ci_lmm_high"]:.3f}], exact P '
+                  f'{row["p_raw"]:.4g} over {int(row["n_relabelings"])} relabelings, Holm P '
+                  f'{row["p_holm_pairwise"]:.4g}')
+        _advance()
+
+        # ---- amplitude: unpaired sensitivity --------------------------------------------------
+        unpaired = fit_hierarchical_cell_unpaired_sensitivity(df_matched, stats_dir)
+        _advance()
+
+        # ---- rate: count table ----------------------------------------------------------------
+        counts_df = build_recall_cell_epoch_count_table(df_matched)
+        counts_out = counts_df.copy()
+        counts_out.insert(0, 'session', session_key)
+        write_text(os.path.join(stats_dir, f'{sp}_rate_counts.csv'),
+                   counts_out.to_csv(index=False))
+        print(f'[sp_rates_lmm]     rate table: {len(counts_df)} cell x epoch rows, '
+              f'{float((counts_df["n_events"] == 0).mean()):.3f} of them zero-event')
+        _advance()
+
+        # ---- rate: prior predictive (BEFORE the inferential fit) ------------------------------
+        built = build_cell_epoch_rate_model(counts_df)
+        hierarchical_cell_rate_prior_predictive(built, stats_dir, seed=seed)
+        _advance()
+
+        # ---- rate: the hierarchical NB model + gate -------------------------------------------
+        convention, measured, expected_var = _confirm_nb_alpha_parameterization(seed=seed)
+        rate_fit = fit_cell_epoch_rate_model(built, sampler=rate_sampler)
+        rate_contrasts = summarize_cell_rate_contrasts(rate_fit['idata'], built)
+        rate_contrasts.insert(0, 'session', session_key)
+        write_text(os.path.join(stats_dir, f'{sp}_rate_contrasts.csv'),
+                   rate_contrasts.to_csv(index=False))
+        coef_summary = az.summary(
+            rate_fit['idata'],
+            var_names=[f'{built["group_term"]}:{built["epoch_term"]}', built['group_term'],
+                       built['epoch_term'], 'alpha', '1|mouse_sigma',
+                       'post_indicator|mouse_sigma', '1|mouse_cell_sigma'])
+        write_text(os.path.join(stats_dir, f'{sp}_rate_nb_summary.txt'),
+                   'HIERARCHICAL CELL-LEVEL RATE MODEL -- recall '
+                   f'{session_key} (companion analysis).\n\n'
+                   f'Formula: {built["formula"]}\n'
+                   f'{len(counts_df)} cell x epoch rows over '
+                   f'{counts_df["mouse"].nunique()} animals; ALL detected cells, zero-event cells '
+                   f'included.\n\n'
+                   'FROZEN PRIORS (specified before fitting; verified attached on the built '
+                   'model):\n'
+                   + '\n'.join(f'  {k}: {v}' for k, v in built['priors_applied'].items()) + '\n\n'
+                   f'NB dispersion parameterization, CONFIRMED empirically against the installed '
+                   f'backend:\n  {convention}\n  (measured Var {measured:.3f} vs expected '
+                   f'{expected_var:.3f} at mu=5, alpha=2)\n\n'
+                   f'FROZEN SAMPLER: {rate_fit["sampler"]}\n\n'
+                   f'{rate_fit["gate_text"]}\n'
+                   f'CONTRASTS: see {sp}_rate_contrasts.csv. `modulation` is the group x '
+                   f'epoch\n'
+                   'interaction alone (the pre->post ratio-of-ratios); `post_tone_simple_effect`\n'
+                   'is the ABSOLUTE post-tone group-vs-control ratio. Different quantities.\n'
+                   'No frequentist p-value is manufactured from this posterior, it supplies no\n'
+                   'star to any figure, and it alters no existing paper-facing number.\n\n'
+                   f'{coef_summary.to_string()}\n')
+        _advance()
+
+        # ---- rate: posterior-predictive adequacy ----------------------------------------------
+        ppc = hierarchical_cell_rate_posterior_predictive(rate_fit['idata'], built, stats_dir)
+        if ppc['inadequate']:
+            print('[sp_rates_lmm]     ** NB rate model FAILED its posterior-predictive adequacy '
+                  'checks; estimates are reported WITH that failure. **')
+        _advance()
+
+        # ---- figures --------------------------------------------------------------------------
+        plot_hierarchical_cell_amplitude_modulation(
+            delta_df.drop(columns=['session']), perm_df, eligibility_df, staging_dir,
+            session_label, filename_root=f'{prefix}_hierarchical_cell_amplitude_modulation')
+        _advance()
+
+        plot_hierarchical_cell_rate_modulation(
+            counts_df, rate_contrasts, staging_dir, session_label,
+            filename_root=f'{prefix}_hierarchical_cell_rate_modulation')
+        _advance()
+
+        # ---- comparison against the existing mouse-summary analysis ---------------------------
+        write_hierarchical_cell_vs_mouse_summary(
+            stats_dir, session_key, session_label, fit, perm_df, eligibility_df,
+            interactions_table, pairwise_df, rate_contrasts=rate_contrasts, rate_fit=rate_fit,
+            ppc=ppc)
+        _advance()
+
+        write_text(os.path.join(staging_dir, 'RUN_STATUS.txt'),
+                   f'COMPLETE -- hierarchical cell-level companion suite, {session_key}\n'
+                   f'{datetime.datetime.now().isoformat(timespec="seconds")}\n\n'
+                   'This suite is all-or-nothing: the directory is promoted into place only after\n'
+                   'every required component below has succeeded, so its presence means the whole\n'
+                   'suite ran. A failed run leaves the previous complete directory untouched and\n'
+                   'its partial output in <dir>__staging/ with a FAILED.txt.\n\n'
+                   'Components (all required, none optional, none result-dependent):\n'
+                   + '\n'.join(f'  [done] {c}' for c in _HIERARCHICAL_CELL_COMPONENTS) + '\n')
+    except BaseException as exc:
+        write_text(os.path.join(staging_dir, 'FAILED.txt'),
+                   f'FAILED -- hierarchical cell-level companion suite, {session_key}\n'
+                   f'{datetime.datetime.now().isoformat(timespec="seconds")}\n\n'
+                   f'Failing component: {current}\n\n'
+                   f'Completed before the failure:\n'
+                   + ('\n'.join(f'  [done] {c}' for c in completed) or '  (none)') + '\n\n'
+                   f'NOT run:\n'
+                   + '\n'.join(f'  [skipped] {c}' for c in _HIERARCHICAL_CELL_COMPONENTS
+                               if c not in completed and c != current) + '\n\n'
+                   'No substitute model was fit and no weaker test was run in place of the failing\n'
+                   'component. The previous complete output (if any) is untouched at\n'
+                   f'{final_dir}\n\n{type(exc).__name__}: {exc}\n\n{traceback.format_exc()}\n')
+        print(f'[sp_rates_lmm]   {session_key} hierarchical cell suite FAILED at: {current} '
+              f'after {(time.perf_counter() - _t_suite) / 60:.1f} min. Partial output and '
+              f'FAILED.txt in {staging_dir}; the previous complete output is untouched.',
+              flush=True)
+        raise
+
+    # ---- promote atomically: replace the directory wholesale, never file by file ---------------
+    if os.path.isdir(final_dir):
+        shutil.rmtree(final_dir)
+    os.replace(staging_dir, final_dir)
+    print(f'[sp_rates_lmm]   {session_key} hierarchical cell-level companion suite complete '
+          f'in {(time.perf_counter() - _t_suite) / 60:.1f} min -> {final_dir}', flush=True)
+    return {'hierarchical_cell_delta': delta_df, 'hierarchical_cell_eligibility': eligibility_df,
+            'hierarchical_cell_fit': fit, 'hierarchical_cell_permutation': perm_df,
+            'hierarchical_cell_unpaired': unpaired, 'hierarchical_cell_counts': counts_df,
+            'hierarchical_cell_rate_fit': rate_fit,
+            'hierarchical_cell_rate_contrasts': rate_contrasts,
+            'hierarchical_cell_rate_ppc': ppc}
+
+
+def write_recall_results_summary(save_dir, session_key, session_label, mouse_epoch, fits,
+                                 contrasts, interactions_table, coverage, stats_prefix,
+                                 filename='paper_results_summary.md'):
+    """
+    Every number a recall Results paragraph needs, for ONE recall session, plus a drafted
+    paragraph in the manuscript's register with this run's own values already in it.
+
+    ** One session per file, and no cross-session sentence anywhere in it. ** The two recall
+    sessions do not contain the same animals, so "significant at 48 h but not at 1 week" is not
+    evidence that anything declined; that comparison would need a fixed-cohort timepoint model
+    which this lane does not fit. The drafted paragraph therefore describes this session only.
+
+    ** The interpretation of each (simple effect, interaction) pair is fixed in advance ** by
+    _RECALL_INTERPRETATION, so what the numbers are read to mean does not depend on what they
+    turn out to be.
+    """
+    n_by_group = (mouse_epoch.drop_duplicates('mouse').groupby('group', observed=True)
+                  .size().reindex(DREADD_DISPLAY_ORDER).dropna().astype(int))
+    cohort = ', '.join(f'n = {n} {GROUP_LABELS.get(g, g)}' for g, n in n_by_group.items())
+    df2 = int(interactions_table['df2'].iloc[0])
+    payloads = _unified_contrast_payloads(contrasts, epochs=RECALL_EPOCHS)
+
+    lines = [
+        f'# {session_label} — cellular amplitude and event rate: paper summary',
+        '',
+        f'Per-event amplitude and population event rate by DREADD group across the two '
+        f'duration-matched 20 s recall windows (pre-tone baseline, post-tone retrieval). '
+        f'{cohort} animals present in this session; the inferential dataset is '
+        f'{len(mouse_epoch)} rows — one value per animal per epoch.',
+        '',
+        f'**This file describes {session_key} only.** Test_B and Test_B_1wk are analysed '
+        'independently because the animals available at the two recall sessions are not the same, '
+        'so no sentence here — and no sentence in the manuscript drawn from here — may compare '
+        'the two timepoints. A formal 48 h versus 1 week comparison would require a separate '
+        'fixed-cohort model restricted to animals present at both sessions, which this analysis '
+        'does not fit.',
+        '',
+        '**No CNO was present during recall.** Any group difference reported below is a '
+        'persistent consequence of the conditioning-day manipulation, not evidence of ongoing '
+        'chemogenetic receptor activation.',
+        '',
+        '## Trial coverage',
+        '',
+        'Analyses are restricted within each animal to tone trials on which BOTH the 20 s '
+        'pre-tone and the 20 s post-tone window are completely observed; amplitude and rate use '
+        'that identical trial set.',
+        '',
+        '| animal | group | tone trials present | trials retained | retained |',
+        '|---|---|---|---|---|',
+    ]
+    for _, row in coverage.iterrows():
+        lines.append(f"| {row['mouse']} | {GROUP_LABELS.get(row['group'], row['group'])} | "
+                     f"{int(row['n_tone_trials_present'])} | {int(row['n_trials_retained'])} | "
+                     f"{row['trials_retained']} |")
+
+    lines += [
+        '',
+        '## Unified mixed models',
+        '',
+        'Both outcomes are analysed with the SAME mouse-level linear mixed-effects model: DREADD '
+        'group, epoch and their interaction as fixed effects, animal as a random intercept, '
+        'reference levels mCherry and pre-tone. Event definition and animal-level summarization '
+        'are identical to the conditioning analysis. All Wald and contrast inference uses this '
+        f'session\'s own animal-level denominator df = n_animals − 1 = {df2}.',
+        '',
+    ]
+    for outcome in UNIFIED_OUTCOMES:
+        fit = fits[outcome.key]
+        lines.append(f"- **{outcome.label}**: `{fit['formula']} + (1|mouse)` "
+                     f"({fit['method']}, {fit['n_mice']} animals)")
+
+    lines += [
+        '',
+        '## Treatment-vs-control contrasts by epoch',
+        '',
+        'Each is a linear contrast of the same full group x epoch model — the group coefficient '
+        'alone at the pre-tone reference epoch, that coefficient plus the corresponding '
+        'group x epoch coefficient at post-tone, with their covariance. Within each epoch the two '
+        'treatment-vs-control comparisons are Holm-corrected together (`p_holm_epoch`).',
+        '',
+        '**These are the only P-values that generate a figure asterisk or a manuscript '
+        'significance statement.**',
+        '',
+        '| outcome | epoch | comparison | ratio | 95% CI | raw P | Holm-adjusted P (within epoch) |',
+        '|---|---|---|---|---|---|---|',
+    ]
+    for _, row in contrasts.iterrows():
+        flag = ' (significant)' if row['holm_epoch_reject'] else ''
+        lines.append(
+            f"| {UNIFIED_OUTCOMES_BY_KEY[row['outcome']].label} | {row['epoch']} | "
+            f"{GROUP_LABELS.get(row['group'], row['group'])} vs Ctl | {row['ratio']:.3f} | "
+            f"[{row['ratio_ci_low']:.3f}, {row['ratio_ci_high']:.3f}] | {row['p_raw']:.4g} | "
+            f"**{row['p_holm_epoch']:.4g}**{flag} |")
+
+    lines += [
+        '',
+        '## Group x epoch interaction — is the effect specific to the retrieval window?',
+        '',
+        'Joint Wald test of the two group x post-tone interaction coefficients, one per outcome. '
+        '**This is the formal test of retrieval preferentiality**, and the only one. A '
+        'significant post-tone comparison with a null interaction does not establish that the '
+        'difference is tone-evoked; it may reflect a group difference already present around '
+        'recall.',
+        '',
+        '| outcome | F | df1 | df2 | P |',
+        '|---|---|---|---|---|',
+    ]
+    for _, row in interactions_table.iterrows():
+        lines.append(f"| {UNIFIED_OUTCOMES_BY_KEY[row['outcome']].label} | {row['F']:.3f} | "
+                     f"{int(row['df1'])} | {int(row['df2'])} | {row['p']:.4g} |")
+
+    lines += [
+        '',
+        'A non-significant interaction is **no evidence that the treatment effect differed '
+        'between the pre-tone and post-tone windows**. It is not evidence that the effect is '
+        'identical, global or tonic across them.',
+        '',
+        '## Reading of each result, by the rule fixed in advance',
+        '',
+    ]
+    interaction_p = {row['outcome']: float(row['p'])
+                     for _, row in interactions_table.iterrows()}
+    for outcome in UNIFIED_OUTCOMES:
+        lines.append(f'**{outcome.label}**')
+        lines.append('')
+        for group in UNIFIED_TREATMENT_GROUPS:
+            pre = unified_contrast_lookup(contrasts, outcome.key,
+                                          RECALL_REFERENCE_EPOCH, group)
+            post = unified_contrast_lookup(contrasts, outcome.key,
+                                           RECALL_RESPONSE_EPOCH, group)
+            key = (bool(pre['holm_epoch_reject']), bool(post['holm_epoch_reject']))
+            lines.append(f"- {group} {_RECALL_SIMPLE_EFFECT_READING[key]}.")
+        lines.append(f"- {_RECALL_INTERACTION_READING[interaction_p[outcome.key] < 0.05]}")
+        lines.append('')
+
+    rate_rows = contrasts[contrasts['outcome'] == 'population_rate']
+    lines += [
+        '## Absolute population-rate differences',
+        '',
+        'DESCRIPTIVE — equal-mouse-weighted observed means, no test.',
+        '',
+    ]
+    for _, row in rate_rows.iterrows():
+        lines.append(
+            f"- {row['epoch']}, {GROUP_LABELS.get(row['group'], row['group'])} vs Ctl: "
+            f"{row['absolute_difference_events_per_s_per_cell']:+.4f} events/s/cell "
+            f"({row['mean_population_rate_treatment']:.4f} vs "
+            f"{row['mean_population_rate_control']:.4f})")
+
+    lines += ['', '## The same contrasts as the figures render them', '']
+    for outcome in UNIFIED_OUTCOMES:
+        for epoch in RECALL_EPOCHS:
+            lines.append(f'**{outcome.label} — {epoch}**')
+            lines.append('')
+            lines += [f'- {ln}' if not ln.startswith('  ') else f'  - {ln.strip()}'
+                      for ln in format_contrast_ci_lines(
+                          payloads[(outcome.key, epoch)]['contrasts'], 'mCherry')]
+            lines.append('')
+
+    # ---- The drafted Results paragraph, with this run's own numbers already substituted --------
+    # The DREADD receptor names are used verbatim here rather than GROUP_LABELS' internal 'Exc' /
+    # 'Inh' shorthand: this block is manuscript prose, and the receptor is what a reader outside
+    # this codebase knows the group by.
+    def _clause(outcome_key, group, trailing):
+        row = unified_contrast_lookup(contrasts, outcome_key, RECALL_RESPONSE_EPOCH, group)
+        stats = (f"ratio {row['ratio']:.2f}, 95% CI {row['ratio_ci_low']:.2f}–"
+                 f"{row['ratio_ci_high']:.2f}; Holm-adjusted P = {row['p_holm_epoch']:.3g}")
+        if row['holm_epoch_reject']:
+            verb = 'it differed from controls' if trailing else 'differed from mCherry controls'
+        else:
+            verb = ('it did not detectably differ from controls' if trailing
+                    else 'did not detectably differ from mCherry controls')
+        return f"in {group} mice {verb} ({stats})"
+
+    inter = {row['outcome']: row for _, row in interactions_table.iterrows()}
+    lines += [
+        f'# Drafted Results paragraph — {session_label}',
+        '',
+        '*Register is the manuscript\'s: effect size with its interval before any P, the animal '
+        'as the unit of inference, and no comparison with the other recall session.*',
+        '',
+        f'At {session_label.split("(")[0].strip().lower()}, in the absence of CNO, post-tone '
+        f'per-event amplitude {_clause("amplitude", "hM3D", False)}, whereas '
+        f'{_clause("amplitude", "hM4D", True)}. Post-tone population event rate '
+        f'{_clause("population_rate", "hM3D", False)}, and '
+        f'{_clause("population_rate", "hM4D", True)}. The group x epoch interaction was '
+        f'F({int(inter["amplitude"]["df1"])}, {int(inter["amplitude"]["df2"])}) = '
+        f'{inter["amplitude"]["F"]:.2f}, P = {inter["amplitude"]["p"]:.3g} for per-event '
+        f'amplitude and F({int(inter["population_rate"]["df1"])}, '
+        f'{int(inter["population_rate"]["df2"])}) = {inter["population_rate"]["F"]:.2f}, '
+        f'P = {inter["population_rate"]["p"]:.3g} for population event rate.',
+        '',
+        '**Interpretive constraints for whoever writes this up.**',
+        '',
+        '- Do not write "the effect disappeared by 1 week", "the effect persisted significantly '
+        'longer", or "48 h differed from 1 week". None of those is tested by this analysis, and '
+        'the two recall cohorts are not the same animals.',
+        '- Do not write "hM3D activation increased activity at recall". No DREADD ligand was '
+        'present at recall. The supportable form is: "transient SST-interneuron manipulation '
+        'during conditioning was associated with a persistent alteration in later CA1 activity '
+        'during drug-free recall."',
+        '- A recall difference may reflect altered memory formation, subsequent network '
+        'plasticity, a different behavioural state or freezing level, or another downstream '
+        'consequence of the conditioning-day manipulation. Do not infer ongoing receptor '
+        'activation.',
+        '- Retrieval preferentiality is the interaction, not the presence or absence of a star in '
+        'the post-tone column.',
+        f'- Every null above is reported with its interval. At {cohort} a non-significant result '
+        'is weak evidence of absence.',
+        '',
+    ]
+
+    ensure_dirs(save_dir)
+    write_text(os.path.join(save_dir, filename), '\n'.join(lines))
+
+
+def render_paper_recall_amplitude_rate(PLOTS_DIR, mice_per_group, sessions, session_key,
+                                       mapping='full', thres=None,
+                                       run_hierarchical_cell_analysis=False,
+                                       n_perm_omnibus=HIERARCHICAL_CELL_N_PERM_OMNIBUS,
+                                       hierarchical_seed=HIERARCHICAL_CELL_SEED):
+    """
+    The paper-facing RECALL analysis for ONE session (`Test_B` or `Test_B_1wk`), under
+    PLOTS_DIR/sp_rates_lmm/paper/recall/<session_key>/.
+
+    ** Deliberately the same statistical logic as the conditioning analysis. ** Same event
+    definition (one contiguous supra-threshold run of `S`, amplitude = integral over the run --
+    unchanged, and reached through the same find_event_runs_ca_S traversal), same animal-level
+    summarization, the same `log(metric) ~ group * epoch + (1|mouse)` for both outcomes, the same
+    within-epoch Holm family, the same joint Wald interaction test, the same figure grammar. The
+    manuscript can therefore describe conditioning and recall with one description of method. What
+    is different is the epoch set and the cohort, and both are read off the data.
+
+    ** The two recall sessions are analysed SEPARATELY and are never compared here. ** The hM4D
+    animal missing at Test_B is not the one missing at Test_B_1wk, so "significant at 48 h and not
+    at 1 week" is NOT evidence that the effect declined with time -- it is two independent
+    analyses of two different animal sets. A formal 48 h -> 1 week comparison needs a fixed-cohort
+    timepoint model restricted to animals present at both sessions, which is out of scope for this
+    lane and deliberately not approximated by putting both sessions on one figure.
+
+    ** Group Ns and the denominator df are derived from the session, never hard-coded. ** Each
+    model's df = n_animals_present - 1 for that session, which is the same animal-level
+    convention the conditioning models use and a different number from their 16.
+
+    ** Amplitude and rate use one identical retained trial set. ** Both outcomes come off the
+    single frame returned by restrict_to_exposure_matched_trials over the two 20 s windows, so
+    there is no code path in which the rate row describes different trials from the amplitude row
+    above it. A tone trial enters only if BOTH windows are completely observed
+    (get_recall_epoch_frames); the per-animal coverage is written out rather than left implicit.
+
+    Returns dict(mouse_epoch, fits, contrasts, interactions, coverage).
+    """
+    session_label = RECALL_SESSION_LABELS.get(session_key, session_key)
+    prefix = _RECALL_FILE_PREFIX.get(session_key, session_key.lower())
+    stats_prefix = 'unified_recall'
+    recall_dir = os.path.join(PLOTS_DIR, 'sp_rates_lmm', 'paper', 'recall', session_key)
+    recall_stats_dir = os.path.join(recall_dir, 'stats')
+    ensure_dirs(recall_dir, recall_stats_dir)
+    _copy_analysis_methods_template(RECALL_PAPER_METHODS_FILENAME, recall_dir)
+
+    print(f'[sp_rates_lmm] Paper recall lane: {session_label}...')
+
+    # ---- Event table over the two duration-matched 20 s windows ------------------------------
+    recall_frames_fn = functools.partial(get_recall_epoch_frames,
+                                         pre_tone_duration_s=TESTB_PRE_TONE_DURATION_S,
+                                         post_tone_duration_s=TESTB_POST_TONE_DURATION_S)
+    df_fine = build_epoch_event_table(mice_per_group, sessions, RECALL_EPOCHS,
+                                      recall_frames_fn, mapping=mapping, thres=thres)
+    df_matched, _counts = restrict_to_exposure_matched_trials(
+        df_fine, RECALL_EPOCHS, window_seconds=RECALL_WINDOW_S)
+    coverage = build_recall_trial_coverage(session_key, df_fine, df_matched)
+    write_text(os.path.join(recall_stats_dir, f'{stats_prefix}_trial_coverage.csv'),
+               coverage.to_csv(index=False))
+    print(f'[sp_rates_lmm]   {session_key}: retained '
+          f'{coverage["n_trials_retained"].sum()} of {coverage["n_tone_trials_present"].sum()} '
+          f'animal x tone-trial windows across {len(coverage)} animals.')
+
+    # ---- The inferential dataset: one row per animal x epoch ----------------------------------
+    mouse_epoch = build_mouse_epoch_unified_table(df_matched, epochs=RECALL_EPOCHS,
+                                                  reference_epoch=RECALL_REFERENCE_EPOCH)
+    present = {m for g in GROUP_ORDER for m in mice_per_group.get(g, []) if m in sessions}
+    dropped = sorted(present - set(mouse_epoch['mouse']))
+    if dropped:
+        raise RuntimeError(
+            f'render_paper_recall_amplitude_rate [{session_key}]: animal(s) {dropped} have a '
+            f'{session_key} recording but contribute no row to the inferential table. That can '
+            f'only happen if no tone trial carried both complete 20 s windows; investigate the '
+            f'recording rather than letting the cohort shrink silently.')
+    n_by_group = (mouse_epoch.drop_duplicates('mouse').groupby('group', observed=True)
+                  .size().reindex(DREADD_DISPLAY_ORDER).dropna().astype(int))
+    print(f'[sp_rates_lmm]   {session_key} cohort: '
+          + ', '.join(f'{g} n={n}' for g, n in n_by_group.items()))
+    write_text(os.path.join(recall_stats_dir, f'{stats_prefix}_mouse_epoch_values.csv'),
+               mouse_epoch.to_csv(index=False))
+
+    # The synthetic check runs on THIS session's cohort: a uniform treatment shift must give a
+    # simple effect with a null interaction, and a post-tone-only shift must make the interaction
+    # significant. That second design is precisely the claim the recall figure would make.
+    verify_unified_synthetic(
+        recall_stats_dir, epochs=RECALL_EPOCHS, reference_epoch=RECALL_REFERENCE_EPOCH,
+        response_epoch=RECALL_RESPONSE_EPOCH, across_epoch_family=False,
+        group_sizes=tuple((g, int(n_by_group[g])) for g in GROUP_ORDER if g in n_by_group),
+        model_label=f'{session_key} recall',
+        filename=f'{stats_prefix}_synthetic_verification.txt')
+
+    # ---- The two models ----------------------------------------------------------------------
+    fits = {o.key: fit_unified_group_epoch_model(mouse_epoch, o.response_col,
+                                                 reference_epoch=RECALL_REFERENCE_EPOCH)
+            for o in UNIFIED_OUTCOMES}
+    require_common_unified_method(fits)
+    contrasts = unified_posthoc_contrasts(fits, mouse_epoch, epochs=RECALL_EPOCHS,
+                                          reference_epoch=RECALL_REFERENCE_EPOCH,
+                                          across_epoch_family=False)
+    contrasts.insert(0, 'session', session_key)
+    interactions_table = unified_interactions_table(fits)
+    interactions_table.insert(0, 'session', session_key)
+
+    # This session's OWN denominator df and its OWN filenames -- both differ from the conditioning
+    # lane's, and the boilerplate used to state the conditioning values here.
+    recall_df2 = fits[UNIFIED_OUTCOMES[0].key]['n_mice'] - 1
+    recall_pvalue_note = _statsmodels_pvalue_note(
+        recall_df2, f'{stats_prefix}_posthoc_contrasts.csv',
+        f'{stats_prefix}_interactions.csv', ('p_raw', 'p_holm_epoch'),
+        _RECALL_NON_REFERENCE_EPOCH_PHRASE)
+    for outcome in UNIFIED_OUTCOMES:
+        write_text(os.path.join(recall_stats_dir, f'{stats_prefix}_{outcome.key}_summary.txt'),
+                   f"PAPER-FACING recall model ({session_label}): {outcome.label}\n"
+                   f"Response: {outcome.response_col} (one value per animal per epoch, "
+                   f"{len(mouse_epoch)} rows, {fits[outcome.key]['n_mice']} animals)\n"
+                   f"Group x epoch joint Wald: {fits[outcome.key]['omnibus']}\n"
+                   f"Contrasts and within-epoch Holm-adjusted p-values (p_holm_epoch): "
+                   f"{stats_prefix}_posthoc_contrasts.csv\n"
+                   f"Analysed independently of the other recall session -- the cohorts differ.\n\n"
+                   f"{recall_pvalue_note}\n\n"
+                   f"{fits[outcome.key]['summary_text']}\n\n"
+                   f"{_statsmodels_pvalue_footer(recall_df2)}\n")
+    write_text(os.path.join(recall_stats_dir, f'{stats_prefix}_interactions.csv'),
+               interactions_table.to_csv(index=False))
+    write_text(os.path.join(recall_stats_dir, f'{stats_prefix}_posthoc_contrasts.csv'),
+               contrasts.to_csv(index=False))
+    for _, row in interactions_table.iterrows():
+        print(f"[sp_rates_lmm]   {session_key} {row['outcome']}: "
+              f"{format_unified_interaction(row)}")
+
+    unified_model_diagnostics(fits, mouse_epoch, contrasts, recall_stats_dir,
+                              epochs=RECALL_EPOCHS, reference_epoch=RECALL_REFERENCE_EPOCH,
+                              across_epoch_family=False,
+                              filename_root=f'{stats_prefix}_diagnostics',
+                              residuals_csv=f'{stats_prefix}_residuals.csv',
+                              influence_csv=f'{stats_prefix}_influence.csv')
+
+    # ---- The pre->post MODULATION decomposition -----------------------------------------------
+    # A representation and pairwise decomposition of the group x epoch interaction already tested
+    # above, from the SAME two fits -- no new model, and the omnibus travels with it everywhere.
+    # Gated to RECALL_MODULATION_SESSIONS for this pass; the machinery is session-agnostic.
+    modulation = {'modulation_by_mouse': None, 'modulation_within_group': None,
+                  'modulation_pairwise': None}
+    if session_key in RECALL_MODULATION_SESSIONS:
+        verify_recall_modulation_synthetic(
+            recall_stats_dir, epochs=RECALL_EPOCHS, reference_epoch=RECALL_REFERENCE_EPOCH,
+            response_epoch=RECALL_RESPONSE_EPOCH,
+            group_sizes=tuple((g, int(n_by_group[g])) for g in GROUP_ORDER if g in n_by_group),
+            model_label=f'{session_key} recall',
+            filename=f'{stats_prefix}_modulation_synthetic_verification.txt')
+
+        modulation_by_mouse = build_recall_modulation_by_mouse(
+            mouse_epoch, reference_epoch=RECALL_REFERENCE_EPOCH,
+            response_epoch=RECALL_RESPONSE_EPOCH)
+        modulation_by_mouse.insert(0, 'session', session_key)
+        within_group_df, pairwise_df = recall_modulation_contrasts(
+            fits, reference_epoch=RECALL_REFERENCE_EPOCH,
+            response_epoch=RECALL_RESPONSE_EPOCH)
+        for frame in (within_group_df, pairwise_df):
+            frame.insert(0, 'session', session_key)
+
+        write_text(os.path.join(recall_stats_dir, f'{stats_prefix}_modulation_by_mouse.csv'),
+                   modulation_by_mouse.to_csv(index=False))
+        # Both blocks in one file, distinguished by `block`: the within-group trajectory estimates
+        # are only ever read next to the pairwise comparisons they explain, and splitting them
+        # into two files invites the descriptive half being quoted on its own.
+        write_text(os.path.join(recall_stats_dir, f'{stats_prefix}_modulation_contrasts.csv'),
+                   pd.concat([within_group_df, pairwise_df], ignore_index=True)
+                   .to_csv(index=False))
+        write_recall_modulation_summary(recall_stats_dir, session_key, session_label,
+                                        interactions_table, within_group_df, pairwise_df,
+                                        stats_prefix)
+        plot_recall_modulation(modulation_by_mouse, pairwise_df, interactions_table, recall_dir,
+                               session_label, stats_prefix,
+                               filename_root=f'{prefix}_amplitude_rate_modulation')
+        plot_recall_prepost_trajectories(
+            modulation_by_mouse, recall_dir, session_label, stats_prefix,
+            filename_root=f'{prefix}_amplitude_rate_prepost_trajectories')
+        for _, row in pairwise_df.iterrows():
+            print(f"[sp_rates_lmm]   {session_key} {row['outcome']} modulation "
+                  f"{row['group_a']}-vs-{row['group_b']}: "
+                  f"ratio {row['relative_modulation_ratio']:.3f} "
+                  f"[{row['ratio_ci_low']:.3f}, {row['ratio_ci_high']:.3f}], "
+                  f"P_raw {row['p_raw']:.3g}, P_holm {row['p_holm_modulation']:.3g}")
+        modulation = {'modulation_by_mouse': modulation_by_mouse,
+                      'modulation_within_group': within_group_df,
+                      'modulation_pairwise': pairwise_df}
+
+    # ---- The HIERARCHICAL CELL-LEVEL companion / sensitivity suite -----------------------------
+    # Strictly ADDITIVE. Everything above this block -- the models, the contrasts, the Holm
+    # families, the omnibus tests, the modulation decomposition and every figure and table already
+    # written -- is untouched and remains the paper-facing analysis. This suite asks the
+    # complementary question (does the modulation pattern occur coherently across the cellular
+    # population WITHIN mice, with the cell hierarchy modelled instead of collapsed?) and writes
+    # into its own subdirectory so its numbers can never be confused with the primary lane's.
+    # Gated only by RECALL_HIERARCHICAL_CELL_SESSIONS and run_hierarchical_cell_analysis, which is
+    # False by default -- this is an explicitly invoked companion, not part of a routine pass (it
+    # costs ~40 min against the few minutes the rest of the analysis takes). When it does run,
+    # every one of its components runs.
+    hierarchical = {}
+    if run_hierarchical_cell_analysis and session_key in RECALL_HIERARCHICAL_CELL_SESSIONS:
+        if session_key not in RECALL_MODULATION_SESSIONS:
+            raise RuntimeError(
+                f'render_paper_recall_amplitude_rate [{session_key}]: the hierarchical cell suite '
+                f'needs the mouse-level modulation contrasts to compare itself against, but this '
+                f'session is not in RECALL_MODULATION_SESSIONS.')
+        hierarchical = run_hierarchical_cell_suite(
+            recall_dir, session_key, session_label, df_matched, mice_per_group,
+            interactions_table, modulation['modulation_pairwise'],
+            n_perm_omnibus=n_perm_omnibus, seed=hierarchical_seed)
+
+    # ---- Figures, annotated entirely from the tables above ------------------------------------
+    preamble = _recall_contrasts_preamble(session_label, n_by_group, stats_prefix)
+    plot_paper_epoch_distributions(
+        df_matched, mouse_epoch, contrasts, recall_dir, epochs=RECALL_EPOCHS,
+        filename_root=f'{prefix}_amplitude_rate_by_epoch',
+        epoch_labels=_RECALL_EPOCH_LABELS, contrasts_preamble=preamble,
+        contrasts_title=f'{session_label} — figure contrasts, unified mixed models')
+
+    interaction_notes = {row['outcome']: format_unified_interaction(row)
+                         for _, row in interactions_table.iterrows()}
+    # Rows in the SAME order as the distribution figure above (amplitude on top, rate below), so
+    # the two figures of one session can be read against each other row by row. The TFC forest's
+    # PAPER_COMPONENT_KEYS order is the reverse and is left alone.
+    forest_row_keys = ('amplitude', 'population_rate')
+    plot_decomposition_grid(
+        df_matched, recall_dir, epochs=RECALL_EPOCHS,
+        components=[_DECOMPOSITION_COMPONENTS_BY_KEY[k] for k in forest_row_keys],
+        include_exc_vs_inh=False, filename_root=f'{prefix}_amplitude_rate_forest',
+        contrast_payloads=_unified_contrast_payloads(contrasts, epochs=RECALL_EPOCHS),
+        interaction_note={k: interaction_notes[k] for k in forest_row_keys},
+        # Kept shorter than the figure's own title line, which sets the width: a two-column
+        # forest is ~4.6 in wide and a longer subtitle is clipped at both edges.
+        subtitle=f'{session_label}; per-row group x epoch joint Wald test',
+        contrasts_preamble=preamble,
+        contrasts_note='**This forest carries no significance stars by design.** It is a second '
+                       'view of the same contrast table the distribution figure is annotated '
+                       'from, drawn as effect sizes; the Holm-adjusted decisions are in '
+                       f'`stats/{stats_prefix}_posthoc_contrasts.csv`.',
+        row_height=1.9,
+        # Both columns are complete 20 s windows on the retained trials by construction.
+        reduced_coverage_epochs=(), epoch_labels=_RECALL_EPOCH_LABELS)
+
+    write_recall_results_summary(recall_stats_dir, session_key, session_label, mouse_epoch, fits,
+                                 contrasts, interactions_table, coverage, stats_prefix)
+    print(f'[sp_rates_lmm] {session_key} recall figures written to {recall_dir}')
+    return {'mouse_epoch': mouse_epoch, 'fits': fits, 'contrasts': contrasts,
+            'interactions': interactions_table, 'coverage': coverage, **modulation,
+            **hierarchical}
 
 
 def plot_manipulation_check(df_delta, dropout_df, save_dir, filename_root='manipulation_check'):
@@ -5107,7 +9355,9 @@ def plot_width_vs_height_matched_examples(sessions, df_runs_trace, save_dir, map
 
 def run_sp_rates_lmm(PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond_LT2,
                         Test_B, Test_B_1wk, mapping='full', thres=None, n_perm=20000, seed=0,
-                        rate_draws=1000, rate_tune=1000, rate_chains=4, auto_close=True):
+                        rate_draws=1000, rate_tune=1000, rate_chains=4, auto_close=True,
+                        run_hierarchical_cell_analysis=False,
+                        n_perm_omnibus=HIERARCHICAL_CELL_N_PERM_OMNIBUS):
     """
     Full cell-level event-amplitude analysis: primary trace-period amplitude, co-primary
     within-cell epoch delta, run-structure/threshold-sensitivity bursting evidence, group x trial
@@ -5116,6 +9366,11 @@ def run_sp_rates_lmm(PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond
     -trace panels, and every figure panel this analysis produces. See
     analysis_methods_templates/sp_rates_lmm_methods.md for the full statistical rationale behind
     every choice made here, and this module's own CHANGELOG docstring for what changed and why.
+
+    Ends with the two PAPER-FACING lanes: the unified conditioning models
+    (render_paper_tfc_amplitude_rate) and then the unified recall models, one INDEPENDENT analysis
+    per recall session (render_paper_recall_amplitude_rate for Test_B and Test_B_1wk). Everything
+    before them is the internal/sensitivity record.
 
     PLOTS_DIR              : ds.PLOTS_DIR-equivalent root; this analysis writes under
                              PLOTS_DIR/sp_rates_lmm/.
@@ -5128,6 +9383,24 @@ def run_sp_rates_lmm(PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond
     thres                   : per-cell deconvolution threshold override; defaults to each
                               session's own .thres attribute.
     n_perm, seed             : passed to mouse_label_permutation_test().
+    run_hierarchical_cell_analysis : the ONE gate on the additive hierarchical cell-level
+                              companion suite for the recall lane (Test_B; see
+                              RECALL_HIERARCHICAL_CELL_SESSIONS). ** False by default: the
+                              companion is EXPLICITLY INVOKED, not part of a routine pass. ** It
+                              costs ~40 min (exact mouse-label MixedLM enumerations over the
+                              paired-cell table, plus the hierarchical NB count model and its
+                              prior/posterior-predictive checks), which is an order of magnitude
+                              more than the rest of this analysis, and it is a sensitivity
+                              question rather than a paper-facing one. Pass True to rerun it;
+                              that runs EVERY component. There is no per-component switch -- it
+                              is one predefined analysis, and nothing in it is activated or
+                              omitted because of what another result showed.
+    n_perm_omnibus           : Monte Carlo draws for the hierarchical suite's OMNIBUS
+                              randomization test only -- its pairwise tests are exact
+                              enumerations and take no such parameter. Production is fixed at
+                              HIERARCHICAL_CELL_N_PERM_OMNIBUS with seed
+                              HIERARCHICAL_CELL_SEED; a development pass may lower it, and the
+                              value actually used is written into the output.
     rate_draws, rate_tune,
     rate_chains              : passed to fit_rate_group_epoch_model()'s Bambi/PyMC MCMC fit
                               (two fits -- full and reduced -- each at these settings). Lower
@@ -5538,6 +9811,18 @@ def run_sp_rates_lmm(PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond
     # exist until the secondary family is complete.
     render_paper_tfc_amplitude_rate(PLOTS_DIR, df_grid, primary_contrasts, holm,
                                     perm_results, interactions, _q_by_name, rate_fit, delta_df)
+
+    # ---- The paper-facing RECALL lane, one INDEPENDENT analysis per recall session -------------
+    # Same statistical logic as the conditioning lane above, applied to the two duration-matched
+    # 20 s windows around each recall tone. Test_B and Test_B_1wk are fit separately and never
+    # compared with each other: the animal missing at 48 h is not the animal missing at 1 week,
+    # so a difference in which session reaches significance is not a difference between the
+    # timepoints. See render_paper_recall_amplitude_rate.
+    for recall_key, recall_sessions in (('Test_B', Test_B), ('Test_B_1wk', Test_B_1wk)):
+        render_paper_recall_amplitude_rate(
+            PLOTS_DIR, mice_per_group, recall_sessions, recall_key, mapping=mapping, thres=thres,
+            run_hierarchical_cell_analysis=run_hierarchical_cell_analysis,
+            n_perm_omnibus=n_perm_omnibus)
 
     print('[sp_rates_lmm] Done.')
     if auto_close:

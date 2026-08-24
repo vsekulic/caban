@@ -25,10 +25,10 @@ and §3.4 plus §4.5 before touching an epoch definition.
 |---|---|
 | Module | [caban/sp_rates_lmm.py](../caban/sp_rates_lmm.py) |
 | Entry point | `caban.sections.run_sp_rates_lmm(ds, cfg)`, gated on `cfg.plot_sp_rates_lmm` |
-| Paper analysis | `caban.sp_rates_lmm.render_paper_tfc_amplitude_rate()` |
-| METHODS templates | [sp_rates_lmm_paper_methods.md](../analysis_methods_templates/sp_rates_lmm_paper_methods.md) (manuscript), [sp_rates_lmm_methods.md](../analysis_methods_templates/sp_rates_lmm_methods.md) (internal) |
+| Paper analysis | conditioning: `caban.sp_rates_lmm.render_paper_tfc_amplitude_rate()`; recall: `render_paper_recall_amplitude_rate()` (§A.7) |
+| METHODS templates | [sp_rates_lmm_paper_methods.md](../analysis_methods_templates/sp_rates_lmm_paper_methods.md) (manuscript, conditioning), [sp_rates_lmm_recall_paper_methods.md](../analysis_methods_templates/sp_rates_lmm_recall_paper_methods.md) (manuscript, recall), [sp_rates_lmm_methods.md](../analysis_methods_templates/sp_rates_lmm_methods.md) (internal) |
 | Notebook | `run_pipeline.ipynb`, cells 24–29 (immediately after `run_sp_rates`) |
-| Output | paper: `PLOTS_DIR/sp_rates_lmm/paper/tfc_amplitude_rate/`; internal: `PLOTS_DIR/sp_rates_lmm/{TFC_cond,Test_B,Test_B_1wk}/` + `stats/` |
+| Output | paper: `PLOTS_DIR/sp_rates_lmm/paper/tfc_amplitude_rate/` and `.../paper/recall/{Test_B,Test_B_1wk}/`; internal: `PLOTS_DIR/sp_rates_lmm/{TFC_cond,Test_B,Test_B_1wk}/` + `stats/` |
 | Design | 17 mice — hM3D n=5, hM4D n=6, mCherry n=6 |
 
 ---
@@ -208,6 +208,296 @@ Descriptive, gating nothing, adding no inference:
   contrast code. An equal shift in every epoch must be detected by the simple effects while the
   interaction stays null; a trace-only shift must make the interaction significant. Margins are
   wide by construction, so this tests the code rather than one lucky realization.
+
+## A.7 The recall lane — Test_B and Test_B_1wk, each on its own
+
+`render_paper_recall_amplitude_rate()`, one call per recall session, writing
+`PLOTS_DIR/sp_rates_lmm/paper/recall/<session>/`. It exists so the manuscript can describe
+conditioning and retrieval with **one** description of statistical method.
+
+**It is the same analysis as §A, with a different epoch set and a different cohort.** Same event
+definition (one contiguous supra-threshold run of `S`, amplitude = its integral — unchanged and
+not re-tuned), same animal-level summarization (§A.1), same
+`log(metric) ~ group * epoch + (1|mouse)` for both outcomes, same `require_common_unified_method`
+hard-fail, same within-epoch two-member Holm family, same joint Wald interaction test, same figure
+grammar and the same `_assert_markers_match_model` marker check. The unified helpers took a
+`reference_epoch` parameter for this; nothing about the conditioning models changed.
+
+| | conditioning (§A) | recall (§A.7) |
+|---|---|---|
+| epochs | `pre_tone_matched`, `trace`, `post_shock` | `pre_tone`, `post_tone` — 20 s each |
+| reference epoch | `pre_tone_matched` | `pre_tone` |
+| interaction | joint Wald, 4 coefficients, df1 = 4 | joint Wald, 2 coefficients, df1 = 2 |
+| denominator df | 16 (`n_animals − 1`) | that session's own `n_animals_present − 1` |
+| across-epoch Holm sensitivity | `p_holm_six`, retained | **not computed** — no such family was ever declared for recall, and there would be four, not six |
+
+**The two 20 s windows.** `pre_tone` ends at tone onset; `post_tone` begins at tone offset and is
+the retrieval analogue of the conditioning trace interval. The **tone epoch itself is excluded**,
+as are the legacy 35 s post-tone window and `TestBSession.post_tone_offsets`' run-to-the-next-tone
+interval. `get_recall_epoch_frames()` is a thin guard over `get_testb_epoch_frames` that adds the
+completeness check the latter does not make: a post-tone window that would run past the end of the
+recording (or into the next tone) returns `None`, and a pre-tone window that would overlap the
+previous trial's post-tone window **raises**. Missing and ambiguous are different problems and are
+handled differently. Each animal is then restricted to the trials carrying both complete windows
+(`restrict_to_exposure_matched_trials`, measured exposure, never a trial index), and the per-animal
+coverage is written to `stats/unified_recall_trial_coverage.csv`. Both outcomes come off that one
+frame, so the rate row cannot describe different trials from the amplitude row.
+
+**Test_B and Test_B_1wk are never compared with each other here, and the code cannot be made to.**
+The hM4D animal missing at 48 h is not the one missing at 1 week, so *"significant at 48 h but not
+at 1 week"* is not evidence that anything declined — it is two independent analyses of two
+different animal sets. A formal timepoint comparison needs a fixed-cohort model restricted to
+animals present at both sessions; that is not fit here and is deliberately not approximated by
+putting both sessions on one figure. Each session's `paper_results_summary.md` says so at the top
+and contains no cross-session sentence.
+
+**Retrieval preferentiality is the interaction and nothing else.** A significant post-tone
+comparison with a null interaction does *not* establish that the difference is tone-evoked. The
+readings of each (simple effect, interaction) pattern are fixed in advance in
+`_RECALL_SIMPLE_EFFECT_READING` / `_RECALL_INTERACTION_READING` so they cannot drift toward
+whichever sentence the observed numbers would flatter — and the interaction's verdict is written
+per **outcome**, never per group, because a joint 2-df test does not localize to one group.
+
+**No CNO was present at recall.** Every generated file says so. A recall difference is a
+persistent consequence of the conditioning-day manipulation, not evidence of ongoing receptor
+activation; "hM3D activation increased activity at recall" is not a supportable sentence.
+
+### A.7.1 The pre→post modulation decomposition (Test_B)
+
+The interaction test above answers *does the pre→post change differ among the groups?* but shows
+nobody the change. This block adds the per-animal change scores and the pairwise decomposition of
+that same interaction. **It fits no model.** Every number is a linear contrast of the two fits the
+lane already made, on the same `df = n_animals_present − 1`.
+
+- `build_recall_modulation_by_mouse` pivots the inferential table to one row per (animal, outcome)
+  carrying `delta_log = post − pre` and `fold_change_post_vs_pre = exp(delta_log)`. It is derived
+  from `<prefix>_mouse_epoch_values.csv` itself, so a plotted change score is a difference of the
+  numbers the model saw — there is no second aggregation path.
+- `recall_modulation_contrasts` returns two blocks. **Within-group** pre→post changes (the control
+  group's is the epoch main coefficient; a treatment group's is that coefficient plus its own
+  interaction term) are **descriptive** — they characterize the trajectory and explain the shape
+  of the interaction, and are not a between-group test. **Pairwise** comparisons of that change
+  are the inferential question: against mCherry each is a single group × epoch coefficient, and
+  hM3D-vs-hM4D is the *difference* of the two, which needs their covariance and is therefore a
+  contrast, not a subtraction of two published SEs. All three identities are asserted in code.
+- **The reported values are the unadjusted model-derived contrasts** — `p_raw`, a linear contrast
+  of the same fitted model, which is what the modulation panel's brackets and the drafted
+  paragraph read. A Holm adjustment across the three pairwise comparisons WITHIN one outcome (two
+  independent three-member families, amplitude and rate never pooled, the same shape as the
+  within-epoch families) is still computed and still written to the CSV and the companion markdown
+  as a **multiplicity reference** for auditability. It is not the governing decision rule for this
+  lane. Neither column is relabelled as the other, and neither is a prospectively preregistered
+  decision. This is a change in what is *reported*, not in what is computed: the estimates,
+  intervals, *t*, df and both P columns are exactly the values the model has always produced.
+  The within-epoch `p_holm_epoch` families are unaffected and remain Holm-governed.
+- **Symmetric across groups and outcomes.** All three comparisons are computed and tabulated for
+  both outcomes; no group is a headline, and a decomposition that singled one group out would be a
+  different and unstated inferential structure. Which comparisons the *figure* brackets
+  (`RECALL_MODULATION_FIGURE_PAIRS`) is a display choice on top of that complete table — hM4D vs
+  mCherry is tabulated but not drawn — and changes no computed value.
+
+**Three questions the outputs keep apart**, because they can disagree in both directions:
+
+| | question | where |
+|---|---|---|
+| A | groups differ *within* an epoch (absolute level) | `unified_recall_posthoc_contrasts.csv` |
+| B | a group changes at all pre→post | the within-group block — descriptive |
+| C | the pre→post change *differs between* groups | the pairwise block, and its omnibus |
+
+Equal post-tone levels reached from unequal baselines is a large C with a null A;  parallel decline
+from unequal baselines is a large A with a null C. `verify_recall_modulation_synthetic` plants
+exactly that case (along with a shared decline, a decline abolished in each DREADD group in turn,
+and an hM3D/hM4D separation around a midway control) and hard-fails if the code does not recover
+it — for both outcomes.
+
+Outputs, under `paper/recall/Test_B/`: `stats/unified_recall_modulation_by_mouse.csv`,
+`stats/unified_recall_modulation_contrasts.csv` (both blocks, distinguished by `block`),
+`stats/unified_recall_modulation_contrasts.md`,
+`stats/unified_recall_modulation_synthetic_verification.txt`,
+`testb_amplitude_rate_modulation.{png,svg}` (one panel per outcome, one point per animal, a zero
+reference line, brackets read from the unadjusted model-derived contrasts via
+`_precomputed_stat_fn` — a bracket in `RECALL_MODULATION_NS_LABEL_PAIRS` carries its *P*-value even
+when *P* ≥ 0.05 — and each panel's own omnibus in its title) and `testb_amplitude_rate_prepost_trajectories.{png,svg}`
+(descriptive; one line per animal, natural scale, 2 outcomes × 3 group facets).
+
+**Scoped to Test_B by `RECALL_MODULATION_SESSIONS`.** The machinery is session-agnostic; extending
+it to `Test_B_1wk` is adding the key and nothing else. That does not license comparing the two.
+
+**Not in this lane:** any cross-session comparison, cross-registered cell-identity persistence,
+responder classification, tone-epoch statistics, and the negative-binomial count model as a
+distribution-aware rate sensitivity analysis (permitted by the plan, not the paper-facing
+statistic, and not fit in this pass).
+
+The older `PLOTS_DIR/sp_rates_lmm/{Test_B,Test_B_1wk}/post_tone_amplitude.*` output is untouched
+and remains a Part B secondary (a single-epoch cell-level amplitude omnibus in the BH-FDR family).
+It is not this lane and supplies no paper number.
+
+### A.7.2 The hierarchical cell-level companion analysis (Test_B)
+
+> **Explicitly invoked — not part of a routine pass.** `run_hierarchical_cell_analysis` defaults to
+> **`False`**, so a normal `run_sp_rates_lmm()` never runs any of this. The suite costs ~40 min
+> (exact mouse-label MixedLM enumerations over the paired-cell table, the hierarchical NB count
+> model, and the prior/posterior-predictive machinery) against a few minutes for everything else,
+> and its evaluation is complete. Rerun it deliberately with
+> `run_sp_rates_lmm(..., run_hierarchical_cell_analysis=True)` or
+> `render_paper_recall_amplitude_rate(..., run_hierarchical_cell_analysis=True)`. Nothing was
+> removed: every function, every component and every output file it has already written is intact,
+> and passing `True` reproduces the same suite. The mouse-level recall lane is the paper-facing
+> analysis and is complete without it.
+>
+> **What the completed run is good for.** Its **paired-cell amplitude** result stands as
+> *supplementary sensitivity evidence* that the hM3D effect magnitude survives explicit pre→post
+> pairing of the same neurons: 1.465× against the mouse-level 1.501×, exact mouse-label
+> *P* ≈ 0.052. It is not the source of any figure annotation. Its **hierarchical NB rate model** is
+> *not* usable as sensitivity evidence at all — it failed its own posterior-predictive adequacy
+> check — and is deliberately **not** redesigned or replaced. The mouse-level Test_B
+> population-rate analysis is unaffected and unchanged.
+
+**Why this exists.** A.7.1's decomposition, like everything above it, is computed from one scalar
+per animal per epoch. That is a valid hierarchical analysis and it stays the primary one — but it
+is **not the only valid one**, and it throws away two things:
+
+- **within-cell pairing** — an animal's pre-tone amplitude averages the cells active at pre-tone
+  and its post-tone amplitude averages the cells active at post-tone, so cell-identity variance
+  never cancels out of the change score;
+- **within-mouse cellular heterogeneity** — whether an animal's shift is coherent across its
+  population or carried by a handful of cells.
+
+This block asks the complementary question: *does the pre→post modulation pattern occur coherently
+across the cellular population within animals, with the cell hierarchy modelled rather than
+collapsed before fitting?* It is **strictly additive** and writes into its own subdirectory,
+`paper/recall/Test_B/hierarchical_cells/`, so its numbers cannot be mistaken for the primary lane's.
+Nothing above it changed.
+
+**Mouse-level assignment is still the basis of inference.** Treatment was assigned to 16 animals,
+not to cells. Every paper-facing *P* in this block comes from permuting the 16 **mouse** labels,
+with every cell fixed to its own animal. `n = 16 mice`; cell counts are descriptive and never a
+sample size.
+
+#### How the cell information is retained, and what makes it a hierarchical *test*
+
+| | | |
+|---|---|---|
+| **estimator** | `delta_log_amplitude_cell ~ group + (1\|mouse)` on the paired cells | cells enter through the model's own within/between-mouse variance partition |
+| **inference** | exact mouse-label randomisation **of that model's coefficient** | the model is refit under every relabelling, so the hierarchy is *inside* the statistic being tested |
+| **sensitivity** | randomisation of the 16 mouse-mean deltas | model-free check, but collapses each animal to one number — carries no cellular hierarchy, and is in no Holm family |
+
+The distinction matters: permuting a per-mouse average would be a better-computed mouse mean, not a
+hierarchical test. Both are reported, neither is described as doing the other's job, and no
+numerical equivalence between them is claimed (the model's GLS weighting and equal-mouse weighting
+coincide only at equal cluster sizes; cells per mouse vary here).
+
+**The restriction is on the randomisation, not the data.** For comparison (a, b) the third group's
+mice keep their true labels and stay in every fit; only a's and b's labels are exchanged, at their
+observed sizes. The full **three-group** model is refit every time — never a two-group subset — so
+the reported estimate, its Wald CI and the permuted statistic all describe one specification. The
+hM3D-vs-hM4D statistic is `β_Exc − β_Inh` as a linear contrast, using the coefficients' covariance.
+
+**Exact, because the restriction makes it affordable.** With 6/5/5 mice the restricted spaces hold
+C(11,6)=462, C(11,6)=462 and C(10,5)=252 relabellings — computed from the observed sizes at run
+time and checked against the enumerator — so every one is enumerated and the three *P*-values are
+**exact**, with no Monte Carlo error and no `+1/+1` correction (the observed labelling is one of the
+enumerated draws). **Holm across exactly those three** is the paper-facing family and the source of
+the figure's brackets. The omnibus cannot work this way — the global space is 2,018,016 and each
+draw refits a mixed model — so it is Monte Carlo at a frozen seed over a **2-df model-based**
+statistic (the joint Wald test of both group coefficients). Its H0 is that those coefficients are
+jointly zero; it is not a test of the cellular distribution's shape, spread or tails.
+
+#### How pseudoreplication is prevented
+
+Treating thousands of cells as independently randomised treatment replicates is the failure mode
+this block is built against. Three things prevent it, and the synthetic suite checks all of them
+(**as a development tool, run by hand — it is not part of a real-data run**; see below):
+
+1. **No asymptotic cell-level *P* is paper-facing.** Every model here writes its `P>|z|` column out
+   with a header saying so; none enters a family or a figure.
+2. **A huge effect confined to ONE animal must not reach significance** — a cell-level test would
+   call it overwhelming; the mouse-label randomisation cannot, because that animal's *label* is what
+   moves.
+3. **Adding cells at a fixed number of mice must sharpen the per-animal estimate and buy no
+   treatment-level precision.** Measured, not asserted: over a 100× increase in cells/mouse under a
+   true null the mean within-mouse SEM fell ~10× (0.0704 → 0.0071) while the **group-contrast SE
+   did not move** (0.098 → 0.105) and the randomisation *P* never approached significance. The
+   contrast SE is a *between-mouse* quantity, floored by between-mouse variance, and no number of
+   cells reduces it — that gap is the guard, and the run fails if the contrast SE ever starts
+   tracking cell count downward.
+   Worth recording, because an earlier draft of this section got it wrong: the asymptotic *P*
+   printed beside it does **not** shrink either, because `linear_contrast_test` already uses
+   `df = n_mice − 1` (§4.1's animal-level convention). The naive cell-level *P* that *would* shrink
+   is the MixedLM summary's own `P>|z|` — which is exactly why this suite never reports it.
+
+#### The estimand is conditional — and the rate model is why that is not the whole picture
+
+The paired amplitude estimate is **conditional on cells with measurable amplitude in both epochs**.
+That is unavoidable for a paired quantity but is a real restriction: eligibility is selected on
+activity in both windows and could itself differ by group. `stats/hierarchical_cell_eligibility.csv`
+is therefore a **reported result**, and `fraction_eligible_both` travels with the estimate
+everywhere. The path that includes **zero-event cells** is the hierarchical NB count model, which is
+one of the reasons it is a required component rather than an optional extra.
+
+#### Both long-format models carry a mouse epoch random slope
+
+The NB rate model and the unpaired amplitude sensitivity model are `group * epoch` models, so
+between-mouse variation in the pre→post **change** — the effect being compared across groups — has
+nowhere to go without `(0 + post_indicator|mouse)`, and the group × epoch terms would get intervals
+that are too narrow with cells acting as replicates for the epoch contrast. That is the same
+pseudoreplication in count-model form, so the slope is part of the frozen structure rather than
+something added later. Independent (uncorrelated) slope; **no cell-level epoch slope**. The primary
+Δ model needs no such term — fit on the within-cell difference, `(1|mouse)` already *is* the
+mouse-specific modulation effect.
+
+#### One predefined flow, no fallbacks, no result-dependent branching
+
+`run_hierarchical_cell_analysis` is the **only** gate and it is all-or-nothing: whenever the suite
+is invoked, all eleven components in `_HIERARCHICAL_CELL_COMPONENTS` run — there is no
+per-component switch, and nothing is activated or omitted because of what another result showed.
+(The gate itself defaults to `False`; see the note opening A.7.2.) Those eleven are **analyses and
+their diagnostics only** — paired-cell construction, the hierarchical amplitude fit and its
+mouse-label randomisation inference, the declared amplitude sensitivity model, the hierarchical
+rate fit with its prior/posterior-predictive and convergence diagnostics, and the figures and
+reports.
+
+**Implementation validation is not part of a real-data run.** `verify_hierarchical_cell_synthetic`
+and `verify_hierarchical_cell_rate_synthetic` plant a known truth in *simulated* data and check
+that this machinery recovers it. They validate the **code**, not the experiment, and are
+**development tools called by hand** after changing the module — never by
+`run_hierarchical_cell_suite`. A run that produces the reported numbers should compute those
+numbers and nothing else; the amplitude suite alone also cost ~19 min, most of a real Test_B pass.
+The design-3 and design-4 results quoted above come from such a hand run and are recorded here so
+the guarantee is on record without re-deriving it every time. Nothing is switched on because
+another result was or was not significant. If a specified model fails to fit or fails its
+predefined adequacy gate the suite **raises** — no pooled-cell test, no Gaussian approximation, no
+quasi-Poisson, no reduced random-effect structure, no clustered-OLS. `fit_mixed_model`'s own
+documented clustered-OLS fallback is correct for the other lanes and is explicitly barred here
+(clustered OLS over cell rows with 16 clusters is exactly the anti-conservative inference this
+block exists to avoid). A **boundary** variance estimate is *not* a failure — it is a statement
+about the data, reported explicitly, and distinct from the term having been dropped, which is
+checked separately.
+
+NB priors are **frozen before fitting** (Bambi would otherwise pick data-dependent defaults), the
+dispersion parameterisation is confirmed empirically against the installed backend, a
+prior-predictive check runs **before** the inferential fit, and posterior-predictive checks of the
+count distribution, zero fraction and overdispersion **by group × epoch** are part of adequacy —
+convergence diagnostics alone are not. The convergence gate's scope is fixed in advance: fixed
+effects, dispersion, RE scale hyperparameters, mouse intercepts and slopes and the derived
+contrasts are gated; the thousands of nuisance per-cell intercepts are reported in full but do not
+define failure. Divergences are gated **globally** at zero — a divergence belongs to the sampler's
+trajectory, not to a parameter, so it is never scoped away.
+
+Output is **staged and promoted**: everything is written to `hierarchical_cells__staging/` and the
+previous complete directory is replaced wholesale only after every component succeeds. A failure
+leaves the previous complete output untouched, a `FAILED.txt` naming the failing component in
+staging, and re-raises. Stale outputs cannot survive a partial run.
+
+**This does not replace the mouse-level analysis and the Results section is not rewritten around
+it.** `stats/hierarchical_cell_vs_mouse_level_summary.md` places the two side by side, reading every
+existing number off the frames the lane already produced, and states explicitly that the smaller
+*P* is not automatically preferred. Where the hierarchical analysis is stronger, the supportable
+wording is that *a hierarchical cell-level analysis, retaining within-mouse cellular variation while
+preserving mouse-level treatment assignment, provided additional evidence that pre-to-post amplitude
+modulation differed among groups* — never `n = thousands of cells`.
+
+**Scoped to Test_B by `RECALL_HIERARCHICAL_CELL_SESSIONS`.** No CNO was present at recall.
 
 ---
 
@@ -1283,8 +1573,11 @@ through it too.
 Entry points: `plot_primary_trace_amplitude`, `plot_epoch_profile`, `plot_amplitude_ecdf`,
 `plot_amplitude_p90`, `plot_decomposition`, `plot_manipulation_check`, `plot_run_structure`,
 `plot_threshold_sensitivity`, `plot_effect_forest`, `plot_decomposition_grid`, `plot_example_traces`,
-`plot_width_vs_height_matched_examples`, `plot_conditioning_phase_amplitude` (§6.0a), and the
-paper lane's `plot_paper_epoch_distributions` / `render_paper_tfc_amplitude_rate` (§6.1).
+`plot_width_vs_height_matched_examples`, `plot_conditioning_phase_amplitude` (§6.0a), the
+paper lane's `plot_paper_epoch_distributions` / `render_paper_tfc_amplitude_rate` (§6.1), and the
+recall lane's `plot_recall_modulation` / `plot_recall_prepost_trajectories` (§A.7.1). The first of
+those reuses `_draw_mouse_violin_panel` with `_precomputed_stat_fn`, so its brackets come from the
+fitted models rather than from a second test on the plotted values.
 
 `write_decomposition_contrasts_markdown` takes `figure_has_stars`, `no_star_note` and `title`.
 The `figure_has_stars=False` default note is written **about the four-component decomposition**
