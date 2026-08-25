@@ -44,7 +44,7 @@ Module layout
                                 verify_unified_synthetic(), render_paper_tfc_amplitude_rate(),
                                 render_paper_recall_amplitude_rate()
   Hierarchical cell companion -- build_recall_cell_amplitude_modulation(),
-   (recall Test_B; strictly     fit_hierarchical_cell_delta_model(),
+   (both recall sessions;       fit_hierarchical_cell_delta_model(),
     additive)                   hierarchical_cell_amplitude_permutation(),
                                 fit_hierarchical_cell_unpaired_sensitivity(),
                                 build_recall_cell_epoch_count_table(),
@@ -63,6 +63,7 @@ Module layout
                                 recall_modulation_contrasts(), recall_modulation_lookup(),
                                 recall_within_group_lookup(), write_recall_modulation_summary(),
                                 plot_recall_modulation(), plot_recall_prepost_trajectories(),
+                                recall_trajectory_paired_tests(), recall_trajectory_lookup(),
                                 verify_recall_modulation_synthetic()
   Event/run table construction -- _iter_event_windows() (shared traversal), build_epoch_event_table(),
                                   build_run_structure_table(), aggregate_over_trials(),
@@ -88,6 +89,46 @@ Module layout
 
 CHANGELOG (post-review corrections, see analysis_methods_templates/sp_rates_lmm_methods.md and
 the plan this module was built from for the full rationale):
+  - THE TRAJECTORY FIGURE NOW CARRIES A WITHIN-GROUP PAIRED t-TEST (recall lane, both sessions;
+    recall_trajectory_paired_tests, recall_trajectory_lookup, plot_recall_prepost_trajectories).
+    ** This is the one place in this lane where a statistic IS computed on plotted values, and it
+    was added deliberately. ** The per-animal trajectory panel was previously annotation-free on
+    the grounds that a per-group paired comparison invites being read as the treatment effect.
+    That risk is real and is now managed explicitly rather than by omission: each facet gets a
+    two-tailed paired t of that group's own animals' pre/post values ON THE LOG SCALE the models
+    were fit on (df = n_g - 1), the figure footer states in as many words that a bracket says
+    whether THAT group changed and is NOT a comparison between groups, and the companion markdown
+    repeats it. Stars below 0.05, the p-value itself printed for 0.05 <= P < 0.10 so a near-miss
+    is stated rather than inferred from an absent bracket, nothing above that. Brackets read the
+    RAW p; a three-group Holm family per outcome travels beside it as a multiplicity reference,
+    the same convention the modulation figure already uses.
+    ** It is a SECOND estimator of a quantity within_group_df already reports, and the two do not
+    agree. ** The model contrast pools residual variance across the three groups on the session's
+    animal-level df; the paired t uses one group's animals and its own df. Both are written --
+    the new `<prefix>_trajectory_paired_tests.csv`, and adjacent sections B and B-panel of
+    `<prefix>_modulation_contrasts.md` -- precisely so the divergence is on the record instead of
+    surfacing as a figure that appears to contradict a table. ** NOTHING ELSE CHANGED: ** the
+    between-group modulation contrasts, their omnibus, the modulation figure's brackets, the
+    within-epoch simple effects, every Holm family and every other output are untouched, and no
+    paper-facing number moved. The model contrast remains this lane's estimate of the within-group
+    change; the paired t is the panel's own annotation and nothing else reads it.
+  - THE TWO SESSION-SCOPED RECALL ADDITIONS NOW RUN ON BOTH RECALL SESSIONS. The pre->post
+    modulation decomposition and the hierarchical cell-level companion were each introduced
+    scoped to Test_B for the pass that specified them, leaving Test_B_1wk behind a lane that was
+    otherwise already identical for both sessions -- including the recall METHODS file copied
+    into Test_B_1wk's own output directory, which pointed readers at a modulation markdown that
+    was never written there. RECALL_MODULATION_SESSIONS and RECALL_HIERARCHICAL_CELL_SESSIONS now
+    both name ('Test_B', 'Test_B_1wk'). ** No model, estimator, contrast, interval, omnibus,
+    epoch definition, matched-trial construction, figure grammar or output filename changed, and
+    no Test_B number changed. ** The machinery was already session-agnostic: each session's
+    cohort, group Ns, denominator df, randomization space, file stems and titles are derived from
+    that session's own data or from RECALL_SESSION_LABELS/_RECALL_FILE_PREFIX, so extending the
+    scope was opening the two gates and nothing else. ** The two recall sessions remain analysed
+    SEPARATELY and are still never compared with each other ** -- a decomposition now existing at
+    both timepoints licenses no 48 h versus 1 week sentence, for the cohort reason
+    render_paper_recall_amplitude_rate states. RUNTIME: a routine pass gains only the (fast)
+    modulation outputs for Test_B_1wk; run_hierarchical_cell_analysis=True now costs ~80 min
+    rather than ~40, since the companion suite runs once per recall session.
   - THE HIERARCHICAL COMPANION IS NOW EXPLICITLY INVOKED, AND THE Test_B MODULATION FIGURE
     REPORTS UNADJUSTED MODEL-DERIVED CONTRASTS. Two changes, neither of them statistical:
     (1) RUNTIME. run_hierarchical_cell_analysis now defaults to FALSE, in run_sp_rates_lmm and in
@@ -112,7 +153,8 @@ the plan this module was built from for the full rationale):
     contrast, interval, omnibus, event or epoch definition, matched-trial construction, TFC
     output or Test_B_1wk output changed. ** The group x epoch omnibus is still reported in each
     panel title and still does not gate the contrasts.
-  - THE HIERARCHICAL CELL-LEVEL COMPANION ANALYSIS (recall lane, Test_B;
+  - THE HIERARCHICAL CELL-LEVEL COMPANION ANALYSIS (recall lane, Test_B when introduced; both
+    recall sessions as of the entry above;
     RECALL_HIERARCHICAL_CELL_SESSIONS, run_hierarchical_cell_suite). ** STRICTLY ADDITIVE:
     NOTHING PRE-EXISTING CHANGED. ** No existing statistical path, estimator, model, contrast,
     Holm family, omnibus test, output file, table or figure was replaced or altered -- in this
@@ -123,7 +165,7 @@ the plan this module was built from for the full rationale):
     That stays primary. This asks the complementary question -- does the pre->post modulation
     occur coherently across the cellular population WITHIN animals when the cell hierarchy is
     modelled rather than collapsed? -- and writes into its own subdirectory
-    (paper/recall/Test_B/hierarchical_cells/) so its numbers cannot be confused with the primary
+    (paper/recall/<session>/hierarchical_cells/) so its numbers cannot be confused with the primary
     lane's. Amplitude: one PAIRED within-cell delta per eligible cell (log post - log pre, no
     imputation, no pseudocount), estimated by `delta ~ group + (1|mouse)` and tested by EXACT
     mouse-label randomization OF THAT MODEL'S COEFFICIENT -- the full three-group model refit
@@ -150,7 +192,8 @@ the plan this module was built from for the full rationale):
     gained an opt-in `method=` optimizer parameter defaulting to its previous 'lbfgs', and the NB
     convergence-diagnostics block was extracted to _nb_convergence_diagnostics with a default that
     emits byte-identical text for the TFC lane. See docs/sp_rates_lmm.md section A.7.2.
-  - THE PRE->POST MODULATION DECOMPOSITION (recall lane, Test_B; RECALL_MODULATION_SESSIONS). The
+  - THE PRE->POST MODULATION DECOMPOSITION (recall lane, Test_B when introduced; both recall
+    sessions as of the entry above; RECALL_MODULATION_SESSIONS). The
     recall models already tested whether the pre-tone -> post-tone change differs among the groups
     -- that IS the group x epoch joint Wald test -- but nothing showed the change itself, and the
     individual pairwise comparisons the fitted model contains were never read out. Added:
@@ -159,10 +202,12 @@ the plan this module was built from for the full rationale):
     change, DESCRIPTIVE; and the three pairwise comparisons of that change, with a within-outcome
     Holm adjustment alongside the raw contrast p-values -- see the entry above for which of the
     two the figure reports), a two-panel per-animal modulation figure whose brackets are looked up
-    from those contrasts, a descriptive pre/post trajectory figure, a companion markdown, and
-    verify_recall_modulation_synthetic. ** No model is fit and no statistic is computed on the
-    plotted change scores: ** every number is a linear contrast of the two fits the lane already
-    made, on the same animal-level df, and each panel and table carries the omnibus it decomposes.
+    from those contrasts, a pre/post trajectory figure (descriptive when introduced; it gained a
+    within-group paired t-test as of the entry above), a companion markdown, and
+    verify_recall_modulation_synthetic. ** No model is fit, and as introduced here no statistic was
+    computed on the plotted change scores: ** every number is a linear contrast of the two fits the
+    lane already made, on the same animal-level df, and each panel and table carries the omnibus it
+    decomposes. That remains true of every BETWEEN-GROUP number in this block.
     All three groups and both outcomes are treated identically -- no group is a headline. Nothing
     pre-existing changed: the within-epoch simple effects, their Holm families, the omnibus
     definition and every existing figure and table are untouched.
@@ -282,7 +327,8 @@ from caban.single_unit_common import (
 from caban.decoder import _ANALYSIS_METHODS_TEMPLATES_DIR, _copy_analysis_methods_template
 from caban.analysis import _draw_violin_triplet, do_pairwise_holm_plot
 from caban.epoch_analysis import (get_epoch_frames, get_testb_epoch_frames,
-                                  TRACE_MATCHED_WINDOW_S, POST_SHOCK_LATE_ONSET_S)
+                                  TRACE_MATCHED_WINDOW_S, POST_SHOCK_LATE_ONSET_S,
+                                  _stars_from_p)
 
 METHODS_FILENAME = 'sp_rates_lmm_methods.md'
 # Interpretive companion to METHODS_FILENAME: the panel-by-panel reading of the decomposition
@@ -5387,12 +5433,13 @@ _RECALL_EPOCH_LABELS = {
 _RECALL_FILE_PREFIX = {'Test_B': 'testb', 'Test_B_1wk': 'testb_1wk'}
 
 # Which recall sessions get the pre->post MODULATION decomposition (the per-mouse change scores,
-# their three pairwise between-group contrasts and the two new figures). Scoped to the 48-h session
-# in this pass, as the analysis was specified; the machinery below is session-agnostic, so
-# extending it to Test_B_1wk is adding the key here and nothing else. It is a constant rather than
-# an argument because a per-call flag invites two sessions being rendered under different rules by
-# accident.
-RECALL_MODULATION_SESSIONS = ('Test_B',)
+# their three pairwise between-group contrasts and the two new figures). BOTH recall sessions, each
+# decomposed entirely within itself: every number comes from that session's own two fits, its own
+# cohort and its own denominator df, and nothing here compares the two timepoints -- see
+# render_paper_recall_amplitude_rate on why that comparison is not available in this lane. It is a
+# constant rather than an argument because a per-call flag invites two sessions being rendered
+# under different rules by accident.
+RECALL_MODULATION_SESSIONS = ('Test_B', 'Test_B_1wk')
 
 # The interpretation rules from the recall plan, stated literally. The point of routing this
 # through a lookup rather than prose written once per run is that the reading of a result is FIXED
@@ -5772,7 +5819,7 @@ def _modulation_direction(row):
 
 def write_recall_modulation_summary(save_dir, session_key, session_label, interactions_table,
                                     within_group_df, pairwise_df, stats_prefix,
-                                    filename=None):
+                                    trajectory_df, filename=None):
     """
     The paper-facing account of the pre->post modulation decomposition, for ONE recall session.
 
@@ -5785,6 +5832,13 @@ def write_recall_modulation_summary(save_dir, session_key, session_label, intera
     within-epoch group differences live in `<prefix>_posthoc_contrasts.csv` and are not restated
     here; the within-group changes are labelled DESCRIPTIVE; the pairwise comparisons of those
     changes are labelled as the inferential question and carry the Holm-adjusted P.
+
+    ** Question B is answered TWICE, adjacently, and the file says why. ** Section B is the
+    model-implied within-group change (pooled variance, session df); section B-panel is the paired
+    t-test the trajectory figure actually draws (that group's animals only, df = n_g - 1). They
+    are different estimators of one estimand and will not agree exactly. Printing them next to
+    each other is deliberate -- it is what stops a reader meeting the figure's bracket and the
+    model's interval as if one contradicted the other. Neither is a between-group comparison.
     """
     filename = filename or f'{stats_prefix}_modulation_contrasts.md'
     inter = {row['outcome']: row for _, row in interactions_table.iterrows()}
@@ -5853,6 +5907,48 @@ def write_recall_modulation_summary(save_dir, session_key, session_label, intera
                 f"{row['post_pre_ratio']:.3f} | "
                 f"[{row['ratio_ci_low']:.3f}, {row['ratio_ci_high']:.3f}] | "
                 f"{row['t']:.2f} | {row['p_raw']:.4g} |")
+
+        lines += [
+            '',
+            '### B-panel. The same question, as the trajectory figure draws it — paired *t*-test',
+            '',
+            'The brackets on the **pre→post trajectories figure** '
+            '(`*_amplitude_rate_prepost_trajectories.png`) are **not** the model contrasts in '
+            'section B. They are a paired *t*-test of each group\'s own animals — the pairing '
+            'that figure draws, one line per animal — on the log scale, with '
+            '**df = n − 1 for that group alone**, from '
+            f'`stats/{stats_prefix}_trajectory_paired_tests.csv`.',
+            '',
+            'Section B pools residual variance across the three groups on the session\'s '
+            'animal-level df; this uses one group\'s animals and its own df. **They are two '
+            'estimators of the same quantity and will not agree exactly.** That is expected, it '
+            'is why both are printed here, and neither supersedes the other: section B remains '
+            'this lane\'s estimate of the within-group change, and this is the panel\'s own '
+            'annotation.',
+            '',
+            '**Still question B.** A star in one facet and none in another is *not* evidence '
+            'that the two groups modulate differently — that is section C, and nothing in this '
+            'table may be used to infer it.',
+            '',
+            'Brackets read the raw *P*; stars below 0.05, the *P* itself printed up to '
+            f'{RECALL_TRAJECTORY_NS_LABEL_MAX:g}, no bracket above that. The Holm adjustment '
+            'across the three groups within this outcome is a multiplicity reference, as '
+            'everywhere else in this lane.',
+            '',
+            f'| group | n | mean Δ log | post/pre {outcome.ratio_label} | t | df | '
+            'P (raw, drawn) | Holm-adjusted P (multiplicity reference) |',
+            '|---|---|---|---|---|---|---|---|',
+        ]
+        for group in DREADD_DISPLAY_ORDER:
+            row = recall_trajectory_lookup(trajectory_df, outcome.key, group)
+            flag = ' (rejects at Holm 0.05)' if row['holm_trajectory_reject'] else ''
+            drawn = _recall_trajectory_bracket_label(row['p_raw'])
+            lines.append(
+                f"| {GROUP_LABELS.get(group, group)} | {int(row['n_animals'])} | "
+                f"{row['mean_delta_log']:+.3f} | {row['post_pre_ratio']:.3f} | "
+                f"{row['t']:.2f} | {int(row['df'])} | "
+                f"**{row['p_raw']:.4g}**{'' if drawn is None else f' (drawn: {drawn})'} | "
+                f"{row['p_holm_trajectory']:.4g}{flag} |")
 
         lines += [
             '',
@@ -6226,27 +6322,202 @@ def plot_recall_modulation(modulation_df, pairwise_df, interactions_table, save_
     plt.close(fig)
 
 
-def plot_recall_prepost_trajectories(modulation_df, save_dir, session_label, stats_prefix,
-                                     filename_root, group_order=DREADD_DISPLAY_ORDER):
+# ── The trajectory panel's own WITHIN-GROUP paired test ──────────────────────────────────────
+#
+# ** This answers question B and ONLY question B: did THIS group change from pre-tone to
+# post-tone? ** It is not a treatment comparison and may never be read as one. "hM3D changed and
+# mCherry did not" is not a test that the two changed differently -- that is question C, it stays
+# with the model-derived pairwise modulation contrasts in recall_modulation_contrasts, and nothing
+# computed here substitutes for them. The between-group brackets on the modulation figure continue
+# to come from the fitted models alone.
+#
+# ** It is deliberately a SECOND estimate of a quantity the LMM already reports, and the two
+# DISAGREE by construction. ** within_group_df carries the same pre->post change as a linear
+# contrast of the fitted mixed model, pooling residual variance across the three groups on that
+# session's animal-level df. The paired t here uses only that group's own animals and its own
+# df = n_g - 1, because that is precisely what this panel draws -- one line per animal, within one
+# group, on the log scale the model was fit on. Neither is wrong; they are different estimators of
+# the same estimand. The disagreement is therefore put ON THE RECORD rather than hidden: both
+# tables are written, the companion markdown prints them adjacent under question B, and each
+# states which it is. The model contrast remains the lane's estimate of the within-group change;
+# this is the trajectory panel's own annotation and nothing else reads it.
+
+# Sets `holm_trajectory_reject` only. The STAR LADDER drawn on the panel is the conventional
+# ***/**/* of _stars_from_p (< 0.001 / < 0.01 / < 0.05), which is imported rather than restated so
+# this module cannot drift from the one every other caban figure uses.
+RECALL_TRAJECTORY_ALPHA = 0.05
+# 0.05 <= P < this gets a bracket labelled with its own P instead of stars, so a near-miss is
+# STATED rather than left to be inferred from an absent bracket. Above it, no bracket is drawn.
+RECALL_TRAJECTORY_NS_LABEL_MAX = 0.10
+
+
+def recall_trajectory_paired_tests(modulation_df, alpha=RECALL_TRAJECTORY_ALPHA,
+                                   group_order=DREADD_DISPLAY_ORDER):
+    """
+    A paired t-test of each group's pre-tone -> post-tone change, computed on the LOG-scale
+    per-animal values that plot_recall_prepost_trajectories draws. One row per (outcome, group).
+
+    ** The test is on the pairing the panel shows. ** Each animal contributes one pre-tone and one
+    post-tone value -- the very rows the models were fit on, pivoted by
+    build_recall_modulation_by_mouse -- and the test is scipy's ttest_rel over those pairs, which
+    is identically a one-sample t on the animal's `delta_log`. It is computed on the LOG scale, not
+    the natural scale the panel's axis is drawn on, because that is the scale the change is
+    additive on and the scale every other number in this lane lives on; exp(mean delta) is reported
+    beside it as the fold change.
+
+    ** df = n_g - 1, this group's own animals only. ** That is the deliberate difference from the
+    model contrast in `within_group_df`, which pools variance across the three groups on the
+    session's animal-level df -- see the block comment above. Both are written out.
+
+    ** Raw P is what the panel draws; Holm is computed beside it. ** Three groups within one
+    outcome form one Holm family, amplitude and rate as separate families -- the same shape as
+    recall_modulation_contrasts' pairwise family and unified_posthoc_contrasts' within-epoch one.
+    `p_holm_trajectory`/`holm_trajectory_reject` are a MULTIPLICITY REFERENCE, exactly as
+    `p_holm_modulation` is for the modulation figure; the bracket reads `p_raw` and the companion
+    text says so.
+
+    Hard-fails on a group with fewer than two animals, a non-finite value, or zero within-group
+    variance in the change -- each is a data pathology that would otherwise emit a meaningless or
+    infinite t.
+
+    Returns a DataFrame with columns
+        block, outcome, group, n_animals, mean_delta_log, sd_delta_log, se_delta_log,
+        post_pre_ratio, t, df, p_raw, p_holm_trajectory, holm_trajectory_reject
+    """
+    rows = []
+    for outcome in UNIFIED_OUTCOMES:
+        sub_outcome = modulation_df[modulation_df['outcome'] == outcome.key]
+        for group in group_order:
+            # Sorted so the paired arrays are in a deterministic animal order; the t is invariant
+            # to it, but a reproducible row order matters for the written table.
+            sub = sub_outcome[sub_outcome['group'] == group].sort_values('mouse')
+            pre = sub['pre_tone_value_log'].to_numpy(dtype=float)
+            post = sub['post_tone_value_log'].to_numpy(dtype=float)
+            n = len(sub)
+            if n < 2:
+                raise RuntimeError(
+                    f'recall_trajectory_paired_tests: group {group!r} has {n} animal(s) with a '
+                    f'{outcome.key} change score; a paired t-test needs at least two. The '
+                    f'inferential table is supposed to be a complete animal x epoch grid.')
+            if not (np.all(np.isfinite(pre)) and np.all(np.isfinite(post))):
+                raise RuntimeError(
+                    f'recall_trajectory_paired_tests: group {group!r} has a non-finite '
+                    f'{outcome.key} pre- or post-tone value; investigate the animal rather than '
+                    f'dropping it.')
+            delta = post - pre
+            sd = float(np.std(delta, ddof=1))
+            if not np.isfinite(sd) or sd == 0.0:
+                raise RuntimeError(
+                    f'recall_trajectory_paired_tests: group {group!r} has zero (or non-finite) '
+                    f'between-animal variance in its {outcome.key} pre->post change (sd={sd!r}), '
+                    f'so a paired t is undefined. That is a data pathology, not a result.')
+            res = scipy_stats.ttest_rel(post, pre)
+            mean_delta = float(np.mean(delta))
+            se = sd / np.sqrt(n)
+            # The one failure mode that would produce a plausible-looking wrong answer is
+            # ttest_rel being handed the arrays the other way round (a sign flip) or an unpaired
+            # variant sneaking in. Both are caught by reconstructing the statistic.
+            t_manual = mean_delta / se
+            if not np.isclose(float(res.statistic), t_manual, rtol=1e-8, atol=1e-10):
+                raise RuntimeError(
+                    f'recall_trajectory_paired_tests: scipy returned t={float(res.statistic)!r} '
+                    f'for {outcome.key}/{group} but the paired construction implies {t_manual!r}. '
+                    f'The reported statistic is not the paired test it is documented to be.')
+            rows.append({
+                'block': 'trajectory_paired_t', 'outcome': outcome.key, 'group': group,
+                'n_animals': int(n), 'mean_delta_log': mean_delta, 'sd_delta_log': sd,
+                'se_delta_log': float(se), 'post_pre_ratio': float(np.exp(mean_delta)),
+                't': float(res.statistic), 'df': int(n - 1), 'p_raw': float(res.pvalue),
+            })
+
+    trajectory_df = pd.DataFrame(rows)
+    trajectory_df['p_holm_trajectory'] = np.nan
+    trajectory_df['holm_trajectory_reject'] = False
+    for outcome_key, idx in trajectory_df.groupby('outcome', observed=True).groups.items():
+        idx = list(idx)
+        if len(idx) != len(group_order):
+            raise RuntimeError(
+                f'recall_trajectory_paired_tests: outcome {outcome_key!r} produced {len(idx)} '
+                f'within-group tests, expected exactly {len(group_order)}. The Holm family is '
+                f'defined by that shape.')
+        reject, padj = holm_correct(trajectory_df.loc[idx, 'p_raw'].to_numpy(), alpha=alpha)
+        trajectory_df.loc[idx, 'p_holm_trajectory'] = padj
+        trajectory_df.loc[idx, 'holm_trajectory_reject'] = reject
+    return trajectory_df
+
+
+def recall_trajectory_lookup(trajectory_df, outcome, group):
+    """The single within-group paired-test row for one (outcome, group), as a Series.
+
+    Same role as recall_modulation_lookup and recall_within_group_lookup: the panel's brackets and
+    the companion markdown go through ONE accessor, so the figure cannot annotate itself from a
+    different row than the text describes. Raises rather than returning an empty match.
+    """
+    match = trajectory_df[(trajectory_df['outcome'] == outcome)
+                          & (trajectory_df['group'] == group)]
+    if len(match) != 1:
+        raise RuntimeError(
+            f'recall_trajectory_lookup: expected exactly one row for outcome {outcome!r}, group '
+            f'{group!r}, found {len(match)}.')
+    return match.iloc[0]
+
+
+def _recall_trajectory_bracket_label(p_raw):
+    """The panel's label for one within-group paired test, or None for no bracket at all.
+
+    Stars by the conventional ladder (_stars_from_p), then a bare `P = 0.0xx` up to
+    RECALL_TRAJECTORY_NS_LABEL_MAX so a near-miss is stated rather than inferred from an absent
+    bracket, then nothing. One function, so the panel and its companion text cannot end up
+    applying two different rules to the same p-value.
+    """
+    p = float(p_raw)
+    if not np.isfinite(p):
+        raise ValueError(f'_recall_trajectory_bracket_label: p must be finite, got {p!r}.')
+    stars = _stars_from_p(p)
+    if stars is not None:
+        return stars
+    if p < RECALL_TRAJECTORY_NS_LABEL_MAX:
+        return format_p_display(p)
+    return None
+
+
+def plot_recall_prepost_trajectories(modulation_df, trajectory_df, save_dir, session_label,
+                                     stats_prefix, filename_root,
+                                     group_order=DREADD_DISPLAY_ORDER):
     """
     The mechanism behind the change scores: each animal's pre-tone and post-tone value joined by a
     line, one facet per group, one row per outcome.
 
-    ** Descriptive by design; no statistics are drawn here. ** The inferential statements are the
-    model-derived pairwise modulation contrasts and their omnibus, in
-    `stats/<prefix>_modulation_contrasts.csv`. Putting a test on this panel would invite reading
-    a per-group paired comparison as the treatment effect, which is question B, not question C.
+    ** The bracket in each facet is that group's own WITHIN-GROUP paired t-test ** -- question B,
+    "did this group change across the tone?" -- read from `trajectory_df`
+    (recall_trajectory_paired_tests), which is written to
+    `stats/<prefix>_trajectory_paired_tests.csv` so every drawn p-value is auditable. It is the
+    test of the pairing this panel actually shows: one line per animal, within one group.
+
+    ** A bracket here is NOT a treatment comparison and must never be read as one. ** That hM3D
+    carries a star and mCherry does not is not evidence that the two groups modulate differently;
+    that is question C, and it stays with the model-derived pairwise modulation contrasts and
+    their omnibus in `stats/<prefix>_modulation_contrasts.csv`, drawn on the modulation figure.
+    The footer says so on the figure itself, because the panel is the thing a reader meets first.
+
+    ** The brackets read `p_raw`, unadjusted ** -- the same convention the modulation figure uses.
+    The Holm adjustment across the three groups within an outcome travels in the CSV as a
+    multiplicity reference. Labelling: stars below 0.05, the p-value itself up to
+    RECALL_TRAJECTORY_NS_LABEL_MAX, no bracket above that (_recall_trajectory_bracket_label).
 
     Values are on the NATURAL scale -- exp() of the model rows -- because the point of this panel
     is to show where each animal started and finished, and a reader knows amplitudes and rates in
     their own units. For amplitude that is the animal's geometric mean event amplitude, the
-    exponential of the mean of its cell-level log amplitudes.
+    exponential of the mean of its cell-level log amplitudes. ** The TEST is on the log scale **
+    (recall_trajectory_paired_tests), which is the scale the change is additive on and the scale
+    the models were fit on; only the drawing is natural-scale.
     """
     fig, axs = plt.subplots(len(UNIFIED_OUTCOMES), len(group_order), sharey='row',
                             figsize=(2.1 * len(group_order), 2.9 * len(UNIFIED_OUTCOMES)))
     axs = np.atleast_2d(axs).reshape(len(UNIFIED_OUTCOMES), len(group_order))
     for r, outcome in enumerate(UNIFIED_OUTCOMES):
         sub_outcome = modulation_df[modulation_df['outcome'] == outcome.key]
+        labels = {}
         for c, group in enumerate(group_order):
             ax = axs[r, c]
             ax.spines[['right', 'top']].set_visible(False)
@@ -6264,15 +6535,38 @@ def plot_recall_prepost_trajectories(modulation_df, save_dir, session_label, sta
             if c == 0:
                 ax.set_ylabel(outcome.label, size='small')
             ax.tick_params(labelsize='x-small')
+            labels[c] = _recall_trajectory_bracket_label(
+                recall_trajectory_lookup(trajectory_df, outcome.key, group)['p_raw'])
+
+        # Headroom is reserved ONCE per row and only when that row carries a bracket: the facets
+        # share a y-axis (sharey='row'), so growing one grows all three, and reserving space no
+        # bracket will occupy just adds whitespace. Bracket y-positions are AXES FRACTIONS via
+        # get_xaxis_transform, so they land identically in all three facets whatever the shared
+        # data range is -- the same reasoning as annotate_pairwise_brackets.
+        if any(lab is not None for lab in labels.values()):
+            reserve_top_fraction(axs[r, 0], occupancy=0.84)
+            for c, label in labels.items():
+                if label is None:
+                    continue
+                ax = axs[r, c]
+                trans = ax.get_xaxis_transform()
+                bar, tick = 0.90, 0.025
+                ax.plot([0, 0, 1, 1], [bar - tick, bar, bar, bar - tick], transform=trans,
+                        color='k', linewidth=0.9, clip_on=False, solid_capstyle='butt')
+                ax.text(0.5, bar + 0.015, label, transform=trans, ha='center', va='bottom',
+                        color='k', size='small' if label.startswith('*') else 'x-small')
 
     fig.suptitle(f'{session_label} — per-animal pre-tone → post-tone trajectories',
                  size='medium')
     fig.text(0.5, 0.015,
-             'Descriptive. One line per animal, natural scale. The inferential statistics are the '
-             'model-derived pairwise\nmodulation contrasts and their group × epoch omnibus in '
-             f'`stats/{stats_prefix}_modulation_contrasts.csv`.',
+             'One line per animal, natural scale. Brackets are each group\'s OWN within-group '
+             'paired t-test of its pre→post change\n(log scale, df = n−1, unadjusted; '
+             f'`stats/{stats_prefix}_trajectory_paired_tests.csv`) — they say whether THAT group '
+             'changed,\nand are NOT a comparison between groups. Whether the groups modulate '
+             'differently is the model-derived pairwise\ncontrasts and their group × epoch '
+             f'omnibus in `stats/{stats_prefix}_modulation_contrasts.csv`.',
              ha='center', size='xx-small')
-    fig.subplots_adjust(left=0.14, bottom=0.14, right=0.98, top=0.88, wspace=0.20, hspace=0.35)
+    fig.subplots_adjust(left=0.14, bottom=0.17, right=0.98, top=0.88, wspace=0.20, hspace=0.35)
     ensure_dirs(save_dir)
     save_fig(fig, os.path.join(save_dir, filename_root + '.png'))
     plt.close(fig)
@@ -6326,7 +6620,9 @@ def plot_recall_prepost_trajectories(modulation_df, save_dir, session_label, sta
 # and is explicitly barred here (clustered OLS over cell rows with 16 clusters is precisely the
 # anti-conservative cell-level inference this analysis exists to avoid).
 
-RECALL_HIERARCHICAL_CELL_SESSIONS = ('Test_B',)
+# Both recall sessions, each analysed entirely within itself. Still gated behind
+# run_hierarchical_cell_analysis (False by default), so a routine pass reaches neither.
+RECALL_HIERARCHICAL_CELL_SESSIONS = ('Test_B', 'Test_B_1wk')
 HIERARCHICAL_CELL_METHODS_FILENAME = 'sp_rates_lmm_recall_hierarchical_cells_methods.md'
 HIERARCHICAL_CELL_DIRNAME = 'hierarchical_cells'
 HIERARCHICAL_CELL_STATS_PREFIX = 'hierarchical_cell'
@@ -8937,9 +9233,10 @@ def render_paper_recall_amplitude_rate(PLOTS_DIR, mice_per_group, sessions, sess
     # ---- The pre->post MODULATION decomposition -----------------------------------------------
     # A representation and pairwise decomposition of the group x epoch interaction already tested
     # above, from the SAME two fits -- no new model, and the omnibus travels with it everywhere.
-    # Gated to RECALL_MODULATION_SESSIONS for this pass; the machinery is session-agnostic.
+    # Runs for every session in RECALL_MODULATION_SESSIONS (both recall sessions), each entirely
+    # within itself: this session's fits, this session's cohort, this session's df.
     modulation = {'modulation_by_mouse': None, 'modulation_within_group': None,
-                  'modulation_pairwise': None}
+                  'modulation_pairwise': None, 'trajectory_paired_tests': None}
     if session_key in RECALL_MODULATION_SESSIONS:
         verify_recall_modulation_synthetic(
             recall_stats_dir, epochs=RECALL_EPOCHS, reference_epoch=RECALL_REFERENCE_EPOCH,
@@ -8958,8 +9255,17 @@ def render_paper_recall_amplitude_rate(PLOTS_DIR, mice_per_group, sessions, sess
         for frame in (within_group_df, pairwise_df):
             frame.insert(0, 'session', session_key)
 
+        # The trajectory panel's own within-group paired tests. Its own file, because it is a
+        # SECOND estimate of the within-group change the model contrasts above already report on
+        # a different df -- keeping it in its own table (and printing both adjacent in the
+        # markdown) is what stops the two disagreeing silently. It decides nothing between groups.
+        trajectory_tests = recall_trajectory_paired_tests(modulation_by_mouse)
+        trajectory_tests.insert(0, 'session', session_key)
+
         write_text(os.path.join(recall_stats_dir, f'{stats_prefix}_modulation_by_mouse.csv'),
                    modulation_by_mouse.to_csv(index=False))
+        write_text(os.path.join(recall_stats_dir, f'{stats_prefix}_trajectory_paired_tests.csv'),
+                   trajectory_tests.to_csv(index=False))
         # Both blocks in one file, distinguished by `block`: the within-group trajectory estimates
         # are only ever read next to the pairwise comparisons they explain, and splitting them
         # into two files invites the descriptive half being quoted on its own.
@@ -8968,12 +9274,12 @@ def render_paper_recall_amplitude_rate(PLOTS_DIR, mice_per_group, sessions, sess
                    .to_csv(index=False))
         write_recall_modulation_summary(recall_stats_dir, session_key, session_label,
                                         interactions_table, within_group_df, pairwise_df,
-                                        stats_prefix)
+                                        stats_prefix, trajectory_df=trajectory_tests)
         plot_recall_modulation(modulation_by_mouse, pairwise_df, interactions_table, recall_dir,
                                session_label, stats_prefix,
                                filename_root=f'{prefix}_amplitude_rate_modulation')
         plot_recall_prepost_trajectories(
-            modulation_by_mouse, recall_dir, session_label, stats_prefix,
+            modulation_by_mouse, trajectory_tests, recall_dir, session_label, stats_prefix,
             filename_root=f'{prefix}_amplitude_rate_prepost_trajectories')
         for _, row in pairwise_df.iterrows():
             print(f"[sp_rates_lmm]   {session_key} {row['outcome']} modulation "
@@ -8981,9 +9287,15 @@ def render_paper_recall_amplitude_rate(PLOTS_DIR, mice_per_group, sessions, sess
                   f"ratio {row['relative_modulation_ratio']:.3f} "
                   f"[{row['ratio_ci_low']:.3f}, {row['ratio_ci_high']:.3f}], "
                   f"P_raw {row['p_raw']:.3g}, P_holm {row['p_holm_modulation']:.3g}")
+        for _, row in trajectory_tests.iterrows():
+            print(f"[sp_rates_lmm]   {session_key} {row['outcome']} within-group pre->post "
+                  f"{row['group']}: {row['post_pre_ratio']:.3f}-fold, "
+                  f"t({int(row['df'])}) = {row['t']:.2f}, P_raw {row['p_raw']:.3g}, "
+                  f"P_holm {row['p_holm_trajectory']:.3g}")
         modulation = {'modulation_by_mouse': modulation_by_mouse,
                       'modulation_within_group': within_group_df,
-                      'modulation_pairwise': pairwise_df}
+                      'modulation_pairwise': pairwise_df,
+                      'trajectory_paired_tests': trajectory_tests}
 
     # ---- The HIERARCHICAL CELL-LEVEL companion / sensitivity suite -----------------------------
     # Strictly ADDITIVE. Everything above this block -- the models, the contrasts, the Holm
@@ -8992,10 +9304,11 @@ def render_paper_recall_amplitude_rate(PLOTS_DIR, mice_per_group, sessions, sess
     # complementary question (does the modulation pattern occur coherently across the cellular
     # population WITHIN mice, with the cell hierarchy modelled instead of collapsed?) and writes
     # into its own subdirectory so its numbers can never be confused with the primary lane's.
-    # Gated only by RECALL_HIERARCHICAL_CELL_SESSIONS and run_hierarchical_cell_analysis, which is
-    # False by default -- this is an explicitly invoked companion, not part of a routine pass (it
-    # costs ~40 min against the few minutes the rest of the analysis takes). When it does run,
-    # every one of its components runs.
+    # RECALL_HIERARCHICAL_CELL_SESSIONS now names both recall sessions, so the real gate is
+    # run_hierarchical_cell_analysis, which is False by default -- this is an explicitly invoked
+    # companion, not part of a routine pass (it costs ~40 min per session against the few minutes
+    # the rest of the analysis takes, so an explicit pass now spends ~80 min here). When it does
+    # run, every one of its components runs.
     hierarchical = {}
     if run_hierarchical_cell_analysis and session_key in RECALL_HIERARCHICAL_CELL_SESSIONS:
         if session_key not in RECALL_MODULATION_SESSIONS:
@@ -9286,6 +9599,7 @@ def plot_example_traces(sessions, df_trace_amp, save_dir, mapping='full', thres=
 
 def plot_width_vs_height_matched_examples(sessions, df_runs_trace, save_dir, mapping='full',
                                           thres=None, target_height_percentile=50,
+                                          orientation='horizontal',
                                           filename_root='width_height_matched_examples'):
     """
     Plan section 5c's last bullet: one run per group, each matched to the SAME target peak
@@ -9298,12 +9612,23 @@ def plot_width_vs_height_matched_examples(sessions, df_runs_trace, save_dir, map
 
     Re-derives each selected run's exact shading from find_event_runs_ca() on the raw S row
     (matched by peak_frame), the same alignment guarantee plot_example_traces() gives.
-    """
-    target = np.percentile(df_runs_trace['peak_height'], target_height_percentile)
-    fig, axs = plt.subplots(1, len(GROUP_ORDER), figsize=(4.2 * len(GROUP_ORDER), 2.3), squeeze=False)
-    axs = axs[0]
 
-    for ax, group in zip(axs, GROUP_ORDER):
+    orientation : 'horizontal' (groups side by side) or 'vertical' (groups stacked in rows,
+                  for narrow figure slots).
+    """
+    if orientation not in ('horizontal', 'vertical'):
+        raise ValueError(f"plot_width_vs_height_matched_examples: orientation must be "
+                         f"'horizontal' or 'vertical', got {orientation!r}.")
+    target = np.percentile(df_runs_trace['peak_height'], target_height_percentile)
+    n = len(DREADD_DISPLAY_ORDER)
+    if orientation == 'horizontal':
+        fig, axs = plt.subplots(1, n, figsize=(2.0 * n, 2.3), squeeze=False)
+        axs = axs[0]
+    else:
+        fig, axs = plt.subplots(n, 1, figsize=(2.3, 1.6 * n), squeeze=False)
+        axs = axs[:, 0]
+
+    for ax, group in zip(axs, DREADD_DISPLAY_ORDER):
         gsub = df_runs_trace[df_runs_trace['group'] == group].sort_values(['mouse', 'cell', 'trial'])
         if gsub.empty:
             raise RuntimeError(f'plot_width_vs_height_matched_examples: no runs for group {group!r}.')
@@ -9324,7 +9649,7 @@ def plot_width_vs_height_matched_examples(sessions, df_runs_trace, save_dir, map
                                f'{sel["peak_frame"]}) via find_event_runs_ca -- selection table '
                                f'and a fresh detection pass disagree.')
         i = match[0]
-        st, w, amp = int(start[i]), int(width[i]), float(amplitude[i])
+        st, w = int(start[i]), int(width[i])
         pad = int(round(EXAMPLE_TRACE_PAD_S * MINISCOPE_FPS))
         win_lo, win_hi = max(0, st - pad), min(S_row.shape[0], st + w + pad)
         t = (np.arange(win_lo, win_hi) - st) / MINISCOPE_FPS
@@ -9334,15 +9659,18 @@ def plot_width_vs_height_matched_examples(sessions, df_runs_trace, save_dir, map
         ax.axvspan(0, w / MINISCOPE_FPS, color=GROUP_COLOURS[group], alpha=0.18)
         ax.axhline(cell_thres, color='k', linewidth=0.5, linestyle=':')
         ax.spines[['right', 'top']].set_visible(False)
-        ax.set_title(f'{GROUP_LABELS[group]}: peak={sel["peak_height"]:.2f}, '
-                    f'width={w} frames, integral={amp:.1f}', size=6.5)
-        ax.set_xlabel('Time from run start (s)', size='small')
-        if ax is axs[0]:
+        ax.set_title(GROUP_LABELS[group], size='small')
+        ax.set_xlim(-1, 1)
+        if orientation == 'horizontal':
+            ax.set_xlabel('Time from run start (s)', size='small')
+            if ax is axs[0]:
+                ax.set_ylabel('S (raw)', size='small')
+        else:
             ax.set_ylabel('S (raw)', size='small')
+            if ax is axs[-1]:
+                ax.set_xlabel('Time from run start (s)', size='small')
 
-    fig.suptitle(f'Height-matched examples (target peak height = pooled p{target_height_percentile} '
-                f'= {target:.2f})', size='small')
-    plt.tight_layout(pad=0.6, rect=[0, 0, 1, 0.9])
+    plt.tight_layout(pad=0.6)
     _save_panel(fig, save_dir, filename_root)
 
 
@@ -9384,10 +9712,11 @@ def run_sp_rates_lmm(PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond
                               session's own .thres attribute.
     n_perm, seed             : passed to mouse_label_permutation_test().
     run_hierarchical_cell_analysis : the ONE gate on the additive hierarchical cell-level
-                              companion suite for the recall lane (Test_B; see
+                              companion suite for the recall lane (both recall sessions; see
                               RECALL_HIERARCHICAL_CELL_SESSIONS). ** False by default: the
                               companion is EXPLICITLY INVOKED, not part of a routine pass. ** It
-                              costs ~40 min (exact mouse-label MixedLM enumerations over the
+                              costs ~40 min PER SESSION, so ~80 min over the two recall sessions
+                              (exact mouse-label MixedLM enumerations over the
                               paired-cell table, plus the hierarchical NB count model and its
                               prior/posterior-predictive checks), which is an order of magnitude
                               more than the rest of this analysis, and it is a sensitivity
@@ -9738,6 +10067,9 @@ def run_sp_rates_lmm(PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond
     plot_example_traces(TFC_cond, df_trace_amp, out_dir, mapping=mapping, thres=thres,
                         tfc_frames_fn=tfc_frames_fn)
     plot_width_vs_height_matched_examples(TFC_cond, df_runs_trace, out_dir, mapping=mapping, thres=thres)
+    plot_width_vs_height_matched_examples(TFC_cond, df_runs_trace, out_dir, mapping=mapping, thres=thres,
+                                         orientation='vertical',
+                                         filename_root='width_height_matched_examples_vertical')
 
     # ---- Secondary: Test_B / Test_B_1wk post-tone amplitude (recall complement) -------------------
     for label, sessions in (('Test_B', Test_B), ('Test_B_1wk', Test_B_1wk)):

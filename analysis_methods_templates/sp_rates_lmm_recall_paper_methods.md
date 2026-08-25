@@ -116,8 +116,24 @@ group's own model-implied pre-to-post change is reported descriptively to charac
 trajectory; it is not a between-group test. **The group × epoch joint Wald test remains the
 omnibus test of whether pre-to-post modulation differed among the groups**, and is reported
 alongside the pairwise contrasts, which decompose it rather than replace it. No group and no
-outcome was treated as privileged, and no test was computed on the change scores outside the
-fitted models.
+outcome was treated as privileged.
+
+**Within-group pre-to-post change on the trajectory figure.** The per-animal trajectory figure
+annotates each group with a two-tailed **paired *t*-test** of that group's own animals' pre-tone
+versus post-tone values, computed on the log scale the models were fit on, with df = *n*
+− 1 for that group alone (`stats/unified_recall_trajectory_paired_tests.csv`). This addresses only
+whether *that* group changed across the tone. **It is not a between-group comparison, and a
+difference in which groups reach significance is not evidence that the groups modulate
+differently** — that question is the pairwise model contrasts and their group × epoch omnibus
+described above, and nothing derived from these within-group tests may be used in its place. The
+brackets show unadjusted *P*-values (stars below 0.05; the *P*-value itself printed between 0.05
+and 0.10; no bracket above 0.10), with a Holm adjustment across the three groups within each
+outcome tabulated beside them as a multiplicity reference. This paired test is deliberately a
+**second estimator** of a within-group change the fitted models also report as a linear contrast:
+the contrast pools residual variance across groups on the session's animal-level df, the paired
+test uses one group's animals and its own df, and the two are not expected to agree exactly. Both
+are tabulated adjacently in `stats/unified_recall_modulation_contrasts.md` (sections B and
+B-panel); the model contrast remains the reported estimate of the within-group change.
 
 Analyses used Python 3.11.15 with statsmodels 0.14.6 (`MixedLM`, REML, L-BFGS), scipy 1.17.1,
 numpy 2.4.5 and pandas 3.0.2.

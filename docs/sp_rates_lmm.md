@@ -262,7 +262,7 @@ per **outcome**, never per group, because a joint 2-df test does not localize to
 persistent consequence of the conditioning-day manipulation, not evidence of ongoing receptor
 activation; "hM3D activation increased activity at recall" is not a supportable sentence.
 
-### A.7.1 The pre→post modulation decomposition (Test_B)
+### A.7.1 The pre→post modulation decomposition (both recall sessions)
 
 The interaction test above answers *does the pre→post change differ among the groups?* but shows
 nobody the change. This block adds the per-animal change scores and the pairwise decomposition of
@@ -310,18 +310,41 @@ exactly that case (along with a shared decline, a decline abolished in each DREA
 and an hM3D/hM4D separation around a midway control) and hard-fails if the code does not recover
 it — for both outcomes.
 
-Outputs, under `paper/recall/Test_B/`: `stats/unified_recall_modulation_by_mouse.csv`,
+Outputs, under `paper/recall/<session>/` (file stems `testb_` for `Test_B`, `testb_1wk_` for
+`Test_B_1wk`): `stats/unified_recall_modulation_by_mouse.csv`,
 `stats/unified_recall_modulation_contrasts.csv` (both blocks, distinguished by `block`),
 `stats/unified_recall_modulation_contrasts.md`,
 `stats/unified_recall_modulation_synthetic_verification.txt`,
 `testb_amplitude_rate_modulation.{png,svg}` (one panel per outcome, one point per animal, a zero
 reference line, brackets read from the unadjusted model-derived contrasts via
 `_precomputed_stat_fn` — a bracket in `RECALL_MODULATION_NS_LABEL_PAIRS` carries its *P*-value even
-when *P* ≥ 0.05 — and each panel's own omnibus in its title) and `testb_amplitude_rate_prepost_trajectories.{png,svg}`
-(descriptive; one line per animal, natural scale, 2 outcomes × 3 group facets).
+when *P* ≥ 0.05 — and each panel's own omnibus in its title),
+`stats/unified_recall_trajectory_paired_tests.csv`, and
+`testb_amplitude_rate_prepost_trajectories.{png,svg}` (one line per animal, natural scale,
+2 outcomes × 3 group facets, each facet bracketed with that group's OWN within-group paired
+*t*-test — see below).
 
-**Scoped to Test_B by `RECALL_MODULATION_SESSIONS`.** The machinery is session-agnostic; extending
-it to `Test_B_1wk` is adding the key and nothing else. That does not license comparing the two.
+**The trajectory figure's brackets are question B, not question C.** Each facet carries a
+two-tailed paired *t*-test of that group's own animals' pre/post values, computed on the **log**
+scale the models were fit on with df = *n*<sub>g</sub> − 1
+(`recall_trajectory_paired_tests` → `stats/unified_recall_trajectory_paired_tests.csv`). It says
+whether *that* group changed across the tone and **is not a between-group comparison** — a star in
+one facet and none in another is not evidence that the two groups modulate differently. Stars below
+0.05, the *P*-value itself printed for 0.05 ≤ *P* < `RECALL_TRAJECTORY_NS_LABEL_MAX` (0.10), no
+bracket above that (`_recall_trajectory_bracket_label`); brackets read the raw *P*, with a
+three-group Holm family per outcome tabulated beside it as a multiplicity reference.
+
+This is a **second estimator** of the within-group change that `within_group_df` already reports as
+a model contrast: the contrast pools residual variance across groups on the session's animal-level
+df, the paired *t* uses one group's animals and its own df, and **they do not agree exactly**. Both
+are printed adjacently in the companion markdown (sections **B** and **B-panel**) so the divergence
+is on the record rather than surfacing as a figure that appears to contradict a table. The model
+contrast remains the lane's estimate of the within-group change. This is the one annotation in the
+lane computed from plotted values; every between-group number still comes from the fitted models.
+
+**Run for both recall sessions (`RECALL_MODULATION_SESSIONS`).** Each session is decomposed
+entirely within itself — its own two fits, its own cohort, its own denominator df. That does not
+license comparing the two.
 
 **Not in this lane:** any cross-session comparison, cross-registered cell-identity persistence,
 responder classification, tone-epoch statistics, and the negative-binomial count model as a
@@ -332,10 +355,11 @@ The older `PLOTS_DIR/sp_rates_lmm/{Test_B,Test_B_1wk}/post_tone_amplitude.*` out
 and remains a Part B secondary (a single-epoch cell-level amplitude omnibus in the BH-FDR family).
 It is not this lane and supplies no paper number.
 
-### A.7.2 The hierarchical cell-level companion analysis (Test_B)
+### A.7.2 The hierarchical cell-level companion analysis (both recall sessions)
 
 > **Explicitly invoked — not part of a routine pass.** `run_hierarchical_cell_analysis` defaults to
-> **`False`**, so a normal `run_sp_rates_lmm()` never runs any of this. The suite costs ~40 min
+> **`False`**, so a normal `run_sp_rates_lmm()` never runs any of this. The suite costs ~40 min per
+> recall session, so ~80 min over the two
 > (exact mouse-label MixedLM enumerations over the paired-cell table, the hierarchical NB count
 > model, and the prior/posterior-predictive machinery) against a few minutes for everything else,
 > and its evaluation is complete. Rerun it deliberately with
@@ -366,7 +390,7 @@ is **not the only valid one**, and it throws away two things:
 This block asks the complementary question: *does the pre→post modulation pattern occur coherently
 across the cellular population within animals, with the cell hierarchy modelled rather than
 collapsed before fitting?* It is **strictly additive** and writes into its own subdirectory,
-`paper/recall/Test_B/hierarchical_cells/`, so its numbers cannot be mistaken for the primary lane's.
+`paper/recall/<session>/hierarchical_cells/`, so its numbers cannot be mistaken for the primary lane's.
 Nothing above it changed.
 
 **Mouse-level assignment is still the basis of inference.** Treatment was assigned to 16 animals,
@@ -497,7 +521,9 @@ wording is that *a hierarchical cell-level analysis, retaining within-mouse cell
 preserving mouse-level treatment assignment, provided additional evidence that pre-to-post amplitude
 modulation differed among groups* — never `n = thousands of cells`.
 
-**Scoped to Test_B by `RECALL_HIERARCHICAL_CELL_SESSIONS`.** No CNO was present at recall.
+**Run for both recall sessions (`RECALL_HIERARCHICAL_CELL_SESSIONS`), each independently**, when
+`run_hierarchical_cell_analysis=True` — which remains the real gate and is `False` by default. No
+CNO was present at recall.
 
 ---
 
@@ -1577,7 +1603,9 @@ Entry points: `plot_primary_trace_amplitude`, `plot_epoch_profile`, `plot_amplit
 paper lane's `plot_paper_epoch_distributions` / `render_paper_tfc_amplitude_rate` (§6.1), and the
 recall lane's `plot_recall_modulation` / `plot_recall_prepost_trajectories` (§A.7.1). The first of
 those reuses `_draw_mouse_violin_panel` with `_precomputed_stat_fn`, so its brackets come from the
-fitted models rather than from a second test on the plotted values.
+fitted models rather than from a second test on the plotted values. The second is the one
+exception in this module: its per-facet brackets are a within-group paired *t*-test computed from
+the plotted pairs (`recall_trajectory_paired_tests`), which is question B only — see §A.7.1.
 
 `write_decomposition_contrasts_markdown` takes `figure_has_stars`, `no_star_note` and `title`.
 The `figure_has_stars=False` default note is written **about the four-component decomposition**

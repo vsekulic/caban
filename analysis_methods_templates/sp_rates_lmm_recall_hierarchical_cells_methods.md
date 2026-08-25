@@ -1,7 +1,9 @@
-# METHODS — hierarchical cell-level companion analysis of drug-free recall (Test_B)
+# METHODS — hierarchical cell-level companion analysis of drug-free recall
 
-*Methods text for the **additive hierarchical cell-level companion / sensitivity analysis** of the
-48-h recall session. The paper-facing recall analysis this accompanies is described in
+*Methods text for the **additive hierarchical cell-level companion / sensitivity analysis** of a
+drug-free recall session (`Test_B` at 48 h or `Test_B_1wk` at 1 week). Each session is analysed
+independently and the two are never compared — a copy of this file sits beside each session's own
+output. The paper-facing recall analysis this accompanies is described in
 `sp_rates_lmm_recall_paper_methods.md`, copied into the parent output folder; the full statistical
 architecture and decision record are in `sp_rates_lmm_methods.md` and `docs/sp_rates_lmm.md`
 §A.7.2.*
@@ -263,4 +265,4 @@ pre-to-post amplitude modulation differed among groups* — not that the sample 
 smaller *P* here is not automatically the better answer and is not grounds for replacing the
 animal-level result.
 
-**No CNO was present at recall.** All Test_B measurements are drug-free.
+**No CNO was present at recall.** All recall measurements are drug-free.
