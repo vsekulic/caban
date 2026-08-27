@@ -810,7 +810,8 @@ def _mixed_model_degeneracy(result, n_fixed):
     return None
 
 
-def fit_mixed_model(df, formula, group_col='mouse', extra_header='', method='lbfgs'):
+def fit_mixed_model(df, formula, group_col='mouse', extra_header='', method='lbfgs',
+                    re_formula=None, vc_formula=None):
     """Fit an arbitrary ``formula`` as a linear mixed model with a random intercept on
     ``group_col``, falling back to ``group_col``-clustered OLS if the mixed model does not
     converge OR converges to a degenerate solution (see :func:`_mixed_model_degeneracy`) — a
@@ -835,11 +836,43 @@ def fit_mixed_model(df, formula, group_col='mouse', extra_header='', method='lbf
     degenerate or non-converged result still goes through :func:`_mixed_model_degeneracy`
     exactly as before.
 
+    ``re_formula`` and ``vc_formula`` are passed straight through to ``smf.mixedlm``. Both
+    default to ``None``, which is exactly the bare random intercept on ``group_col`` that every
+    pre-existing call site here fits — no existing number moves. They exist so a caller needing a
+    richer random-effect structure (a per-``group_col`` random SLOPE via ``re_formula``, or a
+    NESTED grouping such as cell-within-mouse via ``vc_formula``) goes through this same
+    convergence/degeneracy handling rather than calling ``smf.mixedlm`` directly. Example, for
+    ``(1|mouse) + (0+epoch||mouse) + (1|mouse:cell)``::
+
+        fit_mixed_model(df, formula, group_col='mouse', re_formula='1',
+                        vc_formula={'epoch_tone': '0 + is_tone', ...,
+                                    'cell': '0 + C(cell_uid)'})
+
+    ** ``re_formula`` is REQUIRED whenever ``vc_formula`` is given, and this function raises if
+    it is not. ** statsmodels adds the default random intercept only when BOTH are None: pass a
+    ``vc_formula`` alone and ``cov_re`` comes back empty, i.e. the ``(1|group_col)`` term this
+    function's own name promises has silently disappeared from the model. Writing ``'1'``
+    explicitly is a one-token cost and makes the fitted structure readable at the call site.
+
+    ** The clustered-OLS fallback drops the extra structure. ** It fits ``formula`` alone with
+    cluster-robust SEs on ``group_col``, which is NOT the model that was asked for. That is the
+    documented behaviour for the plain random-intercept callers, but a caller that specifies a
+    random-effect structure it depends on must check ``method_used`` and refuse a fallback rather
+    than reporting one under the requested model's name (see
+    ``epoch_modulation.fit_hierarchical_cell_model``).
+
     Returns (result, method_used, summary_text). ``result`` is the fitted statsmodels object
     (``MixedLMResults`` or a cluster-robust ``RegressionResults``) — pass it to
     :func:`joint_wald_test` for omnibus/interaction tests. ``method_used`` is 'mixedlm' or
     'clustered_ols'.
     """
+    if vc_formula is not None and re_formula is None:
+        raise ValueError(
+            'fit_mixed_model: vc_formula was given without re_formula. statsmodels adds its '
+            'default random intercept only when BOTH are None, so this combination would fit a '
+            f'model with NO (1 | {group_col}) term while still being reported as one. Pass '
+            "re_formula='1' to keep the intercept, or re_formula='0' to state deliberately that "
+            'the variance components are the only random effects.')
     header = f'Formula: {formula}\nN rows = {len(df)}, N {group_col} = {df[group_col].nunique()}\n\n{extra_header}'
 
     def _clustered_ols(reason):
@@ -850,7 +883,8 @@ def fit_mixed_model(df, formula, group_col='mouse', extra_header='', method='lbf
         return ols, 'clustered_ols', text
 
     try:
-        model = smf.mixedlm(formula, data=df, groups=df[group_col])
+        model = smf.mixedlm(formula, data=df, groups=df[group_col],
+                            re_formula=re_formula, vc_formula=vc_formula)
         with warnings.catch_warnings():
             # statsmodels signals boundary/singular fits through warnings; they are inspected
             # explicitly below rather than printed, so a degenerate fit is reported in the
@@ -860,8 +894,15 @@ def fit_mixed_model(df, formula, group_col='mouse', extra_header='', method='lbf
         degenerate = _mixed_model_degeneracy(result, n_fixed=len(model.exog_names))
         if degenerate is not None:
             return _clustered_ols(degenerate)
-        text = (f'Linear mixed model, random intercept on {group_col}\n'
-                f'Formula: {formula} + (1 | {group_col})\n{header}{result.summary()}\n')
+        # `re_formula` REPLACES the default random intercept rather than adding to it -- that is
+        # statsmodels' semantics, and '0 + C(epoch)' spans the intercept anyway (the epoch dummies
+        # sum to 1), so the printed term list must not claim an intercept alongside it.
+        re_terms = f'({re_formula} | {group_col})' if re_formula is not None else f'(1 | {group_col})'
+        if vc_formula is not None:
+            re_terms += ''.join(f' + ({v} | {group_col}:{k})' for k, v in vc_formula.items())
+        head = ('Linear mixed model, random intercept on ' + group_col if re_formula is None
+                else 'Linear mixed model, random effects on ' + group_col)
+        text = (f'{head}\nFormula: {formula} + {re_terms}\n{header}{result.summary()}\n')
         return result, 'mixedlm', text
     except Exception as exc:  # documented fallback: cluster-robust OLS
         return _clustered_ols(f'it failed to converge: {exc}')

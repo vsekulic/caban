@@ -47,6 +47,8 @@ import caban.place_cell_rates as place_cell_rates
 import caban.locomotion as locomotion
 import caban.speed_tuning as speed_tuning
 from caban.event_locked_responsiveness import run_event_locked_responsiveness as _run_event_locked_responsiveness
+from caban.epoch_modulation import run_epoch_modulation as _run_epoch_modulation
+from caban.epoch_sequence import run_epoch_sequence as _run_epoch_sequence
 from caban.freezing_tuned_cells import run_freezing_tuned_cells as _run_freezing_tuned_cells
 from caban.population_coupling import run_population_coupling as _run_population_coupling
 from caban.sp_rates_lmm import run_sp_rates_lmm as _run_sp_rates_lmm
@@ -1694,6 +1696,59 @@ def run_event_locked_responsiveness(ds, cfg):
     _run_event_locked_responsiveness(PLOTS_DIR, mice_per_group, ds.TFC_cond, 'encoding', **su_kwargs)
     _run_event_locked_responsiveness(PLOTS_DIR, mice_per_group, ds.Test_B, 'recall_testB', **su_kwargs)
     _run_event_locked_responsiveness(PLOTS_DIR, mice_per_group, ds.Test_A, 'recall_testA', **su_kwargs)
+    msg_end()
+
+
+# ---------------------------------------------------------------------------
+def run_epoch_modulation(ds, cfg):
+    """Per-cell epoch modulation during trace fear conditioning (Figure 2 single-cell block).
+
+    For each cell, how far its activity during the tone, trace interval, shock period and
+    post-shock window departs from ITS OWN pre-tone baseline ON THE SAME TRIAL, compared
+    across DREADD groups with a mouse-level group x epoch mixed model. Produces the
+    tone-aligned per-cell heatmaps and the four-epoch modulation panel.
+
+    Every cfg-threaded parameter here is a GATE rather than an analysis parameter: everything
+    this analysis needs is fixed by its METHODS (the epochs, the trial-retention rule, the two
+    signals, the model), and the only tunable left is panel K's colour ceiling, which is a
+    display choice. Add cfg entries here only if one of those genuinely needs to vary per run.
+
+    ``cfg.epoch_modulation_hierarchical_cells`` (True by default) additionally runs the
+    hierarchical cell-level COMPANION analysis per signal, into
+    ``<signal>/hierarchical_cells/``. It is additive: nothing above it changes, and the
+    mouse-level analysis remains the paper-facing one. It is also the slow part of this
+    section (~8 min YrA, ~17 min C); set it False for a quick pass.
+
+    ``cfg.epoch_modulation_event_proximal`` (True by default) additionally runs the
+    EVENT-PROXIMAL companion per signal, into ``<signal>/event_proximal/``: the same index
+    recomputed over a short window from each event onset, testing whether the 20 s epoch means
+    dilute a brief event-locked response. Also additive, and it carries its own hierarchical
+    lane, so it roughly doubles this section's cost.
+    """
+    if not (cfg.plot_epoch_modulation and not cfg.DEVEL_SWITCH):
+        return
+    msg_start('*** Per-cell epoch modulation (DREADD, trace fear conditioning)')
+    _run_epoch_modulation(
+        cfg.PLOTS_DIR, ds.mice_per_group, ds.TFC_cond,
+        run_hierarchical_cells=cfg.epoch_modulation_hierarchical_cells,
+        run_event_proximal=cfg.epoch_modulation_event_proximal)
+    msg_end()
+
+
+# ---------------------------------------------------------------------------
+def run_epoch_sequence(ds, cfg):
+    """Cross-validated test of sequential (time-cell-like) activity during conditioning.
+
+    EXPLORATORY companion to run_epoch_modulation above, and the reason it exists: that
+    analysis's tone-aligned heatmap sorts cells by a statistic computed from the data it
+    displays, so it shows a diagonal whether or not one is really there. This defines each
+    cell's peak latency on one half of the conditioning trials and tests whether the ordering
+    survives on the held-out half. Changes nothing in the epoch-modulation analysis.
+    """
+    if not (cfg.plot_epoch_sequence and not cfg.DEVEL_SWITCH):
+        return
+    msg_start('*** Cross-validated sequence test (per-cell peak latency, conditioning)')
+    _run_epoch_sequence(cfg.PLOTS_DIR, ds.mice_per_group, ds.TFC_cond)
     msg_end()
 
 

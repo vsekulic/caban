@@ -105,6 +105,25 @@ class PipelineConfig:
     # Single-unit response analyses (per-cell drill-downs beyond per-mouse means)
     plot_cell_activity_distributions: bool = True
     plot_event_locked_responsiveness: bool = True
+    plot_epoch_modulation: bool = True
+    # The hierarchical cell-level COMPANION to run_epoch_modulation, written into
+    # <signal>/hierarchical_cells/ beside that analysis's own panels. On by default like every
+    # other switch here, so a normal pipeline run produces it.
+    # ** It is still the slowest thing in this section: ~8 min (YrA) + ~17 min (C). ** Almost all
+    # of that is the single full cell-level statsmodels fit kept as an independent cross-check
+    # (246 s and 807 s respectively); the randomization itself is a few minutes. Set this False
+    # for a quick pass -- the mouse-level analysis is the paper-facing one and is complete
+    # without it.
+    epoch_modulation_hierarchical_cells: bool = True
+    # The EVENT-PROXIMAL companion to run_epoch_modulation, written into
+    # <signal>/event_proximal/ beside the hierarchical one. It recomputes the same modulation
+    # index over a short window (3 s) from each event onset instead of over the full 20 s
+    # epochs, to test whether the epoch means dilute a brief event-locked response. Same cells,
+    # same trials, same standardization and same pre-tone baseline, so the two lanes are a
+    # paired comparison. It carries its own hierarchical lane, so it roughly doubles this
+    # analysis's runtime; set False for a quick pass.
+    epoch_modulation_event_proximal: bool = True
+    plot_epoch_sequence: bool = True
     plot_freezing_tuned_cells: bool = True
     plot_population_coupling: bool = True
     plot_sp_rates_lmm: bool = True
