@@ -178,10 +178,15 @@ compatibility** — the caches were written by:
 | scikit-learn | 1.8.0 |
 | xarray | 2026.4.0 |
 | zarr | 3.1.6 |
+| matplotlib | 3.10.9 |
 
 i.e. the dependency lines become `python=3.11`, `numpy=2.4.5`, `pandas=3.0.2`,
 `scipy=1.17.1`, `statsmodels=0.14.6`, `scikit-learn=1.8.0`, `xarray=2026.4.0`,
-`zarr=3.1.6`, with the rest left unpinned.
+`zarr=3.1.6`, `matplotlib=3.10.9`, with the rest left unpinned.
+
+`matplotlib` is pinned for a hard reason, not tidiness: matplotlib 3.11 removed
+`matplotlib.style.core`, which `arviz_plots` (pulled in by `bambi`/`pymc` via
+`arviz`) still uses — see the troubleshooting note at the end of this step.
 
 `Saver.load` routes DataFrames through `pd.read_pickle`, so pandas on the Mac
 must be ≥ 3.0 or the cached DataFrames will not unpickle. If conda-forge lacks
@@ -212,6 +217,23 @@ print(numpy.__version__, pandas.__version__, scipy.__version__, \
 statsmodels.__version__, sklearn.__version__, xarray.__version__, zarr.__version__)"
 python -c "import pymc, bambi, arviz, rastermap, pingouin, umap, cv2, optuna; print('imports OK')"
 ```
+
+**If the second command fails with**
+`AttributeError: module 'matplotlib.style' has no attribute 'core'`
+(raised from `arviz_plots/__init__.py` while importing `pymc` → `arviz`):
+the env solved to matplotlib 3.11, which removed `matplotlib.style.core`;
+`arviz-plots` 0.8.0 still calls it. Fix by aligning to the server versions —
+this also repairs any other pins that were skipped when the env was created:
+
+```bash
+conda install -n caban -c conda-forge \
+    matplotlib=3.10.9 statsmodels=0.14.6 scikit-learn=1.8.0 xarray=2026.4.0
+```
+
+If the solver refuses that combination, `matplotlib=3.10.9` alone clears the
+import error — the other three are for numerical parity with cbp-db, and drift
+there is a reason to take the parity check (verification step 5) seriously
+rather than a blocker. Re-run both check commands afterwards.
 
 ### 3d. Register the Jupyter kernel — **on the Mac**
 
