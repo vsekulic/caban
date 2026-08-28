@@ -28,11 +28,17 @@ MINISCOPE_FRAME_MS = 1000 / MINISCOPE_FPS
 # bundled font and is always available, so it anchors the chain.
 FONT_SANS_SERIF = ['Helvetica', 'TeX Gyre Heros', 'Arial', 'Liberation Sans', 'DejaVu Sans']
 
-# Detect host: on the Riken Linux server (cbp-db.bnf.brain.riken.jp) the data
-# lives under /Users/vsekulic/data/...; otherwise default to the Windows D: drive.
-if socket.getfqdn().startswith('cbp-db') or socket.gethostname().startswith('cbp-db'):
+# Detect host: on POSIX hosts (the Riken Linux server cbp-db.bnf.brain.riken.jp, and
+# the local Mac osgiliath, which mirrors the same absolute path) the data lives under
+# /Users/vsekulic/data/...; otherwise default to the Windows D: drive. The path test
+# comes first so any machine holding the mirrored data root is picked up automatically;
+# the hostname test stays as a fallback for cbp-db with the volume not yet mounted.
+POSIX_DATA_ROOT = '/Users/vsekulic/data/vsekulic/OF_test'
+if (os.path.isdir(POSIX_DATA_ROOT)
+        or socket.getfqdn().startswith('cbp-db')
+        or socket.gethostname().startswith('cbp-db')):
     MAIN_DRIVE = ''
-    NPY_SAVE_PATH = '/Users/vsekulic/data/vsekulic/OF_test/npy_files'
+    NPY_SAVE_PATH = os.path.join(POSIX_DATA_ROOT, 'npy_files')
 else:
     MAIN_DRIVE = 'D:'
     NPY_SAVE_PATH = MAIN_DRIVE + '\\data\\vsekulic\\OF_test\\npy_files'
