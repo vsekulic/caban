@@ -125,17 +125,48 @@ local run reproduces server output.
 
 ## 3. Rebuild the environment
 
-There is no `environment.yml` in the repo, so export from the live env on
-cbp-db:
+There is no `environment.yml` in the repo, so the env is exported on the server
+and rebuilt on the Mac. Every command below is labelled with where it runs.
+
+### 3a. Export — **on cbp-db**
 
 ```bash
-conda env export -n caban --from-history > /tmp/caban-env.yml   # portable
-conda list -n caban --explicit > /tmp/caban-env-linux.txt        # reference only
+conda env export -n caban --from-history > ~/caban-env.yml   # portable, use this one
+conda env export -n caban            > ~/caban-env-full.yml  # linux-64 pins, reference only
 ```
 
-Create the env with miniforge on `osx-arm64` from the `--from-history` file
-(the explicit list is linux-64-locked and will not solve on the Mac). Pin the
-versions that govern **pickle compatibility** — the caches were written by:
+`--from-history` lists only the packages that were explicitly requested, so it
+solves on any platform. The full export pins linux-64 builds and **will not
+solve on the Mac** — keep it only as a record of what versions the caches were
+written with.
+
+Two gaps in `--from-history` you must close by hand (verified 2026-08-27):
+
+- It carries **no version pins** except `python=3.11`, so the Mac would
+  otherwise take whatever is newest today. Add the pins from the table below
+  before creating the env.
+- It omits **pip-installed** packages. In this env those are
+  `rastermap==1.0`, `qtpy==2.4.3`, `superqt==0.8.1` — installed separately in
+  step 3c.
+
+For reference, `~/caban-env.yml` currently contains: `python=3.11`,
+`jupyterlab`, `ipykernel`, `ipywidgets`, `numpy`, `pandas`, `matplotlib`,
+`scipy`, `scikit-learn`, `statsmodels`, `xarray`, `scikit-image`, `seaborn`,
+`opencv`, `umap-learn`, `networkx`, `tqdm`, `pyyaml`, `optuna`, `zarr`,
+`natsort`, `pingouin`, `nbstripout`, `nbconvert`, `r-base`, `r-emmeans`,
+`r-lme4`, `r-lmertest`, `numba`, `pyqt6`, `pyqtgraph`, `bambi` (which pulls in
+`pymc` and `arviz`), on channel `conda-forge`. All are available for
+`osx-arm64`.
+
+### 3b. Copy the export to the Mac — **on the Mac**
+
+```bash
+scp vsekulic@cbp-db.bnf.brain.riken.jp:caban-env.yml      ~/caban-env.yml
+scp vsekulic@cbp-db.bnf.brain.riken.jp:caban-env-full.yml ~/caban-env-full.yml
+```
+
+Then edit `~/caban-env.yml` and pin the versions that govern **pickle
+compatibility** — the caches were written by:
 
 | package | version on cbp-db |
 |---|---|
@@ -148,22 +179,52 @@ versions that govern **pickle compatibility** — the caches were written by:
 | xarray | 2026.4.0 |
 | zarr | 3.1.6 |
 
+i.e. the dependency lines become `python=3.11`, `numpy=2.4.5`, `pandas=3.0.2`,
+`scipy=1.17.1`, `statsmodels=0.14.6`, `scikit-learn=1.8.0`, `xarray=2026.4.0`,
+`zarr=3.1.6`, with the rest left unpinned.
+
 `Saver.load` routes DataFrames through `pd.read_pickle`, so pandas on the Mac
 must be ≥ 3.0 or the cached DataFrames will not unpickle. If conda-forge lacks
-an exact `osx-arm64` build for something, match the numpy and pandas **majors**
-first — those two decide whether the caches load at all.
+an exact `osx-arm64` build for something, drop that pin and match the numpy and
+pandas **majors** first — those two decide whether the caches load at all.
+`~/caban-env-full.yml` is the reference for any other version you need to
+check.
 
-Also required by the module imports: `pymc 5.28.5`, `bambi 0.17.2`,
-`arviz 0.23.4`, `rastermap 1.0`, `pingouin 0.6.1`, `umap-learn`, `optuna`,
-`opencv`, `scikit-image`, `seaborn`, `natsort`, `patsy`, `joblib`,
-`jupyterlab`, `ipykernel`. All are on conda-forge for `osx-arm64`.
+### 3c. Create the env — **on the Mac**
 
-Register the kernel:
+```bash
+conda env create -f ~/caban-env.yml          # name: caban comes from the file
+conda activate caban
+pip install rastermap==1.0 qtpy==2.4.3 superqt==0.8.1   # the pip-only packages
+```
+
+Use `mamba env create -f ...` instead if you have mamba — same file, much
+faster solve. If a `caban` env already exists on the Mac, either
+`conda env remove -n caban` first, or create under a different name with
+`conda env create -f ~/caban-env.yml -n caban-local` (and use that name
+everywhere below).
+
+Sanity-check the versions that matter:
+
+```bash
+python -c "import numpy, pandas, scipy, statsmodels, sklearn, xarray, zarr; \
+print(numpy.__version__, pandas.__version__, scipy.__version__, \
+statsmodels.__version__, sklearn.__version__, xarray.__version__, zarr.__version__)"
+python -c "import pymc, bambi, arviz, rastermap, pingouin, umap, cv2, optuna; print('imports OK')"
+```
+
+### 3d. Register the Jupyter kernel — **on the Mac**
 
 ```bash
 conda activate caban
 python -m ipykernel install --user --name caban --display-name "caban"
 ```
+
+This writes `~/Library/Jupyter/kernels/caban/` on the Mac. It is a per-machine
+registration, so the one done on cbp-db does not carry over — run it locally
+even though the same command appears in [JUPYTER_SETUP.md](JUPYTER_SETUP.md).
+Afterwards `jupyter kernelspec list` should show `caban`, and VS Code / Jupyter
+Lab will offer it as a kernel choice for `run_pipeline.ipynb`.
 
 Fonts: `FONT_SANS_SERIF` in `caban/utilities.py` puts Helvetica first and macOS
 ships it, so nothing to install. (TeX Gyre Heros, the free Helvetica clone
