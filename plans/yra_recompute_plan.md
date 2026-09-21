@@ -1,6 +1,7 @@
 # Plan: recompute YrA from the existing footprints instead of re-running Minian
 
-Status: **assessment complete, not yet approved.** Written 2026-09-21.
+Status: **approach approved 2026-09-21** (§10); execution not started.
+Written 2026-09-21.
 Depends on: `plans/yra_unit_alignment_plan.md` (implemented, commit `485f296`) — the load-time
 aligner stays regardless, as a guard; this plan is about removing the need for it.
 Out of scope: freeze scores / `freeze_data`; any change to crossreg mappings or cell identity.
@@ -144,8 +145,13 @@ YrA       = compute_trace(Y, A, b, C, f)
    fluorescence residual should be checked — `analysis.py` uses `F0 = nanmedian(YrA)` then
    `(YrA − F0)/F0`, which is fine.
 5. **G17's conditioning session directory on the server is misnamed** `918_26_30-TFC_cond` (stray
-   leading `9`) where `dpath_TFC_cond['G17']` says `18_26_30-TFC_cond`. Fix the directory or the map
-   before any batch run.
+   leading `9`) where `dpath_TFC_cond['G17']` says `18_26_30-TFC_cond`. Per VS this was deliberate:
+   the `9` forced the correct ordering of the TFC_cond / Test_B / Test_B_1wk timestamped directories
+   during cross-registration, which sorts sessions by directory name. The specifics are not recalled
+   and are **not worth digging up now** — but it means the rename must NOT be "fixed" blindly, since
+   the crossreg mappings that every existing result depends on were produced under that ordering.
+   For the recompute, resolve the path with a glob (`*TFC_cond`) rather than the literal map entry,
+   and leave the directory alone.
 
 ## 7. Verification
 
@@ -200,10 +206,79 @@ writing a new `ds_cache.pkl` is cleaner than patching the existing 8.7 GB one. N
 raw S/C in for the cached S/C, which O.5 measured as differing by ≤1.4×10⁻⁴ relative — so expect
 every downstream number to move at that order, independently of anything YrA.
 
-## 10. Open question to settle before starting
+## 10. Settled 2026-09-21
 
-**Do conditioning results get recomputed, or only recall?** Recomputing conditioning YrA is the
-principled choice (correct footprint correspondence for all 570-1049 cells, not 8 mice patched in
-memory), but it moves already-written §R results. Recomputing only recall leaves conditioning on the
-aligner and avoids that churn. §7.1's G10 gate answers how much movement is actually at stake, so
-decide after it, not before.
+**Recompute everything, conditioning included**, and use G10 as the validation gate (§7.1). The
+principled choice: correct footprint correspondence for every cell in every session, rather than 8
+mice patched in memory. §R numbers will move; §7.3 quantifies and records the movement rather than
+assuming it is nil.
+
+## 11. How the recompute runs
+
+A **parameterized, idempotent, one-mouse-at-a-time notebook**, not a one-off script.
+
+### 11.1 Shape
+
+- `notebooks/recompute_yra.ipynb`, with a single parameter cell (`MOUSE = 'G05'`, `SESSIONS = [...]`,
+  `DRY_RUN = True`). Runnable interactively, or headless per mouse via papermill so progress can be
+  tailed from a log.
+- All real logic lives in `caban/yra_recompute.py` so it is importable, testable and diffable; the
+  notebook is a thin driver plus the report. (Notebooks diff badly — keep them thin.)
+- One mouse per invocation, by design: it gives a natural checkpoint to inspect the report before
+  committing to the next.
+
+### 11.2 Idempotency
+
+Each output gets a provenance sidecar `YrA_recompute.json` next to it, recording the Minian commit,
+the parameter dicts, `del_frames`, input array hashes and a completion flag. A session is skipped
+when the sidecar exists, its inputs still hash the same, and the output's `unit_id` matches `S_idx`.
+Re-running the notebook is therefore free for finished sessions and resumes cleanly after a crash.
+
+### 11.3 Non-destructive output
+
+Write **`YrA_recomputed.zarr`** alongside the existing `YrA.zarr` — never overwrite. Promotion to the
+name the loader reads is a separate, explicit step after the reports are reviewed. This keeps the
+whole operation reversible and lets old and new be compared directly.
+
+### 11.4 Do not persist Y
+
+`Y` is 608x608x~26k float64 = **~77 GB per session** (38 GB as float32). With ~103 GB free locally,
+persisting it is not viable across 85 sessions. Every step in §5 is a lazy dask operation and
+`compute_trace` consumes `Y` through `tensordot`, so the chain streams from the `.avi` files without
+materializing. Deviates from the stock Minian notebook, which saves `varr_ref` and `Y_fm_chk` to
+`intpath` — that is a performance choice, not a correctness one. The G10 gate measures whether the
+streaming version is fast enough; if not, persist as float32 and delete between sessions.
+
+### 11.5 Parallelism
+
+**Per-session serial, dask-parallel within.** Do not run mice concurrently: each session is already
+memory- and I/O-bound through its dask graph, and concurrency would defeat the "inspect before
+continuing" checkpoint. `n_workers` is the knob.
+
+### 11.6 Per-session report, printed before the next session
+
+Hard assertions (abort on failure):
+- `YrA_new.unit_id == S_idx` elementwise, **not** merely as sets and not sorted;
+- `YrA_new.shape == C.shape`; `YrA_new.frame == C.frame` elementwise;
+- no NaN, no inf.
+
+Reported for review (no auto-abort, but the reason to go one mouse at a time):
+- median and 5th/95th percentile of per-cell `corr(C_i, YrA_new_i)`;
+- **against the old YrA, matched by unit id** — per-cell correlation, expected ~1.0; the distribution
+  of this is the single most informative number in the whole exercise, because it separates "Y
+  replayed faithfully" from "Y drifted";
+- rows where old and new disagree, with unit ids;
+- fraction of samples hitting the `clip(0)` floor, per cell and overall;
+- for the 8 divergent mice: confirmation that the previously missing 14 unit ids now carry traces;
+- `del_frames` as derived from `C.frame` vs as read from the notebook — **printed side by side**, and
+  a hard failure if they disagree (§6.1).
+
+### 11.7 Order of execution
+
+1. G10 TFC_cond alone, against the saved `Y_fm_chk` — the §7.1 gate. Nothing else runs until it
+   passes.
+2. The remaining 8 conditioning mice with divergent id sets (G05, G08, G12, G14, G17, G18, G20),
+   where the payoff is largest and the risk best understood.
+3. The 8 clean conditioning mice.
+4. Recall sessions, where there is no old YrA to compare against — so they lean entirely on the
+   checks that do not need one.
