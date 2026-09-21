@@ -47,3 +47,6 @@ cache/
 EOF
 
 freeze_data
+
+# Claude Code per-machine settings
+.claude/settings.local.json
