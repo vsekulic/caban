@@ -88,6 +88,7 @@ import numpy as np
 import pandas as pd
 import patsy
 import matplotlib.pyplot as plt
+from scipy import stats
 from scipy.optimize import approx_fprime, minimize
 
 from caban.utilities import MINISCOPE_FPS
@@ -803,7 +804,7 @@ def plot_epoch_modulation_superplot(df_cell, df_mouse, contrasts, omnibus, out_p
                                     signal=PRIMARY_SIGNAL, auto_close=True,
                                     title_note=None, footer=None,
                                     title_prefix='Per-cell epoch modulation',
-                                    epoch_titles=None, ylabel=None):
+                                    epoch_titles=None, ylabel=None, facets=RESPONSE_EPOCHS):
     """Panel L: per-cell modulation index by epoch and group, mice overlaid.
 
     Cells are the visual cloud; every statistic comes from the per-mouse means, and the
@@ -825,12 +826,17 @@ def plot_epoch_modulation_superplot(df_cell, df_mouse, contrasts, omnibus, out_p
     wording. The event-proximal lane overrides them because its windows are NOT the epochs --
     leaving the defaults there would label a 3 s post-onset window "shock (2 s)" and describe
     the y-axis as "epoch - pre-tone", both of which would be false on that figure.
+
+    ``facets`` names the panels, matched against the ``epoch`` column of both tables and of
+    ``contrasts``; it defaults to the four response epochs. The cell-selectivity lane passes its
+    own facets (the pooled endpoint plus one per preferred event). ``omnibus=None`` leaves the
+    group x epoch F out of the title, for a caller that has no omnibus test.
     """
-    fig, axs = plt.subplots(1, len(RESPONSE_EPOCHS),
-                            figsize=(3.1 * len(RESPONSE_EPOCHS), 4.2), sharey=True)
+    fig, axs = plt.subplots(1, len(facets),
+                            figsize=(3.1 * len(facets), 4.2), sharey=True)
     axs = np.atleast_1d(axs)
 
-    for ax, epoch in zip(axs.flat, RESPONSE_EPOCHS):
+    for ax, epoch in zip(axs.flat, facets):
         cell_vals, mouse_means = {}, {}
         for group in DREADD_DISPLAY_ORDER:
             sub_cell = df_cell[(df_cell['group'] == group) & (df_cell['epoch'] == epoch)]
@@ -850,9 +856,10 @@ def plot_epoch_modulation_superplot(df_cell, df_mouse, contrasts, omnibus, out_p
         grow_ylim_for_bracket_headroom(ax)
 
     axs.flat[0].set_ylabel(ylabel or 'Modulation index\n(epoch - pre-tone, cell SD units)')
-    title = (f'{title_prefix} ({signal}) — group x epoch '
-             f'F({omnibus["df1"]},{omnibus["df2"]}) = {omnibus["F"]:.2f}, '
-             f'P = {omnibus["p"]:.3g}')
+    title = f'{title_prefix} ({signal})'
+    if omnibus is not None:
+        title += (f' — group x epoch F({omnibus["df1"]},{omnibus["df2"]}) = '
+                  f'{omnibus["F"]:.2f}, P = {omnibus["p"]:.3g}')
     if title_note:
         title += f'\n{title_note}'
     fig.suptitle(title, size='medium')
@@ -863,6 +870,26 @@ def plot_epoch_modulation_superplot(df_cell, df_mouse, contrasts, omnibus, out_p
     save_fig(fig, out_path)
     if auto_close:
         plt.close(fig)
+
+
+def _tone_aligned_trials(z, session, trials, pre_s, post_s):
+    """({trial: cells x window frames, or None where the window does not fit}, time axis).
+
+    Per-trial standardized activity aligned to tone onset. No re-standardization happens here
+    (see ``_tone_aligned_matrix``); each caller decides what to do with a trial whose window
+    does not fit inside the recording.
+    """
+    pre_f = _window_frames(pre_s)
+    post_f = _window_frames(post_s)
+    n_frames = z.shape[1]
+
+    per_trial = {}
+    for trial_idx in trials:
+        onset = get_epoch_frames(session, 'tone', trial_idx)[0]
+        lo, hi = onset - pre_f, onset + post_f
+        per_trial[trial_idx] = None if (lo < 0 or hi > n_frames) else z[:, lo:hi]
+    time_axis = (np.arange(pre_f + post_f) - pre_f) / MINISCOPE_FPS
+    return per_trial, time_axis
 
 
 def _tone_aligned_matrix(z, session, trials):
@@ -878,22 +905,41 @@ def _tone_aligned_matrix(z, session, trials):
     Averaged over the SAME retained trials the index uses, so panel and statistics describe
     the same data.
     """
-    pre_f = _window_frames(HEATMAP_PRE_S)
-    post_f = _window_frames(HEATMAP_POST_S)
-    n_frames = z.shape[1]
-
-    per_trial = []
-    for trial_idx in trials:
-        onset = get_epoch_frames(session, 'tone', trial_idx)[0]
-        lo, hi = onset - pre_f, onset + post_f
-        if lo < 0 or hi > n_frames:
-            continue
-        per_trial.append(z[:, lo:hi])
-    if not per_trial:
+    per_trial, time_axis = _tone_aligned_trials(z, session, trials, HEATMAP_PRE_S, HEATMAP_POST_S)
+    fitting = [m for m in per_trial.values() if m is not None]
+    if not fitting:
         return None, None
-    avg = np.mean(np.stack(per_trial, axis=0), axis=0)
-    time_axis = (np.arange(pre_f + post_f) - pre_f) / MINISCOPE_FPS
-    return avg, time_axis
+    return np.mean(np.stack(fitting, axis=0), axis=0), time_axis
+
+
+def _draw_tone_aligned_frame(ax, time_axis):
+    """Epoch boundaries and labels for a tone-onset-aligned heatmap axis.
+
+    Nominal offsets from tone onset: the tone runs 0-20 s, the trace interval 20-40 s, the 2 s
+    shock 40-42 s, and the post-shock window 42-62 s (see epoch_analysis.TRACE_MATCHED_WINDOW_S
+    and the session's tone/shock definitions). The shock band is shaded rather than ruled
+    because at this width two lines 2 s apart are indistinguishable. Boundaries and labels
+    beyond the displayed window are left out, so a shorter window does not stretch the axis.
+    """
+    t0, t1 = float(time_axis[0]), float(time_axis[-1])
+    for boundary in (0.0, 20.0, 40.0, 42.0, 62.0):
+        if t0 <= boundary <= t1:
+            ax.axvline(boundary, color='k', lw=0.8, ls='-' if boundary == 0.0 else ':')
+    ax.axvspan(40.0, 42.0, color='k', alpha=0.12, lw=0)
+    ax.set_xlim(t0, t1)
+    ax.set_xlabel('Time from tone onset (s)')
+    ax.set_xticks([t for t in (0, 20, 40, 62) if t0 <= t <= t1])
+    post_shock_at = (42.0 + min(62.0, t1)) / 2.0
+    labels = [(10.0, 'tone'), (30.0, 'trace'), (41.0, 'US'), (post_shock_at, 'post-shock')]
+    # On a narrow window the post-shock label sits almost on top of the US one. The US is still
+    # marked by the shaded band and the 40 s tick, so its word is what gives way.
+    if post_shock_at - 41.0 < 7.0:
+        labels = [(x, s) for x, s in labels if s != 'US']
+    labels = [(x, s) for x, s in labels if t0 <= x <= t1]
+    sec = ax.secondary_xaxis('top')
+    sec.set_xticks([x for x, _ in labels])
+    sec.set_xticklabels([s for _, s in labels], size='small')
+    sec.tick_params(length=0)
 
 
 def plot_modulation_heatmaps(group_mats, group_sort_values, time_axis, out_path,
@@ -917,22 +963,9 @@ def plot_modulation_heatmaps(group_mats, group_sort_values, time_axis, out_path,
         ax.imshow(mat[order], aspect='auto', cmap='RdBu_r', vmin=-vmax, vmax=vmax,
                   extent=[time_axis[0], time_axis[-1], mat.shape[0], 0])
         # Epoch boundaries, so the reader can see which band is which epoch rather than
-        # inferring it from the x-axis. Nominal offsets from tone onset: the tone runs
-        # 0-20 s, the trace interval 20-40 s, the 2 s shock 40-42 s, and the post-shock
-        # window 42-62 s (see epoch_analysis.TRACE_MATCHED_WINDOW_S and the session's
-        # tone/shock definitions). The shock band is shaded rather than ruled because at
-        # this width two lines 2 s apart are indistinguishable.
-        for boundary in (0.0, 20.0, 40.0, 42.0, 62.0):
-            ax.axvline(boundary, color='k', lw=0.8,
-                       ls='-' if boundary == 0.0 else ':')
-        ax.axvspan(40.0, 42.0, color='k', alpha=0.12, lw=0)
+        # inferring it from the x-axis.
+        _draw_tone_aligned_frame(ax, time_axis)
         ax.set_title(f'{GROUP_LABELS[group]} (n = {mat.shape[0]} cells)', size='medium')
-        ax.set_xlabel('Time from tone onset (s)')
-        ax.set_xticks([0, 20, 40, 62])
-        sec = ax.secondary_xaxis('top')
-        sec.set_xticks([10.0, 30.0, 41.0, 52.0])
-        sec.set_xticklabels(['tone', 'trace', 'US', 'post-shock'], size='small')
-        sec.tick_params(length=0)
     axs.flat[0].set_ylabel('Cell (sorted by trace modulation)')
     fig.suptitle(f'Tone-aligned per-cell activity ({signal}; standardized once per cell '
                  f'over the session)', size='medium')
@@ -2665,10 +2698,6 @@ def compare_hierarchical_signals(perm_by_signal):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Entry point
-# ─────────────────────────────────────────────────────────────────────────────
-
-# ─────────────────────────────────────────────────────────────────────────────
 # Event-proximal companion lane
 #
 # The full-epoch analysis averages three of its four windows over 20 s. A response locked
@@ -3060,9 +3089,726 @@ def run_event_proximal_lane(sig_dir, signal, mice_per_group, sessions, df_mouse_
         n_cells_total = df_cell.groupby(['mouse', 'cell'], observed=True).ngroups
         print(f'[event-proximal/{signal}] {n_mice} mice, {n_cells_total} cells, '
               f'{window_seconds:g} s windows -> {out_dir}', flush=True)
-    return {'df_cell': df_cell, 'df_mouse': df_mouse, 'coverage': coverage,
+    return {'df_trial': df, 'df_cell': df_cell, 'df_mouse': df_mouse, 'coverage': coverage,
             'contrasts': contrasts, 'omnibus': omnibus, 'dilution': dilution,
             'permutation': perm_df}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Cross-validated per-cell selectivity (leave one trial out)
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# WHAT THIS LANE ASKS. Every lane above compares the AVERAGE cell. This one asks whether
+# individual cells have a REPRODUCIBLE preference for one event -- tone, trace, shock or
+# post-shock -- beyond what their mouse's average cell does, and whether the DREADD groups differ
+# in how strong that preference is. It is the distribution-shape question the mean-based lanes
+# cannot see (docs/epoch_modulation.md §R.6, §R.10.9, §R.11.4).
+#
+# WHY LEAVE ONE TRIAL OUT. Labelling cells "tone cells" from the same data and then comparing
+# that label's statistic across groups is the circular pattern this module refuses (module
+# docstring). Here a cell's preferred event and its sign are chosen on all retained trials but
+# one, and the selectivity is measured on the held-out trial only, rotating through every
+# retained trial. The held-out trial plays no part in the choice, so selection noise cannot pass
+# for selectivity: with no reproducible preference, the held-out value has expectation zero.
+#
+# WHY CENTRED WITHIN MOUSE. Both signs are admissible, so a response every cell shares would
+# otherwise read as selectivity: a cohort-wide dip after tone offset makes most cells choose
+# "trace, negative" on the training trials, and the held-out trial confirms it although no cell
+# differs from any other. Each (mouse, trial, event) mean over that mouse's cells is therefore
+# subtracted first, and a preference is a preference RELATIVE TO THE MOUSE'S AVERAGE CELL. The
+# average profile itself is what the lanes above already test.
+#
+# The input is the event-proximal table (3 s from each onset): same resolved cells, same retained
+# trials, same single standardization and same pre-tone baseline as every other lane here.
+
+SELECTIVITY_DIRNAME = 'cell_selectivity'
+SELECTIVITY_METHODS_FILENAME = 'epoch_modulation_cell_selectivity_methods.md'
+
+# The pooled endpoint's facet label, beside one facet per preferred event.
+SELECTIVITY_ALL = 'all'
+SELECTIVITY_FACETS = (SELECTIVITY_ALL,) + RESPONSE_EPOCHS
+
+# Held-out heatmap window, relative to tone onset -- the WIDEST asked for, not the one used. Every
+# held-out trial the statistics use must appear on this panel, so the window actually drawn is the
+# widest that fits for EVERY retained trial of every mouse (_common_alignment_window), which is
+# narrower whenever a recording ends soon after its last post-shock window. Shrinking one shared
+# window keeps every row the same length and the same epochs; skipping the trials that do not fit
+# would silently drop rows the statistics counted.
+SELECTIVITY_HEATMAP_PRE_S = 10.0
+SELECTIVITY_HEATMAP_POST_S = 60.0
+# The panel is pointless if it cannot reach the last analysed window: the post-shock onset sits
+# 42 s after tone onset and the analysed window is EVENT_PROXIMAL_WINDOW_S long.
+SELECTIVITY_HEATMAP_MIN_POST_S = 45.0
+# DISPLAY ONLY: held-out rows are averaged in 0.25 s bins (5 frames at 20 Hz) so ~38,000
+# cell x trial rows fit in memory and on the page. No statistic is computed from the binned rows.
+SELECTIVITY_HEATMAP_BIN_FRAMES = 5
+SELECTIVITY_HEATMAP_VMAX = 1.0
+
+# The cohort-level test enumerates every sign vector; 2**17 = 131,072 on this cohort.
+SIGN_FLIP_MAX_N = 20
+
+
+def center_within_mouse(df_trial):
+    """Each index minus the mean over that mouse's cells for the same trial and event.
+
+    See this section's header for why a preference has to be defined against the mouse's average
+    cell once both signs are admissible.
+    """
+    out = df_trial.copy()
+    means = out.groupby(['mouse', 'trial', 'epoch'], observed=True)['index'].transform('mean')
+    out['index'] = out['index'] - means
+    return out
+
+
+def _mouse_index_array(sub):
+    """(cells, trials, cells x trials x events array) for one mouse's rows of a trial-level table.
+
+    Every cell must carry every event on every retained trial -- ``build_modulation_table``
+    guarantees it -- so a gap here is an error, never something to fill.
+    """
+    mouse = sub['mouse'].iloc[0]
+    if sub.duplicated(['cell', 'trial', 'epoch']).any():
+        raise RuntimeError(f'epoch_modulation: mouse {mouse!r} has duplicated (cell, trial, epoch) '
+                           f'rows in the selectivity input.')
+    cells = list(dict.fromkeys(sub['cell'].tolist()))
+    trials = sorted(int(t) for t in sub['trial'].unique())
+    full = pd.MultiIndex.from_product([cells, trials, list(RESPONSE_EPOCHS)],
+                                      names=['cell', 'trial', 'epoch'])
+    values = sub.set_index(['cell', 'trial', 'epoch'])['index'].reindex(full)
+    if values.isna().any():
+        raise RuntimeError(
+            f'epoch_modulation: mouse {mouse!r} is missing {int(values.isna().sum())} '
+            f'(cell, trial, event) indices. Every cell must carry every event on every retained '
+            f'trial for the leave-one-trial-out split to be defined.')
+    arr = values.to_numpy(dtype=float).reshape(len(cells), len(trials), len(RESPONSE_EPOCHS))
+    return cells, trials, arr
+
+
+def cross_validated_selectivity(df_centered):
+    """Per (mouse, cell, held-out trial): the preference chosen WITHOUT that trial, measured ON it.
+
+    For held-out trial k, on the within-mouse-centred indices:
+
+        train_e      = mean over the other retained trials of index_e
+        e*, s        = argmax_e |train_e|,  sign(train_e*)
+        selectivity  = s * (heldout_e* - mean over the three other events of heldout_e)
+
+    ``selectivity`` is in the index's own units (cell SD). It is positive when the cell departs
+    from its mouse's average cell, in the chosen direction, at the chosen event, on a trial that
+    had no say in the choice.
+
+    Returns ``(df_fold, audit)``. ``df_fold`` has one row per cell per held-out trial. ``audit``
+    counts, per mouse, choices that were not uniquely defined -- an exact tie for the largest
+    |train| (argmax then takes the first event) or a training value of exactly zero (sign 0,
+    selectivity 0). Both are kept and counted rather than dropped; on YrA none are expected, on C
+    they are what flat windows produce.
+    """
+    frames, audit = [], []
+    n_events = len(RESPONSE_EPOCHS)
+    events = np.array(RESPONSE_EPOCHS, dtype=object)
+    for (mouse, group), sub in df_centered.groupby(['mouse', 'group'], observed=True, sort=False):
+        cells, trials, arr = _mouse_index_array(sub)
+        if len(trials) < 2:
+            raise RuntimeError(
+                f'epoch_modulation: mouse {mouse!r} retained {len(trials)} trial(s); leave one '
+                f'trial out needs at least 2.')
+        rows = np.arange(len(cells))
+        n_ties = n_zero_sign = 0
+        for k, heldout in enumerate(trials):
+            train = np.delete(arr, k, axis=1).mean(axis=1)            # cells x events
+            magnitude = np.abs(train)
+            choice = magnitude.argmax(axis=1)
+            top = magnitude[rows, choice]
+            n_ties += int(((magnitude == top[:, None]).sum(axis=1) > 1).sum())
+            train_score = train[rows, choice]
+            sign = np.sign(train_score)
+            n_zero_sign += int((sign == 0).sum())
+            test = arr[:, k, :]
+            chosen = test[rows, choice]
+            others = (test.sum(axis=1) - chosen) / (n_events - 1)
+            frames.append(pd.DataFrame({
+                'mouse': mouse, 'group': group, 'cell': cells, 'heldout_trial': int(heldout),
+                'preferred_event': events[choice], 'sign': sign.astype(int),
+                'train_score': train_score, 'selectivity': sign * (chosen - others)}))
+        audit.append({'mouse': mouse, 'group': group, 'n_cells': len(cells),
+                      'n_trials': len(trials), 'n_cell_folds': len(cells) * len(trials),
+                      'n_tied_choices': n_ties, 'n_zero_sign_choices': n_zero_sign})
+    if not frames:
+        raise RuntimeError('epoch_modulation: the selectivity input table is empty.')
+    return pd.concat(frames, ignore_index=True), pd.DataFrame(audit)
+
+
+def summarize_selectivity(df_fold):
+    """(per-mouse endpoints, per-cell display cloud), both keyed by facet in an ``epoch`` column.
+
+    Per mouse, facet ``all``: the mean selectivity over every cell x held-out trial. Facet ``e``:
+    the mean over the cell x held-out trials whose preference (chosen without that trial) was
+    event e, with ``frac_chosen`` -- the share of choices falling on e -- and ``frac_positive`` --
+    the share of those choices that were increases.
+
+    ``frac_chosen`` is DESCRIPTIVE ONLY. Choosing by the largest |train| favours events whose index
+    is noisier, so the composition partly reflects per-event noise rather than per-event
+    preference; the held-out selectivity is unaffected by this, because a choice made on noise
+    contributes zero in expectation on the held-out trial.
+
+    The display cloud is each cell's mean over its held-out trials for ``all`` and the individual
+    cell x held-out-trial values for each event facet, so every mouse mean on the panel is the mean
+    of that mouse's own cloud.
+    """
+    rows = []
+    for (mouse, group), sub in df_fold.groupby(['mouse', 'group'], observed=True, sort=False):
+        total = len(sub)
+        rows.append({'mouse': mouse, 'group': group, 'epoch': SELECTIVITY_ALL,
+                     'value': float(sub['selectivity'].mean()), 'n_cell_folds': total,
+                     'frac_chosen': 1.0, 'frac_positive': float((sub['sign'] > 0).mean())})
+        for event in RESPONSE_EPOCHS:
+            chosen = sub[sub['preferred_event'] == event]
+            if chosen.empty:
+                raise RuntimeError(
+                    f'epoch_modulation: no cell of mouse {mouse!r} ever preferred {event!r}, so '
+                    f'that mouse has no value in the {event!r} facet. With hundreds of cells per '
+                    f'mouse this indicates a problem upstream, not a real absence.')
+            rows.append({'mouse': mouse, 'group': group, 'epoch': event,
+                         'value': float(chosen['selectivity'].mean()),
+                         'n_cell_folds': len(chosen), 'frac_chosen': len(chosen) / total,
+                         'frac_positive': float((chosen['sign'] > 0).mean())})
+    df_mouse = pd.DataFrame(rows)
+
+    per_cell = (df_fold.groupby(['mouse', 'group', 'cell'], observed=True)['selectivity']
+                .mean().reset_index().rename(columns={'selectivity': 'index'})
+                .assign(epoch=SELECTIVITY_ALL))
+    per_fold = df_fold.rename(columns={'preferred_event': 'epoch', 'selectivity': 'index'})
+    df_cloud = pd.concat([per_cell[['mouse', 'group', 'cell', 'epoch', 'index']],
+                          per_fold[['mouse', 'group', 'cell', 'epoch', 'index']]],
+                         ignore_index=True)
+    return df_mouse, df_cloud
+
+
+def exact_sign_flip_test(values):
+    """(mean, exact two-sided P, number of sign vectors) for H0: the per-mouse values centre on 0.
+
+    Every one of the 2**n sign vectors is enumerated, so the P is exact with no +1/+1 correction
+    (the observed signs are one of the enumerated vectors). Mouse is the unit: one value per mouse.
+
+    The null is justified by construction rather than assumed from the data: with no reproducible
+    cell-specific preference the held-out selectivity has expectation zero, and the test
+    additionally assumes its distribution is symmetric about zero. The synthetic calibration in
+    ``verify_cell_selectivity_synthetic`` checks the resulting false-positive rate.
+    """
+    v = np.asarray(values, dtype=float)
+    if v.ndim != 1 or v.size == 0 or not np.all(np.isfinite(v)):
+        raise ValueError(f'exact_sign_flip_test: need a 1-D array of finite values, got {v!r}.')
+    if v.size > SIGN_FLIP_MAX_N:
+        raise ValueError(f'exact_sign_flip_test: {v.size} values means 2**{v.size} sign vectors, '
+                         f'above SIGN_FLIP_MAX_N = {SIGN_FLIP_MAX_N}.')
+    bits = (np.arange(2 ** v.size)[:, None] >> np.arange(v.size)) & 1
+    null = ((1 - 2 * bits) * v).mean(axis=1)
+    observed = float(v.mean())
+    return observed, float(np.mean(np.abs(null) >= abs(observed))), int(2 ** v.size)
+
+
+def selectivity_group_contrasts(df_mouse_sel, mice_per_group):
+    """Between-group comparisons of the per-mouse selectivity, per facet.
+
+    Estimate: difference in group means of the per-mouse values (each mouse weighted equally).
+    P: EXACT mouse-label randomization over the two compared groups' mice only
+    (``mouse_label_permutation_test(exact=True, restrict_to_groups=pair)``), as in the
+    hierarchical lane. Interval: Welch 95% CI on the same per-mouse values, descriptive.
+    Holm across the two treatment-versus-control comparisons within each facet; Exc-vs-Inh is
+    computed and tabulated but is in no family and carries no bracket -- the rule used by every
+    other lane in this module (§A.8.1).
+    """
+    rows = []
+    for facet in SELECTIVITY_FACETS:
+        sub = df_mouse_sel[df_mouse_sel['epoch'] == facet]
+        for group_a, group_b in HIERARCHICAL_PAIRS:
+            stat_fn = make_contrast_stat(sub, 'value', group_a, group_b, weight='mouse')
+            res = mouse_label_permutation_test(stat_fn, mice_per_group,
+                                               restrict_to_groups=(group_a, group_b), exact=True)
+            va = sub.loc[sub['group'] == group_a, 'value'].to_numpy(dtype=float)
+            vb = sub.loc[sub['group'] == group_b, 'value'].to_numpy(dtype=float)
+            ci = stats.ttest_ind(va, vb, equal_var=False).confidence_interval(0.95)
+            rows.append({'epoch': facet, 'group_a': group_a, 'group_b': group_b,
+                         'comparison': f'{GROUP_LABELS[group_a]} vs {GROUP_LABELS[group_b]}',
+                         'estimate': float(res['observed']),
+                         'ci_low_welch': float(ci.low), 'ci_high_welch': float(ci.high),
+                         'p_exact': res['p_two_sided'], 'n_relabelings': res['n_relabelings'],
+                         'in_family': (group_a, group_b) in HIERARCHICAL_FAMILY_PAIRS})
+    out = pd.DataFrame(rows)
+    out['p_holm'] = np.nan
+    for facet in SELECTIVITY_FACETS:
+        mask = (out['epoch'] == facet) & out['in_family']
+        _, adjusted = holm_correct(out.loc[mask, 'p_exact'].to_numpy())
+        out.loc[mask, 'p_holm'] = adjusted
+    return out
+
+
+def _selectivity_panel_contrasts(contrasts):
+    """The table shape ``_model_contrast_stat_fn`` reads: epoch, group (vs mCherry), p_holm."""
+    fam = contrasts[contrasts['in_family']]
+    return pd.DataFrame({'epoch': fam['epoch'].to_numpy(), 'group': fam['group_a'].to_numpy(),
+                         'p_holm': fam['p_holm'].to_numpy()})
+
+
+def _bin_columns(mat, n_bin):
+    """Mean over consecutive blocks of ``n_bin`` columns, dropping a trailing partial block."""
+    n = (mat.shape[1] // n_bin) * n_bin
+    return mat[:, :n].reshape(mat.shape[0], -1, n_bin).mean(axis=2)
+
+
+def _selectivity_block_order(df_fold):
+    """Heatmap blocks: each event with increases then decreases, then any undefined choices."""
+    order = [(e, s) for e in RESPONSE_EPOCHS for s in (1, -1)]
+    order += sorted({(e, 0) for e in df_fold.loc[df_fold['sign'] == 0, 'preferred_event']},
+                    key=lambda k: RESPONSE_EPOCHS.index(k[0]))
+    return order
+
+
+def _common_alignment_window(mice_per_group, sessions, signal, mapping='full',
+                             crossreg_to_use=None):
+    """(pre_s, post_s, limiting) — the widest tone-aligned window fitting EVERY retained trial.
+
+    Capped at SELECTIVITY_HEATMAP_{PRE,POST}_S. ``limiting`` names the (mouse, trial) that set the
+    post-onset edge, so the figure can say why it is what it is. Raises rather than returning a
+    window too short to reach the last analysed onset: on this cohort G09's recording ends ~50 s
+    after its last retained tone onset, which shortens the panel for every mouse.
+    """
+    pre_f = _window_frames(SELECTIVITY_HEATMAP_PRE_S)
+    post_f = _window_frames(SELECTIVITY_HEATMAP_POST_S)
+    limiting = None
+    for group in DREADD_DISPLAY_ORDER:
+        for mouse in mice_per_group.get(group, []):
+            if mouse not in sessions:
+                continue
+            session = sessions[mouse]
+            n_frames = int(np.asarray(getattr(session, signal)).shape[1])
+            trials, _ = retained_trials(session)
+            for trial_idx in trials:
+                onset = int(get_epoch_frames(session, 'tone', trial_idx)[0])
+                pre_f = min(pre_f, onset)
+                if n_frames - onset < post_f:
+                    post_f = n_frames - onset
+                    limiting = (mouse, int(trial_idx))
+    if post_f < _window_frames(SELECTIVITY_HEATMAP_MIN_POST_S):
+        raise RuntimeError(
+            f'epoch_modulation: the widest tone-aligned window common to every retained trial is '
+            f'{post_f / MINISCOPE_FPS:.1f} s after onset (limited by {limiting}), short of the '
+            f'{SELECTIVITY_HEATMAP_MIN_POST_S:g} s the held-out panel needs to reach the '
+            f'post-shock window it analyses.')
+    return pre_f / MINISCOPE_FPS, post_f / MINISCOPE_FPS, limiting
+
+
+def collect_heldout_heatmap(mice_per_group, sessions, signal, df_fold, mapping='full',
+                            crossreg_to_use=None):
+    """({group: {(event, sign): [(|train_score|, binned held-out row), ...]}}, binned time axis).
+
+    One row per cell per held-out trial: that trial's tone-aligned trace ONLY, placed in the block
+    of the preference chosen WITHOUT it. No row is ever positioned by the data it displays, which
+    is what makes this the honest counterpart of panel K (§O.8).
+
+    Each row gets the same two subtractions the selection quantity is built from: the cell's own
+    pre-tone mean on that trial, then the mean over the mouse's cells at each time point on that
+    trial. The trace itself is standardized once over the session, as everywhere in this module.
+    """
+    pre_s, post_s, limiting = _common_alignment_window(mice_per_group, sessions, signal,
+                                                       mapping=mapping,
+                                                       crossreg_to_use=crossreg_to_use)
+    heat = {g: {} for g in DREADD_DISPLAY_ORDER}
+    time_axis = None
+    for group in DREADD_DISPLAY_ORDER:
+        for mouse in mice_per_group.get(group, []):
+            if mouse not in sessions:
+                continue
+            session = sessions[mouse]
+            wc = crossreg_to_use[mouse] if (crossreg_to_use is not None and mapping != 'full') else None
+            cell_ids, _ = resolve_shared_cells(session, mapping=mapping, with_crossreg=wc)
+            z = _standardized_trace(session, signal, cell_ids)
+            trials, _ = retained_trials(session)
+            aligned, axis = _tone_aligned_trials(z, session, trials, pre_s, post_s)
+            missing = [t for t, m in aligned.items() if m is None]
+            if missing:
+                raise RuntimeError(
+                    f'epoch_modulation: mouse {mouse!r} retained trials {missing} but the '
+                    f'-{pre_s:g} s to +{post_s:g} s held-out heatmap window does not fit inside '
+                    f'the recording for them, although _common_alignment_window chose that window '
+                    f'to fit every retained trial.')
+            centred = {}
+            for trial_idx, mat in aligned.items():
+                base_on, base_off = get_epoch_frames(session, BASELINE_EPOCH, trial_idx)
+                mat = mat - z[:, base_on:base_off].mean(axis=1, keepdims=True)
+                mat = mat - mat.mean(axis=0, keepdims=True)
+                centred[int(trial_idx)] = _bin_columns(mat, SELECTIVITY_HEATMAP_BIN_FRAMES)
+            time_axis = _bin_columns(axis[None, :], SELECTIVITY_HEATMAP_BIN_FRAMES)[0]
+
+            row_of = {int(c): i for i, c in enumerate(cell_ids)}
+            folds = df_fold[df_fold['mouse'] == mouse]
+            fold_cells = {int(c) for c in folds['cell'].unique()}
+            if fold_cells != set(row_of):
+                raise RuntimeError(
+                    f'epoch_modulation: mouse {mouse!r} has {len(fold_cells)} cells in the '
+                    f'selectivity table but {len(row_of)} resolved cells -- the heatmap rows would '
+                    f'not describe the analysed cells.')
+            for rec in folds.itertuples(index=False):
+                key = (rec.preferred_event, int(rec.sign))
+                heat[group].setdefault(key, []).append(
+                    (abs(float(rec.train_score)), centred[int(rec.heldout_trial)][row_of[int(rec.cell)]]))
+    if time_axis is None:
+        raise RuntimeError('epoch_modulation: collected no held-out heatmap rows.')
+    return heat, time_axis, limiting
+
+
+def plot_heldout_selectivity_heatmaps(heat, time_axis, block_order, out_path,
+                                      signal=PRIMARY_SIGNAL, vmax=SELECTIVITY_HEATMAP_VMAX,
+                                      auto_close=True, limiting=None):
+    """Panel O: held-out tone-aligned activity, grouped by the preference chosen without it.
+
+    One column per group (mCherry, hM3D, hM4D), one row per cell x held-out trial, blocks in
+    ``block_order`` and, within a block, rows in descending |training score| -- also a training
+    quantity, so the order never uses the displayed trial. A block whose rows show their event's
+    band in the chosen direction is reproducible preference; noise would leave the blocks
+    featureless.
+    """
+    # ASCII markers: the paper font stack has no glyph for the arrows, which render as tofu boxes.
+    labels = {(e, 1): f'{e} (+)' for e in RESPONSE_EPOCHS}
+    labels.update({(e, -1): f'{e} (-)' for e in RESPONSE_EPOCHS})
+    fig, axs = plt.subplots(1, len(DREADD_DISPLAY_ORDER),
+                            figsize=(4.3 * len(DREADD_DISPLAY_ORDER), 8.0))
+    axs = np.atleast_1d(axs)
+    for ax, group in zip(axs.flat, DREADD_DISPLAY_ORDER):
+        blocks = heat.get(group, {})
+        mats, ticks, ticklabels, bounds = [], [], [], [0]
+        for key in block_order:
+            entries = sorted(blocks.get(key, []), key=lambda x: -x[0])
+            if not entries:
+                continue
+            mats.append(np.stack([row for _, row in entries], axis=0))
+            ticks.append(bounds[-1] + len(entries) / 2.0)
+            ticklabels.append(f'{labels.get(key, f"{key[0]} (undefined)")}\n{len(entries)}')
+            bounds.append(bounds[-1] + len(entries))
+        if not mats:
+            raise RuntimeError(f'epoch_modulation: no held-out heatmap rows for group {group!r}.')
+        mat = np.concatenate(mats, axis=0)
+        ax.imshow(mat, aspect='auto', cmap='RdBu_r', vmin=-vmax, vmax=vmax, interpolation='nearest',
+                  extent=[time_axis[0], time_axis[-1], mat.shape[0], 0])
+        for b in bounds[1:-1]:
+            ax.axhline(b, color='k', lw=0.6)
+        ax.set_yticks(ticks)
+        ax.set_yticklabels(ticklabels, size='xx-small')
+        _draw_tone_aligned_frame(ax, time_axis)
+        ax.set_title(f'{GROUP_LABELS[group]} ({mat.shape[0]} cell x held-out trial rows)',
+                     size='medium')
+    axs.flat[0].set_ylabel('Preferred event, chosen WITHOUT the displayed trial\n'
+                           '((+) increase, (-) decrease; rows per block)')
+    fig.suptitle(f'Held-out activity by cross-validated preference ({signal}); relative to the '
+                 f"mouse's average cell", size='medium')
+    fig.text(0.5, 0.012,
+             'Each row is ONE held-out trial of one cell, placed by the preference chosen on its '
+             'other retained trials and ordered by the training-trial strength of that preference.'
+             '\nStandardized once per cell over the session; minus the cell\'s pre-tone mean on '
+             'that trial; minus the mean over the mouse\'s cells at each time point. '
+             f'Display binned to {SELECTIVITY_HEATMAP_BIN_FRAMES / MINISCOPE_FPS:g} s.'
+             + (f'\nWindow ends at +{time_axis[-1]:.0f} s: the widest common to every retained '
+                f'trial, limited by mouse {limiting[0]} trial {limiting[1]}.' if limiting else ''),
+             ha='center', size='xx-small')
+    fig.subplots_adjust(left=0.1, right=0.99, bottom=0.1, top=0.9, wspace=0.28)
+    save_fig(fig, out_path)
+    if auto_close:
+        plt.close(fig)
+
+
+def format_selectivity_report(signal, window_seconds, audit, df_mouse_sel, cohort, contrasts):
+    """The lane's text report: cohort test, per-group values, comparisons, composition, audit."""
+    heading = f'Cross-validated per-cell selectivity (leave one trial out) — {signal}'
+    observed, p_cohort, n_flips = cohort
+    lines = [
+        heading, '=' * len(heading), '',
+        f'Index: the event-proximal index ({window_seconds:g} s from each onset minus the '
+        f'trial\'s {TRACE_MATCHED_WINDOW_S:.0f} s pre-tone mean),',
+        'centred within mouse: each (mouse, trial, event) mean over cells is subtracted.',
+        'For each held-out trial, each cell\'s preferred event and sign are chosen as the',
+        'largest |mean index| over the OTHER retained trials; selectivity is the held-out',
+        'index at that event minus the mean of the held-out indices at the other three,',
+        'times the chosen sign. Expectation zero when cells have no reproducible preference',
+        'beyond their mouse\'s average cell.', '',
+        f'n = {df_mouse_sel["mouse"].nunique()} MICE is the sample size. Cells and held-out '
+        'trials are descriptive.', '',
+        'Is there reproducible cell-specific preference at all? (all mice pooled)',
+        '-' * 74,
+        f'  mean over mice of per-mouse selectivity = {observed:+.4f} (cell SD units)',
+        f'  exact sign-flip P = {p_cohort:.4g} over {n_flips} sign vectors', '',
+        'Per-mouse selectivity by group (mean ± SD across mice)',
+        '-' * 74,
+    ]
+    for facet in SELECTIVITY_FACETS:
+        sub = df_mouse_sel[df_mouse_sel['epoch'] == facet]
+        parts = []
+        for group in DREADD_DISPLAY_ORDER:
+            v = sub.loc[sub['group'] == group, 'value']
+            parts.append(f'{GROUP_LABELS[group]} {v.mean():+.4f} ± {v.std(ddof=1):.4f} (n={len(v)})')
+        name = 'all cells' if facet == SELECTIVITY_ALL else f'preferred {facet}'
+        lines.append(f'  {name:>20}: ' + '   '.join(parts))
+    lines += ['', 'Between-group comparisons (difference in per-mouse means; exact mouse-label',
+              'randomization over the two compared groups; Holm across the two vs-control',
+              'comparisons within each facet; Exc vs Inh in no family; Welch CI descriptive)',
+              '-' * 74]
+    for facet in SELECTIVITY_FACETS:
+        name = 'all cells' if facet == SELECTIVITY_ALL else f'preferred {facet}'
+        lines.append(f'  {name}:')
+        for rec in contrasts[contrasts['epoch'] == facet].itertuples(index=False):
+            holm = (f'P_holm = {rec.p_holm:.4g}' if rec.in_family else '[in no Holm family]')
+            lines.append(f'    {rec.comparison}: {rec.estimate:+.4f} '
+                         f'[{rec.ci_low_welch:+.4f}, {rec.ci_high_welch:+.4f}]  exact P = '
+                         f'{rec.p_exact:.4g} ({rec.n_relabelings} relabelings)  {holm}')
+    lines += ['', 'Composition of choices (DESCRIPTIVE ONLY: choosing the largest |index| favours',
+              'noisier events, so this is not a per-event preference rate). Mean over mice of the',
+              'share of cell x held-out-trial choices on each event, and the share of those that',
+              'were increases.', '-' * 74]
+    for event in RESPONSE_EPOCHS:
+        sub = df_mouse_sel[df_mouse_sel['epoch'] == event]
+        parts = [f'{GROUP_LABELS[g]} {sub.loc[sub["group"] == g, "frac_chosen"].mean():.3f} '
+                 f'(increases {sub.loc[sub["group"] == g, "frac_positive"].mean():.2f})'
+                 for g in DREADD_DISPLAY_ORDER]
+        lines.append(f'  {event:>11}: ' + '   '.join(parts))
+    lines += ['', 'Choice audit', '-' * 74,
+              f'  cell x held-out-trial choices: {int(audit["n_cell_folds"].sum())}; exact ties '
+              f'for the largest |train|: {int(audit["n_tied_choices"].sum())}; training value '
+              f'exactly zero: {int(audit["n_zero_sign_choices"].sum())}.',
+              '  Both kinds are kept (a tie takes the first event in tone, trace, shock,',
+              '  post-shock order; a zero training value contributes selectivity 0).', '']
+    return '\n'.join(lines) + '\n'
+
+
+def run_cell_selectivity_lane(sig_dir, signal, mice_per_group, sessions, df_trial=None,
+                              mapping='full', crossreg_to_use=None,
+                              window_seconds=EVENT_PROXIMAL_WINDOW_S, auto_close=True,
+                              verbose=True):
+    """Run the cross-validated selectivity lane for one signal, into ``<sig_dir>/cell_selectivity/``.
+
+    ``df_trial`` is the event-proximal lane's trial-level table for the SAME signal and window
+    when that lane has just built it (``run_event_proximal_lane(...)['df_trial']``); when None it
+    is built here with the identical call, so the lane can also be run on its own.
+    """
+    out_dir = os.path.join(sig_dir, SELECTIVITY_DIRNAME)
+    tables_dir = os.path.join(out_dir, 'tables')
+    stats_dir = os.path.join(out_dir, 'stats')
+    ensure_dirs(out_dir, tables_dir, stats_dir)
+
+    if df_trial is None:
+        if verbose:
+            print(f'[cell-selectivity/{signal}] building {window_seconds:g} s modulation table...',
+                  flush=True)
+        df_trial, _ = build_modulation_table(
+            mice_per_group, sessions, signal=signal, mapping=mapping,
+            crossreg_to_use=crossreg_to_use, verbose=verbose, window_seconds=window_seconds)
+
+    df_fold, audit = cross_validated_selectivity(center_within_mouse(df_trial))
+    df_mouse_sel, df_cloud = summarize_selectivity(df_fold)
+    # The randomization space is the mice actually analysed, never a roster that might name a mouse
+    # with no data.
+    analysed = {g: sorted(df_mouse_sel.loc[df_mouse_sel['group'] == g, 'mouse'].unique())
+                for g in GROUP_ORDER if (df_mouse_sel['group'] == g).any()}
+    pooled = df_mouse_sel[df_mouse_sel['epoch'] == SELECTIVITY_ALL]
+    cohort = exact_sign_flip_test(pooled['value'].to_numpy())
+    contrasts = selectivity_group_contrasts(df_mouse_sel, analysed)
+
+    df_fold.to_csv(os.path.join(tables_dir, 'per_cell_heldout_selectivity.csv'), index=False)
+    df_mouse_sel.to_csv(os.path.join(tables_dir, 'per_mouse_selectivity.csv'), index=False)
+    audit.to_csv(os.path.join(tables_dir, 'choice_audit.csv'), index=False)
+    contrasts.to_csv(os.path.join(tables_dir, 'group_contrasts.csv'), index=False)
+    report = format_selectivity_report(signal, window_seconds, audit, df_mouse_sel, cohort,
+                                       contrasts)
+    write_text(os.path.join(stats_dir, 'selectivity_report.txt'), report)
+
+    heat, time_axis, limiting = collect_heldout_heatmap(
+        mice_per_group, sessions, signal, df_fold, mapping=mapping,
+        crossreg_to_use=crossreg_to_use)
+    plot_heldout_selectivity_heatmaps(heat, time_axis, _selectivity_block_order(df_fold),
+                                      os.path.join(out_dir, 'panel_O_heldout_heatmaps.png'),
+                                      signal=signal, auto_close=auto_close, limiting=limiting)
+
+    n_mice = df_mouse_sel['mouse'].nunique()
+    plot_epoch_modulation_superplot(
+        df_cloud, df_mouse_sel, _selectivity_panel_contrasts(contrasts), None,
+        os.path.join(out_dir, 'panel_P_selectivity.png'), signal=signal, auto_close=auto_close,
+        title_prefix='Cross-validated per-cell selectivity',
+        title_note=(f'all mice pooled: {cohort[0]:+.3f}, exact sign-flip P = {cohort[1]:.3g}; '
+                    f'brackets: exact mouse-label randomization, Holm within facet'),
+        footer=(f'n = {n_mice} mice — the unit of inference. Selectivity: held-out index at the '
+                f'event preferred on the other trials, minus the other three, times the chosen '
+                f'sign;\nindices from {window_seconds:g} s after each onset, centred on the '
+                f"mouse's average cell. Cloud: per-cell means (all) or cell x held-out-trial "
+                f'values (per preferred event).'),
+        epoch_titles={SELECTIVITY_ALL: 'all cells',
+                      **{e: f'preferred:\n{EVENT_ONSET_LABELS[e]}' for e in RESPONSE_EPOCHS}},
+        ylabel='Held-out selectivity\n(cell SD units)', facets=SELECTIVITY_FACETS)
+
+    if verbose:
+        print(f'[cell-selectivity/{signal}] {n_mice} mice, {len(df_fold)} cell x held-out trials; '
+              f'pooled selectivity {cohort[0]:+.4f}, exact sign-flip P = {cohort[1]:.4g} '
+              f'-> {out_dir}', flush=True)
+    return {'df_fold': df_fold, 'df_mouse': df_mouse_sel, 'audit': audit, 'cohort': cohort,
+            'contrasts': contrasts}
+
+
+# ── Synthetic verification (hand-run development tool; never called by a real run) ──
+
+_SYNTH_SEL_NOISE_SD = {'tone': 0.20, 'trace': 0.25, 'shock': 0.45, 'post_shock': 0.30}
+_SYNTH_SEL_N_TRIALS = 4
+_SYNTH_SEL_AMP = 0.8
+_SYNTH_SEL_ONE_MOUSE_AMP = 3.0
+_SYNTH_SEL_MAX_FPR = 0.09     # at alpha 0.05; ~2.6 binomial SDs above 0.05 for 200 replicates
+
+
+def _synthetic_selectivity_trials(rng, selective_frac_by_group=None, selective_amp=0.0,
+                                  population_shift=None, one_mouse_amp=0.0,
+                                  n_cells=_SYNTH_N_CELLS, n_trials=_SYNTH_SEL_N_TRIALS):
+    """A trial-level table in ``build_modulation_table``'s shape, with known ground truth.
+
+    index = population shift (per event, shared by every cell) + mouse effect (per event, shared
+            by the mouse's cells) + cell intercept (same for all events) + planted preference +
+            per-trial noise (a different SD per event, so the choice step is biased towards the
+            noisy event exactly as it can be on real data).
+
+    A selective cell gets one randomly drawn event and sign, of size ``selective_amp``.
+    ``one_mouse_amp`` makes EVERY cell of the first hM3D mouse selective at that size.
+    Returns (table, {(mouse, cell): (event, sign)} for the planted cells).
+    """
+    selective_frac_by_group = selective_frac_by_group or {}
+    population_shift = population_shift or {}
+    noise_sd = np.array([_SYNTH_SEL_NOISE_SD[e] for e in RESPONSE_EPOCHS])
+    shift = np.array([population_shift.get(e, 0.0) for e in RESPONSE_EPOCHS])
+    frames, planted = [], {}
+    for group, n_mice in _SYNTH_GROUP_SIZES:
+        for m in range(n_mice):
+            mouse = f'{group}_{m}'
+            whole_mouse = bool(one_mouse_amp) and group == 'hM3D' and m == 0
+            amp = one_mouse_amp if whole_mouse else selective_amp
+            frac = 1.0 if whole_mouse else selective_frac_by_group.get(group, 0.0)
+            mouse_effect = rng.normal(0.0, _SYNTH_EPOCH_SD, size=len(RESPONSE_EPOCHS))
+            intercept = rng.normal(0.0, 0.15, size=(n_cells, 1, 1))
+            pref = np.zeros((n_cells, 1, len(RESPONSE_EPOCHS)))
+            for c in np.flatnonzero(rng.random(n_cells) < frac):
+                e, s = int(rng.integers(len(RESPONSE_EPOCHS))), int(rng.choice([-1, 1]))
+                pref[c, 0, e] = s * amp
+                planted[(mouse, int(c))] = (RESPONSE_EPOCHS[e], s)
+            noise = rng.normal(size=(n_cells, n_trials, len(RESPONSE_EPOCHS))) * noise_sd
+            vals = shift + mouse_effect + intercept + pref + noise
+            cell, trial, epoch = np.meshgrid(np.arange(n_cells), np.arange(n_trials),
+                                             np.arange(len(RESPONSE_EPOCHS)), indexing='ij')
+            frames.append(pd.DataFrame({
+                'mouse': mouse, 'group': group, 'trial': trial.ravel(), 'cell': cell.ravel(),
+                'epoch': np.array(RESPONSE_EPOCHS, dtype=object)[epoch.ravel()],
+                'index': vals.ravel()}))
+    return pd.concat(frames, ignore_index=True), planted
+
+
+def _synthetic_pooled_selectivity(df_trial, center=True):
+    """(per-mouse pooled selectivity array, exact sign-flip P, df_fold).
+
+    The pooled value is taken straight from the per-fold table -- it is the same per-mouse mean
+    ``summarize_selectivity`` reports for the ``all`` facet -- because the uncentred arm of Design 2
+    sends every choice to one event, which leaves the per-event facets empty by design.
+    """
+    df_fold, _ = cross_validated_selectivity(center_within_mouse(df_trial) if center else df_trial)
+    pooled = df_fold.groupby('mouse', sort=False)['selectivity'].mean().to_numpy()
+    return pooled, exact_sign_flip_test(pooled)[1], df_fold
+
+
+def verify_cell_selectivity_synthetic(seed=0, n_calibration=200, verbose=True):
+    """Hand-run check of the properties the selectivity lane rests on. Returns the report text and
+    raises AssertionError if any check fails. Never called by a real run; writes nothing.
+
+    1. Pure noise: the pooled sign-flip test holds its size (false-positive rate at 0.05 no more
+       than _SYNTH_SEL_MAX_FPR over ``n_calibration`` replicates) and the selectivity centres on 0.
+    2. A population-wide response (every cell dips at trace, rises at shock): with within-mouse
+       centring the test still holds its size; WITHOUT centring the same data read as strong
+       selectivity -- the reason the centring exists.
+    3. A planted selective subpopulation is detected, and its planted event and sign are the ones
+       chosen on most held-out trials.
+    4. A group difference in the selective fraction is detected for that group only.
+    5. A huge effect confined to ONE mouse is not significant between groups (pseudoreplication).
+    """
+    rng = np.random.default_rng(seed)
+    lines, failures = [], []
+
+    def check(ok, text):
+        lines.append(f'  [{"PASS" if ok else "FAIL"}] {text}')
+        if not ok:
+            failures.append(text)
+
+    def calibrate(label, **kwargs):
+        ps, means, uncentred_means = [], [], []
+        for _ in range(n_calibration):
+            df, _ = _synthetic_selectivity_trials(rng, **kwargs)
+            pooled, p, _ = _synthetic_pooled_selectivity(df)
+            ps.append(p)
+            means.append(pooled.mean())
+            if kwargs.get('population_shift'):
+                uncentred_means.append(_synthetic_pooled_selectivity(df, center=False)[0].mean())
+        ps, means = np.array(ps), np.array(means)
+        fpr = float(np.mean(ps < 0.05))
+        se = means.std(ddof=1) / np.sqrt(len(means))
+        lines.append(f'{label}: {n_calibration} replicates')
+        check(fpr <= _SYNTH_SEL_MAX_FPR, f'false-positive rate at 0.05 = {fpr:.3f} '
+                                         f'(limit {_SYNTH_SEL_MAX_FPR})')
+        check(abs(means.mean()) < 3 * se, f'mean pooled selectivity {means.mean():+.5f}, '
+                                          f'within 3 SE ({3 * se:.5f}) of 0')
+        return np.array(uncentred_means)
+
+    calibrate('Design 1 — pure noise')
+    uncentred = calibrate('Design 2 — population-wide response, centred',
+                          population_shift={'trace': -0.5, 'shock': 0.4})
+    check(uncentred.mean() > 0.2, f'the SAME data uncentred read as selectivity '
+                                  f'{uncentred.mean():+.3f} (must be clearly positive)')
+
+    lines.append('Design 3 — 20% selective cells in every group, amplitude '
+                 f'{_SYNTH_SEL_AMP} SD')
+    df, planted = _synthetic_selectivity_trials(
+        rng, selective_frac_by_group={g: 0.2 for g, _ in _SYNTH_GROUP_SIZES},
+        selective_amp=_SYNTH_SEL_AMP)
+    pooled, p, df_fold = _synthetic_pooled_selectivity(df)
+    check(pooled.mean() > 0 and p < 0.001, f'pooled selectivity {pooled.mean():+.4f}, exact '
+                                           f'sign-flip P = {p:.2g}')
+    keys = list(zip(df_fold['mouse'], df_fold['cell'].astype(int)))
+    is_planted = np.array([k in planted for k in keys])
+    recovered = np.array([planted[k] == (e, s) for k, e, s in
+                          zip(keys, df_fold['preferred_event'], df_fold['sign']) if k in planted])
+    check(recovered.mean() >= 0.7, f'planted event and sign chosen on {recovered.mean():.2f} of '
+                                   f'the planted cells\' held-out trials')
+    sel = df_fold['selectivity'].to_numpy()
+    check(sel[is_planted].mean() > 0.5 * _SYNTH_SEL_AMP and abs(sel[~is_planted].mean()) < 0.05,
+          f'held-out selectivity {sel[is_planted].mean():+.3f} in planted cells, '
+          f'{sel[~is_planted].mean():+.3f} in the rest')
+
+    groups = {g: sorted(f'{g}_{m}' for m in range(n)) for g, n in _SYNTH_GROUP_SIZES}
+
+    lines.append('Design 4 — selective fraction 40% in hM3D, 10% in mCherry and hM4D')
+    df, _ = _synthetic_selectivity_trials(
+        rng, selective_frac_by_group={'hM3D': 0.4, 'mCherry': 0.1, 'hM4D': 0.1},
+        selective_amp=_SYNTH_SEL_AMP)
+    df_mouse_sel, _ = summarize_selectivity(_synthetic_pooled_selectivity(df)[2])
+    con = selectivity_group_contrasts(df_mouse_sel, groups).set_index(['epoch', 'group_a', 'group_b'])
+    p_exc = con.loc[(SELECTIVITY_ALL, 'hM3D', 'mCherry'), 'p_exact']
+    p_inh = con.loc[(SELECTIVITY_ALL, 'hM4D', 'mCherry'), 'p_exact']
+    check(p_exc < 0.05, f'Exc vs Ctl detected: exact P = {p_exc:.4g}')
+    check(p_inh > 0.05, f'Inh vs Ctl (no planted difference) not significant: exact P = {p_inh:.4g}')
+
+    lines.append(f'Design 5 — every cell of ONE hM3D mouse selective at {_SYNTH_SEL_ONE_MOUSE_AMP} '
+                 f'SD, all other mice pure noise')
+    df, _ = _synthetic_selectivity_trials(rng, one_mouse_amp=_SYNTH_SEL_ONE_MOUSE_AMP)
+    df_mouse_sel, _ = summarize_selectivity(_synthetic_pooled_selectivity(df)[2])
+    con = selectivity_group_contrasts(df_mouse_sel, groups).set_index(['epoch', 'group_a', 'group_b'])
+    p_one = con.loc[(SELECTIVITY_ALL, 'hM3D', 'mCherry'), 'p_exact']
+    check(p_one > 0.05, f'Exc vs Ctl NOT significant with the effect in one animal: exact P = '
+                        f'{p_one:.4g}')
+
+    report = (f'verify_cell_selectivity_synthetic (seed {seed})\n' + '\n'.join(lines) + '\n'
+              + (f'\n{len(failures)} CHECK(S) FAILED\n' if failures else '\nALL CHECKS PASSED\n'))
+    if verbose:
+        print(report, flush=True)
+    if failures:
+        raise AssertionError(report)
+    return report
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -3073,7 +3819,7 @@ def run_epoch_modulation(PLOTS_DIR, mice_per_group, TFC_cond, mapping='full',
                          crossreg_to_use=None, auto_close=True,
                          run_hierarchical_cells=True,
                          hierarchical_cross_check_full_fit=HIERARCHICAL_CROSS_CHECK_FULL_FIT,
-                         run_event_proximal=True):
+                         run_event_proximal=True, run_cell_selectivity=True):
     """Run the per-cell epoch modulation analysis (Figure 2 single-cell block, panels K-L).
 
     PLOTS_DIR       : output root
@@ -3097,6 +3843,15 @@ def run_epoch_modulation(PLOTS_DIR, mice_per_group, TFC_cond, mapping='full',
                     response; it changes nothing above it. It carries its own hierarchical lane,
                     so it roughly doubles the run's cost. Pass False (or
                     cfg.epoch_modulation_event_proximal = False) to skip it.
+
+    run_cell_selectivity : run the cross-validated selectivity lane per signal
+                    (run_cell_selectivity_lane), into ``<signal>/cell_selectivity/``. True by
+                    default. It asks whether individual cells have a reproducible preference for
+                    one event beyond their mouse's average cell -- the distribution-shape question
+                    the lanes above cannot answer -- choosing each cell's preference on all
+                    retained trials but one and measuring it on the held-out trial. It reuses the
+                    event-proximal lane's trial-level table when that lane runs, and rebuilds it
+                    otherwise; it changes nothing above it.
 
     hierarchical_cross_check_full_fit : also refit the whole model through statsmodels on every
                     cell row and compare it against the reported collapsed fit. False by default
@@ -3123,11 +3878,13 @@ def run_epoch_modulation(PLOTS_DIR, mice_per_group, TFC_cond, mapping='full',
     _copy_analysis_methods_template(METHODS_FILENAME, out_dir)
 
     contrasts_by_signal, omnibus_by_signal, hier_by_signal = {}, {}, {}
-    event_prox_by_signal = {}
+    event_prox_by_signal, selectivity_by_signal = {}, {}
     if run_hierarchical_cells:
         _copy_analysis_methods_template(HIERARCHICAL_METHODS_FILENAME, out_dir)
     if run_event_proximal:
         _copy_analysis_methods_template(EVENT_PROXIMAL_METHODS_FILENAME, out_dir)
+    if run_cell_selectivity:
+        _copy_analysis_methods_template(SELECTIVITY_METHODS_FILENAME, out_dir)
 
     for signal in SIGNALS:
         sig_dir = os.path.join(out_dir, signal)
@@ -3237,6 +3994,15 @@ def run_epoch_modulation(PLOTS_DIR, mice_per_group, TFC_cond, mapping='full',
                 run_hierarchical_cells=run_hierarchical_cells,
                 hierarchical_cross_check_full_fit=hierarchical_cross_check_full_fit)
 
+        # ── Cross-validated selectivity, on the event-proximal table ──
+        # Handed the table the lane above just built when it ran, so both describe the same cells,
+        # trials and window rather than two separately rebuilt copies of it.
+        if run_cell_selectivity:
+            selectivity_by_signal[signal] = run_cell_selectivity_lane(
+                sig_dir, signal, mice_per_group, TFC_cond,
+                df_trial=(event_prox_by_signal[signal]['df_trial'] if run_event_proximal else None),
+                mapping=mapping, crossreg_to_use=crossreg_to_use, auto_close=auto_close)
+
     merged, comparison_text = compare_signals(contrasts_by_signal, omnibus_by_signal)
     merged.to_csv(os.path.join(out_dir, 'signal_comparison.csv'), index=False)
     write_text(os.path.join(out_dir, 'signal_comparison.txt'), comparison_text)
@@ -3271,4 +4037,14 @@ def run_epoch_modulation(PLOTS_DIR, mice_per_group, TFC_cond, mapping='full',
             [r['dilution'].assign(signal=s) for s, r in event_prox_by_signal.items()],
             ignore_index=True)
         dilution.to_csv(os.path.join(ep_dir, 'dilution_vs_full_epoch.csv'), index=False)
+
+    if run_cell_selectivity:
+        sel_dir = os.path.join(out_dir, SELECTIVITY_DIRNAME)
+        ensure_dirs(sel_dir)
+        # Both signals' comparisons side by side. The two signals are not expected to give the same
+        # magnitudes (module docstring); this is about agreement of conclusions.
+        pd.concat([r['contrasts'].assign(signal=s) for s, r in selectivity_by_signal.items()],
+                  ignore_index=True).to_csv(
+            os.path.join(sel_dir, 'group_contrasts_by_signal.csv'), index=False)
+        out['cell_selectivity'] = selectivity_by_signal
     return out

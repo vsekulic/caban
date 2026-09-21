@@ -123,6 +123,14 @@ class PipelineConfig:
     # paired comparison. It carries its own hierarchical lane, so it roughly doubles this
     # analysis's runtime; set False for a quick pass.
     epoch_modulation_event_proximal: bool = True
+    # The CROSS-VALIDATED SELECTIVITY companion to run_epoch_modulation, written into
+    # <signal>/cell_selectivity/. Does an individual cell reproducibly prefer one event -- tone,
+    # trace, shock or post-shock -- beyond what its mouse's average cell does, and do the groups
+    # differ in that? Each cell's preferred event and sign are chosen on all retained trials but
+    # one and measured on the held-out trial, rotating through every trial, so no cell is ever
+    # scored on the data that selected it. Same cells, trials and 3 s windows as the
+    # event-proximal lane, whose table it reuses.
+    epoch_modulation_cell_selectivity: bool = True
     plot_epoch_sequence: bool = True
     plot_freezing_tuned_cells: bool = True
     plot_population_coupling: bool = True

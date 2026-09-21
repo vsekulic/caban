@@ -1724,6 +1724,12 @@ def run_epoch_modulation(ds, cfg):
     recomputed over a short window from each event onset, testing whether the 20 s epoch means
     dilute a brief event-locked response. Also additive, and it carries its own hierarchical
     lane, so it roughly doubles this section's cost.
+
+    ``cfg.epoch_modulation_cell_selectivity`` (True by default) additionally runs the
+    CROSS-VALIDATED SELECTIVITY companion per signal, into ``<signal>/cell_selectivity/``: does an
+    individual cell reproducibly prefer one event beyond its mouse's average cell, and do the
+    groups differ in that? The preference is chosen on all retained trials but one and measured
+    on the held-out trial. Also additive, and cheap -- it reuses the event-proximal table.
     """
     if not (cfg.plot_epoch_modulation and not cfg.DEVEL_SWITCH):
         return
@@ -1731,7 +1737,8 @@ def run_epoch_modulation(ds, cfg):
     _run_epoch_modulation(
         cfg.PLOTS_DIR, ds.mice_per_group, ds.TFC_cond,
         run_hierarchical_cells=cfg.epoch_modulation_hierarchical_cells,
-        run_event_proximal=cfg.epoch_modulation_event_proximal)
+        run_event_proximal=cfg.epoch_modulation_event_proximal,
+        run_cell_selectivity=cfg.epoch_modulation_cell_selectivity)
     msg_end()
 
 

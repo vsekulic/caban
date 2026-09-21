@@ -32,7 +32,8 @@ than that table makes it look (§R.10.1).
 | Output | `PLOTS_DIR/epoch_modulation/{YrA,C}/` + `signal_comparison.{txt,csv}` |
 | Companion | cross-validated sequence test (§R.9): [caban/epoch_sequence.py](../caban/epoch_sequence.py), `run_epoch_sequence(ds, cfg)`, output `PLOTS_DIR/epoch_sequence/` |
 | Companion | hierarchical cell-level lane (§A.8, §R.10), same module, gated on `cfg.epoch_modulation_hierarchical_cells` (**on**), output `<signal>/hierarchical_cells/` |
-| Companion | event-proximal short-window lane (§A.9), same module, gated on `cfg.epoch_modulation_event_proximal` (**on**), output `<signal>/event_proximal/` — **implemented, results pending** |
+| Companion | event-proximal short-window lane (§A.9), same module, gated on `cfg.epoch_modulation_event_proximal` (**on**), output `<signal>/event_proximal/` — results in §R.11 (null; run 2026-08-28) |
+| Companion | cross-validated per-cell selectivity (§A.10), same module, gated on `cfg.epoch_modulation_cell_selectivity` (**on**), output `<signal>/cell_selectivity/` — **implemented 2026-09-18, results pending** |
 | Design | 17 mice — hM3D (Exc) n=5, hM4D (Inh) n=6, mCherry (Ctl) n=6 |
 | Run reported here | §R.1–§R.8: **2026-08-26, 12:24:51 → 12:28:09** (3 min 18 s). §R.10: **2026-08-27, 10:16 → 10:21** (3 min 0 s), which re-ran the mouse-level lane as well and reproduced every §R.2 number exactly. `PLOTS_DIR = .../plots/CURRENT` now holds the 08-27 output. |
 | Repo state at run | working tree on `feat/sp-rates-axis-labels`, last commit `6cf7ee6` |
@@ -173,12 +174,17 @@ model. Both lanes produce a full panel set so the output directories are structu
 
 ### Cells are matched to traces BY UNIT ID, never by row position
 
-`S.zarr` and `YrA.zarr` are exported independently and **do not hold the same units on this dataset.**
-Every mouse has an equal *count* in both — so a length check passes — but in 8 of 17 mice the id
-*sets* differ by 1–4 cells, and where they differ the row alignment shears for the rest of the matrix.
-For G05, `S_idx` holds unit 71 where `YrA_idx` holds unit 70, and **37 of 570 row positions
-thereafter refer to different cells.** Indexing YrA by S-derived row positions would pair most cells
-with another cell's trace and produce a confident, entirely wrong result.
+`S.zarr` and `YrA.zarr` are exported independently and **do not share a row order on this dataset.**
+`C_idx == S_idx` exactly (same ids, same order) in every cached session, but `YrA_idx` is always
+sorted ascending while `S_idx`/`C_idx` are not. So **in all 17 conditioning mice** some YrA row
+positions hold a different cell than the same S/C row — 5 (G13) to 374 (G20) rows per mouse, even in
+the 9 mice whose id *sets* are identical. In the other 8 mice the sets additionally differ by 1–4
+units, with equal counts, so a length check passes. **Verified on the traces (2026-09-17):** on the
+misaligned rows, C vs YrA correlation is median r ≈ 0.3–0.57 when paired by unit id, against ≈ 0.0–0.12
+when paired by row position (random-pair baseline ≈ 0.01); pairing by id wins on 94–100% of those rows
+in 16 of 17 mice (80% in G13, 5 rows). The unmatched ids are genuinely different cells, not relabels
+(e.g. G05: C unit 71 vs YrA unit 70, r = 0.01). Indexing YrA by S-derived row positions pairs cells with
+another cell's trace.
 
 This is why `get_mapping_signal` is **not** used for the trace matrices here: it resolves cells
 through `get_S_indeces`, i.e. positions in `S_idx` — correct for C (`C_idx == S_idx` exactly) and
@@ -400,15 +406,14 @@ The lane's own two-signal comparison uses the **fixed** agreement criterion (bot
 *or* matching sign with overlapping CIs) rather than §R.7's, which is defective near zero. That is a
 choice for new code, not a change to the existing criterion — see §O.3.
 
-## A.9 The event-proximal companion (short windows) — implemented, not yet run
+## A.9 The event-proximal companion (short windows) — results in §R.11
 
 > **Gated on `cfg.epoch_modulation_event_proximal`** (**`True`**), run from inside
 > `run_epoch_modulation`'s per-signal loop, output
 > `<PLOTS_DIR>/epoch_modulation/<signal>/event_proximal/` — beside `hierarchical_cells/`.
 > It carries a hierarchical lane of its own, so it roughly **doubles** this analysis's runtime.
 >
-> It is a **companion**: §A.1–§A.8 and every number in §R are unchanged. **Results are not in this
-> document yet** — §R.11 is written after the first run.
+> It is a **companion**: §A.1–§A.8 and every number in §R.1–§R.10 are unchanged. Results: §R.11.
 
 **What it asks.** §R.6's honest limit on the main null is that epoch modulation is marginal in
 *every* group, so there is little room for a group difference in it. One concrete explanation is
@@ -467,6 +472,90 @@ to `stats/mouse_level_crosscheck.txt` under that name. **It brackets nothing.**
 
 One known cosmetic side effect on the existing lane: `contrasts.txt`'s heading underline is now
 generated from the heading and is 46 characters rather than 45. No number changes.
+
+## A.10 The cross-validated selectivity companion — the distribution-shape question
+
+> **Gated on `cfg.epoch_modulation_cell_selectivity`** (**`True`**), run from inside
+> `run_epoch_modulation`'s per-signal loop, output `<PLOTS_DIR>/epoch_modulation/<signal>/cell_selectivity/`.
+> It reuses the event-proximal lane's trial-level table, so it is cheap.
+>
+> It is a **companion**: §A.1–§A.9 and every number in §R.1–§R.11 are unchanged.
+> **Results are not in this document yet** — §R.12 is written after the first run.
+
+**What it asks, and why nothing above answers it.** Every lane above compares the *average* cell,
+and §R.6/§R.10.9 both say the same thing: a manipulation that reorganised *which* cells respond
+without moving the mean is invisible to all of them. §R.11.4 sharpens it — panel M averages every
+cell, so a responsive subpopulation, or cells responding in opposite directions, cancel in it.
+This lane asks whether an individual cell reproducibly prefers one event — tone, trace, shock or
+post-shock — **beyond what its mouse's average cell does**, and whether the groups differ in that.
+
+**Leave one trial out, so no cell is scored on the data that selected it.** §A.6's standing
+objection to `event_locked_responsiveness` is that selecting cells on a noisy statistic and then
+comparing that same statistic across groups is circular. Here, for each held-out trial:
+
+```
+train_e     = mean over the OTHER retained trials of the centred 3 s index at event e
+e*, s       = argmax_e |train_e|,  sign(train_e*)
+selectivity = s * (heldout_e* − mean over the other three events of heldout_e)
+```
+
+Every retained trial is held out in turn (4 folds; 3 for G09). The held-out trial took no part in
+the choice, so with no reproducible preference the value has **expectation zero by construction**
+— not by assumption. Both signs are admissible, because §R.11.2's one real finding is a
+*suppression* at tone offset.
+
+**Why the index is centred within mouse.** With both signs admissible, a response every cell
+shares would read as selectivity: the cohort-wide trace dip makes most cells choose "trace,
+negative" on the training trials and the held-out trial confirms it, although no cell differs from
+any other. Each (mouse, trial, event) mean over that mouse's cells is therefore subtracted first.
+**This is measurable, not theoretical**: on planted data with a population-wide response the
+uncentred procedure returns +0.59 selectivity where the centred one returns zero (§A.10.2).
+
+**Inference.** The mouse, as everywhere in this module. Two questions, kept separate:
+
+- *Is there any reproducible selectivity?* Exact sign-flip test of the 17 per-mouse pooled values
+  against zero, all 2¹⁷ = 131,072 sign vectors enumerated.
+- *Do the groups differ?* Difference in group means of the per-mouse values, with the **exact**
+  mouse-label randomisation of §A.8.1 (462 or 924 relabellings, restricted to the two compared
+  groups). Holm across the two treatment-versus-control comparisons within each endpoint;
+  Exc-vs-Inh in no family, no bracket. Welch CIs are descriptive.
+
+**Composition is descriptive only.** Choosing the largest |index| favours the events whose index
+is noisier — on YrA the shock window, whose between-animal variance is an order of magnitude
+larger (§R.10.1) — so the share of cells preferring each event is partly a noise statistic. The
+held-out selectivity is immune to this: a choice made on noise contributes zero in expectation.
+
+**Panel O answers §O.8 for this lane.** Each row is one cell on one held-out trial, grouped by the
+preference chosen *without* that trial and ordered within a block by the training-trial strength
+of that preference. Neither the grouping nor the ordering touches the displayed data, so the
+sorted-noise artifact of §R.9 cannot arise. (Panel K itself is unchanged; §O.8 stays open for it.)
+
+Its alignment window is the widest that fits **every** retained trial of every mouse, computed at
+run time and capped at −10 s to +60 s. On this cohort G09's recording ends ~50 s after its last
+retained tone onset, so the panel stops at +50 s for all three groups — still past the post-shock
+window it analyses. One shared window keeps every row the same length; skipping the trials that do
+not fit would drop rows the statistics counted. The figure names the mouse and trial that set the
+edge.
+
+### A.10.1 What it still cannot see
+
+It measures the *strength* of per-cell preference, not the number of "tone cells": there is no
+threshold anywhere in it, by design. A manipulation that changed which event cells prefer without
+changing how reproducibly they prefer it would show up in the composition table, which is
+descriptive for the reason above.
+
+### A.10.2 Validation
+
+`verify_cell_selectivity_synthetic` is a **hand-run development tool**, never called by a real run
+(the §A.7.2 rule), and it writes nothing. Five planted designs, all passing at seed 0:
+
+| Design | Result |
+|---|---|
+| pure noise, per-event noise SDs deliberately unequal | false-positive rate **0.055** at α = 0.05 over 200 replicates; mean selectivity +0.00009 |
+| population-wide response (−0.5 trace, +0.4 shock), centred | FPR **0.075**; mean +0.00042 — **and the same data uncentred reads +0.593**, which is why the centring exists |
+| 20% selective cells, amplitude 0.8 SD | pooled +0.140, sign-flip *P* = 1.5×10⁻⁵; planted event *and* sign recovered on **94%** of held-out trials; +0.745 in planted cells against +0.007 in the rest |
+| 40% selective in hM3D vs 10% elsewhere | Exc-vs-Ctl exact *P* = 0.0022; Inh-vs-Ctl (no planted difference) *P* = 0.470 |
+| one animal's every cell selective at 3.0 SD | Exc-vs-Ctl exact *P* = 0.422 — the pseudoreplication guard |
 
 ---
 
@@ -948,6 +1037,89 @@ It also buys **no treatment-level power** — the contrast standard error is a b
 quantity, floored by between-animal variance, and no number of cells reduces it (demonstrated on
 planted data, §A.8.3). Q2 (§O.2) remains the thing that would address distribution shape.
 
+## R.11 The event-proximal companion (§A.9), both signals
+
+Run **2026-08-28, 17:35 → 17:36**, `PLOTS_DIR = .../plots/CURRENT` (now
+`/Users/vsekulic/data/vsekulic/OF_test/plots/CURRENT` after the local migration). Same 9,515
+resolved cells and retained trials as §R.1; every window realised at exactly 3.00 s.
+
+**The conclusion is again a null on both signals** — but panel M changes what that null means.
+
+### R.11.1 Panel M: there is no onset transient to dilute at tone or trace
+
+The group-mean event-aligned traces (YrA, mean ± SEM across mice) are **flat at tone onset and
+at tone offset in every group** — within ±0.1 SD of baseline, with no visible deflection in the
+first 3 s. The dilution hypothesis of §A.9 therefore fails at its premise for the CS epochs: short
+windows were not hiding an onset-locked population response, because none is present in the
+mouse-averaged trace.
+
+The US is the one event with a visible response. Ctl and Exc rise to ~+0.2–0.3 SD within ~1–2 s
+of shock onset; **Inh is visibly blunted** (the same direction as §R.2's named contrast). Exc
+additionally stays elevated for longer — through the first ~4 s of the post-shock window and
+again at ~5–8 s after shock onset — which is what drives the post-shock rows below. These are
+descriptive readings of a figure with n = 5–6 mice per group, not results.
+
+### R.11.2 Dilution, quantified (paired, per mouse)
+
+| Event | YrA 3 s | YrA full | mice larger in 3 s | C 3 s | C full | mice larger in 3 s |
+|---|---|---|---|---|---|---|
+| tone | −0.0234 | −0.0232 | 12/17 | −0.0329 | −0.0258 | 11/17 |
+| trace | **−0.0720** | −0.0334 | **14/17** | **−0.0560** | −0.0289 | **14/17** |
+| shock | +0.0570 | +0.0851 | 5/17 | +0.0254 | +0.0242 | 6/17 |
+| post_shock | −0.0179 | +0.0018 | 12/17 | −0.0019 | +0.0178 | 9/17 |
+
+- **Trace is the one event the short window sharpens** — about twice as negative on both
+  signals, in 14/17 mice. A mild suppression concentrated in the first seconds after tone offset.
+  It is cohort-wide, not a group difference (below).
+- **The shock row (internal check) is consistent with correct windowing.** On C the two lanes
+  agree (+0.025 vs +0.024). On YrA the 3 s value is lower than the 2 s one; the extra second falls
+  on the decay after the ~1–2 s peak visible in panel M, so this is expected, not a windowing error.
+- **Flat windows:** YrA 1 of 150,420 values; **C 56% (median 58.1% per mouse, range 40.6–72.3%)**.
+  More than half of C's 3 s indices are the deterministic constant described in §A.9 — §A.4's
+  YrA-primary argument, now at its strongest. C's numbers in this section should be read with that
+  in mind.
+
+### R.11.3 Inference — hierarchical lane (the reported one)
+
+| Signal | Omnibus (6-df joint Wald, mouse-label randomisation, 2,000 draws, seed 0) |
+|---|---|
+| **YrA** | F = 1.870, **P = 0.151** |
+| C | F = 1.491, **P = 0.245** |
+
+Closer than the full-epoch lane (YrA P = 0.568) but not significant. Within-event comparisons,
+YrA (difference in index, 95% CI, exact *P*, Holm *P*):
+
+| Event | Exc vs Ctl | Inh vs Ctl | *Exc vs Inh* (no family) |
+|---|---|---|---|
+| tone | −0.049 [−0.127, +0.030], 0.236, 0.472 | −0.017 [−0.091, +0.058], 0.670, 0.670 | −0.032, 0.439 |
+| trace | −0.045 [−0.141, +0.050], 0.364, 0.727 | −0.026 [−0.117, +0.066], 0.556, 0.727 | −0.020, 0.669 |
+| shock | +0.034 [−0.103, +0.171], 0.647, 0.647 | −0.066 [−0.196, +0.065], 0.159, 0.318 | +0.099, 0.184 |
+| post_shock | **+0.096 [−0.013, +0.204], 0.076, 0.152** | −0.035 [−0.138, +0.068], 0.520, 0.520 | ***+0.130 [+0.023, +0.238], 0.028*** |
+
+C: every Holm *P* ≥ 0.24; smallest raw exact *P* is shock Inh-vs-Ctl, −0.089 [−0.221, +0.043],
+P = 0.121. **All 12 comparisons agree between signals** under the fixed criterion.
+
+**Not to be quoted as a finding:** YrA post-shock Exc-vs-Inh has a CI excluding zero and exact
+P = 0.028, but it is in no Holm family by design (§A.8.1), the omnibus is non-significant, and it
+is not reproduced on C (+0.063, P = 0.193). It is consistent in direction with panel M's
+prolonged Exc post-US elevation and with Figure 2's Exc amplitude increase, and is a hypothesis
+at most.
+
+Between-animal variance components (YrA): shock 0.0108, post_shock 0.0065, trace 0.0050,
+tone 0.0031; cell 0.0172; residual 0.0588. The shock/tone ratio drops from ~370× (full epoch) to
+~3.5×, because the 3 s tone window carries more between-animal spread than the 20 s mean.
+
+### R.11.4 What this does and does not establish
+
+**Does:** shortening the windows to the 3 s after each onset does not reveal a group difference
+in average cellular modulation, on either signal; and the premise that 20 s means were diluting a
+CS onset response is not supported, because the mouse-averaged traces show no CS onset response.
+
+**Does not:** say anything about individual cells. Panel M averages all cells, so tone- or
+trace-responsive cells of opposite sign — or a small responsive subpopulation — would cancel or
+vanish in it. That is the same distribution-shape gap as §R.6 and §R.10.9, and after this lane it
+is the only remaining form of the per-neuron question (§O.2).
+
 ---
 
 # Part O — open items
@@ -977,6 +1149,17 @@ reported in §R.7; adopting the fixed criterion there is still the open item.
 **O.5 The YrA/S unit-set mismatch is an upstream provenance issue** (§A.4). Re-exporting `YrA.zarr`
 over the same unit set as `S.zarr` would remove the cell restriction entirely. Worth understanding
 before publication regardless, since anything else reading YrA positionally is silently affected.
+**Checked against the raw backup drives (2026-09-18, read-only):** the mismatch is in the raw
+exports, not the caches. Conditioning `YrA.zarr` sits at the `Miniscope/` level, *outside* the
+`minian_crossreg*` folder holding S/C (for LT1/LT2 it sits inside it). Cached YrA equals it
+byte-for-byte in 17/17 mice; cached S/C match the raw ids and order exactly, with data differing at
+≤1.4×10⁻⁴ relative (per-row r = 1.000000; G15 byte-identical). YrA ids use the same labelling as S/C —
+no shift after the first divergent id (by id r ≈ 0.3–0.57; by id−1 r ≈ 0.02–0.08). Which Minian run
+produced the Miniscope-level YrA cannot be read from the files (no attrs; mtimes are backup-copy times).
+Positional readers found 2026-09-17: `sessions.py` cell filter (`YrA_filt`, `YrA_idx_filt`),
+`analysis.py` `YrA_pyr` and the `use_YrA` / `X_hist_use='YrA'` PSTH paths, `engram_sanity.py`, and
+`plot_sample_traces{,2}`. Figure 2C's nine paper cells happen to sit on aligned rows (checked), so
+that panel is correct.
 
 **O.6 Runtime.** Both lanes now produce panels, roughly doubling panel-generation time; the full run
 took 3 min 18 s. `resolve_shared_cells` also recomputes per-cell SDs for both signals once per signal
@@ -1037,6 +1220,19 @@ Event-proximal companion (§A.9), on by default — `cfg.epoch_modulation_event_
 | `<out>/{YrA,C}/event_proximal/hierarchical_cells/` | the reported inference, produced by the same shared lane |
 | `<out>/event_proximal/signal_comparison.{txt,csv}` | YrA-vs-C for this lane, fixed agreement criterion |
 | `analysis_methods_templates/epoch_modulation_event_proximal_methods.md` | its METHODS text, copied into the output dir at runtime |
+
+Cross-validated selectivity companion (§A.10), on by default — `cfg.epoch_modulation_cell_selectivity`:
+
+| Path | Contents |
+|---|---|
+| `<out>/{YrA,C}/cell_selectivity/panel_O_heldout_heatmaps.{png,svg}` | held-out activity grouped by the preference chosen without it |
+| `<out>/{YrA,C}/cell_selectivity/panel_P_selectivity.{png,svg}` | selectivity pooled and by preferred event, brackets from the exact randomisation |
+| `<out>/{YrA,C}/cell_selectivity/tables/per_cell_heldout_selectivity.csv` | one row per cell per held-out trial: chosen event, sign, training score, held-out selectivity |
+| `<out>/{YrA,C}/cell_selectivity/tables/per_mouse_selectivity.csv` | per mouse and endpoint: value, n, `frac_chosen`, `frac_positive` |
+| `<out>/{YrA,C}/cell_selectivity/tables/{group_contrasts,choice_audit}.csv` | comparisons; per-mouse counts of tied or zero-valued choices |
+| `<out>/{YrA,C}/cell_selectivity/stats/selectivity_report.txt` | cohort test, per-group values, comparisons, composition, audit |
+| `<out>/cell_selectivity/group_contrasts_by_signal.csv` | both signals' comparisons side by side |
+| `analysis_methods_templates/epoch_modulation_cell_selectivity_methods.md` | its METHODS text, copied into the output dir at runtime |
 
 Cross-validated sequence test (§R.9), exploratory and additive:
 
