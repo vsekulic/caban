@@ -1,6 +1,6 @@
 # Plan: migrate off the RIKEN CBP server before access ends
 
-Status: **scoped and copy underway 2026-09-21.** Access ends within days. Written for VS on
+Status: **mirror complete and verified 2026-09-22; two items earmarked (§5b).** Access ends within days. Written for VS on
 `osgiliath` (MacBook Pro, **arm64**, macOS 26.6).
 Mirror destination: **`~/cbp-db/vsekulic/`** — host/share structure preserved, so `~/cbp-ndb/` can
 hold that server's shares later without collision. Driven by `~/cbp-db/mirror_cbp_db.sh`
@@ -121,6 +121,34 @@ treat the full interactive env (route A) as a separate, lower-urgency task.**
 
 `.ssh` is **deliberately excluded** from the script: it holds private keys, and duplicating those
 should be a conscious act rather than a side effect of a mirror. Copy it by hand if wanted.
+
+## 5b. Done, and earmarked for later
+
+**Done 2026-09-21/22:**
+- Mirror complete at `~/cbp-db/vsekulic/` — **6.5 G**, all stages, no rsync errors. Verified by
+  checksum dry-run (only `.git/index` differed, and only because running `git status` on the copy
+  refreshed it) and by `git fsck --connectivity-only`, which came back clean.
+- `.local/share/fonts` (4.7 M) copied — Liberation Sans/Mono/Serif and TeX Gyre Heros, i.e. two of
+  the four families in `caban/utilities.py`'s `FONT_SANS_SERIF` chain. Without them figure text
+  falls through to DejaVu Sans and panel metrics change.
+- `.local/share/jupyter` copied — carries `kernels/caban/kernel.json`, the registered kernelspec.
+- Fork pushed: `a3216ae2` on `origin/vsekulic_v4` (pipeline.ipynb with the YrA export,
+  cross-registration.ipynb, minian_vsekulic_cbp-db.yaml). `core.fileMode false` first, since 71 of
+  the 98 "dirty" paths were SMB-induced 100644->100755 mode flips with no content change.
+
+**Correction to §0b as first written:** there was **no** unpushed commit. `88e76c47` was already on
+`origin/vsekulic_v4`; the earlier claim came from comparing against `origin/master`, which is a
+different branch. The genuinely-untracked content was the `*-WORKING*.ipynb` notebooks and `prev/`.
+
+**Earmarked for later (VS, 2026-09-22):**
+- **`MATLAB/` (18 G)** — not copied. Worth a look before the mount goes, in case anything in it is
+  hand-written rather than just the installation. The only top-level item not confidently disposable.
+- **Spot-check the BAK drives** against the server for a few G05-G23 sessions. §3 treats those as
+  already backed up on the strength of directory listings alone; that has not been verified by
+  content.
+- Not copied, judged disposable: `.local/tmp` (519 M, sysadmin-designated scratch per its own
+  `README_DENIS.txt`), top-level `demo_movies` (1.1 G, upstream copy already mirrored inside
+  `minian_vsekulic`), `code/bbnp` (2.2 G, separate project), `.local/share/{Trash,mc,pki}`.
 
 ## 6. Verification before the mount goes away
 
