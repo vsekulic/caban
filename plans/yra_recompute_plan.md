@@ -227,6 +227,44 @@ A **parameterized, idempotent, one-mouse-at-a-time notebook**, not a one-off scr
 - One mouse per invocation, by design: it gives a natural checkpoint to inspect the report before
   committing to the next.
 
+### 11.1b Dependencies: vendor, do not install Minian
+
+**The recompute does not need the Minian package, and definitely not its 2021 environment.** It
+needs five operations, four of which are thin wrappers:
+
+| step | what it is | needs |
+|---|---|---|
+| `load_videos` | read `.avi`s in natsorted order | cv2 |
+| `denoise(method="median", ksize=5)` | `cv2.medianBlur(fm, 5)` per frame via `xr.apply_ufunc` | cv2 |
+| `remove_background(method="tophat", wnd=15)` | `cv2.morphologyEx(fm, MORPH_TOPHAT, disk(15))` per frame | cv2, `skimage.morphology.disk` |
+| `apply_transform(varr, motion, fill=0)` | `sitk.TranslationTransform(2, -shift[::-1])` + `sitk.Resample(..., sitkLinear, 0)` | **SimpleITK** |
+| `compute_trace` | the §4 equation | numpy, xarray, dask, sparse |
+
+Only `apply_transform` has real substance — rigid translation with **linear subpixel
+interpolation**. Integer-shifting instead would silently change Y, so this one must be reproduced
+exactly, not approximated.
+
+The `caban` env already has cv2 5.0, xarray 2026.4, zarr 3.1.6, sparse 0.17, skimage 0.26,
+numpy 2.4, scipy, pandas, natsort, tifffile, numba. **Missing only `dask` and `SimpleITK`**, both
+with current arm64 builds. (`medpy`, `rechunker`, `ffmpeg-python` are also absent but serve only
+Minian paths this never touches: anisotropic denoise, chunked saving, video export.)
+
+**Decision: vendor the five functions into `caban/yra_recompute.py`**, verbatim, each with a
+provenance comment naming the Minian commit and file it came from, adapted where the modern
+xarray/dask API requires. Installing Minian as-is is not an alternative *within* the caban env
+anyway — it pins numpy 1.20 against the env's 2.4 — so it would mean a second environment for no
+gain.
+
+The residual risk is plumbing drift, not algorithms: `xr.apply_ufunc(..., dask="parallelized",
+output_dtypes=...)` semantics moved between xarray 0.16 and 2026.4, and numpy 2.x casting is
+stricter. Both surface as an exception or an obvious mismatch on the G10 gate, not as a silent
+numerical shift.
+
+**This makes §7.1's G10 gate do double duty**: matching the existing `YrA.zarr` at r ~ 1.0 proves
+*both* that Y replays faithfully *and* that the vendored implementation is correct — after which
+Minian need never be installed. A mismatch is the signal to fall back to a real Minian install
+(`plans/cbp_server_migration_plan.md` §4), which is why that work is deferred rather than dropped.
+
 ### 11.2 Idempotency
 
 Each output gets a provenance sidecar `YrA_recompute.json` next to it, recording the Minian commit,
