@@ -1,28 +1,37 @@
 # Plan: migrate off the RIKEN CBP server before access ends
 
-Status: **scoped 2026-09-21, urgent — access ends within days.** Written for VS on `osgiliath`
-(MacBook Pro, **arm64**, macOS 26.6).
+Status: **scoped and copy underway 2026-09-21.** Access ends within days. Written for VS on
+`osgiliath` (MacBook Pro, **arm64**, macOS 26.6).
+Mirror destination: **`~/cbp-db/vsekulic/`** — host/share structure preserved, so `~/cbp-ndb/` can
+hold that server's shares later without collision. Driven by `~/cbp-db/mirror_cbp_db.sh`
+(restartable; log at `~/cbp-db/mirror.log`).
 Share: `//vsekulic@cbp-db.bnf.brain.riken.jp/vsekulic` → `/Volumes/vsekulic`.
 Goal: be able to run the Minian framework as it ran on the server, and keep anything else on that
 share that is not reproducible from elsewhere.
 
-## 0. Do this first — there is unbacked-up raw data
+## 0. Raw data — resolved
 
-`/Volumes/vsekulic/data/vsekulic/OF_test` holds **G05–G27**. The backup drives hold:
+`/Volumes/vsekulic/data/vsekulic/OF_test` holds G05–G27, while the backup drives cover G01–G11
+(`1a`) and G12–G23 (`1b`). **G24-ST861, G25-ST862, G26-ST894 and G27-ST895 are on neither** — but VS
+confirms they live on a third, currently unmounted drive. **No action needed; no raw data is at
+risk.** Recorded because the gap is invisible from the two mounted drives alone.
 
-| | mice |
-|---|---|
-| `1a-MINISCOPE-BAK` | G01–G11 |
-| `1b-MINISCOPE-BAK` | G12–G23 |
-| **server only** | **G24-ST861-hM3D-SGFR1, G25-ST862-hM3D-SGFR1, G26-ST894-hM4D-DIOGC, G27-ST895-hM4D-DIOGC** |
+Note the BAK drives are mounted **read-only** (`ntfs, read-only`), so they cannot receive any copy.
 
-**G24–G27 exist on neither backup drive.** They are outside the current paper's cohort (G05–G21),
-but they are raw acquisition data that disappears with the mount. Decide explicitly whether to keep
-them; if yes, copy them first, because they are the only irreplaceable thing on the share. Everything
-else below is code and can be re-derived or re-downloaded.
+## 0b. The real at-risk item: the Minian fork's uncommitted work
 
-Note the backup drives are mounted **read-only** (`ntfs, read-only`), so they cannot receive the copy
-— it has to go to local disk or another external volume. Local free space is ~103 GB.
+`minian_vsekulic` **is** a git repo, remote `git@github.com:vsekulic/minian.git`. But:
+
+- **1 commit is unpushed** — `88e76c47 Added framerate arguments to some visualization functions.`
+- **98 paths are dirty** — 71 modified, 27 untracked, including `minian/install.py`, the test suite,
+  the docs extensions, and the `pipeline-WORKING-*` notebooks that carry the per-session parameters.
+
+**So GitHub is not a backup of this.** The working tree *and* `.git` must both be copied; pushing to
+GitHub afterwards is worth doing but does not substitute for the copy, because the untracked files
+and notebook outputs would not go with it.
+
+By contrast `minian_git` is **not a git repo at all** — just a pristine upstream extract (it carries
+a `qless` directory that the fork lacks). Low value, copied anyway since it is cheap.
 
 ## 1. Tier 1 — must copy, small
 
@@ -56,14 +65,19 @@ Notebook sizes are almost entirely stored outputs (`pipeline_clean.ipynb` alone 
 | path | size | why |
 |---|---|---|
 | `miniforge3/` | large | a **linux-64** conda install; useless on arm64 — rebuild instead (§4) |
-| `minian_git/` | 1.7 G | upstream clone, re-clonable from GitHub (check `git log` for local commits first) |
+| ~~`minian_git/`~~ | 1.7 G | **now copied** — it is not a git repo, so "re-clonable" was wrong; cheap enough to keep |
 | `minian_vsekulic/demo_movies` | 689 M | upstream demo videos, re-downloadable |
 | `dask-worker-space/` | 32 K | scratch |
 | `data/vsekulic/OF_test` G05–G23 | huge | already on the two BAK drives — **verified per-mouse, but spot-check before relying on it** |
-| `code/caban` | 144 M | server copy is at `cd1aa5a`; the local repo is ahead. Nothing to rescue — confirm with `git log` before deleting |
+| `code/caban` | 144 M | server copy is at `cd1aa5a`; the local repo is well ahead. **Confirmed nothing to rescue** |
 | `code/bbnp`, `bbnp/`, `MATLAB/` | 2.2 G / 13 M / ? | separate projects; decide independently of this migration |
 
-## 4. The environment — the genuinely hard part
+## 4. The environment — DEFERRED
+
+**VS 2026-09-21: hold off on getting Minian running on macOS for now.** Copy first; solve the
+environment later. The analysis below stands for when it is picked up.
+
+### The genuinely hard part
 
 `environment_minian_vsekulic.yml` is **linux-64 with full build strings and Python 3.8**
 (`py38h01eb140_4`, `_libgcc_mutex`, …). It **cannot** be recreated on osx-arm64. Upstream
@@ -96,18 +110,17 @@ ffmpeg-python, natsort, scikit-learn, statsmodels. That is a far easier solve th
 environment, and it is the only part needed for the recompute. **Build the slim env first (route B);
 treat the full interactive env (route A) as a separate, lower-urgency task.**
 
-## 5. Suggested order of work
+## 5. Order of work
 
-1. **Decide on G24–G27** and copy them if keeping — they are the only irreplaceable data (§0).
-2. Copy Tier 1 (§1). Small and fast; do it before anything can go wrong with the mount.
-3. Copy Tier 2 (§2).
-4. `git log` the server's `minian_git` and `code/caban` to confirm no local commits are stranded;
-   then skip both.
-5. Build the **slim** recompute env (§4 route B) and verify `import minian.cnmf` succeeds.
-6. Only then tackle the full interactive env (§4 route A) if you still need it.
+1. ~~Decide on G24–G27~~ — resolved, they are on a third drive (§0).
+2. **Run `~/cbp-db/mirror_cbp_db.sh`** (in progress). Three stages, smallest and most critical first:
+   Stage 1 config/scripts/env-specs/notebooks, Stage 2 `minian_vsekulic` including `.git`,
+   Stage 3 `minian_git` + `abnormal_cell_filter_1`. Restartable — just re-run it.
+3. Push `88e76c47` and commit the dirty tree to the GitHub fork, as a second copy (§0b).
+4. Environment work — **deferred** (§4).
 
-Use `rsync -avP --no-perms --no-owner --no-group` for the copies (SMB + POSIX permissions do not mix
-well), and re-run it to resume — it is restartable, which matters on a flaky share.
+`.ssh` is **deliberately excluded** from the script: it holds private keys, and duplicating those
+should be a conscious act rather than a side effect of a mirror. Copy it by hand if wanted.
 
 ## 6. Verification before the mount goes away
 
