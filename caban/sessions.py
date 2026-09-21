@@ -416,6 +416,17 @@ class BehaviourSession:
 
     def __setstate__(self, state):
         self.__dict__.update(state)
+        # A ds_cache.pkl written before YrA alignment existed carries an unaligned, session-
+        # bounded self.YrA and the raw self.YrA_idx (YrA_full is pruned by __getstate__ and
+        # reloads aligned, but YrA itself is pickled). Re-align it through the one aligner
+        # rather than letting a stale cache silently reintroduce the row shear. Alignment is
+        # idempotent, so an already-aligned session just reports 0 rows moved.
+        YrA = self.__dict__.get('YrA')
+        if YrA is not None:
+            self.YrA = self._align_YrA_to_S_units(YrA, self.YrA_idx)
+            self.YrA_idx = np.asarray(self.S_idx).copy()
+        elif self.__dict__.get('YrA_has_trace') is None:
+            self._clear_YrA_alignment_state()
 
     def _load_cached_array(self, saver_name, cache_name):
         saver = getattr(self, saver_name)
@@ -442,8 +453,11 @@ class BehaviourSession:
             saver = getattr(self, 'saver_YrA', None)
             if saver is None:
                 raise AttributeError(name)
-            value = saver.load('YrA_full')
+            # The cache holds the RAW export, so a released-then-reloaded YrA_full must go
+            # through the same aligner get_CS_matrices used.
+            value = self._align_YrA_to_S_units(saver.load('YrA_full'), saver.load('YrA_idx'))
             setattr(self, name, value)
+            self.YrA_idx = np.asarray(self.S_idx).copy()
             return value
 
         if name == 'S_mov':
@@ -585,6 +599,108 @@ class BehaviourSession:
                 - self.fnum_behavcam[self.session_bounds[self.start_idx]]
         self.fnum_behavcam = self.fnum_behavcam.to_numpy()
 
+    def _align_YrA_to_S_units(self, YrA_raw, YrA_raw_idx):
+        '''
+        Rebuild a raw YrA matrix so that row *i* holds the same unit as row *i* of S and C.
+
+        Minian exported S.zarr, C.zarr and YrA.zarr independently. C_idx equals S_idx
+        elementwise, but YrA_idx is always sorted ascending while S_idx/C_idx are not, so a
+        raw YrA row position generally refers to a different cell than the same S/C row
+        position, and in some mice the unit id SETS differ as well. Cells are therefore
+        matched to traces BY UNIT ID, once, here at load time.
+
+        S and C are never modified -- no rows dropped, no NaNs -- so crossreg mappings and
+        every S/C-based result are unchanged. A unit present in S/C but absent from the YrA
+        export gets an all-NaN row in YrA only; a unit present only in YrA has no S/C row to
+        attach to and is dropped. Both sets are recorded and printed. The on-disk YrA caches
+        stay raw (they are byte-identical to the Minian exports); alignment happens in memory
+        on every load.
+
+        An all-NaN row is the representation of "this unit has no YrA measurement", so a unit
+        counts as having a trace only when its row holds data -- whether it was absent from
+        the export or arrived as a NaN row from an earlier pass.
+
+        Sets self.YrA_has_trace (bool mask over S rows), self.YrA_missing_unit_ids (in S/C,
+        not in YrA) and self.YrA_only_unit_ids (in YrA, not in S/C -- dropped), and returns
+        the aligned matrix. The caller sets self.YrA_idx to a copy of self.S_idx.
+
+        Idempotent: re-running it on an already-aligned matrix is the identity permutation.
+        '''
+        where = '{} {}'.format(self.mouse, self.session_type)
+        S_idx = np.asarray(self.S_idx)
+        C_idx = np.asarray(self.C_idx)
+        YrA_raw = np.asarray(YrA_raw)
+        YrA_raw_idx = np.asarray(YrA_raw_idx)
+
+        if S_idx.shape != C_idx.shape:
+            raise ValueError(
+                'YrA alignment ({}): S_idx holds {} units but C_idx holds {}, so there is no '
+                'single S/C unit order to align YrA to.'.format(where, S_idx.size, C_idx.size))
+        if not np.array_equal(S_idx, C_idx):
+            first = int(np.flatnonzero(S_idx != C_idx)[0])
+            raise ValueError(
+                'YrA alignment ({}): S_idx and C_idx are not elementwise equal (first mismatch '
+                'at row {}: S_idx={}, C_idx={}), so there is no single S/C unit order to align '
+                'YrA to.'.format(where, first, S_idx[first], C_idx[first]))
+        for name, idx in (('S_idx', S_idx), ('YrA_idx', YrA_raw_idx)):
+            uniq, counts = np.unique(idx, return_counts=True)
+            if np.any(counts > 1):
+                raise ValueError(
+                    'YrA alignment ({}): {} contains duplicate unit ids {}; unit ids must be '
+                    'unique for row-by-id matching to be well defined.'.format(
+                        where, name, uniq[counts > 1].tolist()))
+        if YrA_raw.shape[0] != YrA_raw_idx.size:
+            raise ValueError(
+                'YrA alignment ({}): YrA has {} rows but YrA_idx holds {} unit ids.'.format(
+                    where, YrA_raw.shape[0], YrA_raw_idx.size))
+        if not np.issubdtype(YrA_raw.dtype, np.floating):
+            raise ValueError(
+                'YrA alignment ({}): YrA has dtype {}, but units with no YrA export are '
+                'represented by an all-NaN row, which requires a floating dtype.'.format(
+                    where, YrA_raw.dtype))
+
+        raw_row_of_unit = {int(u): i for i, u in enumerate(YrA_raw_idx)}
+        aligned = np.full((S_idx.size, YrA_raw.shape[1]), np.nan, dtype=YrA_raw.dtype)
+        has_trace = np.zeros(S_idx.size, dtype=bool)
+        missing_unit_ids = []
+        n_moved = 0
+        for dest, unit in enumerate(S_idx):
+            src = raw_row_of_unit.get(int(unit))
+            if src is None:
+                missing_unit_ids.append(int(unit))
+                continue
+            aligned[dest] = YrA_raw[src]
+            # A unit counts as having a trace only if its row actually holds data. Testing the
+            # row rather than only the id lookup is what makes this idempotent: after the first
+            # pass an absent unit IS an all-NaN row carried under an id that now matches, and
+            # re-running must classify it the same way rather than declaring it present.
+            if np.isnan(aligned[dest]).all():
+                missing_unit_ids.append(int(unit))
+            else:
+                has_trace[dest] = True
+            if src != dest:
+                n_moved += 1
+
+        S_unit_set = {int(u) for u in S_idx}
+        only_unit_ids = [int(u) for u in YrA_raw_idx if int(u) not in S_unit_set]
+
+        self.YrA_has_trace = has_trace
+        self.YrA_missing_unit_ids = np.asarray(missing_unit_ids, dtype=int)
+        self.YrA_only_unit_ids = np.asarray(only_unit_ids, dtype=int)
+
+        print('*** [YrA align] {}: {}/{} rows moved; {} S/C unit(s) with no YrA trace '
+              '(NaN rows): {}; {} YrA-only unit(s) dropped: {}'.format(
+                  where, n_moved, S_idx.size,
+                  len(missing_unit_ids), missing_unit_ids if missing_unit_ids else 'none',
+                  len(only_unit_ids), only_unit_ids if only_unit_ids else 'none'))
+        return aligned
+
+    def _clear_YrA_alignment_state(self):
+        '''Mark this session as having no YrA at all (YrA.zarr absent from the Minian output).'''
+        self.YrA_has_trace = None
+        self.YrA_missing_unit_ids = None
+        self.YrA_only_unit_ids = None
+
     def get_CS_matrices(self):
 
         # zarr.load returns zarr LazyLoader dict, so get the numpy values for the calcium and spike arrays
@@ -624,6 +740,15 @@ class BehaviourSession:
                 self.YrA_idx = self.YrA_zarr['unit_id']
                 self.saver_YrA.save(self.YrA_full, 'YrA_full')
                 self.saver_YrA.save(self.YrA_idx, 'YrA_idx')
+
+        # Both load paths above yield the RAW Minian export, whose row order is not S/C's.
+        # Align it to the S/C unit order before anything slices or indexes it. The zarr branch
+        # has already written the raw arrays to the cache, so the cache stays raw.
+        if self.YrA_full is not None:
+            self.YrA_full = self._align_YrA_to_S_units(self.YrA_full, self.YrA_idx)
+            self.YrA_idx = np.asarray(self.S_idx).copy()
+        else:
+            self._clear_YrA_alignment_state()
 
         # Get subset of S, C corresponding to the experiment bounds of the session.
         self.S = self.S_full[:,self.miniscope_exp_fnum[self.start_idx]:self.miniscope_exp_fnum[self.stop_idx]]
@@ -781,8 +906,24 @@ class BehaviourSession:
         sig_z = np.divide(sig_raw - means, stds, out=np.zeros_like(sig_raw),
                           where=stds > 0)
 
-        good_indices, submasks = filter_abnormal_cells(
-            sig_raw, sig_z,
+        n_cells = sig_raw.shape[0]
+
+        # YrA is aligned to the S/C unit order at load time, which leaves an all-NaN row for
+        # every S/C unit with no YrA export. Those rows carry no measurement, so the skew /
+        # sparsity / plateau / silent checks are undefined on them: evaluate the filter over
+        # the rows that DO have a trace, and reject the rest outright via has_YrA_trace.
+        if signal_name == 'YrA':
+            has_YrA_trace = np.asarray(self.YrA_has_trace, dtype=bool)
+            if has_YrA_trace.size != n_cells:
+                raise ValueError(
+                    f'cell filter ({self.mouse} {self.session_type}): YrA_has_trace has '
+                    f'{has_YrA_trace.size} entries but YrA has {n_cells} rows.')
+        else:
+            has_YrA_trace = np.ones(n_cells, dtype=bool)
+        eval_rows = np.flatnonzero(has_YrA_trace)
+
+        eval_good, eval_submasks = filter_abnormal_cells(
+            sig_raw[eval_rows], sig_z[eval_rows],
             thre_skew=params.get('cell_filter_thre_skew', 1.5),
             thre_plateau=params.get('cell_filter_thre_plateau', 15.0),
             min_peaks=params.get('cell_filter_min_peaks', 3),
@@ -792,9 +933,19 @@ class BehaviourSession:
             silent_enabled=params.get('cell_filter_silent_enabled', True),
         )
 
-        n_cells = sig_raw.shape[0]
+        # Lift the filter's row indices and per-check masks back onto the full row set. A row
+        # that was not evaluated is False in every check mask; has_YrA_trace says which.
+        submasks = {}
+        for check_name, check_mask in eval_submasks.items():
+            full_mask = np.zeros(n_cells, dtype=bool)
+            full_mask[eval_rows] = check_mask
+            submasks[check_name] = full_mask
+        submasks['has_YrA_trace'] = has_YrA_trace
+        good_indices = eval_rows[eval_good]
+
         good_mask = np.zeros(n_cells, dtype=bool)
         good_mask[good_indices] = True
+        good_mask = good_mask & has_YrA_trace
 
         # Sphericity (ROI shape) check, ANDed in when enabled.
         self.cell_sphericity = None

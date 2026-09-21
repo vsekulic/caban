@@ -2267,6 +2267,44 @@ def plot_firing_rate_changes(PLOTS_DIR, mice_per_group, crossreg_mice, session1,
     plt.savefig(os.path.join(PLOTS_DIR, 'firing_rate_changes', filename), format='png', dpi=300)
     plt.close()
 
+def YrA_has_trace_mask(sess):
+    '''
+    Validated bool mask over `sess`'s S/C rows: True where the cell carries a YrA trace.
+
+    YrA is aligned to the S/C unit order at load time (sessions._align_YrA_to_S_units), which
+    leaves an all-NaN row for every S/C unit with no YrA export. Anything that averages,
+    normalizes or plots a YrA row has to know which rows those are.
+    '''
+    has_trace = getattr(sess, 'YrA_has_trace', None)
+    if has_trace is None:
+        raise RuntimeError(
+            '{} {}: no YrA_has_trace, so this session was not put through '
+            'sessions.BehaviourSession._align_YrA_to_S_units and its YrA rows may not '
+            'correspond to its S/C rows. Reload it before using YrA.'.format(
+                sess.mouse, sess.session_type))
+    return np.asarray(has_trace, dtype=bool)
+
+
+def _YrA_trace_rows(sess):
+    '''Row positions that the sample-trace panels may sample from: those with a YrA trace.'''
+    rows = np.flatnonzero(YrA_has_trace_mask(sess))
+    if rows.size == 0:
+        raise RuntimeError('{} {}: no cell has a YrA trace.'.format(sess.mouse, sess.session_type))
+    return rows
+
+
+def _require_YrA_traces(sess, sel, group):
+    '''Hard-fail if any supplied selection sits on a cell with no YrA trace (an all-NaN row).'''
+    has_trace = YrA_has_trace_mask(sess)
+    bad = [int(cell) for (cell, _t_idx) in sel if not has_trace[int(cell)]]
+    if bad:
+        raise ValueError(
+            '*** Error: group {} ({} {}) selects cell row(s) {} with no YrA trace (unit ids {}); '
+            'those rows are all-NaN and cannot be plotted.'.format(
+                group, sess.mouse, sess.session_type, bad,
+                np.asarray(sess.S_idx)[bad].tolist()))
+
+
 def plot_sample_traces(PLOTS_DIR, mice_to_use, session, paper_dir=None, selection_mode=False, len_trace=100, desired_spikes=2, \
                        cells_per_mouse=3, selections=None):
 
@@ -2275,13 +2313,14 @@ def plot_sample_traces(PLOTS_DIR, mice_to_use, session, paper_dir=None, selectio
         for group, m in mice_to_use.items():
             print('*** Selecting from group {}'.format(group))
             sess = session[m]
+            YrA_rows = _YrA_trace_rows(sess)
 
             for cell in range(cells_per_mouse):
                 print('*** selecting cell {}'.format(cell))
 
                 not_satisfied=True
                 while not_satisfied:
-                    cell_random = random.randrange(sess.C.shape[0])
+                    cell_random = int(random.choice(YrA_rows))
                     sample_t = True
                     print(f'[mouse={m}, group={group}] cell_random: {cell_random}; sampling times: ', end='')
                     kill_num_max = 20
@@ -2338,6 +2377,8 @@ def plot_sample_traces(PLOTS_DIR, mice_to_use, session, paper_dir=None, selectio
         if not selections:
             raise Exception('*** Error: selections_mode set to False but selections not provided')
         print('*** Skipping selections mode...')
+        for group, sel in selections.items():
+            _require_YrA_traces(session[mice_to_use[group]], sel, group)
 
     width=8
     height=3
@@ -2403,13 +2444,14 @@ def plot_sample_traces2(PLOTS_DIR, mice_to_use, session, paper_dir=None, selecti
         for group, m in mice_to_use.items():
             print('*** Selecting from group {}'.format(group))
             sess = session[m]
+            YrA_rows = _YrA_trace_rows(sess)
 
             for cell in range(cells_per_mouse):
                 print('*** selecting cell {}'.format(cell))
 
                 not_satisfied=True
                 while not_satisfied:
-                    cell_random = random.randrange(sess.C.shape[0])
+                    cell_random = int(random.choice(YrA_rows))
                     sample_t = True
                     print(f'[mouse={m}, group={group}] cell_random: {cell_random}; sampling times: ', end='')
                     kill_num_max = 20
@@ -2477,6 +2519,8 @@ def plot_sample_traces2(PLOTS_DIR, mice_to_use, session, paper_dir=None, selecti
         if not selections:
             raise Exception('*** Error: selections_mode set to False but selections not provided')
         print('*** Skipping selections mode...')
+        for group, sel in selections.items():
+            _require_YrA_traces(session[mice_to_use[group]], sel, group)
 
     width=8
     height=3
@@ -2989,6 +3033,7 @@ def process_PSTH_shuffle(PLOTS_DIR, mice_per_group, crossreg_mice, session, mapp
                 ##C = s.S
                 C = s.C
                 YrA = s.YrA
+                rows = np.arange(s.C.shape[0])
                 #C = s.S_imm
             else:
                 indeces = []
@@ -3008,6 +3053,18 @@ def process_PSTH_shuffle(PLOTS_DIR, mice_per_group, crossreg_mice, session, mapp
                 #C = s.S[indeces,:]
                 C = s.C[indeces,:]
                 YrA = s.YrA[indeces,:]
+                rows = np.asarray(indeces, dtype=int)
+
+            # YrA is aligned to the S/C unit order at load time, so a cell with no YrA export
+            # carries an all-NaN row. Those cells still take part in the C-based significance
+            # test below, but they must be kept out of every YrA-derived stack: one NaN cell
+            # would blank a whole group trace under np.mean.
+            has_YrA = YrA_has_trace_mask(s)[rows]
+            if not has_YrA.all():
+                no_trace_ids = np.asarray(s.S_idx)[rows][~has_YrA]
+                print('*** {} {}: excluding {} cell(s) with no YrA trace from the YrA PSTH '
+                      'stacks: unit ids {}'.format(mouse, s.session_type, int((~has_YrA).sum()),
+                                                   no_trace_ids.tolist()))
             tot_cells[group][mouse].append(C.shape[0])
             V = s.velocities_miniscope_smooth
 
@@ -3109,16 +3166,26 @@ def process_PSTH_shuffle(PLOTS_DIR, mice_per_group, crossreg_mice, session, mapp
             #frac_tots[group].append(len(sig_cells_mouse))
             sig_cells[group][mouse].append(sig_cells_mouse)
 
+            # C_responses_save is built from YrA, so only cells with a YrA trace may enter.
+            # NB: group_PSTH_all used to be assigned C_responses_save itself, i.e. a REFERENCE,
+            # so the `C_responses_save /= len(bout_onsets)` below silently rescaled the first
+            # mouse of each group (later mice went through np.vstack, which copies). Row
+            # selection copies, so that aliasing is gone and every mouse is now on the same
+            # scale.
+            sig_cells_YrA = sig_cells_mouse[has_YrA[sig_cells_mouse]]
+            PSTH_sig = C_responses_save[sig_cells_YrA,:]
+            PSTH_all = C_responses_save[has_YrA,:]
+
             if group not in group_PSTH.keys():
-                group_PSTH[group] = C_responses_save[sig_cells_mouse,:]
-                group_PSTH_vel[group] = C_responses_save[sig_cells_mouse,:] / (1+V_save)
-                group_PSTH_all[group] = C_responses_save
+                group_PSTH[group] = PSTH_sig
+                group_PSTH_vel[group] = PSTH_sig / (1+V_save)
+                group_PSTH_all[group] = PSTH_all
                 group_vel[group] = V_save
                 group_percentiles[group] = dict()
             else:
-                group_PSTH[group] = np.vstack((group_PSTH[group], C_responses_save[sig_cells_mouse,:]))
-                group_PSTH_all[group] = np.vstack((group_PSTH_all[group], C_responses_save)) 
-                group_PSTH_vel[group] = np.vstack((group_PSTH_vel[group], C_responses_save[sig_cells_mouse,:] / (1+V_save)))
+                group_PSTH[group] = np.vstack((group_PSTH[group], PSTH_sig))
+                group_PSTH_all[group] = np.vstack((group_PSTH_all[group], PSTH_all))
+                group_PSTH_vel[group] = np.vstack((group_PSTH_vel[group], PSTH_sig / (1+V_save)))
                 group_vel[group] = np.vstack((group_vel[group], V_save))
             group_percentiles[group][mouse] = C_percentile
             print('')

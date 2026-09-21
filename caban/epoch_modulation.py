@@ -168,20 +168,24 @@ _SIGNAL_INDEX_ATTR = {'C': 'C_idx', 'S': 'S_idx', 'YrA': 'YrA_idx'}
 def _unit_id_rows(session, signal):
     """{unit_id -> row position} for one signal's own matrix.
 
-    ** Cells are matched to traces BY UNIT ID, never by row position. ** This matters
-    because ``S.zarr`` and ``YrA.zarr`` are exported independently (see the loading block
-    at sessions.py:596-626, which reads ``S_idx``, ``C_idx`` and ``YrA_idx`` from three
-    separate files) and on this dataset they DO NOT hold the same units. Measured over the
-    conditioning cohort: every mouse has an equal COUNT of S and YrA cells -- so a length
-    check passes -- but in 8 of 17 mice the id SETS differ by 1-4 cells, and where they
-    differ the row alignment shears for the whole remainder of the matrix. For G05, S_idx
-    holds unit 71 where YrA_idx holds unit 70, and 37 of 570 row positions thereafter refer
-    to different cells. Indexing YrA by S-derived row positions would therefore pair most
-    cells with another cell's trace and produce a confident, entirely wrong result.
+    ** Cells are matched to traces BY UNIT ID, never by row position. ** ``S.zarr`` and
+    ``YrA.zarr`` were exported independently and do NOT hold the same units in the raw
+    exports: every mouse has an equal COUNT of S and YrA cells -- so a length check passes --
+    but in 8 of 17 mice the id SETS differ by 1-4 cells, and where they differ the row
+    alignment shears for the whole remainder of the matrix. For G05, S_idx holds unit 71
+    where the raw YrA_idx holds unit 70, and 37 of 570 row positions thereafter refer to
+    different cells.
 
-    This is why ``get_mapping_signal`` is NOT used for the trace matrices here: it resolves
-    cells through ``get_S_indeces``, i.e. positions in ``S_idx``, which is correct for C
-    (C_idx equals S_idx exactly on this dataset) and wrong for YrA.
+    ``sessions.py`` now repairs this at load time: ``_align_YrA_to_S_units`` rebuilds YrA
+    over the S/C unit order, so ``YrA_idx == S_idx`` by the time any analysis sees it, and a
+    unit with no YrA export carries an all-NaN row. This lookup stays ID-based as a second
+    guard -- it is the definition of correct pairing rather than a consequence of load order
+    -- and it OMITS the units in ``YrA_missing_unit_ids`` so that ``resolve_shared_cells``
+    keeps reporting them under ``dropped['YrA']['missing']``. Without that omission a NaN row
+    would look present (a NaN SD is not ``== 0``) and would leak into the analysis.
+
+    This is also why ``get_mapping_signal`` is NOT used for the trace matrices here: it
+    resolves cells through ``get_S_indeces``, i.e. positions in ``S_idx``.
     """
     idx = getattr(session, _SIGNAL_INDEX_ATTR[signal], None)
     if idx is None:
@@ -190,7 +194,25 @@ def _unit_id_rows(session, signal):
             f'{_SIGNAL_INDEX_ATTR[signal]}; the {signal} matrix was never loaded (sessions.py '
             f'leaves YrA_full/YrA_idx as None when YrA.zarr is absent from the Minian output). '
             f'This analysis requires {signal}, so it cannot proceed for this mouse.')
-    return {int(u): i for i, u in enumerate(np.asarray(idx))}
+    rows = {int(u): i for i, u in enumerate(np.asarray(idx))}
+    if signal == 'YrA':
+        missing = getattr(session, 'YrA_missing_unit_ids', None)
+        if missing is None:
+            raise RuntimeError(
+                f'epoch_modulation: session {session.mouse!r} has a YrA_idx but no '
+                f'YrA_missing_unit_ids, so it was not put through '
+                f'sessions.BehaviourSession._align_YrA_to_S_units and its YrA rows may not '
+                f'correspond to its S/C rows. Reload this session before analysing it.')
+        for unit_id in np.asarray(missing):
+            # After alignment YrA_idx == S_idx, so every missing id must be present as a
+            # (NaN) row; if it is not, the session's index and mask disagree.
+            if int(unit_id) not in rows:
+                raise RuntimeError(
+                    f'epoch_modulation: session {session.mouse!r} lists unit {int(unit_id)} in '
+                    f'YrA_missing_unit_ids but YrA_idx has no such unit, so YrA_idx and the '
+                    f'alignment bookkeeping disagree. Reload this session.')
+            del rows[int(unit_id)]
+    return rows
 
 
 def resolve_shared_cells(session, mapping='full', with_crossreg=None):

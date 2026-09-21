@@ -186,9 +186,38 @@ in 16 of 17 mice (80% in G13, 5 rows). The unmatched ids are genuinely different
 (e.g. G05: C unit 71 vs YrA unit 70, r = 0.01). Indexing YrA by S-derived row positions pairs cells with
 another cell's trace.
 
+**Since 2026-09-21 this is repaired once, at load time.** `BehaviourSession._align_YrA_to_S_units`
+(`caban/sessions.py`) rebuilds `YrA_full` in memory so that row *i* holds the same unit as row *i* of
+S and C, and sets `YrA_idx` to a copy of `S_idx`. S and C are never modified — no rows dropped, no
+NaNs — so crossreg mappings and every S/C-based result are unchanged. The convention for the units
+whose sets differ:
+
+- a unit in S/C with **no YrA export** gets an **all-NaN row in YrA only**;
+- a unit present **only in YrA** has no S/C row to attach to and is **dropped**.
+
+Three session attributes record the outcome and one line is printed per session: `YrA_has_trace`
+(bool mask over S rows), `YrA_missing_unit_ids` (in S/C, not in YrA) and `YrA_only_unit_ids` (in YrA,
+not in S/C — dropped). The on-disk YrA caches stay **raw**, since they are byte-identical to the
+Minian exports; alignment happens in memory on every load, including the lazy `YrA_full` reload after
+the loader releases it and the re-align in `__setstate__` that stops a pre-alignment `ds_cache.pkl`
+from reintroducing the shear. Alternatives rejected: intersecting S, C and YrA (would shift S/C row
+indices in 8 mice, moving crossreg mappings and existing results) and hard-erroring until YrA is
+re-exported (decided against on 2026-09-18).
+
+Readers that were silently affected by the row shear are correct with no further change. The two
+that needed handling are the ones where a NaN row does arithmetic rather than just failing to draw:
+`process_PSTH_shuffle` excludes cells without a YrA trace from the YrA-derived stacks (one NaN cell
+would otherwise blank a whole group trace under `np.mean`) and prints the excluded unit ids, and
+`plot_sample_traces{,2}` samples only from rows with a trace in `selection_mode` and raises if a
+supplied selection lands on one without. The `cell_filter_signal='YrA'` path evaluates the QC checks
+only over rows that have a trace and ANDs a `has_YrA_trace` submask into `good_mask`.
+
 This is why `get_mapping_signal` is **not** used for the trace matrices here: it resolves cells
 through `get_S_indeces`, i.e. positions in `S_idx` — correct for C (`C_idx == S_idx` exactly) and
-wrong for YrA.
+wrong for YrA. `_unit_id_rows` stays ID-based as a second guard, and omits `YrA_missing_unit_ids` so
+that the 14 NaN cells keep being reported under `dropped['YrA']['missing']` rather than leaking in
+(a NaN SD is not `== 0`, so the constant-trace check would not catch them). The analysed cell set is
+therefore exactly what it was before the alignment.
 
 `resolve_shared_cells` returns the mapping's cells that carry a **usable** trace in *both* signals.
 Two conditions exclude a cell:
@@ -1146,9 +1175,11 @@ reported in §R.7; adopting the fixed criterion there is still the open item.
 
 **O.4 Panel K `vmax` should probably default lower** than 1.0 (§R.8).
 
-**O.5 The YrA/S unit-set mismatch is an upstream provenance issue** (§A.4). Re-exporting `YrA.zarr`
-over the same unit set as `S.zarr` would remove the cell restriction entirely. Worth understanding
-before publication regardless, since anything else reading YrA positionally is silently affected.
+**O.5 The YrA/S unit-set mismatch is an upstream provenance issue** (§A.4). **CLOSED 2026-09-21:**
+YrA is now aligned to the S/C unit order at load time (§A.4), so nothing reads YrA positionally any
+more and the 14 restricted cells are the only residue. Re-exporting `YrA.zarr` over the same unit
+set as `S.zarr` would remove even that, and remains the upstream fix; the provenance question below
+is recorded because it is worth understanding before publication.
 **Checked against the raw backup drives (2026-09-18, read-only):** the mismatch is in the raw
 exports, not the caches. Conditioning `YrA.zarr` sits at the `Miniscope/` level, *outside* the
 `minian_crossreg*` folder holding S/C (for LT1/LT2 it sits inside it). Cached YrA equals it
@@ -1159,7 +1190,8 @@ produced the Miniscope-level YrA cannot be read from the files (no attrs; mtimes
 Positional readers found 2026-09-17: `sessions.py` cell filter (`YrA_filt`, `YrA_idx_filt`),
 `analysis.py` `YrA_pyr` and the `use_YrA` / `X_hist_use='YrA'` PSTH paths, `engram_sanity.py`, and
 `plot_sample_traces{,2}`. Figure 2C's nine paper cells happen to sit on aligned rows (checked), so
-that panel is correct.
+that panel is correct. All of these read the aligned matrix as of 2026-09-21 and need no per-reader
+index fix.
 
 **O.6 Runtime.** Both lanes now produce panels, roughly doubling panel-generation time; the full run
 took 3 min 18 s. `resolve_shared_cells` also recomputes per-cell SDs for both signals once per signal
