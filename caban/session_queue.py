@@ -1,0 +1,353 @@
+"""A restartable, disk-backed work queue over Miniscope session directories.
+
+Both pipelines in this repository work session by session over the same recording
+tree, one session at a time, resuming after a crash:
+
+- `caban.yra_recompute` -- recompute `YrA` for sessions that already have Minian
+  output (`plans/yra_recompute_plan.md`);
+- the local CNMF-E pipeline -- generate `A`/`C`/`S` for sessions that have none
+  (`plans/local_minian_pipeline_plan.md`).
+
+They differ entirely in what counts as work: one wants sessions *with* a complete
+`minian_crossreg*`, the other wants sessions *without* one. What they share is the
+scan, the cursor, the idempotency and the reporting, and that is what lives here.
+
+The split is mechanism/policy. This module answers "what is on disk and what has
+already been done"; each pipeline answers "which of these is my work, and how do I
+do one". Concretely: :func:`scan_sessions` reports facts about every session it
+finds and selects nothing, and :func:`next_pending` decides *position* but never
+*acceptance* -- a session that merely looks finished is still re-checked by the
+pipeline's own authoritative test.
+
+Position is re-derived from the sidecars on every call rather than held in a
+generator, so a queue survives a kernel restart and advances by itself once a
+session finishes.
+"""
+
+import dataclasses
+import glob
+import json
+import os
+import re
+from typing import Callable, List, Optional
+
+import pandas as pd
+
+# Where the raw sessions live. The backup drives are read-only; `MINISCOPE` is the
+# consolidated APFS volume (`plans/local_minian_pipeline_plan.md` §5).
+DATA_ROOTS_BACKUP = (
+    "/Volumes/1a-MINISCOPE-BAK/data/vsekulic/OF_test",
+    "/Volumes/1b-MINISCOPE-BAK/data/vsekulic/OF_test",
+)
+DATA_ROOTS_CONSOLIDATED = ("/Volumes/MINISCOPE/SSTCa2",)
+
+MOUSE_DIR_PATTERN = r"^G\d\d"
+VIDEO_PATTERN = r"^[0-9]+\.avi$"
+# A Minian output directory counts as complete only with all of these present.
+REQUIRED_MINIAN_ARRAYS = ("A", "C", "S", "b", "f", "motion")
+
+
+def default_data_roots() -> tuple:
+    """The consolidated volume if it is mounted, else the two backup drives.
+
+    Hard-fails rather than returning an empty tuple: a queue built from no roots
+    would silently report "nothing to do", which is the one answer that must never
+    be produced by accident.
+    """
+    for roots in (DATA_ROOTS_CONSOLIDATED, DATA_ROOTS_BACKUP):
+        if all(os.path.isdir(r) for r in roots):
+            return roots
+    raise FileNotFoundError(
+        "no data root is mounted; tried {} and {}".format(
+            list(DATA_ROOTS_CONSOLIDATED), list(DATA_ROOTS_BACKUP)
+        )
+    )
+
+
+@dataclasses.dataclass
+class SessionCandidate:
+    """What is on disk for one session. Facts only -- no judgement about work."""
+
+    mouse: str
+    day: str
+    session: str
+    session_dir: str
+    n_avi: int
+    complete_minian_dirs: List[str]          # minian_crossreg* holding every required array
+    plain_minian_dir: Optional[str]          # minian/ -- processed, never cross-registered
+    intermediate_dir: Optional[str]          # minian_intermediate/ -- rare, precious
+    existing_yra_path: Optional[str]
+    saved_movie_path: Optional[str]          # minian_intermediate/Y_fm_chk.zarr
+
+    @property
+    def label(self) -> str:
+        return "{}/{}/{}".format(self.mouse, self.day, self.session)
+
+
+@dataclasses.dataclass
+class SessionWork:
+    """One queued item: a candidate, plus where its output goes."""
+
+    candidate: SessionCandidate
+    minian_dir: Optional[str]
+    output_dir: str
+
+    @property
+    def label(self) -> str:
+        return self.candidate.label
+
+    # Read-through to the candidate's facts, so callers need not reach inside.
+    @property
+    def mouse(self) -> str:
+        return self.candidate.mouse
+
+    @property
+    def day(self) -> str:
+        return self.candidate.day
+
+    @property
+    def session(self) -> str:
+        return self.candidate.session
+
+    @property
+    def session_dir(self) -> str:
+        return self.candidate.session_dir
+
+    @property
+    def n_avi(self) -> int:
+        return self.candidate.n_avi
+
+    @property
+    def existing_yra_path(self) -> Optional[str]:
+        return self.candidate.existing_yra_path
+
+    @property
+    def saved_movie_path(self) -> Optional[str]:
+        return self.candidate.saved_movie_path
+
+
+def _complete_minian_dirs(session_dir: str) -> List[str]:
+    return [
+        d
+        for d in sorted(glob.glob(os.path.join(session_dir, "minian_crossreg*")))
+        if all(os.path.isdir(os.path.join(d, n + ".zarr")) for n in REQUIRED_MINIAN_ARRAYS)
+    ]
+
+
+def _find_existing_yra(session_dir: str, minian_dirs: List[str]) -> Optional[str]:
+    """Locate an exported ``YrA.zarr``, if the session has one.
+
+    The backup drives file it at the ``Miniscope/`` level, the CBP server files it
+    inside ``minian_crossreg*``; `plans/yra_recompute_plan.md` §2.1 established the
+    two are the same export, so either is fine.
+    """
+    for candidate in [os.path.join(d, "YrA.zarr") for d in minian_dirs] + [
+        os.path.join(session_dir, "YrA.zarr")
+    ]:
+        if os.path.isdir(candidate):
+            return candidate
+    return None
+
+
+def scan_sessions(
+    roots=None, mouse_pattern: str = MOUSE_DIR_PATTERN, verbose: bool = True
+) -> List[SessionCandidate]:
+    """Report every session directory under ``roots``, with what each one holds.
+
+    Selects nothing: a session with no video and no Minian output is still
+    returned, so a pipeline that filters it out does so visibly rather than by
+    omission. The printed summary accounts for everything scanned.
+    """
+    roots = roots or default_data_roots()
+    candidates: List[SessionCandidate] = []
+    for root in roots:
+        if not os.path.isdir(root):
+            raise FileNotFoundError("data root {} is not mounted".format(root))
+        for mouse_dir in sorted(os.listdir(root)):
+            mouse_path = os.path.join(root, mouse_dir)
+            if not os.path.isdir(mouse_path) or not re.match(mouse_pattern, mouse_dir):
+                continue
+            for day in sorted(os.listdir(mouse_path)):
+                day_path = os.path.join(mouse_path, day)
+                if not os.path.isdir(day_path):
+                    continue
+                for session in sorted(os.listdir(day_path)):
+                    session_dir = os.path.join(day_path, session, "Miniscope")
+                    if not os.path.isdir(session_dir):
+                        continue
+                    entries = os.listdir(session_dir)
+                    complete = _complete_minian_dirs(session_dir)
+                    plain = os.path.join(session_dir, "minian")
+                    intermediate = os.path.join(session_dir, "minian_intermediate")
+                    movie = os.path.join(intermediate, "Y_fm_chk.zarr")
+                    candidates.append(SessionCandidate(
+                        mouse=mouse_dir[:3],
+                        day=day,
+                        session=session,
+                        session_dir=session_dir,
+                        n_avi=len([v for v in entries if re.search(VIDEO_PATTERN, v)]),
+                        complete_minian_dirs=complete,
+                        plain_minian_dir=plain if all(
+                            os.path.isdir(os.path.join(plain, n + ".zarr"))
+                            for n in REQUIRED_MINIAN_ARRAYS
+                        ) else None,
+                        intermediate_dir=intermediate if os.path.isdir(intermediate) else None,
+                        existing_yra_path=_find_existing_yra(session_dir, complete),
+                        saved_movie_path=movie if os.path.isdir(movie) else None,
+                    ))
+    if verbose:
+        with_video = [c for c in candidates if c.n_avi]
+        print("scanned {} Miniscope folders under {} root(s)".format(
+            len(candidates), len(roots)))
+        print("  {} have numbered .avi files".format(len(with_video)))
+        print("  {} have a complete minian_crossreg*".format(
+            sum(1 for c in with_video if c.complete_minian_dirs)))
+        print("  {} have only a plain minian/ (never cross-registered)".format(
+            sum(1 for c in with_video if not c.complete_minian_dirs and c.plain_minian_dir)))
+        print("  {} have no Minian output at all".format(
+            sum(1 for c in with_video
+                if not c.complete_minian_dirs and not c.plain_minian_dir)))
+        print("  {} carry an exported YrA.zarr; {} kept a minian_intermediate/".format(
+            sum(1 for c in with_video if c.existing_yra_path),
+            sum(1 for c in with_video if c.intermediate_dir)))
+    return candidates
+
+
+def resolve_minian_dir(candidate: SessionCandidate, overrides: Optional[dict] = None) -> str:
+    """Pick the one Minian output directory meant for this session.
+
+    Two complete ``minian_crossreg*`` folders is a hard failure, not a coin flip:
+    G16's ``2022_01_26-TFC_test_B / 14_23_45-LT1`` has two that disagree about both
+    unit and frame count, and only one of them matches the session's own videos.
+    Pin it through ``overrides``, keyed by the ``<mouse>/<day>/<session>`` label.
+    """
+    overrides = overrides or {}
+    complete = candidate.complete_minian_dirs
+    if candidate.label in overrides:
+        chosen = overrides[candidate.label]
+        if chosen not in complete:
+            raise ValueError(
+                "override for {} names {}, which is not one of the complete Minian "
+                "outputs {}".format(candidate.label, chosen, complete)
+            )
+        return chosen
+    if not complete:
+        raise ValueError("{} has no complete Minian output".format(candidate.label))
+    if len(complete) > 1:
+        raise ValueError(
+            "{} has {} complete Minian outputs and no override:\n  {}\n"
+            "Pick one explicitly via the overrides map -- they can disagree about both "
+            "unit and frame count, so there is no safe default.".format(
+                candidate.label, len(complete), "\n  ".join(complete))
+        )
+    return complete[0]
+
+
+def session_output_dir(candidate: SessionCandidate, output_root: str) -> str:
+    """`<output_root>/<mouse>/<day>/<session>` -- unique across all 657 sessions."""
+    return os.path.join(
+        os.path.expanduser(output_root), candidate.mouse, candidate.day, candidate.session
+    )
+
+
+# --- sidecars: the record of what has been done ----------------------------
+
+
+def sidecar_path(output_dir: str, sidecar_name: str) -> str:
+    return os.path.join(output_dir, sidecar_name)
+
+
+def read_sidecar(output_dir: str, sidecar_name: str) -> dict:
+    path = sidecar_path(output_dir, sidecar_name)
+    if not os.path.isfile(path):
+        return {}
+    with open(path) as fh:
+        return json.load(fh)
+
+
+def write_sidecar(output_dir: str, sidecar_name: str, record: dict) -> str:
+    path = sidecar_path(output_dir, sidecar_name)
+    with open(path, "w") as fh:
+        json.dump(record, fh, indent=2, sort_keys=True, default=str)
+    return path
+
+
+def output_present(item: SessionWork, sidecar_name: str, output_name: str) -> bool:
+    """Cheap "looks finished" test: a complete sidecar with its output beside it.
+
+    Deliberately cheap, because the queue view calls it for every session while the
+    authoritative test re-hashes the inputs. A session that only *looks* finished is
+    still caught and redone by the pipeline -- this is the index, not the verdict.
+    """
+    record = read_sidecar(item.output_dir, sidecar_name)
+    return bool(record.get("complete")) and os.path.isdir(
+        os.path.join(item.output_dir, output_name)
+    )
+
+
+def next_pending(
+    items: List[SessionWork], sidecar_name: str, output_name: str
+) -> Optional[SessionWork]:
+    """The first session not already done, or ``None`` when all are."""
+    for item in items:
+        if not output_present(item, sidecar_name, output_name):
+            return item
+    return None
+
+
+def queue_frame(
+    items: List[SessionWork],
+    sidecar_name: str,
+    output_name: str,
+    extra_columns: Optional[Callable[[SessionWork, dict], dict]] = None,
+) -> pd.DataFrame:
+    """One row per session. ``extra_columns`` adds the pipeline's own reporting.
+
+    It receives the item and its sidecar record (``{}`` when absent) and returns a
+    dict of columns, so the shared view carries task-specific numbers without this
+    module knowing anything about them.
+    """
+    rows = []
+    for item in items:
+        record = read_sidecar(item.output_dir, sidecar_name)
+        row = {
+            "mouse": item.mouse,
+            "day": item.day,
+            "session": item.session,
+            "n_avi": item.n_avi,
+            "done": output_present(item, sidecar_name, output_name),
+        }
+        if extra_columns:
+            row.update(extra_columns(item, record))
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def run_queue(
+    items: List[SessionWork],
+    runner: Callable[..., dict],
+    stop_on_error: bool = True,
+    **kwargs,
+) -> List[dict]:
+    """Work through a queue serially, printing each report before the next session.
+
+    Serial by design (`plans/yra_recompute_plan.md` §11.5): each session is already
+    memory- and I/O-bound through its own dask graph. ``stop_on_error`` left at
+    ``True`` means a failed hard check halts the batch, which is the point of having
+    hard checks -- set it to ``False`` only for an unattended sweep whose failures
+    you intend to read afterwards in the returned list.
+    """
+    records = []
+    for n, item in enumerate(items, start=1):
+        print("\n{}\n[{}/{}] {}\n{}".format("=" * 78, n, len(items), item.label, "=" * 78))
+        try:
+            records.append(runner(item, **kwargs))
+        except Exception as error:
+            if stop_on_error:
+                raise
+            print("FAILED: {}: {}".format(type(error).__name__, error))
+            records.append({
+                "label": item.label,
+                "failed": "{}: {}".format(type(error).__name__, error),
+            })
+    return records

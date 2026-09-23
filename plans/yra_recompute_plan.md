@@ -1,6 +1,7 @@
 # Plan: recompute YrA from the existing footprints instead of re-running Minian
 
-Status: **approach approved 2026-09-21** (§10); execution not started.
+Status: **approach approved 2026-09-21** (§10); **§7.1 G10 gate run and passed 2026-09-22**
+(§12). §11 implemented in `caban/yra_recompute.py` + `notebooks/recompute_yra.ipynb`.
 Written 2026-09-21.
 Depends on: `plans/yra_unit_alignment_plan.md` (implemented, commit `485f296`) — the load-time
 aligner stays regardless, as a guard; this plan is about removing the need for it.
@@ -157,6 +158,30 @@ YrA       = compute_trace(Y, A, b, C, f)
 
 ### 7.1 Gate: validate the replay on G10 before touching anything else
 G10 TFC_cond has saved `Y_fm_chk`. Run the §5 replay for G10 and compare:
+
+> **2026-09-22:** check (1) could not be run *on G10* — its `minian_intermediate/`
+> is on the unmounted CBP server. Checks (2) and (3) were, and (2) isolates the replay
+> just as well; see §12.
+>
+> **But check (1) is runnable after all, on other mice.** A later scan of the backup
+> drives (an earlier `find` had been depth-limited and missed them) turned up **9**
+> `minian_intermediate/` directories, **7 with `Y_fm_chk.zarr` and `Y_hw_chk.zarr`**:
+>
+> | session | arrays kept | final output |
+> |---|---|---|
+> | G06 `2021_10_18-TFC_cond` / `09_52_24-HC1` | **27** | `minian/` |
+> | G06 `2021_10_18-TFC_cond` / `10_34_09-CNO1` | **27** | `minian/` |
+> | G06 `2021_10_18-TFC_cond` / `10_49_52-CNO2` | **27** | `minian/` |
+> | G06 `2021_10_18-TFC_cond` / `11_26_52-HC2` | **27** | `minian/` |
+> | G03 `2021_07_16` / `13_02_08` | 14 | `minian/` |
+> | G04 `2021_07_27` / `11_47_50` | 4 | `minian/` |
+> | G04 `2021_07_27` / `12_13_07` | 5 | `minian/` |
+>
+> The four G06 sessions carry a saved `Y_fm_chk` **and** `A`/`C`/`b`/`f` in `minian/`,
+> so `compare_replayed_movie` can do the exact frame-for-frame comparison there. They
+> are HC/CNO sessions outside the 130, which is irrelevant for validating a replay.
+> Worth running: it would upgrade §12 from "inferred from zero-overlap units" to
+> "verified directly against the saved movie".
 1. regenerated `Y` vs saved `Y_fm_chk` — expect exact equality, or quantify the difference;
 2. `compute_trace(Y_saved, A, b, C, f)` vs the existing `YrA.zarr`, matched **by unit id** — this
    isolates "is the formula/input set right" from "does Y replay exactly";
@@ -320,3 +345,167 @@ Reported for review (no auto-abort, but the reason to go one mouse at a time):
 3. The 8 clean conditioning mice.
 4. Recall sessions, where there is no old YrA to compare against — so they lean entirely on the
    checks that do not need one.
+
+## 12. G10 TFC_cond gate: run and result, 2026-09-22
+
+Run through `caban/yra_recompute.py` (see §11): 799 units x 25,995 frames, 679 s
+end to end on 6 threads, streaming from the 26 `.avi` files with no `Y` on disk.
+Output at `~/cbp-db/yra_recomputed/G10/2021_11_23-TFC_cond/16_32_14-TFC_cond/YrA_recomputed.zarr` with its
+`YrA_recompute.json` sidecar. The BAK drives are mounted read-only, so the output
+is staged locally rather than written beside `A`/`C`/`S`.
+
+### 12.1 Hard checks — all passed
+
+| check | result |
+|---|---|
+| `del_frames` derived from `C.frame` vs the notebook | `[]` vs `[]`. 26 `.avi`s hold exactly 25,995 frames and `C.frame` is `0..25994` contiguous; `pipeline-WORKING-TFC_cond-1.ipynb` (whose live `dpath` **is** this session) has its `del_frames` block commented out and its one live deletion guarded by a G25 `dpath`. |
+| `YrA_new.unit_id == S_idx` elementwise, unsorted | yes — and `S_idx` is itself unsorted, so this is the aligner becoming a no-op, not a coincidence |
+| shape and `frame` against `C` | equal |
+| NaN / inf | none |
+| `corr(C_i, YrA_new_i)` | median 0.507, p5 0.191, p95 0.851 — inside the 0.3–0.6 band §7.2 predicted |
+| `clip(0)` floor | 0.04 % of all samples |
+
+### 12.2 Against the existing `YrA.zarr`, matched by unit id
+
+797 of 799 units are shared; `[344, 347]` are new-only and `[343, 346]` old-only,
+which is G10's share of the §2.2 divergence. Overall per-cell r: median 0.9943,
+p5 0.917, min 0.700 — **not** the flat ~1.0 §7.1 expected. Split by how much each
+footprint overlaps the others, it resolves completely:
+
+| off-diagonal overlap `Σ_{j≠i}⟨A_i,A_j⟩ / ⟨A_i,A_i⟩` | units | median r | min r |
+|---|---|---|---|
+| **none** | 13 | **0.999999877** | 0.999999 |
+| 0–1 % | 9 | 0.999999427 | 0.999999 |
+| 1–10 % | 32 | 0.999853 | 0.985 |
+| >10 % | 743 | 0.993413 | 0.700 |
+
+### 12.3 Why that is a pass, not a near-miss
+
+In the §4 equation the `j == i` term of the crosstalk sum cancels `C_i` **exactly**,
+because `AtA[i,i]/⟨A_i,A_i⟩ = 1`. So
+
+```
+YrA_i(t) = max( 0 ,  ⟨Ybs(t), A_i⟩/⟨A_i,A_i⟩  −  Σ_{j≠i} C_j(t)·AtA[i,j]/⟨A_i,A_i⟩ )
+```
+
+and a unit whose footprint overlaps nothing has `YrA_i` determined by the movie and
+its own footprint alone — no `C` at all. Those 13 units reproduce the 2021 export to
+r = 0.999999877. **That is the whole gate**: it says the replayed `Y` is right, `b`/`f`
+are right, and the vendored `compute_trace` is right, which per §11.1b is the point at
+which Minian need never be installed.
+
+The disagreement on the rest rises monotonically with the overlap ratio — the one
+coefficient by which `C` can enter — which is the signature of a different `C`, not a
+different `Y`.
+
+### 12.4 The different `C`: a correction to §2.2
+
+Reading `pipeline-WORKING-TFC_cond-1.ipynb` end to end settles where that different
+`C` comes from, and it is more specific than "the re-run diverged":
+
+```
+cell 267:  A, b, f  <- second spatial update            (saved to intpath)
+cell 276:  YrA = compute_trace(Y_fm_chk, A, b, C_chk, f)  <- C_chk is PRE-update
+cell 277:  C_new, S_new, ..., mask = update_temporal(A, C, YrA=YrA, ...)
+cell 289:  C, S <- C_new, S_new
+cell 304:  A, C, S saved; YrA saved as YrA.sel(unit_id=mask)
+```
+
+The exported `YrA` is computed from the `C` that existed **before** the second
+temporal update, while the exported `C.zarr` is the one that update produced. The two
+were never meant to correspond. Add that the run which wrote `YrA.zarr` is not the run
+whose `A`/`C`/`S` sit in `minian_crossreg*` (hence the 2-unit difference, and hence the
+residual ~0.08 % even at zero overlap), and every part of the discrepancy is accounted
+for.
+
+This also makes the recompute strictly more correct than the export, beyond the
+alignment argument of §1: a recomputed `YrA` is the residual of *these* footprints
+against *these* traces, which is what `YrA` is supposed to mean.
+
+### 12.5 What §6.2 said would need deciding
+
+§6.2 reserved judgment on conditioning numbers moving. They will: median r 0.994
+against the old export, and the `>10 %`-overlap tail reaches r = 0.70. The movement is
+real and is in the direction of correctness, but §7.3 should quantify it on
+`build_modulation_table` before anything is rewritten.
+
+### 12.6 Independent confirmation on a second session
+
+G05 `2021_08_30-TFC_cond / 16_47_02-LT1`, 292 units x 12,431 frames, 137 s. A
+different mouse, a different session type, and — unlike G10 — **identical unit sets**:
+`in new only []`, `in old only []`. The same structure appears:
+
+| overlap | units | median r |
+|---|---|---|
+| **none** | 5 | **0.999999294** |
+| 0–1 % | 8 | 0.999998729 |
+| 1–10 % | 9 | 0.999841 |
+| >10 % | 270 | 0.996018 |
+
+This is worth more than a repeat. With the unit sets identical, "the two runs
+disagreed about which cells exist" is eliminated as an explanation for this session,
+leaving only the pre- vs post-second-temporal-update `C` of §12.4. The overlap
+gradient is therefore that difference and nothing else.
+
+## 13. What building §11 turned up
+
+Findings from implementing §11, kept because they change the plan rather than
+describe the code. The notebook's own shape is documented in the notebook.
+
+### 13.1 The queue is 130 sessions, not 85
+
+§6.3 estimated "17 mice x 5 sessions ~ 85". Walking both drives for folders that have
+numbered `.avi` *and* one complete `minian_crossreg*` finds **130**, 6-8 per mouse
+across all 17, `(mouse, day, session)` unique for every one: LT1 30, LT2 17,
+TFC_cond 17, Test_A 17, Test_B 16, Test_A_1wk 16, Test_B_1wk 16, LT1b 1. The other 976
+`Miniscope` folders have no complete Minian output at all -- the HC and CNO sessions
+never put through CNMF-E.
+
+**28 of the 130 already have an exported `YrA.zarr`**, more than §2.4's recall
+inventory implied: the LT sessions have them too, so there is more to compare against
+than expected. ~137 s for a 13-file LT session, ~680 s for a 26-file conditioning
+session, so the whole queue is on the order of a day, serial.
+
+### 13.2 `del_frames` is answered corpus-wide, retiring §6.1
+
+§6.1 is the top risk in this plan and §11.6 asked for the notebook value per session.
+Scanning **all 60 `*.ipynb` in the Minian mirror** (including `.ipynb_checkpoints/`
+and `prev/`) for every `del_frames` assignment and its guarding `dpath ==` test
+returns exactly one non-empty value anywhere:
+
+- **G25** `2023_04_05-TFC_cond / 16_00_27-TFC_cond`, 27 frames — an SGFR1 mouse
+  outside the G05-G21 cohort, whose data is not on these drives.
+
+Every other assignment in every notebook is the literal `del_frames = []`, and in the
+TFC_cond notebooks the deletion block is commented out entirely. The notebook-side
+answer for this cohort is **no frames dropped, anywhere**, recorded once in
+`yr.NOTEBOOK_DEL_FRAMES` with its provenance.
+
+This does not weaken the check: the derivation from the saved `frame` coordinate still
+runs independently, both values are still printed side by side, and a disagreement is
+still a hard failure. What changed is that the expected answer is now known in
+advance, so a disagreement is a real signal rather than a typo.
+
+### 13.3 G16 has a session with two Minian outputs, and one of them does not fit
+
+`G16-ST731-mCherry/2022_01_26-TFC_test_B/14_23_45-LT1/Miniscope` holds two complete
+`minian_crossreg*` folders:
+
+| folder | A / C / S | frames |
+|---|---|---|
+| `minian_crossreg2_crossreg3` | 883 units | **17,853** |
+| `minian_crossreg3` | 788 units | **13,923** |
+
+The session's 14 `.avi` files hold 13,923 frames and `timeStamps.csv` has 13,923 rows,
+so **`minian_crossreg3` is the one that belongs to this session**; the other has more
+frames than the session has and belongs to something else. That is the override the
+recompute uses, and picking wrong is not silently possible -- `derive_deleted_frames`
+raises on a `frame` coordinate running past the end of the videos, which is exactly
+what the other folder does.
+
+`sessions.set_minian_output_dir` takes `glob.glob(...)[0]` with its
+`assert len(glob_results) == 1` commented out, and here that returns
+`minian_crossreg2_crossreg3` — the one that does not fit. **It is harmless today**:
+`dpath_Test_B_LT1` has only a `G05` entry, so `caban` never loads this session. Worth
+knowing before anything adds Test_B LT1 sessions to the loader, and worth restoring
+that assert.
