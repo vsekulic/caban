@@ -16,6 +16,10 @@ share that is not reproducible from elsewhere.
 confirms they live on a third, currently unmounted drive. **No action needed; no raw data is at
 risk.** Recorded because the gap is invisible from the two mounted drives alone.
 
+**Confirmed 2026-09-23:** that drive is `4-MINISCOPE` (NTFS, read-only, 941 GB used). It holds
+G22–G31 in full (the server's G24–G27 are a partial subset: 1–2 days per mouse), plus Yijun's and
+Yinghao's `testMouse` data. Audit in `plans/sst_dio_dreadd_validation_plan.md` §2.
+
 Note the BAK drives are mounted **read-only** (`ntfs, read-only`), so they cannot receive any copy.
 
 ## 0b. The real at-risk item: the Minian fork's uncommitted work
@@ -141,8 +145,10 @@ should be a conscious act rather than a side effect of a mirror. Copy it by hand
 different branch. The genuinely-untracked content was the `*-WORKING*.ipynb` notebooks and `prev/`.
 
 **Earmarked for later (VS, 2026-09-22):**
-- **`MATLAB/` (18 G)** — not copied. Worth a look before the mount goes, in case anything in it is
-  hand-written rather than just the installation. The only top-level item not confidently disposable.
+- ~~**`MATLAB/` (18 G)**~~ — **resolved 2026-09-23**: VS checked, it is only a local R2020b
+  installation. Disposable, not copied.
+- `cbp-ndb` home (`//vsekulic@cbp-ndb.bnf.brain.riken.jp/vsekulic`) checked 2026-09-23: eight
+  stock 2018 shell dotfiles and nothing else. Nothing to rescue; `~/cbp-ndb/` not needed.
 - **Spot-check the BAK drives** against the server for a few G05-G23 sessions. §3 treats those as
   already backed up on the strength of directory listings alone; that has not been verified by
   content.
