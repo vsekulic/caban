@@ -21,8 +21,8 @@ type, the expected effect and the comparisons all differ.
 
 | mouse | DREADD | recorded | where | sessions | Minian output |
 |---|---|---|---|---|---|
-| G03-ST639-hM3D_inSST-DIO_GCaMP | hM3D | 2021-07/08, 4 days | MINISCOPE (from 1a) | unnamed timestamps only | partial: `minian/` in 1 session, `minian_intermediate/` in 2 |
-| G04-ST624-hM3D_inSST-DIO_GCaMP | hM3D | 2021-07/08, 3 days | MINISCOPE (from 1a) | unnamed timestamps only | partial: `minian/` + `minian_intermediate/` in 2 sessions |
+| G03-ST639-hM3D_inSST-DIO_GCaMP | hM3D | 2021-07/08, 4 days | MINISCOPE (from 1a) | CNO day 2021_07_29 (§2.1) | partial: `minian/` in 1 session, `minian_intermediate/` in 2 |
+| G04-ST624-hM3D_inSST-DIO_GCaMP | hM3D | 2021-07/08, 3 days | MINISCOPE (from 1a) | CNO day 2021_07_27 (§2.1) | partial: `minian/` + `minian_intermediate/` in 2 sessions |
 | **G22-ST875-hM3D-DIOGC** | hM3D | 2023-03, 10 days | MINISCOPE **and** 4-MINISCOPE (identical) | full protocol, one `CNO` session | none |
 | **G23-ST856-hM3D-DIOGC** | hM3D | 2023-03, 10 days | MINISCOPE **and** 4-MINISCOPE (identical) | full protocol, one `CNO` session | none |
 | **G26-ST894-hM4D-DIOGC** | hM4D | 2023-05/06, 11 days | **4-MINISCOPE only** (server: 2 days) | full protocol, `CNO1` + `CNO2` | none |
@@ -44,6 +44,26 @@ Other oddities seen, not yet understood:
 - G22 `TestA_1wk` has `HC1a`/`HC1b` ("HC1a , b because line scans in a"); G27 `HC3` day the same.
 - Every day also has ~15–18 bare-timestamp folders before the named sessions — presumably
   setup/focus recordings, to be checked before anything is queued.
+
+### 2.1 G03/G04 session labels, recovered from the files
+
+The 2021 pilots' folders are bare timestamps, but each session carries a label file
+(`CNO1.txt` etc.) whose content is the duration, e.g. `315s`. Read 2026-09-23:
+
+| mouse | day | sessions, in order |
+|---|---|---|
+| G03 | 2021_07_16 | unlabelled ×2 (11.2, 5.4 min) |
+| G03 | 2021_07_26 | unlabelled ×3 (3.7, 4.5, 4.5 min) |
+| G03 | **2021_07_29** | HC1 15:05, LT1 15:20, **CNO1 15:47, CNO2 16:07**, LT2 16:23, HC2 16:51 |
+| G03 | 2021_08_04 | HC1a, HC1b, LT1, HC2 — no CNO label |
+| G04 | 2021_07_26 | unlabelled ×1 (11.0 min; `notes.txt`: "657s g04"; ~30 fps, the others ~20) |
+| G04 | **2021_07_27** | HC1 11:47, LT1 12:13, **CNO1 12:36, CNO2 12:55** ("mouse essentially immobile in cage"), LT2 13:10, HC2 13:30 |
+| G04 | 2021_08_06 | HC1a, HC1b, LT1, HC2 — no CNO label |
+
+Same HC → LT → CNO1 → CNO2 → LT2 → HC shape as the 2023 mice. Not recoverable from the files,
+to ask of the lab notebooks: CNO dose and exact injection time; whether the 08_04 / 08_06 days
+were drug-free re-tests (washout) or something else; what the unlabelled 07_16 / 07_26 sessions
+were.
 
 Not DIO, out of scope here: G24/G25 (`hM3D-SGFR1`), G28/G29 (NPY prism), G30/G31 (2025 HB/OLT).
 

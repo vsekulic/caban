@@ -383,8 +383,35 @@ files, 3,606.4 GB**, exactly the inventory below, no rsync errors. Stage 2 (`ext
 with the script's own rsync line, because the 3,700 GB free-space precheck cannot pass once
 stage 1 has landed: 194 files, 479 MB, into `_drive_roots/{1a,1b}/` (the layout's
 `_drive_roots/`, not `_original_drive_roots/`). A size+mtime dry-run pass over all 29 mouse
-directories and both drive roots then listed **zero differences**. Checksum `verify` still
-not run.
+directories and both drive roots then listed **zero differences**.
+
+**Hub incident, 2026-09-23, and the verify it forced.** Stage 1 ran with MINISCOPE (a
+bus-powered WD My Passport) on a USB hub shared with three other bus-powered drives, while
+Spotlight indexed the new volume throughout. On starting the `drive4` stage the drive clicked,
+a 36 KB crossreg file copied the day before failed to read (`Illegal byte sequence`), and
+freshly appended log lines read back as nulls/foreign blocks — writes landing wrong while
+size and mtime stayed right, which a size+mtime pass cannot see. All jobs were stopped. On a
+dedicated port and its own cable the drive went silent and the same file read back
+byte-identical to 1b: **cause taken to be insufficient power, not the disk**. Spotlight is now
+off for MINISCOPE (`mdutil -i off` plus System Settings -> Spotlight -> Privacy, which is what
+persists across remounts). Rules carried forward: one bus-powered drive per port, never a
+shared hub; disable Spotlight on any data volume before copying onto it.
+
+Checksum verification (`rsync -n -c`), 2026-09-24, each source alone on its own port — **zero
+differences anywhere**:
+
+| source | full, every byte | sampled |
+|---|---|---|
+| 1a | G01–G05 (~600 GB), `plugins`, `prev-test`, `testMouse`, `baseplating`, drive root | G06–G11: every non-`.avi` file (~468k, 150 GB) + 2 % of `.avi` (86) |
+| 1b | `baseplating`, drive root | CA1-Cre1, G12–G23: every non-`.avi` file (~310k, 123 GB) + 2 % of `.avi` |
+
+The sample (seed `20260924`) was a time decision: the full pass ran at ~50 MB/s, bound by
+macOS's user-space NTFS driver, and would have taken ~20 h for both drives. Logs and the exact
+file lists are in `MINISCOPE/_provenance/`. Before either source is wiped, the unsampled
+`.avi` (98 % of G06–G23's video) remain the one unverified layer.
+
+The `drive4` copy (4-MINISCOPE, §5.1b; G24–G31) was stopped by the incident and has **not**
+been re-run: G26/G27 still exist in full only on 4-MINISCOPE.
 
 | | size | files |
 |---|---|---|
