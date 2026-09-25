@@ -82,21 +82,32 @@ copy_extras() {
   $R --exclude='/data' "$src/" "$out/" 2>&1 | tee -a "$LOG"
 }
 
-# The third drive. G22/G23 are skipped: they are also on 1b, already copied, and a
-# size+mtime pass (2026-09-23) found the two copies file-for-file identical.
-# Other users' test data goes to _misc/<user>/, not into the project tree.
+# The third drive (4-MINISCOPE), sorted by project on the way in -- VS, 2026-09-24:
+#   SSTCa2/   G26/G27 (hM4D DIO-GCaMP), baseplating images
+#   FRAMCa2/  G24/G25 and SGFR3_bad: engram labelling (red) + activity imaging (green)
+#   OLT/      G30/G31 (2025): object location task, an SSTCa2-related batch run with the
+#             RIKEN CBS summer program, kept apart as a separate data batch
+#   _misc/    prism tests (G28, G29, 2024_07_04), 2024_10_05 (unlabelled), other users' test data
+# G22/G23 are skipped: also on 1b, already copied, and file-for-file identical.
 copy_drive4() {
-  local base="$SRC_C/data/vsekulic/OF_test" out="$DEST/SSTCa2"
+  local base="$SRC_C/data/vsekulic/OF_test"
   for m in "$base"/*/ ; do
-    local name; name=$(basename "$m")
+    local name dest; name=$(basename "$m")
     case "$name" in
-      G22-*|G23-*) echo "skip $name: identical copy already in SSTCa2/ (from 1b)" | tee -a "$LOG" ;;
-      baseplating) $R "$m" "$out/baseplating-from-4/" 2>&1 | tee -a "$LOG" ;;
-      *)           $R "$m" "$out/$name/" 2>&1 | tee -a "$LOG" ;;
+      G22-*|G23-*)  echo "skip $name: identical copy already in SSTCa2/ (from 1b)" | tee -a "$LOG"; continue ;;
+      G26-*|G27-*)  dest="SSTCa2/$name" ;;
+      baseplating)  dest="SSTCa2/baseplating-from-4" ;;
+      G24-*|G25-*|SGFR3_bad) dest="FRAMCa2/$name" ;;
+      G28-*|G29-*|2024_07_04) dest="_misc/prism_tests/$name" ;;
+      G30-*|G31-*)  dest="OLT/$name" ;;
+      2024_10_05)   dest="_misc/unlabelled/$name" ;;
+      *) die "unmapped directory on 4-MINISCOPE: $name -- add it to copy_drive4" ;;
     esac
+    mkdir -p "$DEST/$(dirname "$dest")"
+    $R "$m" "$DEST/$dest/" 2>&1 | tee -a "$LOG"
   done
   for u in Yijun Yinghao; do
-    $R "$SRC_C/data/$u/" "$DEST/_misc/$u/" 2>&1 | tee -a "$LOG"
+    $R "$SRC_C/data/$u/OF_test/" "$DEST/_misc/$u/" 2>&1 | tee -a "$LOG"
   done
   local extras="$DEST/_drive_roots/4"; mkdir -p "$extras"
   $R --exclude='/data' "$SRC_C/" "$extras/" 2>&1 | tee -a "$LOG"

@@ -25,8 +25,8 @@ type, the expected effect and the comparisons all differ.
 | G04-ST624-hM3D_inSST-DIO_GCaMP | hM3D | 2021-07/08, 3 days | MINISCOPE (from 1a) | CNO day 2021_07_27 (§2.1) | partial: `minian/` + `minian_intermediate/` in 2 sessions |
 | **G22-ST875-hM3D-DIOGC** | hM3D | 2023-03, 10 days | MINISCOPE **and** 4-MINISCOPE (identical) | full protocol, one `CNO` session | none |
 | **G23-ST856-hM3D-DIOGC** | hM3D | 2023-03, 10 days | MINISCOPE **and** 4-MINISCOPE (identical) | full protocol, one `CNO` session | none |
-| **G26-ST894-hM4D-DIOGC** | hM4D | 2023-05/06, 11 days | **4-MINISCOPE only** (server: 2 days) | full protocol, `CNO1` + `CNO2` | none |
-| **G27-ST895-hM4D-DIOGC** | hM4D | 2023-05/06, 11 days | **4-MINISCOPE only** (server: 1 day) | full protocol, `CNO1` + `CNO2` | none |
+| **G26-ST894-hM4D-DIOGC** | hM4D | 2023-05/06, 11 days | 4-MINISCOPE and MINISCOPE (copied 2026-09-25; server: 2 days) | full protocol, `CNO1` + `CNO2` | none |
+| **G27-ST895-hM4D-DIOGC** | hM4D | 2023-05/06, 11 days | 4-MINISCOPE and MINISCOPE (copied 2026-09-25; server: 1 day) | full protocol, `CNO1` + `CNO2` | none |
 
 "Full protocol": HC1–HC3 baseline days, three LT days (HC1/LT1/HC2 each), a TFC_cond day
 (HC1, LT1, HC2, CNO, LT2, HC3, TFC_cond, HC4), then TestB, TestA, TestB_1wk, TestA_1wk (each

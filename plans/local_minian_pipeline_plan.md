@@ -131,15 +131,35 @@ The YrA recompute vendored five functions. A full run pulls in `cnmf.py`,
 `datashader`, `panel` for the viewers, which the automation does not need, and `medpy`,
 which only serves the anisotropic-denoise branch this pipeline never takes).
 
-`pymetis` is the one to expect trouble from on arm64 — it is a C extension wrapping METIS
-and is used by `graph_optimize_corr` during seed merging. If it will not build, that is a
-decision point, not a workaround: seed merging changes which cells exist.
+`pymetis` is the one to expect trouble from on arm64 — it is a C extension wrapping METIS.
+**Corrected 2026-09-25, from reading the fork:** its only use is `graph_optimize_corr`
+(`cnmf.py:1757`), which serves `seeds_merge`, `initA` and `unit_merge`. There METIS partitions
+the correlation graph purely to *schedule* the out-of-core computation — edges inside a
+partition are computed per partition, edges across partitions in a second pass
+(`cnmf.py:1790-1808`) — so every requested correlation is computed whatever the partition.
+It is a **performance** dependency, not a correctness one: if it will not build, a stand-in
+partition gives the same correlations at higher memory/recompute cost, and the §6 gate
+confirms it. (First written as "a decision point … seed merging changes which cells exist",
+which was wrong.)
 
 Vendoring is no longer the cheaper option at this surface area. **Decision to make:** a
 separate conda env (`minian-local`) pinned to whatever numpy the fork tolerates, driven
 from `caban` as a subprocess, versus forcing the fork onto numpy 2.4 in place. The first
 is more likely to work and keeps `caban` untouched; the second avoids a process boundary.
 Recommend the first, and record the env spec next to the fork.
+
+**Built 2026-09-25: `minian-local`, spec in `envs/minian-local.yml`.** Better than either option
+above: every pin from the production server env (`minian_vsekulic_cbp-db.yaml`) — Python 3.8.15,
+numpy 1.20.2, dask/distributed 2021.2.0, xarray 0.16.2, numba 0.52.0, opencv 4.2.0, cvxpy 1.2.1,
+pyfftw 0.13.0, pymetis 2020.1, scipy 1.9.1, scikit-image 0.18.1, zarr 2.17.1, … — solved exactly
+as **osx-64 packages run under Rosetta** (`CONDA_SUBDIR=osx-64`; the env's own `.condarc` pins
+`subdir: osx-64` so later installs stay Intel). No porting, no version drift: this is the 2021
+software stack, differing from the server only in CPU (x86-64 under emulation vs native) and
+OS. Minian is not installed; the fork is put on `PYTHONPATH`. Smoke test: all five pipeline
+modules import; `pymetis.part_graph`, a `cvxpy` solve (ECOS/OSQP/SCS present) and `pyfftw`
+all run correctly. GUI packages (bokeh/holoviews/panel/datashader) left out — no pipeline
+module imports them. The §6 gate is still what establishes equivalence; Rosetta speed is
+unmeasured until the first real session.
 
 ## 5. Storage
 
@@ -214,8 +234,10 @@ cohort number their mice `G*`, so a project level is required regardless.
 │       │   └── YrA_recomputed.zarr   NEW: yra_recompute output
 │       ├── BehavCam/
 │       └── experiment/
-├── FRAM/                    future cohort, same shape
-├── _misc/                   baseplating-from-{1a,1b}, plugins, prev-test, testMouse
+├── FRAMCa2/                 G24/G25 (SGFR1), SGFR3_bad: engram label (red) + activity (green)
+├── OLT/                     G30/G31 (2025): object location task, SSTCa2-related batch
+├── _misc/                   prism tests (G28, G29, 2024_07_04), unlabelled/2024_10_05,
+│                            Yijun/, Yinghao/; to sort: plugins, prev-test, testMouse
 ├── _drive_roots/{1a,1b}/    recycle bins, volume metadata, stray dotfiles
 └── _provenance/             consolidate.log, checksum manifests, drive history
 ```
@@ -410,8 +432,10 @@ macOS's user-space NTFS driver, and would have taken ~20 h for both drives. Logs
 file lists are in `MINISCOPE/_provenance/`. Before either source is wiped, the unsampled
 `.avi` (98 % of G06–G23's video) remain the one unverified layer.
 
-The `drive4` copy (4-MINISCOPE, §5.1b; G24–G31) was stopped by the incident and has **not**
-been re-run: G26/G27 still exist in full only on 4-MINISCOPE.
+The `drive4` copy (4-MINISCOPE; G24–G31) was stopped by the incident, then run on dedicated
+ports 2026-09-24/25 (paused once mid-G27 and resumed): done 2026-09-25 22:19, no errors, sorted
+by project on the way in (layout §5.1b). G22/G23 were skipped as identical to 1b's copies. G26/G27
+are now on two drives.
 
 | | size | files |
 |---|---|---|
@@ -580,8 +604,9 @@ touch nothing but YrA", and a generative pipeline in the same driver would wreck
 
 ## 10. Risks
 
-1. **`pymetis` on arm64** (§4.2). Blocks seed merging, which changes which cells exist.
-   Find out early — it is the first thing to test after the env is built.
+1. **`pymetis` on arm64** (§4.2). Performance only: it schedules the correlation
+   computation and does not change results, so a stand-in partition is an acceptable
+   fallback. Still the first thing to test after the env is built.
 2. **Scratch space** (§4.1, §5.2). 79 GB free locally against 76 GB for a TFC_cond
    session. Must hard-fail on insufficient space, never half-write.
 3. **The gate fails** (§6). Means the automated pipeline is not the 2021 pipeline. Most
