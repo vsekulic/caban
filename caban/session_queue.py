@@ -46,6 +46,13 @@ VIDEO_PATTERN = r"^[0-9]+\.avi$"
 # A Minian output directory counts as complete only with all of these present.
 REQUIRED_MINIAN_ARRAYS = ("A", "C", "S", "b", "f", "motion")
 
+# What the Minian pipeline notebook writes into a session's Miniscope/ folder, and the
+# suffix existing output is renamed to before a re-run writes there again
+# (`plans/local_minian_pipeline_plan.md` §6).
+NOTEBOOK_OUTPUT_DIRS = ("minian", "minian_intermediate")
+SET_ASIDE_SUFFIX = "-ORIG"
+SET_ASIDE_RECORD = "minian_set_aside.json"
+
 
 def default_data_roots() -> tuple:
     """The consolidated volume if it is mounted, else the two backup drives.
@@ -66,7 +73,14 @@ def default_data_roots() -> tuple:
 
 @dataclasses.dataclass
 class SessionCandidate:
-    """What is on disk for one session. Facts only -- no judgement about work."""
+    """What is on disk for one session. Facts only -- no judgement about work.
+
+    ``plain_minian_dir``, ``intermediate_dir`` and ``saved_movie_path`` always
+    describe the session's *original* output. Once that has been set aside for a
+    notebook re-run (:func:`set_aside_minian_output`), they point into the
+    ``*-ORIG`` folders, and the re-run's fresh ``minian/`` is described by nothing
+    here -- so no consumer can take a re-run for the original by accident.
+    """
 
     mouse: str
     day: str
@@ -78,6 +92,7 @@ class SessionCandidate:
     intermediate_dir: Optional[str]          # minian_intermediate/ -- rare, precious
     existing_yra_path: Optional[str]
     saved_movie_path: Optional[str]          # minian_intermediate/Y_fm_chk.zarr
+    set_aside_dirs: List[str]                # minian-ORIG/ etc.: see set_aside_minian_output
 
     @property
     def label(self) -> str:
@@ -177,8 +192,10 @@ def scan_sessions(
                         continue
                     entries = os.listdir(session_dir)
                     complete = _complete_minian_dirs(session_dir)
-                    plain = os.path.join(session_dir, "minian")
-                    intermediate = os.path.join(session_dir, "minian_intermediate")
+                    set_aside = _set_aside_dirs(session_dir)
+                    suffix = SET_ASIDE_SUFFIX if set_aside else ""
+                    plain = os.path.join(session_dir, "minian" + suffix)
+                    intermediate = os.path.join(session_dir, "minian_intermediate" + suffix)
                     movie = os.path.join(intermediate, "Y_fm_chk.zarr")
                     candidates.append(SessionCandidate(
                         mouse=mouse_dir[:3],
@@ -194,6 +211,7 @@ def scan_sessions(
                         intermediate_dir=intermediate if os.path.isdir(intermediate) else None,
                         existing_yra_path=_find_existing_yra(session_dir, complete),
                         saved_movie_path=movie if os.path.isdir(movie) else None,
+                        set_aside_dirs=set_aside,
                     ))
     if verbose:
         with_video = [c for c in candidates if c.n_avi]
@@ -210,7 +228,72 @@ def scan_sessions(
         print("  {} carry an exported YrA.zarr; {} kept a minian_intermediate/".format(
             sum(1 for c in with_video if c.existing_yra_path),
             sum(1 for c in with_video if c.intermediate_dir)))
+        set_aside = [c for c in candidates if c.set_aside_dirs]
+        if set_aside:
+            print("  {} have their original Minian output set aside as *{} (reported "
+                  "above from there; any minian/ beside it is a re-run):".format(
+                      len(set_aside), SET_ASIDE_SUFFIX))
+            for c in set_aside:
+                print("    {}".format(c.label))
     return candidates
+
+
+# --- setting existing output aside before a notebook re-run ------------------
+
+
+def _set_aside_dirs(session_dir: str) -> List[str]:
+    return [
+        os.path.join(session_dir, name + SET_ASIDE_SUFFIX)
+        for name in NOTEBOOK_OUTPUT_DIRS
+        if os.path.isdir(os.path.join(session_dir, name + SET_ASIDE_SUFFIX))
+    ]
+
+
+def set_aside_minian_output(session_dir: str, reason: str) -> dict:
+    """Rename a session's notebook output to ``*-ORIG`` so a re-run can write afresh.
+
+    The Minian notebook writes ``minian/`` and ``minian_intermediate/`` into the
+    session's own ``Miniscope/`` folder. Before re-running it on a session that
+    already has them, they are renamed ``minian-ORIG/`` and
+    ``minian_intermediate-ORIG/`` -- instant on APFS, nothing copied.
+
+    Refuses, touching nothing, if any ``*-ORIG`` already exists: renaming again
+    would move the *first re-run's* output into ``-ORIG`` and lose the original.
+    Also refuses when there is nothing to set aside, so a call never silently
+    implies an original was preserved. Records what it did in
+    ``minian_set_aside.json`` beside the folders.
+    """
+    session_dir = os.path.abspath(session_dir)
+    if not os.path.isdir(session_dir):
+        raise FileNotFoundError("{} is not a directory".format(session_dir))
+    existing = _set_aside_dirs(session_dir)
+    if existing:
+        raise FileExistsError(
+            "{} already has set-aside output {}; renaming again would overwrite the "
+            "original with a re-run. Resolve by hand.".format(session_dir, existing))
+    present = [n for n in NOTEBOOK_OUTPUT_DIRS if os.path.isdir(os.path.join(session_dir, n))]
+    if not present:
+        raise FileNotFoundError(
+            "{} has none of {} -- nothing to set aside; the notebook can run as-is".format(
+                session_dir, list(NOTEBOOK_OUTPUT_DIRS)))
+    record_path = os.path.join(session_dir, SET_ASIDE_RECORD)
+    if os.path.exists(record_path):
+        raise FileExistsError("{} exists without any *{} folder -- inspect it by hand".format(
+            record_path, SET_ASIDE_SUFFIX))
+    renamed = {}
+    for name in present:
+        src = os.path.join(session_dir, name)
+        dst = src + SET_ASIDE_SUFFIX
+        os.rename(src, dst)
+        renamed[name] = name + SET_ASIDE_SUFFIX
+    record = {
+        "renamed": renamed,
+        "reason": reason,
+        "when": pd.Timestamp.now().isoformat(timespec="seconds"),
+    }
+    with open(record_path, "w") as fh:
+        json.dump(record, fh, indent=2, sort_keys=True)
+    return record
 
 
 def resolve_minian_dir(candidate: SessionCandidate, overrides: Optional[dict] = None) -> str:
@@ -219,12 +302,19 @@ def resolve_minian_dir(candidate: SessionCandidate, overrides: Optional[dict] = 
     Two complete ``minian_crossreg*`` folders is a hard failure, not a coin flip:
     G16's ``2022_01_26-TFC_test_B / 14_23_45-LT1`` has two that disagree about both
     unit and frame count, and only one of them matches the session's own videos.
-    Pin it through ``overrides``, keyed by the ``<mouse>/<day>/<session>`` label.
+    Pin it through ``overrides``, keyed by the ``<mouse>/<day>/<session>`` label,
+    whose value is the chosen folder's *name* (e.g. ``"minian_crossreg3"``) so the
+    pin holds whichever drive the session is read from.
     """
     overrides = overrides or {}
     complete = candidate.complete_minian_dirs
     if candidate.label in overrides:
-        chosen = overrides[candidate.label]
+        name = overrides[candidate.label]
+        if os.sep in name:
+            raise ValueError(
+                "override for {} is a path ({}); give the folder name only, so it does "
+                "not depend on which drive is mounted".format(candidate.label, name))
+        chosen = os.path.join(candidate.session_dir, name)
         if chosen not in complete:
             raise ValueError(
                 "override for {} names {}, which is not one of the complete Minian "

@@ -182,6 +182,36 @@ fidelity reference: if a gate stage diverges under `minian-native`, re-running t
 `minian-local` says whether a version bump is to blame. Rosetta's general availability ends
 after macOS 27, which is a second reason not to depend on it.
 
+**Requirement (VS, 2026-09-26): the pipeline notebooks run as-is.** Not a headless
+re-implementation: the same `pipeline*.ipynb` — the `WORKING-TFC_cond-1..4` and every
+per-session-type notebook in `prev/` — opened in Jupyter and run. What that took:
+
+- *Which server env actually ran them.* The server had several: `minian_cbp-db` (the export
+  first built from; its unpatched bokeh cannot import under its own jinja2 3.1.4, so it cannot
+  have run the GUI), `minian_vsekulic`/`_py311` (a 2026 modernisation, bokeh 3), and **`minian`**
+  — the one `bin/jupyter_minian.sh` activates. `minian-native` now tracks `minian`, GUI and
+  Jupyter stack included (bokeh 1.4.0, holoviews 1.12.7, panel 0.8.0, datashader 0.12.1,
+  notebook 6.5.7, xarray 0.17.0, sk-video 1.1.10, …), with PyPI for what conda lacks on arm64.
+- *The server's own patches.* `minian` had a one-line fix in `bokeh/core/templates.py` and
+  `panel/io/resources.py` (`Markup` from `markupsafe`, not `jinja2`). Reproduced byte-for-byte by
+  `envs/minian-native-postinstall.sh`, which checks the md5 of the server's copies.
+- *Which Minian code ran.* The server env also carried conda-forge's stock Minian 1.0.0rc0 in
+  `site-packages`, which differs from the fork in every module — including `20da1b5c fix: use
+  fft filter for pnr computation`, a seed-refinement change. It is not what produced the
+  results: the notebooks import `minian` from their own folder, which Jupyter puts ahead of
+  `site-packages`, and the G06 outputs (Feb 2022) postdate the fork's Minian 1.1.0 (Sep 2021)
+  plus VS's Dec 2021 commit. `minian-native` installs no Minian at all, so the fork's code is the
+  only one importable.
+- *Where it runs.* A working copy of the fork at `~/code/minian_vsekulic` (clone of
+  `vsekulic_v4`; the `WORKING` notebooks and `prev/` are untracked in git and were copied from the
+  `~/cbp-db` mirror, which stays untouched). Launch: `cd ~/code/minian_vsekulic && conda
+  activate minian-native && jupyter notebook` — classic Notebook 6 in a browser, as the server
+  did; the 2021 bokeh/panel viewers are not expected to work in VS Code's renderer.
+- *Verified:* the notebooks' own import cells, `hv.notebook_extension("bokeh")` and the
+  `LocalCluster` + `TaskAnnotation` setup execute under `jupyter nbconvert` from the working copy.
+  One trap found doing so: the first cell imports `minian` before `sys.path.append(minian_path)`,
+  so the notebook must live in the fork folder.
+
 ## 5. Storage
 
 Measured across both backup drives, 2026-09-22:
@@ -392,6 +422,19 @@ sessions have essentially no YrA, and the cache layer shows it directly.
 
 ### 5.2 Scratch does not go on this drive
 
+**Superseded 2026-09-26 by VS's decision: the notebooks write where they always did — into
+the session's own `Miniscope/` folder on MINISCOPE** (`intpath = dpath/minian_intermediate`,
+outputs beside the videos). A session that already has `minian/` or `minian_intermediate/` gets
+them renamed `minian-ORIG/` / `minian_intermediate-ORIG/` first, by
+`python -m scripts.set_aside_minian_output <Miniscope dir> --reason ...`
+(`caban.session_queue.set_aside_minian_output`), which refuses if anything is already set
+aside — a second rename would push the first re-run into `-ORIG` and lose the original — and
+records itself in `minian_set_aside.json`. The scanner's `plain_minian_dir`,
+`intermediate_dir` and `saved_movie_path` always mean the *original* output and follow it
+into `-ORIG`, so neither the YrA recompute's movie check nor anything else can take a re-run
+for 2021 output. Cost: CNMF-E's random access now hits the USB disk, not an SSD — slower, not
+less correct. The analysis below is kept for the record.
+
 `intpath` must be on fast local storage, not the USB volume: CNMF-E hammers it with
 random reads, and 79 GB free on the internal SSD is enough for one session at a time if
 intermediates are float32 and deleted between sessions. A TFC_cond session at 76 GB for
@@ -456,7 +499,9 @@ file lists are in `MINISCOPE/_provenance/`. Before either source is wiped, the u
 The `drive4` copy (4-MINISCOPE; G24–G31) was stopped by the incident, then run on dedicated
 ports 2026-09-24/25 (paused once mid-G27 and resumed): done 2026-09-25 22:19, no errors, sorted
 by project on the way in (layout §5.1b). G22/G23 were skipped as identical to 1b's copies. G26/G27
-are now on two drives.
+are now on two drives. Verified 2026-09-25/26, **zero differences**: G26/G27 by full checksum,
+likewise every small directory and the drive root; G24/G25/G30/G31 by every non-`.avi` file
+plus 2 % of `.avi` (seed `20260924`). Log: `MINISCOPE/_provenance/verify_4.txt`.
 
 | | size | files |
 |---|---|---|
