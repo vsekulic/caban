@@ -161,6 +161,27 @@ all run correctly. GUI packages (bokeh/holoviews/panel/datashader) left out — 
 module imports them. The §6 gate is still what establishes equivalence; Rosetta speed is
 unmeasured until the first real session.
 
+**Superseded the same night by a native build: `minian-native`, spec in
+`envs/minian-native.yml` — this is the working env.** Of the ~30 production pins, all but five
+exist as native osx-arm64 builds at the 2021 version — including every numerically heavy one
+(numpy 1.20.2, dask, xarray, numba 0.52, cvxpy, pymetis, scipy, scikit-image). The five:
+
+| package | 2021 | native | where it acts | gate stage (§6.1) |
+|---|---|---|---|---|
+| opencv | 4.2.0 | 4.5.0 | median/tophat, decode, warps | 1 |
+| simpleitk | 2.0.2 | 2.1.1 (PyPI wheel) | motion estimation | 2 |
+| pyfftw | 0.13.0 | 0.12.0 (same FFTW 3.3.10) | noise estimation | 3 |
+| scikit-learn | 0.22.1 | 0.23.2 | GMM in seed refine, neighbours | 4 |
+| medpy | 0.4.0 | 0.4.0 (PyPI) | import only | — |
+
+Synthetic benchmark, same script in both envs: native is **1.1–1.5x faster** on every
+operation (median+tophat, pyfftw, cvxpy, numba, matmul, pymetis), and the median+tophat
+preprocessing output is **bit-identical** between opencv 4.2.0/Rosetta and 4.5.0/native — a
+first, synthetic look at gate stage 1. `minian-local` (Rosetta, exact pins) is kept as the
+fidelity reference: if a gate stage diverges under `minian-native`, re-running that stage under
+`minian-local` says whether a version bump is to blame. Rosetta's general availability ends
+after macOS 27, which is a second reason not to depend on it.
+
 ## 5. Storage
 
 Measured across both backup drives, 2026-09-22:
