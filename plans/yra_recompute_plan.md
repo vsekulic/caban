@@ -515,3 +515,26 @@ what the other folder does.
 `dpath_Test_B_LT1` has only a `G05` entry, so `caban` never loads this session. Worth
 knowing before anything adds Test_B LT1 sessions to the loader, and worth restoring
 that assert.
+
+## 14. NaN motion in two production sessions (2026-09-26)
+
+The batch wrote an **all-zero** `YrA` for G05 `2021_09_01-TFC_test_B/15_37_05-LT1` and marked it
+complete: its saved `motion.zarr` is NaN in **every** frame (12,511 of 12,511), a NaN shift moves every
+pixel out of frame, so the replayed `Y` is zero and so is `YrA`. A scan of every output folder on
+MINISCOPE finds three with all-NaN motion:
+
+| folder | NaN frames |
+|---|---|
+| G05 `2021_09_01-TFC_test_B/15_37_05-LT1/…/minian_crossreg3` (production) | 12,511 / 12,511 |
+| G05 `2021_09_01-TFC_test_B/16_20_07-TFC_test_B/…/minian_crossreg2_crossreg3_crossreg4_crossreg6` (production) | 24,714 / 24,714 |
+| G09 `2021_11_08-TFC_cond/19_28_33-HC3/…/minian` (the partial-output session, not production) | 6,062 / 6,062 |
+
+Production's movie for the two G05 sessions was not zero — their `C` and `max_proj` (max 61) are
+real — so the saved `motion.zarr` is not the motion that was applied. The recompute now refuses NaN
+motion before replaying and before accepting an earlier output, and refuses to write a `YrA` whose
+correlation with `C` is undefined for every unit (commit `c83cd4b`). The bad G05 LT1 output was deleted.
+
+**Open: how to recompute these two.** Motion re-estimation reproduced production exactly on G06 and
+G10 (`minian_batch_runner_plan.md` §13), so re-estimating motion from the `.avi` in `minian-native`,
+checking it against production's saved `max_proj` (exact, as in the gate), then replaying with it,
+would recover them without touching `A`/`C`/`S`. Not built; VS to decide.
