@@ -393,3 +393,12 @@ searched in `<mouse>/<day>/<session>` (`"track_day0"`). Matches that already hav
 are listed as not queued. `PATH` (VS) is separate and stands alone: exact sessions (label or
 folder), processed or not, in the order given — the way to re-run a processed session as a gate
 run.
+
+**Gate scope** (VS, 2026-09-26): the TFC_cond gate stands for all session types — no separate
+LT1 / Test_B end-to-end checks (the extra checks `local_minian_pipeline_plan.md` §6.2 proposed).
+The step 5 batch may start.
+
+**Output folder naming** (VS, 2026-09-26): every output folder is to be named `minian`; grouping
+membership moves to a registry. The runner already writes `minian/`, and the YrA recompute writes
+inside whatever folder holds `A`/`C`/`S`, so nothing here changes; renaming the production
+`minian_crossreg*` folders waits for the registry — `plans/crossreg_batch_runner_plan.md` §3–4.
