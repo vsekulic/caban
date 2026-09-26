@@ -304,7 +304,20 @@ def select_sessions(
     (:data:`GATE_LABELS`) or ``"labels"`` (``labels``, in the order given; every label
     must exist). ``mice`` keeps those mice; ``session_types`` keeps sessions whose type
     starts with any of the given regexes, e.g. ``["HC"]`` or ``["LT", "CNO"]``.
+    ``which`` is case-insensitive, and a single string stands for a one-item list in
+    ``mice``, ``session_types`` and ``labels``.
     """
+    which = which.lower()
+    mice, session_types, labels = ([v] if isinstance(v, str) else v
+                                   for v in (mice, session_types, labels))
+    def narrowed(sessions):
+        if mice:
+            sessions = [i for i in sessions if i.mouse in mice]
+        if session_types:
+            sessions = [i for i in sessions
+                        if any(re.match(p, session_type(i.session)) for p in session_types)]
+        return sessions
+
     if which in ("gate", "labels"):
         wanted = list(GATE_LABELS) if which == "gate" else list(labels or [])
         if not wanted:
@@ -313,22 +326,16 @@ def select_sessions(
         missing = [w for w in wanted if w not in by_label]
         if missing:
             raise KeyError("not found among {} scanned sessions: {}".format(len(items), missing))
-        chosen = [by_label[w] for w in wanted]
-    elif which == "never_processed":
-        fresh = [i for i in items if is_never_processed(i)]
-        stubs = [i for i in fresh if is_stub(i)]
-        chosen = [i for i in fresh if not is_stub(i)]
-        print("{} of {} sessions never processed; {} of them are stubs, left out:".format(
-            len(fresh), len(items), len(stubs)))
-        for stub in stubs:
-            print("  " + stub.label)
-    else:
+        return narrowed([by_label[w] for w in wanted])
+    if which != "never_processed":
         raise ValueError("which must be 'never_processed', 'gate' or 'labels', not {!r}".format(which))
-    if mice:
-        chosen = [i for i in chosen if i.mouse in mice]
-    if session_types:
-        chosen = [i for i in chosen
-                  if any(re.match(p, session_type(i.session)) for p in session_types)]
+    fresh = narrowed([i for i in items if is_never_processed(i)])
+    stubs = [i for i in fresh if is_stub(i)]
+    print("{} never-processed sessions in this selection; {} of them are stubs, left out{}".format(
+        len(fresh), len(stubs), ":" if stubs else "."))
+    for stub in stubs:
+        print("  " + stub.label)
+    chosen = [i for i in fresh if not is_stub(i)]
     return chosen
 
 
