@@ -1013,6 +1013,17 @@ def recompute_session_yra(
     b = open_minian_array(minian_dir, "b")
     f = open_minian_array(minian_dir, "f")
     motion = open_minian_array(minian_dir, "motion")
+    # A NaN shift moves every pixel out of frame: the replayed Y would be all zeros and
+    # so would YrA. Checked before `completed_run`, so an output already written from
+    # such a motion is not accepted either. Found 2026-09-26 in two G05 TFC_test_B
+    # production sessions whose saved motion.zarr is NaN in every frame.
+    nan_frames = int(np.isnan(motion.values).any(axis=1).sum())
+    if nan_frames:
+        raise ValueError(
+            "{}: motion.zarr is NaN in {} of {} frames, so Y cannot be replayed from it "
+            "(it would be all zeros, and so would YrA). Production's movie was not: its "
+            "C and max_proj are nonzero, so the saved motion is not the one that was "
+            "applied.".format(minian_dir, nan_frames, motion.sizes["frame"]))
     S_unit_id = np.asarray(open_minian_array(minian_dir, "S").coords["unit_id"].values)
 
     A_unit_id = np.asarray(A.coords["unit_id"].values)
@@ -1071,6 +1082,11 @@ def recompute_session_yra(
         YrA_new, S_unit_id, C.compute(), YrA_old, del_frames_derived,
         list(del_frames_notebook), footprint_overlap_ratio(A),
     )
+    if report["corr_C_vs_new"]["n"] == 0:
+        raise ValueError(
+            "{}: corr(C, YrA_new) is undefined for every unit -- the recomputed YrA is "
+            "constant (all-zero clip floor {:.3f}); not writing it".format(
+                minian_dir, report["clip_floor_fraction"]["overall"]))
     if movie_check is not None:
         report["replayed_Y_vs_saved_Y_fm_chk"] = movie_check
 
