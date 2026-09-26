@@ -28,6 +28,7 @@ import sys
 import time
 from typing import List, Optional
 
+import dask
 import matplotlib.pyplot as plt
 import nbformat
 import numpy as np
@@ -293,50 +294,54 @@ def discover_sessions(roots=None, verbose: bool = True) -> List[sq.SessionWork]:
 
 def select_sessions(
     items: List[sq.SessionWork],
-    which: str = "never_processed",
-    mice: Optional[List[str]] = None,
-    session_types: Optional[List[str]] = None,
-    labels: Optional[List[str]] = None,
+    selection: Optional[str] = None,
+    labels=None,
+    mice=None,
+    sessions=None,
 ) -> List[sq.SessionWork]:
-    """Choose the queue (§8).
+    """Choose the queue (§8). ``selection`` names the one variable that is used:
 
-    ``which`` is ``"never_processed"`` (stubs excluded, and counted), ``"gate"``
-    (:data:`GATE_LABELS`) or ``"labels"`` (``labels``, in the order given; every label
-    must exist). ``mice`` keeps those mice; ``session_types`` keeps sessions whose type
-    starts with any of the given regexes, e.g. ``["HC"]`` or ``["LT", "CNO"]``.
-    ``which`` is case-insensitive, and a single string stands for a one-item list in
-    ``mice``, ``session_types`` and ``labels``.
+    - ``None`` -- every never-processed session (stubs listed and left out);
+    - ``"labels"`` -- exactly ``labels`` (``<mouse>/<day>/<session>``), in that order,
+      processed or not;
+    - ``"mice"`` -- the never-processed sessions of ``mice``, e.g. ``["G05", "G08"]``;
+    - ``"sessions"`` -- the never-processed sessions whose type starts with one of
+      ``sessions``, e.g. ``["HC"]`` (HC1-HC4) or ``["LT", "CNO"]``.
+
+    Case-insensitive; a single string stands for a one-item list. The named variable must
+    be set, and the others must be ``None`` -- a value that would be ignored is an error.
     """
-    which = which.lower()
-    mice, session_types, labels = ([v] if isinstance(v, str) else v
-                                   for v in (mice, session_types, labels))
-    def narrowed(sessions):
-        if mice:
-            sessions = [i for i in sessions if i.mouse in mice]
-        if session_types:
-            sessions = [i for i in sessions
-                        if any(re.match(p, session_type(i.session)) for p in session_types)]
-        return sessions
+    selection = selection.lower() if selection is not None else None
+    labels, mice, sessions = ([v] if isinstance(v, str) else v for v in (labels, mice, sessions))
+    given = {"labels": labels, "mice": mice, "sessions": sessions}
+    if selection is not None and selection not in given:
+        raise ValueError("SELECTION must be None, 'labels', 'mice' or 'sessions', not {!r}"
+                         .format(selection))
+    if selection is not None and not given[selection]:
+        raise ValueError("SELECTION is {!r} but {} is empty".format(selection, selection.upper()))
+    ignored = [k.upper() for k, v in given.items() if v and k != selection]
+    if ignored:
+        raise ValueError("{} set but SELECTION is {!r}, so it would be ignored; set it to "
+                         "None".format(" and ".join(ignored), selection))
 
-    if which in ("gate", "labels"):
-        wanted = list(GATE_LABELS) if which == "gate" else list(labels or [])
-        if not wanted:
-            raise ValueError("which='labels' needs a non-empty labels list")
+    if selection == "labels":
         by_label = {i.label: i for i in items}
-        missing = [w for w in wanted if w not in by_label]
+        missing = [w for w in labels if w not in by_label]
         if missing:
             raise KeyError("not found among {} scanned sessions: {}".format(len(items), missing))
-        return narrowed([by_label[w] for w in wanted])
-    if which != "never_processed":
-        raise ValueError("which must be 'never_processed', 'gate' or 'labels', not {!r}".format(which))
-    fresh = narrowed([i for i in items if is_never_processed(i)])
+        return [by_label[w] for w in labels]
+    fresh = [i for i in items if is_never_processed(i)]
+    if selection == "mice":
+        fresh = [i for i in fresh if i.mouse in mice]
+    if selection == "sessions":
+        fresh = [i for i in fresh
+                 if any(re.match(p, session_type(i.session)) for p in sessions)]
     stubs = [i for i in fresh if is_stub(i)]
     print("{} never-processed sessions in this selection; {} of them are stubs, left out{}".format(
         len(fresh), len(stubs), ":" if stubs else "."))
     for stub in stubs:
         print("  " + stub.label)
-    chosen = [i for i in fresh if not is_stub(i)]
-    return chosen
+    return [i for i in fresh if not is_stub(i)]
 
 
 # --- status: run.json is the sidecar ------------------------------------------
@@ -369,14 +374,15 @@ def unit_counts(minian_dir: str) -> str:
     """``"88 (S), 88 (C), 88 (YrA)"``, read from the saved arrays, for sanity checking.
 
     Equal counts can hide different unit sets (G10 TFC_cond: 799 each, but YrA holds
-    343/346 where C holds 344/347), so a set difference is spelled out too.
+    343/346 where C holds 344/347), so then the shared count is added:
+    ``"799 (S), 799 (C), 799 (YrA, 797 shared with C)"``.
     """
     ids = {n: yr.open_minian_array(minian_dir, n).coords["unit_id"].values
            for n in ("S", "C", "YrA")}
     text = "{} (S), {} (C), {} (YrA)".format(*(len(ids[n]) for n in ("S", "C", "YrA")))
-    differ = len(set(ids["YrA"].tolist()) - set(ids["C"].tolist()))
-    if differ:
-        text = text[:-1] + "; {} differ from C)".format(differ)
+    shared = len(set(ids["YrA"].tolist()) & set(ids["C"].tolist()))
+    if shared != len(ids["C"]) or len(ids["YrA"]) != len(ids["C"]):
+        text = text[:-1] + ", {} shared with C)".format(shared)
     return text
 
 
@@ -388,7 +394,15 @@ def _status_columns(item: sq.SessionWork, record: dict) -> dict:
         "wall_h": round(record["timings"]["total_s"] / 3600, 2) if "total_s" in record.get("timings", {}) else None,
         "peak_mem_gb": record.get("memory", {}).get("peak_rss_gb"),
         "units": unit_counts(os.path.join(item.session_dir, OUTPUT_NAME)) if done else "",
+        "YrA_recomputed": "DONE" if done and yra_recomputed(item) else "",
     }
+
+
+def yra_recomputed(item: sq.SessionWork) -> bool:
+    """A complete recompute made from *this* run's ``minian/`` -- not production's."""
+    sidecar = sq.read_sidecar(yra_output_dir(item), yr.SIDECAR_NAME)
+    return bool(sidecar.get("complete")) and sidecar.get("minian_dir") == os.path.join(
+        item.session_dir, OUTPUT_NAME)
 
 
 def queue_status(items: List[sq.SessionWork]) -> pd.DataFrame:
@@ -769,14 +783,55 @@ def _remove_scratch(session_dir: str, scratch: str) -> None:
     os.unlink(link)
 
 
+def yra_output_dir(item: sq.SessionWork) -> str:
+    """Where :func:`recompute_yra` writes: beside the production sessions' recomputes."""
+    return sq.session_output_dir(item.candidate, yr.DEFAULT_OUTPUT_ROOT)
+
+
+def recompute_yra(item: sq.SessionWork, n_workers: Optional[int] = None) -> dict:
+    """Recompute ``YrA`` for this run's ``minian/`` with ``caban.yra_recompute`` (step 2).
+
+    The notebook's own ``YrA.zarr`` can hold a few wrong units (``YrA.sel(unit_id=mask)``;
+    see :func:`unit_counts`), so the same recompute the production sessions get is run
+    here, unchanged: the movie is replayed from the ``.avi`` files and ``YrA`` computed
+    against the saved ``A``/``C``/``b``/``f``, which puts ``S``'s ``unit_id`` on it by
+    construction. Output: ``YrA_recomputed.zarr`` and its sidecar in
+    :func:`yra_output_dir`; ``minian/YrA.zarr`` is untouched and serves as the comparison.
+    While the run's scratch still exists, the replayed movie is also checked against
+    its saved ``Y_fm_chk``.
+    """
+    session_dir = item.session_dir
+    if item.candidate.complete_minian_dirs:
+        raise ValueError("{} has production output; its recomputed YrA is in {} already"
+                         .format(item.label, yra_output_dir(item)))
+    minian_dir = os.path.join(session_dir, OUTPUT_NAME)
+    saved_movie = os.path.join(session_dir, sq.SCRATCH_DIR_NAME, "Y_fm_chk.zarr")
+    with dask.config.set(scheduler="threads", num_workers=n_workers or 6):
+        done = yr.recompute_session_yra(
+            session_dir,
+            minian_dir,
+            yra_output_dir(item),
+            yr.notebook_del_frames(session_dir),
+            existing_yra_path=os.path.join(minian_dir, "YrA.zarr"),
+            saved_movie_path=saved_movie if os.path.isdir(saved_movie) else None,
+        )
+    return {"output": os.path.join(yra_output_dir(item), yr.OUTPUT_ARRAY_NAME),
+            "written_utc": done["written_utc"], "report": done["report"]}
+
+
 def run_session(
     item: sq.SessionWork,
     scratch_root: str = DEFAULT_SCRATCH_ROOT,
     keep_scratch: bool = False,
     n_workers: Optional[int] = None,
     reason: str = "caban.minian_runner",
+    recompute_yra: bool = True,
 ) -> dict:
-    """Prepare, execute, report, re-encode, clean up, record (§5).
+    """Prepare, execute, report, recompute YrA, re-encode, clean up, record (§5).
+
+    ``recompute_yra`` runs :func:`recompute_yra` on the new output (see there). It is
+    refused for a session with production output, whose recomputed ``YrA`` already
+    occupies the output folder -- pass ``False`` for gate runs.
 
     ``keep_scratch`` keeps the intermediates -- for a gate run, which is compared
     against ``minian_intermediate-ORIG`` stage by stage. Any failure is recorded in
@@ -786,6 +841,10 @@ def run_session(
     status = run_status(item)
     if status != "pending":
         raise ValueError("{} is {}, not pending".format(item.label, status))
+    if recompute_yra and item.candidate.complete_minian_dirs:
+        raise ValueError("{} has production output ({}); its recomputed YrA lives in the "
+                         "folder this run would write to. Use recompute_yra=False.".format(
+                             item.label, item.candidate.complete_minian_dirs))
     template = load_template()
     if not os.path.isdir(MINIAN_FORK_DIR):
         raise FileNotFoundError("minian fork not found at {}".format(MINIAN_FORK_DIR))
@@ -812,6 +871,8 @@ def run_session(
         "notebook_edits": edits,
         "set_aside": set_aside,
         "scratch_kept": keep_scratch,
+        "recompute_yra": recompute_yra,
+        "n_workers": n_workers,
         "timings": {"prepare_s": round(time.time() - started, 1)},
     }
     sq.write_sidecar(session_dir, SIDECAR_NAME, record)
@@ -868,6 +929,12 @@ def _finish_after_notebook(item: sq.SessionWork, record: dict, started: float) -
                                       parameters["FRAMERATE"])
     record["timings"]["report_s"] = round(time.time() - mark, 1)
 
+    # Records written before this step existed carry no flag; they did not run it.
+    if record.get("recompute_yra", False):
+        mark = time.time()
+        record["yra_recompute"] = recompute_yra(item, n_workers=record.get("n_workers"))
+        record["timings"]["yra_s"] = round(time.time() - mark, 1)
+
     mark = time.time()
     record["videos"] = {name: reencode_video(os.path.join(session_dir, name))
                         for name in NOTEBOOK_VIDEOS}
@@ -904,7 +971,7 @@ def resume_after_notebook(item: sq.SessionWork) -> dict:
     record["resumed_from"] = {"error": record.pop("error"),
                               "when": pd.Timestamp.now().isoformat(timespec="seconds")}
     record["status"] = "running"
-    for key in ("report_s", "videos_s", "total_s"):
+    for key in ("report_s", "yra_s", "videos_s", "total_s"):
         record["timings"].pop(key, None)
     sq.write_sidecar(item.session_dir, SIDECAR_NAME, record)
     try:

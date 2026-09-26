@@ -373,3 +373,18 @@ production output. A single run produces it. So it comes from the notebook itsel
 second run's doing. The report records it (`yra_missing_C_units`, `yra_extra_units`) and no
 longer fails on it. A run that failed only after the notebook finishes with
 `resume_after_notebook`, without recomputing.
+
+**Step 2 per session: recompute `YrA`** (VS, 2026-09-26). The notebook's `YrA.zarr` can hold
+wrong units (above), so every new run gets the production sessions' recompute: after the
+report, `run_session` calls `caban.yra_recompute.recompute_session_yra` unchanged on the new
+`minian/`, writing `YrA_recomputed.zarr` + sidecar to `~/cbp-db/yra_recomputed/<mouse>/<day>/<session>/`
+beside the production recomputes. While the scratch exists, the replayed movie is also checked
+against the run's saved `Y_fm_chk`. It is refused for sessions with production output (their
+recompute already occupies that folder), so gate runs pass `recompute_yra=False`. The queue
+table's `YrA_recomputed` column reads DONE only for a recompute made from that run's own `minian/`.
+Backfilled on the G13 dry run: non-overlapping units match the notebook's `YrA` at r ≥ 0.999999
+(the replay is right); overlapping ones differ (r ≥ 0.984) because the notebook's `YrA` uses
+`C` from before the second temporal update and the recompute uses the final `C`.
+
+`SELECTION` (VS): `None` = never-processed; `"labels"` / `"mice"` / `"sessions"` each use only
+their own variable, and a set-but-unused variable is an error.
