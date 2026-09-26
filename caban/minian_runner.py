@@ -34,7 +34,7 @@ import numpy as np
 import pandas as pd
 import papermill
 import psutil
-from IPython.display import Image, display
+from IPython.display import Image, Markdown, display
 from nbconvert import HTMLExporter
 
 from caban import session_queue as sq
@@ -358,14 +358,29 @@ def run_status(item: sq.SessionWork) -> str:
 STATUS_LABELS = {"pending": "", "done": "DONE"}
 
 
+def unit_counts(minian_dir: str) -> str:
+    """``"88 (S), 88 (C), 88 (YrA)"``, read from the saved arrays, for sanity checking.
+
+    Equal counts can hide different unit sets (G10 TFC_cond: 799 each, but YrA holds
+    343/346 where C holds 344/347), so a set difference is spelled out too.
+    """
+    ids = {n: yr.open_minian_array(minian_dir, n).coords["unit_id"].values
+           for n in ("S", "C", "YrA")}
+    text = "{} (S), {} (C), {} (YrA)".format(*(len(ids[n]) for n in ("S", "C", "YrA")))
+    differ = len(set(ids["YrA"].tolist()) - set(ids["C"].tolist()))
+    if differ:
+        text = text[:-1] + "; {} differ from C)".format(differ)
+    return text
+
+
 def _status_columns(item: sq.SessionWork, record: dict) -> dict:
-    report = record.get("report", {})
+    done = record.get("status") == "done"
     return {
         "type": session_type(item.session),
         "status": STATUS_LABELS.get(record.get("status", "pending"), record.get("status")),
         "wall_h": round(record["timings"]["total_s"] / 3600, 2) if "total_s" in record.get("timings", {}) else None,
         "peak_mem_gb": record.get("memory", {}).get("peak_rss_gb"),
-        "n_units": report.get("n_units"),
+        "units": unit_counts(os.path.join(item.session_dir, OUTPUT_NAME)) if done else "",
     }
 
 
@@ -376,6 +391,13 @@ def queue_status(items: List[sq.SessionWork]) -> pd.DataFrame:
     """
     frame = sq.queue_frame(items, SIDECAR_NAME, OUTPUT_NAME, extra_columns=_status_columns)
     return frame.drop(columns="done").set_index(["mouse", "day", "session"]).sort_index()
+
+
+def show_queue(status: pd.DataFrame) -> None:
+    """The queue table, one table per mouse, so every mouse carries its own header."""
+    for mouse in status.index.get_level_values("mouse").unique():
+        display(Markdown("**{}**".format(mouse)))
+        display(status.xs(mouse, level="mouse").fillna(""))
 
 
 def pending_items(items: List[sq.SessionWork]) -> List[sq.SessionWork]:
