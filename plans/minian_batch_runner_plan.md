@@ -1,8 +1,8 @@
 # Plan: a top-level runner that executes the Minian pipeline notebook over many sessions
 
-Status: **§11 steps 1–3 done; step 4 run, not passed** (2026-09-26): stages 1–3 and seed
-initialisation reproduce exactly, the final unit set does not; see §13. Awaiting VS's decision
-on what the gate should be calibrated against.
+Status: **§11 steps 1–4 done** (2026-09-26): the gate **passed** against production G10
+`TFC_cond` — the re-run reproduces its 799 units to solver precision; see §13. Next: step 5,
+the batch.
 Depends on: `plans/local_minian_pipeline_plan.md` — the `minian-native` env (§4.2), the
 `-ORIG` set-aside and `--scratch` link (§5.2), the gate (§6), the queue in
 `caban/session_queue.py` (§9). This plan is §9's "shape of the code", revised by VS's
@@ -205,8 +205,10 @@ Same four-cell shape as `recompute_yra.ipynb`, code in `caban/minian_runner.py`:
 2. ✅ Build `caban/minian_runner.py` + the notebook; add `minian_run` to the set-aside list.
 3. ✅ Dry run: execute the template on the **shortest never-processed HC session**; check the
    executed notebook, html, videos, memory.
-4. **Gate**: G06 `2021_10_18-TFC_cond/09_52_24-HC1` — set aside, run, compare stage by stage
+4. ✅ **Gate**: G06 `2021_10_18-TFC_cond/09_52_24-HC1` — set aside, run, compare stage by stage
    against `minian_intermediate-ORIG/` (parent plan §6.1). Nothing is batched before it passes.
+   *Done differently*: G06 HC1's reference proved to be a junk 2022 run (VS); the gate was
+   passed against production G10 `TFC_cond` instead (§13).
 5. Batch in the parent plan's §8 order.
 
 ## 12. Working notes for whoever implements this
@@ -340,3 +342,34 @@ in the CNMF updates — parameters or solver versions — that no record shows.
 
 Also: `local_minian_pipeline_plan.md` §3.2 lists `seeds_init max_wnd 7`. The template has 15,
 and identical seeds show the 2022 run used 15 as well.
+
+VS, 2026-09-26: that HC run is junk; compare against a production TFC_cond (G05 or G10).
+
+**Gate against production** (2026-09-26): G10 `2021_11_23-TFC_cond/16_32_14-TFC_cond`, 26
+`.avi`, 25,995 frames, against `minian_crossreg1_crossreg2_crossreg4_crossreg6_crossreg7`
+(production A/C/S; parent plan §3.4). Chosen over G05 because the YrA plan already knows this
+session in detail. No intermediates survive for it, so the gate compares `motion`, `max_proj`
+and the final units (`caban/minian_gate.py`, report `minian_run/gate_vs_production_report.json`).
+
+| check | result |
+|---|---|
+| `motion` | identical |
+| `max_proj` (max over the motion-corrected movie) | identical |
+| units | 799 = 799, same `unit_id`s in the same order, all matched |
+| `A` / `C` / `S` max relative difference | 4e-6 / 2e-6 / 2e-5 |
+| footprint centroid shift | median 3e-9 px |
+| per-unit corr(C) | min 0.999999999995 |
+
+**Passed.** The runner reproduces the production output to solver precision: the ~1e-5 run-to-run
+noise of `yra_recompute_plan.md` §2.2, and no unit-set difference at all. Wall 1.05 h
+(notebook 52 min, re-encode 10 min); peak RSS 12.7 GB at 6 workers, system available
+never below 5.6 GB. `prev/minian` in this session is a byte-level copy of production
+(799/799, corr 1.000) — not an independent run.
+
+**The `YrA` defect comes from the notebook.** The re-run's saved `YrA.zarr` holds units 343/346
+in place of `C`'s 344/347 — the exact discrepancy `yra_recompute_plan.md` §12.2 found in the
+production output. A single run produces it. So it comes from the notebook itself, most likely
+`YrA.sel(unit_id=mask)` in cell 297, with `YrA` sorted and `mask` in `C`'s order. It is not a
+second run's doing. The report records it (`yra_missing_C_units`, `yra_extra_units`) and no
+longer fails on it. A run that failed only after the notebook finishes with
+`resume_after_notebook`, without recomputing.

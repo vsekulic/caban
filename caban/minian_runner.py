@@ -499,8 +499,9 @@ def export_html(nb_path: str, html_path: str) -> None:
 def report_session(minian_dir: str, run_dir: str, framerate: float) -> dict:
     """Cell count, footprint sizes, corr(C, YrA) and the summary figures (§5 step 4).
 
-    Hard-fails unless ``A`` and ``S`` carry ``C``'s units in ``C``'s order and ``YrA``
-    carries the same set, and unless ``C``/``YrA`` share frames and are finite.
+    Hard-fails unless ``A`` and ``S`` carry ``C``'s units in ``C``'s order, ``YrA``
+    shares at least 90 % of them, and ``C``/``YrA`` share frames and are finite.
+    ``YrA`` units missing from ``C``'s set, or extra, are recorded (see below).
 
     ``YrA`` may hold them in another order: the notebook reorders ``A`` to ``C``
     (cell 284) but saves ``YrA`` as ``compute_trace`` left it -- the misalignment
@@ -515,23 +516,31 @@ def report_session(minian_dir: str, run_dir: str, framerate: float) -> dict:
             raise ValueError("{}: unit_id of {} differs from C's ({} vs {} units)".format(
                 minian_dir, name, arrays[name].sizes["unit_id"], len(units)))
     yra_units = arrays["YrA"].coords["unit_id"].values
-    if len(yra_units) != len(units) or set(yra_units.tolist()) != set(units.tolist()):
-        raise ValueError("{}: YrA holds a different unit set from C ({} vs {} units)".format(
-            minian_dir, len(yra_units), len(units)))
+    # The notebook saves `YrA.sel(unit_id=mask)` with YrA sorted and `mask` in C's order,
+    # which can select a few wrong units: G10 TFC_cond's production output and its re-run
+    # both hold YrA units 343/346 in place of C's 344/347. Recorded, and the correlation
+    # uses the shared units; caban's loader repairs this (_align_YrA_to_S_units).
+    c_only = sorted(set(units.tolist()) - set(yra_units.tolist()))
+    yra_only = sorted(set(yra_units.tolist()) - set(units.tolist()))
+    shared = np.array([u for u in units if u not in set(c_only)])
+    if len(shared) < 0.9 * len(units):
+        raise ValueError("{}: YrA shares only {} of C's {} units".format(
+            minian_dir, len(shared), len(units)))
     if not np.array_equal(arrays["C"].coords["frame"].values, arrays["YrA"].coords["frame"].values):
         raise ValueError("{}: C and YrA have different frames".format(minian_dir))
     C = arrays["C"].values
-    YrA = arrays["YrA"].sel(unit_id=units).values
+    YrA = arrays["YrA"].sel(unit_id=shared).values
+    C_shared = arrays["C"].sel(unit_id=shared).values
     for name, values in (("C", C), ("YrA", YrA)):
         if not np.isfinite(values).all():
             raise ValueError("{}: {} holds non-finite values".format(minian_dir, name))
     A = arrays["A"]
     footprint_px = (A > 0).sum(["height", "width"]).compute().values
-    corr = yr._per_cell_correlation(C, YrA)
+    corr = yr._per_cell_correlation(C_shared, YrA)
 
     figures = {
         "summary_footprints.png": _plot_footprints(arrays["max_proj"].values, A),
-        "summary_traces.png": _plot_traces(C, YrA, units, framerate),
+        "summary_traces.png": _plot_traces(C_shared, YrA, shared, framerate),
         "summary_distributions.png": _plot_distributions(footprint_px, corr),
     }
     for name, fig in figures.items():
@@ -546,6 +555,8 @@ def report_session(minian_dir: str, run_dir: str, framerate: float) -> dict:
         "n_empty_footprints": int((footprint_px == 0).sum()),
         "n_all_zero_C": int((C == 0).all(axis=1).sum()),
         "yra_unit_order_matches_C": bool(np.array_equal(yra_units, units)),
+        "yra_missing_C_units": c_only,
+        "yra_extra_units": yra_only,
         "footprint_px": yr._summary(footprint_px.astype(float)),
         "corr_C_YrA": yr._summary(corr),
         "figures": list(figures),
@@ -670,6 +681,9 @@ def write_readme(item: sq.SessionWork, record: dict, parameters: dict) -> str:
         "| median corr(C, YrA) | {:.3f} |".format(report["corr_C_YrA"]["median"]),
         "| `YrA.zarr` unit order matches `C`/`S` | {} (if not, align by `unit_id`) |".format(
             report["yra_unit_order_matches_C"]),
+        "| `YrA.zarr` units missing / extra vs `C` | {} / {} (the notebook's "
+        "`YrA.sel(unit_id=mask)` can pick wrong units) |".format(
+            report["yra_missing_C_units"] or "none", report["yra_extra_units"] or "none"),
         "| template | `{}` (source md5 `{}`) |".format(
             os.path.relpath(record["template"]["path"], REPO_DIR), record["template"]["md5"]),
         "| minian fork | `{}` |".format(record["minian_fork"]["commit"]),
@@ -779,38 +793,87 @@ def run_session(
                 executed["returncode"], record["notebook_error"],
                 os.path.join(run_dir, PAPERMILL_LOG)))
 
-        with open(parameters_path) as fh:
-            parameters = json.load(fh)
-        wrong = {k: parameters["flags"][k] for k, v in NOTEBOOK_FLAGS.items()
-                 if parameters["flags"][k] != v}
-        if wrong or parameters["dpath"] != os.path.abspath(session_dir):
-            raise ValueError("kernel ended with flags {} / dpath {} -- the edits did not "
-                             "hold".format(wrong, parameters["dpath"]))
-
-        mark = time.time()
-        record["report"] = report_session(os.path.join(session_dir, OUTPUT_NAME), run_dir,
-                                          parameters["FRAMERATE"])
-        record["timings"]["report_s"] = round(time.time() - mark, 1)
-
-        mark = time.time()
-        record["videos"] = {name: reencode_video(os.path.join(session_dir, name))
-                            for name in NOTEBOOK_VIDEOS}
-        record["timings"]["videos_s"] = round(time.time() - mark, 1)
-
-        if not keep_scratch:
-            _remove_scratch(session_dir, set_aside["scratch"])
-        record["timings"]["total_s"] = round(time.time() - started, 1)
-        record["finished"] = pd.Timestamp.now().isoformat(timespec="seconds")
-        write_readme(item, record, parameters)
-        record["status"] = "done"
-        record["complete"] = True
+        _finish_after_notebook(item, record, started)
     except BaseException as error:
-        record["status"] = "interrupted" if isinstance(error, KeyboardInterrupt) else "failed"
-        record["error"] = "{}: {}".format(type(error).__name__, error)
-        record["timings"]["total_s"] = round(time.time() - started, 1)
+        _record_failure(record, error, started)
         raise
     finally:
         sq.write_sidecar(session_dir, SIDECAR_NAME, record)
+    return record
+
+
+def _record_failure(record: dict, error: BaseException, started: float) -> None:
+    record["status"] = "interrupted" if isinstance(error, KeyboardInterrupt) else "failed"
+    record["error"] = "{}: {}".format(type(error).__name__, error)
+    record["timings"]["total_s"] = round(time.time() - started, 1)
+
+
+def _finish_after_notebook(item: sq.SessionWork, record: dict, started: float) -> None:
+    """Everything after a notebook that ran to the end: check, report, videos, clean up.
+
+    ``started`` is the wall-clock origin of the run, for ``total_s``.
+    """
+    session_dir = item.session_dir
+    run_dir = os.path.join(session_dir, RUN_DIR_NAME)
+    with open(os.path.join(run_dir, PARAMETERS_JSON)) as fh:
+        parameters = json.load(fh)
+    wrong = {k: parameters["flags"][k] for k, v in NOTEBOOK_FLAGS.items()
+             if parameters["flags"][k] != v}
+    if wrong or parameters["dpath"] != os.path.abspath(session_dir):
+        raise ValueError("kernel ended with flags {} / dpath {} -- the edits did not "
+                         "hold".format(wrong, parameters["dpath"]))
+
+    mark = time.time()
+    record["report"] = report_session(os.path.join(session_dir, OUTPUT_NAME), run_dir,
+                                      parameters["FRAMERATE"])
+    record["timings"]["report_s"] = round(time.time() - mark, 1)
+
+    mark = time.time()
+    record["videos"] = {name: reencode_video(os.path.join(session_dir, name))
+                        for name in NOTEBOOK_VIDEOS}
+    record["timings"]["videos_s"] = round(time.time() - mark, 1)
+
+    if not record["scratch_kept"]:
+        _remove_scratch(session_dir, record["set_aside"]["scratch"])
+    record["timings"]["total_s"] = round(time.time() - started, 1)
+    record["finished"] = pd.Timestamp.now().isoformat(timespec="seconds")
+    write_readme(item, record, parameters)
+    record["status"] = "done"
+    record["complete"] = True
+
+
+def resume_after_notebook(item: sq.SessionWork) -> dict:
+    """Finish a ``failed`` run whose notebook itself completed, without re-running it.
+
+    For a failure in the steps after the notebook (report, videos, clean-up): refuses
+    unless the executed notebook holds no error and ``parameters.json`` was written, so
+    the CNMF-E output on disk is the notebook's complete output. The earlier error is
+    kept in the record as ``resumed_from``.
+    """
+    record = run_record(item)
+    if record.get("status") != "failed":
+        raise ValueError("{} is {}, not failed".format(item.label, record.get("status", "pending")))
+    run_dir = os.path.join(item.session_dir, RUN_DIR_NAME)
+    nb_path = os.path.join(run_dir, EXECUTED_NOTEBOOK)
+    if "notebook_error" in record or "execute_s" not in record["timings"] \
+            or notebook_error(nb_path) is not None \
+            or not os.path.isfile(os.path.join(run_dir, PARAMETERS_JSON)):
+        raise ValueError("{}: the notebook did not complete; clear_failed_run and re-run "
+                         "instead".format(item.label))
+    started = time.time() - record["timings"]["prepare_s"] - record["timings"]["execute_s"]
+    record["resumed_from"] = {"error": record.pop("error"),
+                              "when": pd.Timestamp.now().isoformat(timespec="seconds")}
+    record["status"] = "running"
+    for key in ("report_s", "videos_s", "total_s"):
+        record["timings"].pop(key, None)
+    sq.write_sidecar(item.session_dir, SIDECAR_NAME, record)
+    try:
+        _finish_after_notebook(item, record, started)
+    except BaseException as error:
+        _record_failure(record, error, started)
+        raise
+    finally:
+        sq.write_sidecar(item.session_dir, SIDECAR_NAME, record)
     return record
 
 
@@ -870,6 +933,10 @@ def format_report(record: dict) -> str:
                          r["footprint_px"]["median"], r["corr_C_YrA"]["median"],
                          r["n_empty_footprints"], r["n_all_zero_C"],
                          r["yra_unit_order_matches_C"]))
+        if r["yra_missing_C_units"] or r["yra_extra_units"]:
+            lines.append("  YrA.zarr unit set differs from C's: missing {}, extra {} "
+                         "(the notebook's YrA.sel(unit_id=mask))".format(
+                             r["yra_missing_C_units"], r["yra_extra_units"]))
     for name, v in record.get("videos", {}).items():
         lines.append("  {}: {} -> {} MB (crf {})".format(name, v["mb_before"], v["mb_after"], v["crf"]))
     if "error" in record:
