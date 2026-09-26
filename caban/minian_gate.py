@@ -22,6 +22,10 @@ initialisation on, CNMF-E is not deterministic and the comparison is distributio
    by mutual nearest footprint centroid; counts, match rate, matched-trace correlation,
    and the unmatched units drawn, not summarised away.
 
+Most sessions kept no intermediates; there the reference is the production output
+(``minian_crossreg*``) and the gate compares ``motion``, ``max_proj`` and the final
+units only -- see :func:`run_gate`.
+
 The §6.2 thresholds are the plan's proposals, "to be calibrated on the four G06
 sessions before being fixed" -- so they are reported as provisional flags, and every
 number behind them is in the report.
@@ -39,8 +43,6 @@ from scipy.spatial import cKDTree
 from caban import minian_runner as mr
 from caban import session_queue as sq
 from caban import yra_recompute as yr
-
-GATE_REPORT_NAME = "gate_report.json"
 
 # Stage 3: max |new - old| relative to max |old|.
 NOISE_RTOL = 1e-6
@@ -70,18 +72,29 @@ COLOR_OLD_ONLY = "#eb6834"
 COLOR_NEW_ONLY = "#1baf7a"
 
 
-def gate_dirs(session_dir: str) -> dict:
-    """The four directories a gate compares; hard-fails unless the gate run left them."""
+def gate_dirs(session_dir: str, reference_final: Optional[str] = None,
+              new_final: Optional[str] = None) -> dict:
+    """The directories a gate compares; hard-fails unless the ones it needs exist.
+
+    ``reference_final`` is the output to judge against: by default the set-aside
+    ``minian-ORIG/``, for a production session its ``minian_crossreg*`` folder (which
+    holds the CNMF-E ``A``/``C``/``S`` unchanged -- parent plan §3.4). ``new_final``
+    defaults to the re-run's ``minian/``. Intermediate stages need the reference run's
+    ``minian_intermediate-ORIG/``; most sessions never kept one, and then
+    ``old_intermediate`` is ``None`` and only the final output is compared.
+    """
+    old_intermediate = os.path.join(session_dir, sq.set_aside_name(sq.SCRATCH_DIR_NAME))
+    has_intermediates = os.path.isdir(old_intermediate)
     dirs = {
-        "old_intermediate": os.path.join(session_dir, sq.set_aside_name(sq.SCRATCH_DIR_NAME)),
-        "new_intermediate": os.path.join(session_dir, sq.SCRATCH_DIR_NAME),
-        "old_final": os.path.join(session_dir, sq.set_aside_name(mr.OUTPUT_NAME)),
-        "new_final": os.path.join(session_dir, mr.OUTPUT_NAME),
+        "old_intermediate": old_intermediate if has_intermediates else None,
+        "new_intermediate": os.path.join(session_dir, sq.SCRATCH_DIR_NAME) if has_intermediates else None,
+        "old_final": reference_final or os.path.join(session_dir, sq.set_aside_name(mr.OUTPUT_NAME)),
+        "new_final": new_final or os.path.join(session_dir, mr.OUTPUT_NAME),
     }
-    missing = [k for k, d in dirs.items() if not os.path.isdir(d)]
+    missing = [d for d in dirs.values() if d is not None and not os.path.isdir(d)]
     if missing:
-        raise FileNotFoundError("{}: no {} -- run the session with keep_scratch=True "
-                                "first".format(session_dir, [dirs[k] for k in missing]))
+        raise FileNotFoundError("{}: missing {} -- run the session (keep_scratch=True when "
+                                "comparing intermediates) first".format(session_dir, missing))
     return dirs
 
 
@@ -201,9 +214,9 @@ def plot_unit_match(A_new, A_old, background: np.ndarray, result: dict, path: st
         (A_old.isel(unit_id=pairs[:, 0]) if len(pairs) else None, COLOR_MATCHED,
          "matched ({})".format(len(pairs))),
         (A_old.sel(unit_id=result["unmatched_old_unit_ids"]), COLOR_OLD_ONLY,
-         "2021 only ({})".format(len(result["unmatched_old_unit_ids"]))),
+         "reference only ({})".format(len(result["unmatched_old_unit_ids"]))),
         (A_new.sel(unit_id=result["unmatched_new_unit_ids"]), COLOR_NEW_ONLY,
-         "re-run only ({})".format(len(result["unmatched_new_unit_ids"]))),
+         "new only ({})".format(len(result["unmatched_new_unit_ids"]))),
     )
     for footprints, color, label in groups:
         if footprints is None or footprints.sizes["unit_id"] == 0:
@@ -222,21 +235,35 @@ def plot_unit_match(A_new, A_old, background: np.ndarray, result: dict, path: st
     plt.close(fig)
 
 
-def run_gate(session_dir: str, out_dir: Optional[str] = None,
-             stop_at_first_mismatch: bool = True) -> dict:
-    """Compare the re-run with 2021, in pipeline order; write ``gate_report.json``.
+def run_gate(session_dir: str, reference_final: Optional[str] = None,
+             new_final: Optional[str] = None, tag: str = "gate",
+             out_dir: Optional[str] = None, stop_at_first_mismatch: bool = True) -> dict:
+    """Compare a run with its reference, in pipeline order; write ``<tag>_report.json``.
 
-    With ``stop_at_first_mismatch`` (§6.1) the reproducible stages 1-3 stop the gate at
-    the first failure -- everything downstream inherits that divergence. The unit stages
-    are distributional and always all reported.
+    See :func:`gate_dirs` for ``reference_final`` / ``new_final``. Without reference
+    intermediates the intermediate stages are listed as not available in the report and
+    only ``motion``, ``max_proj`` (the maximum over the motion-corrected movie, so an
+    exact check of preprocessing and motion correction together) and the final units are
+    compared. ``tag`` prefixes the report and figures, so several comparisons of one
+    session sit side by side.
+
+    With ``stop_at_first_mismatch`` (§6.1) the reproducible stages stop the gate at the
+    first failure -- everything downstream inherits that divergence. The unit stages are
+    distributional and always all reported.
     """
-    dirs = gate_dirs(session_dir)
+    dirs = gate_dirs(session_dir, reference_final, new_final)
     out_dir = out_dir or os.path.join(session_dir, mr.RUN_DIR_NAME)
+    has_intermediates = dirs["old_intermediate"] is not None
     new = lambda n: yr.open_minian_array(dirs["new_intermediate"], n)
     old = lambda n: yr.open_minian_array(dirs["old_intermediate"], n)
+    new_final = lambda n: yr.open_minian_array(dirs["new_final"], n)
+    old_final = lambda n: yr.open_minian_array(dirs["old_final"], n)
     stages = []
     report = {"session_dir": session_dir, "dirs": dirs, "stages": stages,
+              "intermediate_stages": "compared" if has_intermediates else
+              "not available: the reference run kept no minian_intermediate",
               "first_mismatch": None, "stopped_early": False}
+    print("  intermediate stages: {}".format(report["intermediate_stages"]))
 
     def record(result):
         stages.append(result)
@@ -255,45 +282,52 @@ def run_gate(session_dir: str, out_dir: Optional[str] = None,
         return passed or not blocking
 
     def write():
-        path = os.path.join(out_dir, GATE_REPORT_NAME)
+        path = os.path.join(out_dir, "{}_report.json".format(tag))
         clean = dict(report, stages=[{k: v for k, v in s.items() if not k.startswith("_")}
                                      for s in stages])
         with open(path, "w") as fh:
             json.dump(clean, fh, indent=2, default=str)
         return path
 
-    reproducible = [
-        lambda: compare_exact(new("varr"), old("varr"), "varr"),
-        lambda: compare_exact(new("varr_ref"), old("varr_ref"), "varr_ref"),
-        lambda: dict(compare_exact(
-            yr.apply_transform(new("varr_ref"), yr.open_minian_array(dirs["old_final"], "motion"))
-            .astype(float), old("Y_fm_chk"), "Y_fm_chk"), stage_array="Y_fm_chk (2021 motion)",
-            blocking=False, note=MOTION_APPLIED_NOTE),
-        lambda: compare_motion(yr.open_minian_array(dirs["new_final"], "motion"),
-                               yr.open_minian_array(dirs["old_final"], "motion")),
-        lambda: dict(compare_exact(new("Y_fm_chk"), old("Y_fm_chk"), "Y_fm_chk"),
-                     stage_array="Y_fm_chk (re-estimated)"),
-        lambda: compare_close(new("sn_spatial"), old("sn_spatial"), "sn_spatial"),
-        lambda: compare_close(new("max_res"), old("max_res"), "max_res"),
-    ]
+    reproducible = []
+    if has_intermediates:
+        reproducible += [
+            lambda: compare_exact(new("varr"), old("varr"), "varr"),
+            lambda: compare_exact(new("varr_ref"), old("varr_ref"), "varr_ref"),
+            lambda: dict(compare_exact(
+                yr.apply_transform(new("varr_ref"), old_final("motion")).astype(float),
+                old("Y_fm_chk"), "Y_fm_chk"), stage_array="Y_fm_chk (2021 motion)",
+                blocking=False, note=MOTION_APPLIED_NOTE),
+        ]
+    reproducible.append(lambda: compare_motion(new_final("motion"), old_final("motion")))
+    if has_intermediates:
+        reproducible += [
+            lambda: dict(compare_exact(new("Y_fm_chk"), old("Y_fm_chk"), "Y_fm_chk"),
+                         stage_array="Y_fm_chk (re-estimated)"),
+            lambda: compare_close(new("sn_spatial"), old("sn_spatial"), "sn_spatial"),
+            lambda: compare_close(new("max_res"), old("max_res"), "max_res"),
+        ]
+    reproducible.append(lambda: compare_exact(new_final("max_proj"), old_final("max_proj"), "max_proj"))
     for compare in reproducible:
         if not record(compare()) and stop_at_first_mismatch:
             report["stopped_early"] = True
             print("  stopped at the first mismatch; report: {}".format(write()))
             return report
 
-    background = yr.open_minian_array(dirs["old_final"], "max_proj").values
+    background = old_final("max_proj").values
     for label, a_name, c_name, where in UNIT_STAGES:
+        if where == "intermediate" and not has_intermediates:
+            continue
         src_new = dirs["new_" + where]
         src_old = dirs["old_" + where]
         A_new, C_new = yr.open_minian_array(src_new, a_name), yr.open_minian_array(src_new, c_name)
         A_old, C_old = yr.open_minian_array(src_old, a_name), yr.open_minian_array(src_old, c_name)
         result = compare_units(A_new, C_new, A_old, C_old, "{} ({})".format(a_name, label))
-        figure = "gate_units_{}.png".format(a_name)
+        figure = "{}_units_{}.png".format(tag, a_name)
         plot_unit_match(A_new, A_old, background, result, os.path.join(out_dir, figure))
         result["figure"] = figure
         record(result)
-        print("    {} -> {} units, {} matched ({:.0%} of 2021), median matched corr(C) {:.3f}"
+        print("    {} -> {} units, {} matched ({:.0%} of reference), median matched corr(C) {:.3f}"
               .format(result["n_old"], result["n_new"], result["n_matched"],
                       result["matched_fraction_of_old"], result["matched_corr_C"].get("median", np.nan)))
     print("  report: {}".format(write()))
