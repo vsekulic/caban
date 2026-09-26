@@ -51,8 +51,10 @@ REQUIRED_MINIAN_ARRAYS = ("A", "C", "S", "b", "f", "motion")
 #   pipeline notebook      -> <session>/Miniscope/: these dirs and videos
 #   cross-registration     -> <mouse>/: mappings_<name>.{pkl,csv}, cents_<name>.pkl,
 #                             shiftds_<name>.nc  (cell 55 of cross-registration-WORKING)
+#   caban.minian_runner    -> <session>/Miniscope/minian_run/ (executed notebook, record)
 SET_ASIDE_SUFFIX = "-ORIG"
-NOTEBOOK_OUTPUT_DIRS = ("minian", "minian_intermediate")
+RUN_DIR_NAME = "minian_run"
+NOTEBOOK_OUTPUT_DIRS = ("minian", "minian_intermediate", RUN_DIR_NAME)
 NOTEBOOK_OUTPUT_FILES = ("minian.mp4", "minian_mc.mp4")
 SCRATCH_DIR_NAME = "minian_intermediate"
 SET_ASIDE_RECORD = "minian_set_aside.json"
@@ -326,7 +328,7 @@ def set_aside_minian_output(session_dir: str, reason: str, scratch_root: Optiona
     """Prepare a session's ``Miniscope/`` folder for a pipeline-notebook run.
 
     Renames existing notebook output -- ``minian/``, ``minian_intermediate/``,
-    ``minian.mp4``, ``minian_mc.mp4`` -- to its ``-ORIG`` names (instant on APFS,
+    ``minian_run/``, ``minian.mp4``, ``minian_mc.mp4`` -- to its ``-ORIG`` names (instant on APFS,
     nothing copied), with the refusals of :func:`_set_aside`.
 
     With ``scratch_root``, then makes ``minian_intermediate`` a symlink to a fresh

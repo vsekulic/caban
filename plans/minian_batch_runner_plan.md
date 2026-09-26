@@ -1,6 +1,7 @@
 # Plan: a top-level runner that executes the Minian pipeline notebook over many sessions
 
-Status: **planning**, written 2026-09-26. Nothing built.
+Status: **§11 steps 1–3 done** (2026-09-26): `caban/minian_runner.py`,
+`notebooks/run_minian_pipeline.ipynb`, dry run passed; see §13. Next: step 4, the gate.
 Depends on: `plans/local_minian_pipeline_plan.md` — the `minian-native` env (§4.2), the
 `-ORIG` set-aside and `--scratch` link (§5.2), the gate (§6), the queue in
 `caban/session_queue.py` (§9). This plan is §9's "shape of the code", revised by VS's
@@ -98,7 +99,8 @@ copy of `unit_id` (`CNMFViewer.__init__`'s fallback). Recorded per run.
 
 ```
 <session>/Miniscope/
-├── minian/                  notebook output (A, C, S, YrA, motion, A/C/S.npy, …)
+├── minian/                  notebook output (A, C, S, YrA, motion, max_proj, …; no .npy —
+│                            the template's export cell 301 is commented out)
 ├── minian.mp4, minian_mc.mp4  the notebook's videos, re-encoded smaller in place (§7)
 └── minian_run/              everything the runner adds
     ├── pipeline.ipynb       the executed notebook: every figure, exactly as a manual run
@@ -198,9 +200,9 @@ Same four-cell shape as `recompute_yra.ipynb`, code in `caban/minian_runner.py`:
 
 ## 11. Setup and order of work
 
-1. `papermill` into the `caban` env; register `minian-native` as a Jupyter kernel.
-2. Build `caban/minian_runner.py` + the notebook; add `minian_run` to the set-aside list.
-3. Dry run: execute the template on the **shortest never-processed HC session**; check the
+1. ✅ `papermill` into the `caban` env; register `minian-native` as a Jupyter kernel.
+2. ✅ Build `caban/minian_runner.py` + the notebook; add `minian_run` to the set-aside list.
+3. ✅ Dry run: execute the template on the **shortest never-processed HC session**; check the
    executed notebook, html, videos, memory.
 4. **Gate**: G06 `2021_10_18-TFC_cond/09_52_24-HC1` — set aside, run, compare stage by stage
    against `minian_intermediate-ORIG/` (parent plan §6.1). Nothing is batched before it passes.
@@ -239,3 +241,69 @@ Practical gotchas found while setting this up (2026-09-23 → 26), not recorded 
   `/Volumes/MINISCOPE/SSTCa2/G06-ST688_hM4D/2021_10_18-TFC_cond/09_52_24-HC1/Miniscope`
   (all 27 intermediate arrays in `minian_intermediate/`). Never point a notebook at a session
   with existing output without the set-aside first.
+
+## 13. Implementation record (2026-09-26)
+
+**Step 1.** papermill 2.7.0 from conda-forge into `caban` (additions only, nothing
+updated). `minian-native` registered as a user kernelspec; this writes to
+`~/Library/Jupyter/kernels/`, not into the env, so the bokeh caveat of §12 does not apply.
+Smoke test: papermill in `caban` → `minian-native` kernel, cwd the fork, `minian` imported
+from `~/code/minian_vsekulic/minian/`.
+
+**Step 2.** Built, and tested piece by piece without touching a session:
+
+- Papermill runs as a child process that reads the edited notebook on stdin (`papermill -`),
+  so papermill, the kernel and the dask workers form one process tree. Memory is the RSS summed
+  over that tree. An interrupt terminates the whole tree.
+- The edits are checked, not assumed: each flag line exists exactly once in the parameter cell,
+  no other cell assigns a flag, and no `dpath` line is active in the template (none is; the
+  runner inserts one). After the run, `parameters.json` must show the flags and `dpath` as set,
+  or the run fails.
+- Queue: 657 sessions in G05–G21; 476 never processed, of which 34 are stubs (listed, left out);
+  **442 queued**, 327 of them HC. One session with partial output
+  (`G09/2021_11_08-TFC_cond/19_28_33-HC3`, `minian` + `minian_intermediate`) is excluded as
+  not-never-processed. Shortest HC: `G13/2022_01_10-TFC_test_B_1wk/16_35_20-HC2` (4 `.avi`).
+- A failed session stays `failed` until `clear_failed_run`, which removes what that run wrote
+  and keeps its `minian_run/` as `minian_run-failed-<time>/`.
+
+Findings while building:
+
+- **`YrA.zarr` unit order.** Cell 284 reorders `A` to `C` but `YrA` is saved as
+  `compute_trace` left it, so a fresh run may save `YrA` in a different unit order from `C`/`S`.
+  In existing output, 31 of 53 `minian*` folders that hold A/C/S/YrA/max_proj have the same set
+  in a different order and 1 has a different set. The report aligns `YrA` by `unit_id` and
+  records `yra_unit_order_matches_C` per run; the saved arrays are not touched.
+- Cell numbers in the baseline: `unit_labels` is cell 293 (not ≈128); the videos are cells 99
+  and 287 (not 38/125).
+- Free memory during the smoke test was 5.8 GB of 32 GB, with other work open. At 6 workers,
+  watch `min_available_gb` in the first run.
+
+Not built yet:
+
+- The two runner-made videos (`minian_raw_traces.mp4`, `minian_preprocessing.mp4`, §7). They
+  need the intermediates before scratch cleanup, and the "denoised" stage is not saved, so it has
+  to be recomputed in `minian-native`.
+- The paper Methods (§7a) and its copy into `minian_run/`. By design its numbers come from the
+  first run's `parameters.json`.
+- Attended mode shows the report and summary figures inline, but no video; the notebook's
+  videos are 50+ MB each.
+
+**Step 3, dry run** (2026-09-26): `G13/2022_01_10-TFC_test_B_1wk/16_35_20-HC2`, 4 `.avi`,
+3,591 frames (3.0 min). Status `done`, **12 min wall** (notebook 532 s, re-encode 168 s,
+report 7 s). Peak RSS 6.2 GB over 10 processes at 6 workers; system available memory never
+fell below 5.6 GB. All 306 cells executed, no error outputs, 16 figure outputs; html 33 MB.
+88 units, median footprint 368 px, median corr(C, YrA) 0.51, `YrA` unit order matched `C`.
+Scratch deleted. `parameters.json` confirms the §2 override: `sparse_penal` is 0.0001 in
+both spatial updates, not the parameter cell's 0.01. Re-encode at crf 23: `minian.mp4`
+540 → 174 MB (3.1×), `minian_mc.mp4` 317 → 108 MB. That is less shrink than the 9.5×
+measured on G06 in §7, presumably content-dependent.
+
+- **Minian's videos drop one frame in five.** `minian.visualization.write_video` pipes raw
+  frames without an input rate, so ffmpeg assumes 25 fps and resamples to `r=framerate` (20):
+  `drop=` in the log, and both videos hold 2,874 = 0.8 × 3,591 frames. They play in real time
+  but miss 20 % of frames. This is upstream behaviour and applies to every 2021 video too; the
+  arrays are unaffected. The runner executes the notebook as-is, so this is recorded, not
+  patched. The runner-made videos (§7) must declare the input rate.
+- The notebook's ffmpeg writes its progress into `papermill.log`; the progress reader now
+  scans the whole log for papermill's last cell count.
+- Empty `<mouse>/<day>/<session>/` folders stay under `minian_scratch/` after cleanup.
