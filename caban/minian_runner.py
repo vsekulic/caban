@@ -294,48 +294,37 @@ def discover_sessions(roots=None, verbose: bool = True) -> List[sq.SessionWork]:
 
 def select_sessions(
     items: List[sq.SessionWork],
-    selection: Optional[str] = None,
     labels=None,
     mice=None,
-    sessions=None,
+    session_types=None,
 ) -> List[sq.SessionWork]:
-    """Choose the queue (§8). ``selection`` names the one variable that is used:
+    """Choose the queue (§8).
 
-    - ``None`` -- every never-processed session (stubs listed and left out);
-    - ``"labels"`` -- exactly ``labels`` (``<mouse>/<day>/<session>``), in that order,
-      processed or not;
-    - ``"mice"`` -- the never-processed sessions of ``mice``, e.g. ``["G05", "G08"]``;
-    - ``"sessions"`` -- the never-processed sessions whose type starts with one of
-      ``sessions``, e.g. ``["HC"]`` (HC1-HC4) or ``["LT", "CNO"]``.
+    - Nothing set: every never-processed session (stubs listed and left out).
+    - ``labels``: exactly these ``<mouse>/<day>/<session>``, in that order, processed or
+      not. Stands alone -- with ``mice`` or ``session_types`` also set it is an error.
+    - ``mice`` and/or ``session_types``: never-processed sessions of those mice (G05 or
+      G08) whose type starts with one of those prefixes (``"HC"`` = HC1-HC4). Both set
+      means both must hold: ``mice=["G05"], session_types=["HC"]`` is G05's HC sessions.
 
-    Case-insensitive; a single string stands for a one-item list. The named variable must
-    be set, and the others must be ``None`` -- a value that would be ignored is an error.
+    A single string stands for a one-item list.
     """
-    selection = selection.lower() if selection is not None else None
-    labels, mice, sessions = ([v] if isinstance(v, str) else v for v in (labels, mice, sessions))
-    given = {"labels": labels, "mice": mice, "sessions": sessions}
-    if selection is not None and selection not in given:
-        raise ValueError("SELECTION must be None, 'labels', 'mice' or 'sessions', not {!r}"
-                         .format(selection))
-    if selection is not None and not given[selection]:
-        raise ValueError("SELECTION is {!r} but {} is empty".format(selection, selection.upper()))
-    ignored = [k.upper() for k, v in given.items() if v and k != selection]
-    if ignored:
-        raise ValueError("{} set but SELECTION is {!r}, so it would be ignored; set it to "
-                         "None".format(" and ".join(ignored), selection))
-
-    if selection == "labels":
+    labels, mice, session_types = ([v] if isinstance(v, str) else v
+                                   for v in (labels, mice, session_types))
+    if labels:
+        if mice or session_types:
+            raise ValueError("LABELS stands alone; set MICE and SESSION_TYPES to None")
         by_label = {i.label: i for i in items}
         missing = [w for w in labels if w not in by_label]
         if missing:
             raise KeyError("not found among {} scanned sessions: {}".format(len(items), missing))
         return [by_label[w] for w in labels]
     fresh = [i for i in items if is_never_processed(i)]
-    if selection == "mice":
+    if mice:
         fresh = [i for i in fresh if i.mouse in mice]
-    if selection == "sessions":
+    if session_types:
         fresh = [i for i in fresh
-                 if any(re.match(p, session_type(i.session)) for p in sessions)]
+                 if any(re.match(p, session_type(i.session)) for p in session_types)]
     stubs = [i for i in fresh if is_stub(i)]
     print("{} never-processed sessions in this selection; {} of them are stubs, left out{}".format(
         len(fresh), len(stubs), ":" if stubs else "."))

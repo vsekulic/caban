@@ -386,5 +386,6 @@ Backfilled on the G13 dry run: non-overlapping units match the notebook's `YrA` 
 (the replay is right); overlapping ones differ (r ≥ 0.984) because the notebook's `YrA` uses
 `C` from before the second temporal update and the recompute uses the final `C`.
 
-`SELECTION` (VS): `None` = never-processed; `"labels"` / `"mice"` / `"sessions"` each use only
-their own variable, and a set-but-unused variable is an error.
+Choosing sessions (VS): no mode switch — `LABELS`, `MICE`, `SESSION_TYPES`. All `None` =
+never-processed; `LABELS` stands alone (exact sessions, processed or not); `MICE` and
+`SESSION_TYPES` narrow the never-processed set and combine by AND (values within one are OR'd).
