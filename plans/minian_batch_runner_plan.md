@@ -43,8 +43,14 @@ Checked by diffing code cells (comments and the parameter cell excluded):
 - `prev/…-TFC_cond-RED` has **different** parameters (`wnd 10`, `size_thres (10, None)`) for
   red-channel recordings and is out of scope here.
 
-The template is read from `~/code/minian_vsekulic` (working copy of the fork, §4.2 of the
-parent plan) and its md5 recorded per run, so a later edit to the notebook is visible.
+**The runner never reads `TFC_cond-4` itself** — VS may open and edit it. It reads
+**`notebooks/minian_pipeline_BASELINE.ipynb`** (created 2026-09-26): an output-free copy of
+`TFC_cond-4` — all 305 cells, code sources identical, execution counts and embedded figures
+stripped (46.4 MB → 163 KB), kernel set to `minian-native`. Protected three ways: tracked in
+git (any edit shows in `git diff`), read-only on disk, and the runner checks the md5 of its
+concatenated cell sources (`5eb502c4a0252de26fc6170626d8ad00`) before every run and refuses on
+a mismatch. It executes with the fork's working copy (`~/code/minian_vsekulic`) as working
+directory, since the first cell imports `minian` from there.
 
 ## 4. What the runner changes in the copy it executes
 
@@ -77,7 +83,7 @@ copy of `unit_id` (`CNMFViewer.__init__`'s fallback). Recorded per run.
 3. **Measure**: sample memory (kernel + dask workers) and wall time throughout.
 4. **Report** (in the `caban` env, from the saved `minian/`): cell count, footprint-size
    distribution, `corr(C, YrA)`, summary figures (§6).
-5. **Videos**: small re-encodes (§7).
+5. **Videos**: re-encode the notebook's two in place; make the two extra ones (§7).
 6. **Clean up**: delete the scratch folder and link on success — except gate runs.
 7. **Record**: `minian_run/run.json` — status, timings, peak memory, template + md5, fork
    commit, env, the §4 edits, the report numbers.
@@ -87,12 +93,12 @@ copy of `unit_id` (`CNMFViewer.__init__`'s fallback). Recorded per run.
 ```
 <session>/Miniscope/
 ├── minian/                  notebook output (A, C, S, YrA, motion, A/C/S.npy, …)
-├── minian.mp4               notebook's 4-panel video, full quality — kept as the sanity check
+├── minian.mp4, minian_mc.mp4  the notebook's videos, re-encoded smaller in place (§7)
 └── minian_run/              everything the runner adds
     ├── pipeline.ipynb       the executed notebook: every figure, exactly as a manual run
     ├── pipeline.html        the same, viewable in any browser
     ├── summary_*.png        max projection + footprints, sample traces, report plots
-    ├── *_small.mp4          small re-encodes of the videos
+    ├── minian_raw_traces.mp4, minian_preprocessing.mp4   the two extra videos (§7)
     └── run.json             the record (§5 step 7)
 ```
 
@@ -107,11 +113,29 @@ denoised, background-removed, motion-corrected, ×1.5 gain) / **residual** `Y �
 The notebook encodes at `crf 18, preset ultrafast` — fast, large. The runner re-encodes at the
 **same pixel dimensions**, higher CRF, slow preset: much smaller files, small visual cost.
 
-- `minian.mp4`: full-quality original **kept** (VS's sanity check) + `minian_small.mp4`.
-- `minian_mc.mp4`: replaced by `minian_mc_small.mp4` once the small one is verified readable.
-- **Open (VS):** an extra runner-made video, leaving the notebook's untouched — candidates
-  `A·(C+YrA)` (per-cell reconstruction before denoising) and/or a preprocessing strip
-  (raw → denoised → background-removed → motion-corrected).
+Measured 2026-09-26 on G06 `09_52_24-HC1`'s 2021 `minian.mp4` (1216×1216, 20 fps, 238 s,
+527 MB), first 60 s re-encoded with libx264 `preset slow`:
+
+| crf | per 60 s | whole file | shrink | SSIM vs original |
+|---|---|---|---|---|
+| 18 ultrafast (notebook) | 133 MB | 527 MB | — | 1 |
+| 20 | 35 MB | ~138 MB | 3.8× | 0.982 |
+| **23** | 14 MB | **~55 MB** | 9.5× | 0.977 |
+| 26 | 5.5 MB | ~22 MB | 24× | 0.975 |
+
+Side by side (zoomed, ×4 brightness) the cells are indistinguishable at every setting; what
+goes is background grain — kept at 20, slightly smoothed at 23, visibly softened at 26. The
+notebook's own file is already lossy (crf 18). Over ~657 sessions: ~330 GB at the notebook's
+setting vs ~35 GB at crf 23.
+
+Decided (VS, 2026-09-26): same pixel dimensions, compressed only.
+- `minian.mp4` — **re-encoded in place** at crf 23 (proposed; VS to confirm), after the
+  re-encode is verified readable with the right frame count. Still the full 2×2 sanity check.
+- `minian_mc.mp4` — likewise.
+- **Two extra runner-made videos**, small, in `minian_run/`, the notebook's video untouched:
+  `minian_raw_traces.mp4` — `A·(C+YrA)`, each cell's activity before temporal denoising,
+  beside `A·C`; and `minian_preprocessing.mp4` — raw → denoised → background-removed →
+  motion-corrected, as a strip.
 
 ## 8. The top-level notebook: `notebooks/run_minian_pipeline.ipynb`
 
