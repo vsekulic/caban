@@ -1,6 +1,11 @@
 # Plan: recompute YrA from the existing footprints instead of re-running Minian
 
-Status: **approach approved 2026-09-21** (§10); **§7.1 G10 gate run and passed 2026-09-22**
+Status: **128 of 130 production sessions recomputed (2026-09-27).** **Open, for VS:**
+**(1)** §14.1 — the 2 G05 TFC_test_B sessions with all-NaN saved motion need re-estimated motion;
+**(2)** §14.2 — a `max_proj` replay check, to prove the replay for sessions with no old `YrA`
+and re-check all 128; **(3)** §15.1 — G21 TFC_test_B frames after 10,999 are paired with timestamps
+3,000 frames early by the analysis loader (existing pipeline; loader fix + check of published results).
+Earlier: approach approved 2026-09-21 (§10); **§7.1 G10 gate run and passed 2026-09-22**
 (§12). §11 implemented in `caban/yra_recompute.py` + `notebooks/recompute_yra.ipynb`.
 Written 2026-09-21.
 Depends on: `plans/yra_unit_alignment_plan.md` (implemented, commit `485f296`) — the load-time

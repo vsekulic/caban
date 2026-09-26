@@ -402,3 +402,14 @@ The step 5 batch may start.
 membership moves to a registry. The runner already writes `minian/`, and the YrA recompute writes
 inside whatever folder holds `A`/`C`/`S`, so nothing here changes; renaming the production
 `minian_crossreg*` folders waits for the registry — `plans/crossreg_batch_runner_plan.md` §3–4.
+
+**The 50 plain-`minian/` sessions join the queue** (VS, 2026-09-27). Processed once (45 in Jul–Aug
+2025, apparently G10/G11 track-day HC/LT and CNO; the 4 G06 TFC_cond-day ones in Feb 2022 — the "junk
+run" batch) but never cross-registered, so no mapping or published result depends on them. They are
+re-run through the runner like the never-processed ones: `minian_runner.needs_minian` replaces
+`is_never_processed` and accepts a session whose only output is an old complete `minian/`;
+preparation sets it aside as `minian-ORIG`. Partial output (G09 `19_28_33-HC3`) stays out. Queue:
+**492** = 442 + 50, of which G06 HC1 (the gate run) and G13 HC2 (the dry run) are DONE. G06 HC1's
+`YrA` was backfilled: its replayed movie matched its own saved `Y_fm_chk` except 5 pixels off by 1
+grey level over 50 frames (the cv2-version difference) — a first calibration point for
+`yra_recompute_plan.md` §14.2.

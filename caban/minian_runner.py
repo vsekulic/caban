@@ -267,16 +267,28 @@ def is_stub(item: sq.SessionWork) -> bool:
     return kind == "" or kind in STUB_SESSION_TYPES
 
 
-def is_never_processed(item: sq.SessionWork) -> bool:
-    """No Minian output from before this runner: nothing, or only this runner's own run.
+def needs_minian(item: sq.SessionWork) -> bool:
+    """A session for this runner: not cross-registered, and not yet run through it.
 
-    A folder holding partial output (e.g. ``minian_intermediate`` without a complete
-    ``minian/``) is not never-processed -- it needs a look, not a run.
+    - Cross-registered (``minian_crossreg*``, the 130 behind the published analyses):
+      never -- re-running them would change unit ids (parent plan §3.1).
+    - Already run by this runner (``minian_run/run.json``): yes, so it stays in the
+      table as DONE / failed.
+    - No output at all (the never-processed sessions): yes.
+    - Only an old, complete plain ``minian/`` -- processed once, never cross-registered,
+      so no mapping depends on it: yes, re-run through the verified pipeline (VS,
+      2026-09-27). Preparation sets the old output aside as ``minian-ORIG``.
+    - Partial output (e.g. ``minian_intermediate`` without a complete ``minian/``), or
+      output set aside by hand: no -- it needs a look, not a run.
     """
     c = item.candidate
-    if c.complete_minian_dirs or c.set_aside_dirs:
+    if c.complete_minian_dirs:
         return False
     if os.path.isfile(os.path.join(item.session_dir, SIDECAR_NAME)):
+        return True
+    if c.set_aside_dirs:
+        return False
+    if c.plain_minian_dir:
         return True
     return not any(os.path.lexists(os.path.join(item.session_dir, n))
                    for n in sq.NOTEBOOK_OUTPUT_DIRS + sq.NOTEBOOK_OUTPUT_FILES)
@@ -305,8 +317,9 @@ def select_sessions(
     in the order given, processed or not (a production session re-run is a gate run). It
     stands alone: with any other filter set it is an error.
 
-    Otherwise the queue comes from the never-processed sessions; with nothing set, all of
-    them. Each filter that is set must hold (AND); the values
+    Otherwise the queue comes from the sessions that need Minian (:func:`needs_minian`:
+    never processed, or processed once but never cross-registered); with nothing set, all
+    of them. Each filter that is set must hold (AND); the values
     within one are alternatives (OR):
 
     - ``labels``: regex patterns searched in ``<mouse>/<day>/<session>`` --
@@ -314,7 +327,7 @@ def select_sessions(
     - ``mice``: e.g. ``["G05", "G08"]``;
     - ``session_types``: type prefixes, e.g. ``["HC"]`` (HC1-HC4) or ``["LT", "CNO"]``.
 
-    Sessions that match but already have Minian output (production, or partial) are
+    Sessions that match but are cross-registered or hold partial output are
     listed as not queued (parent plan §3.1: the processed ones are never re-run). Stubs
     are listed and left out. A single string stands for a one-item list.
     """
@@ -338,15 +351,15 @@ def select_sessions(
     if session_types:
         matching = [i for i in matching
                     if any(re.match(p, session_type(i.session)) for p in session_types)]
-    fresh = [i for i in matching if is_never_processed(i)]
+    fresh = [i for i in matching if needs_minian(i)]
     if labels or mice or session_types:
-        have_output = [i for i in matching if not is_never_processed(i)]
-        print("{} sessions match; {} already have Minian output, not queued{}".format(
+        have_output = [i for i in matching if not needs_minian(i)]
+        print("{} sessions match; {} are cross-registered or hold partial output, not queued{}".format(
             len(matching), len(have_output), ":" if have_output else "."))
         for item in have_output:
             print("  " + item.label)
     stubs = [i for i in fresh if is_stub(i)]
-    print("{} never-processed sessions in this selection; {} of them are stubs, left out{}".format(
+    print("{} sessions need Minian in this selection; {} of them are stubs, left out{}".format(
         len(fresh), len(stubs), ":" if stubs else "."))
     for stub in stubs:
         print("  " + stub.label)
