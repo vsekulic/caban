@@ -1,6 +1,7 @@
 from tkinter.filedialog import SaveFileDialog
 import numpy as np
 from caban.utilities import *
+from caban.session_queue import original_output_path
 import ast
 import glob
 from natsort import natsorted
@@ -151,7 +152,9 @@ class CrossRegMapping:
             self.mappings_df = saver.load('mappings_df')
             df = self.mappings_df
         else:
-            with open(dpath_mappings) as crossreg_file:
+            # The original mappings, even if a cross-registration re-run has written
+            # a new file in its place (plans/local_minian_pipeline_plan.md §5.2).
+            with open(original_output_path(dpath_mappings)) as crossreg_file:
                 df = pd.read_csv(crossreg_file)
             self.mappings_df = df
             saver.save(df, 'mappings_df')

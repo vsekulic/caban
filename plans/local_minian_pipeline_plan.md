@@ -432,8 +432,27 @@ aside — a second rename would push the first re-run into `-ORIG` and lose the 
 records itself in `minian_set_aside.json`. The scanner's `plain_minian_dir`,
 `intermediate_dir` and `saved_movie_path` always mean the *original* output and follow it
 into `-ORIG`, so neither the YrA recompute's movie check nor anything else can take a re-run
-for 2021 output. Cost: CNMF-E's random access now hits the USB disk, not an SSD — slower, not
-less correct. The analysis below is kept for the record.
+for 2021 output. The same command also renames `minian.mp4`/`minian_mc.mp4`, which the notebook
+writes beside the videos (cells 99, 287).
+
+**Scratch on the SSD without editing the notebook:** `--scratch /Volumes/FUTROLA/minian_scratch`
+makes `<session>/Miniscope/minian_intermediate` a symlink to a fresh
+`<scratch>/<mouse>/<day>/<session>/minian_intermediate`, so the notebook's
+`intpath = dpath/minian_intermediate` lands on FUTROLA. Tested 2026-09-26 in `minian-native`:
+`save_minian` including the rechunk-and-overwrite path writes through the link cross-volume and
+reads back bit-identical (it only ever touches paths *inside* `intpath`). For a never-processed
+session the scratch link is the only step. All checks run before anything is renamed; a
+`minian_intermediate` that is already a symlink is an earlier run's scratch and is refused.
+Intermediates of new runs are disposable once `minian/` is written — except for gate re-runs,
+compared against them, and never the 2021 `minian_intermediate-ORIG/`.
+
+**Cross-registration re-runs** write `mappings_<name>.{pkl,csv}`, `cents_<name>.pkl` and
+`shiftds_<name>.nc` into the mouse folder (cell 55 of `cross-registration-WORKING`), under the
+same names the analyses load. `python -m scripts.set_aside_crossreg_output <mouse dir> crossreg_7
+--reason ...` renames them `…-ORIG.<ext>` first (same refusals, record in
+`crossreg_set_aside_<name>.json`), and `caban.sessions`' mapping reader goes through
+`session_queue.original_output_path`, so analyses keep loading the original mappings. Promoting a
+re-run's output is a separate, deliberate step, not designed yet.
 
 `intpath` must be on fast local storage, not the USB volume: CNMF-E hammers it with
 random reads, and 79 GB free on the internal SSD is enough for one session at a time if

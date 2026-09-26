@@ -46,11 +46,15 @@ VIDEO_PATTERN = r"^[0-9]+\.avi$"
 # A Minian output directory counts as complete only with all of these present.
 REQUIRED_MINIAN_ARRAYS = ("A", "C", "S", "b", "f", "motion")
 
-# What the Minian pipeline notebook writes into a session's Miniscope/ folder, and the
-# suffix existing output is renamed to before a re-run writes there again
-# (`plans/local_minian_pipeline_plan.md` §6).
-NOTEBOOK_OUTPUT_DIRS = ("minian", "minian_intermediate")
+# Existing output is renamed with this suffix before a notebook re-run writes in its
+# place (`plans/local_minian_pipeline_plan.md` §5.2). What each notebook writes:
+#   pipeline notebook      -> <session>/Miniscope/: these dirs and videos
+#   cross-registration     -> <mouse>/: mappings_<name>.{pkl,csv}, cents_<name>.pkl,
+#                             shiftds_<name>.nc  (cell 55 of cross-registration-WORKING)
 SET_ASIDE_SUFFIX = "-ORIG"
+NOTEBOOK_OUTPUT_DIRS = ("minian", "minian_intermediate")
+NOTEBOOK_OUTPUT_FILES = ("minian.mp4", "minian_mc.mp4")
+SCRATCH_DIR_NAME = "minian_intermediate"
 SET_ASIDE_RECORD = "minian_set_aside.json"
 
 
@@ -193,9 +197,9 @@ def scan_sessions(
                     entries = os.listdir(session_dir)
                     complete = _complete_minian_dirs(session_dir)
                     set_aside = _set_aside_dirs(session_dir)
-                    suffix = SET_ASIDE_SUFFIX if set_aside else ""
-                    plain = os.path.join(session_dir, "minian" + suffix)
-                    intermediate = os.path.join(session_dir, "minian_intermediate" + suffix)
+                    orig = set_aside_name if set_aside else (lambda n: n)
+                    plain = os.path.join(session_dir, orig("minian"))
+                    intermediate = os.path.join(session_dir, orig("minian_intermediate"))
                     movie = os.path.join(intermediate, "Y_fm_chk.zarr")
                     candidates.append(SessionCandidate(
                         mouse=mouse_dir[:3],
@@ -241,59 +245,130 @@ def scan_sessions(
 # --- setting existing output aside before a notebook re-run ------------------
 
 
+def set_aside_name(name: str) -> str:
+    """``minian`` -> ``minian-ORIG``; ``mappings_crossreg_7.csv`` -> ``mappings_crossreg_7-ORIG.csv``.
+
+    The suffix goes before the extension, so a set-aside file still opens as what it is.
+    """
+    stem, ext = os.path.splitext(name)
+    return stem + SET_ASIDE_SUFFIX + ext
+
+
+def original_output_path(path: str) -> str:
+    """The original of an output that a re-run may have replaced.
+
+    Returns the ``-ORIG`` sibling when one exists, else ``path`` itself -- so a reader
+    routed through here keeps reading the original after a re-run writes beside it.
+    """
+    orig = os.path.join(os.path.dirname(path), set_aside_name(os.path.basename(path)))
+    return orig if os.path.exists(orig) else path
+
+
 def _set_aside_dirs(session_dir: str) -> List[str]:
     return [
-        os.path.join(session_dir, name + SET_ASIDE_SUFFIX)
+        os.path.join(session_dir, set_aside_name(name))
         for name in NOTEBOOK_OUTPUT_DIRS
-        if os.path.isdir(os.path.join(session_dir, name + SET_ASIDE_SUFFIX))
+        if os.path.isdir(os.path.join(session_dir, set_aside_name(name)))
     ]
 
 
-def set_aside_minian_output(session_dir: str, reason: str) -> dict:
-    """Rename a session's notebook output to ``*-ORIG`` so a re-run can write afresh.
+def _set_aside(base_dir: str, names, record_name: str, reason: str) -> dict:
+    """Rename whichever of ``names`` exist in ``base_dir`` to their ``-ORIG`` names.
 
-    The Minian notebook writes ``minian/`` and ``minian_intermediate/`` into the
-    session's own ``Miniscope/`` folder. Before re-running it on a session that
-    already has them, they are renamed ``minian-ORIG/`` and
-    ``minian_intermediate-ORIG/`` -- instant on APFS, nothing copied.
-
-    Refuses, touching nothing, if any ``*-ORIG`` already exists: renaming again
-    would move the *first re-run's* output into ``-ORIG`` and lose the original.
-    Also refuses when there is nothing to set aside, so a call never silently
-    implies an original was preserved. Records what it did in
-    ``minian_set_aside.json`` beside the folders.
+    Refuses, touching nothing, if any ``-ORIG`` target or the record already exists --
+    renaming again would move a re-run's output into ``-ORIG`` and lose the original
+    -- and if none of ``names`` is present, so a call never implies an original was
+    kept when there was none. Records what it did in ``record_name``.
     """
-    session_dir = os.path.abspath(session_dir)
-    if not os.path.isdir(session_dir):
-        raise FileNotFoundError("{} is not a directory".format(session_dir))
-    existing = _set_aside_dirs(session_dir)
-    if existing:
+    base_dir = os.path.abspath(base_dir)
+    if not os.path.isdir(base_dir):
+        raise FileNotFoundError("{} is not a directory".format(base_dir))
+    taken = [set_aside_name(n) for n in names
+             if os.path.lexists(os.path.join(base_dir, set_aside_name(n)))]
+    record_path = os.path.join(base_dir, record_name)
+    if taken or os.path.lexists(record_path):
         raise FileExistsError(
-            "{} already has set-aside output {}; renaming again would overwrite the "
-            "original with a re-run. Resolve by hand.".format(session_dir, existing))
-    present = [n for n in NOTEBOOK_OUTPUT_DIRS if os.path.isdir(os.path.join(session_dir, n))]
+            "{} already has set-aside output {} (record: {}); renaming again would "
+            "overwrite the original with a re-run. Resolve by hand.".format(
+                base_dir, taken, os.path.exists(record_path)))
+    present = [n for n in names if os.path.lexists(os.path.join(base_dir, n))]
     if not present:
-        raise FileNotFoundError(
-            "{} has none of {} -- nothing to set aside; the notebook can run as-is".format(
-                session_dir, list(NOTEBOOK_OUTPUT_DIRS)))
-    record_path = os.path.join(session_dir, SET_ASIDE_RECORD)
-    if os.path.exists(record_path):
-        raise FileExistsError("{} exists without any *{} folder -- inspect it by hand".format(
-            record_path, SET_ASIDE_SUFFIX))
+        raise FileNotFoundError("{} has none of {} -- nothing to set aside".format(
+            base_dir, list(names)))
     renamed = {}
     for name in present:
-        src = os.path.join(session_dir, name)
-        dst = src + SET_ASIDE_SUFFIX
-        os.rename(src, dst)
-        renamed[name] = name + SET_ASIDE_SUFFIX
-    record = {
-        "renamed": renamed,
-        "reason": reason,
-        "when": pd.Timestamp.now().isoformat(timespec="seconds"),
-    }
+        os.rename(os.path.join(base_dir, name), os.path.join(base_dir, set_aside_name(name)))
+        renamed[name] = set_aside_name(name)
+    record = {"renamed": renamed, "reason": reason,
+              "when": pd.Timestamp.now().isoformat(timespec="seconds")}
     with open(record_path, "w") as fh:
         json.dump(record, fh, indent=2, sort_keys=True)
     return record
+
+
+def _scratch_target(session_dir: str, scratch_root: str) -> str:
+    """``<scratch_root>/<mouse>/<day>/<session>/minian_intermediate``, checked unused."""
+    if not os.path.isdir(scratch_root):
+        raise FileNotFoundError("scratch root {} is not mounted".format(scratch_root))
+    session, day, mouse = (os.path.basename(p) for p in (
+        os.path.dirname(session_dir),
+        os.path.dirname(os.path.dirname(session_dir)),
+        os.path.dirname(os.path.dirname(os.path.dirname(session_dir)))))
+    target = os.path.join(os.path.abspath(scratch_root), mouse, day, session, SCRATCH_DIR_NAME)
+    if os.path.lexists(target):
+        raise FileExistsError(
+            "scratch target {} already exists -- a leftover from an earlier run? Delete "
+            "it by hand if it is disposable.".format(target))
+    return target
+
+
+def set_aside_minian_output(session_dir: str, reason: str, scratch_root: Optional[str] = None) -> dict:
+    """Prepare a session's ``Miniscope/`` folder for a pipeline-notebook run.
+
+    Renames existing notebook output -- ``minian/``, ``minian_intermediate/``,
+    ``minian.mp4``, ``minian_mc.mp4`` -- to its ``-ORIG`` names (instant on APFS,
+    nothing copied), with the refusals of :func:`_set_aside`.
+
+    With ``scratch_root``, then makes ``minian_intermediate`` a symlink to a fresh
+    ``<scratch_root>/<mouse>/<day>/<session>/minian_intermediate``: the notebook
+    writes to ``dpath/minian_intermediate`` unchanged, and the heavy intermediates land
+    on the fast drive. A session with no output yet needs only this step, so that is
+    not an error. Every check runs before anything is renamed or created.
+
+    A ``minian_intermediate`` that is already a symlink is an earlier run's scratch,
+    not an original, and is refused: remove the link (and its scratch folder, if
+    disposable) first. After a run, delete both when the intermediates are no longer
+    needed -- except for a gate re-run, which is compared against them.
+    """
+    session_dir = os.path.abspath(session_dir)
+    link = os.path.join(session_dir, SCRATCH_DIR_NAME)
+    if os.path.islink(link):
+        raise FileExistsError(
+            "{} is a symlink to {} -- an earlier run's scratch, not an original. Remove "
+            "the link first.".format(link, os.readlink(link)))
+    target = _scratch_target(session_dir, scratch_root) if scratch_root is not None else None
+    names = NOTEBOOK_OUTPUT_DIRS + NOTEBOOK_OUTPUT_FILES
+    has_output = any(os.path.lexists(os.path.join(session_dir, n)) for n in names)
+    record = {}
+    if has_output or target is None:
+        record = _set_aside(session_dir, names, SET_ASIDE_RECORD, reason)
+    if target is not None:
+        os.makedirs(target)
+        os.symlink(target, link)
+        record["scratch"] = target
+    return record
+
+
+def set_aside_crossreg_output(mouse_dir: str, name: str, reason: str) -> dict:
+    """Rename a mouse's cross-registration output ``<name>`` to its ``-ORIG`` names.
+
+    ``name`` is what the notebook builds from ``f_pattern_prefix`` and ``f_pattern``,
+    e.g. ``crossreg_7`` for ``mappings_crossreg_7.csv``. Readers in ``caban`` go
+    through :func:`original_output_path`, so they keep loading the original.
+    """
+    files = ("mappings_{}.pkl", "mappings_{}.csv", "cents_{}.pkl", "shiftds_{}.nc")
+    return _set_aside(mouse_dir, tuple(f.format(name) for f in files),
+                      "crossreg_set_aside_{}.json".format(name), reason)
 
 
 def resolve_minian_dir(candidate: SessionCandidate, overrides: Optional[dict] = None) -> str:
