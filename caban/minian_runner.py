@@ -297,10 +297,16 @@ def select_sessions(
     labels=None,
     mice=None,
     session_types=None,
+    path=None,
 ) -> List[sq.SessionWork]:
-    """Choose the queue (§8) from the never-processed sessions.
+    """Choose the queue (§8).
 
-    With nothing set, all of them. Each filter that is set must hold (AND); the values
+    ``path`` names exact sessions -- ``<mouse>/<day>/<session>`` or the session's folder --
+    in the order given, processed or not (a production session re-run is a gate run). It
+    stands alone: with any other filter set it is an error.
+
+    Otherwise the queue comes from the never-processed sessions; with nothing set, all of
+    them. Each filter that is set must hold (AND); the values
     within one are alternatives (OR):
 
     - ``labels``: regex patterns searched in ``<mouse>/<day>/<session>`` --
@@ -312,8 +318,18 @@ def select_sessions(
     listed as not queued (parent plan §3.1: the processed ones are never re-run). Stubs
     are listed and left out. A single string stands for a one-item list.
     """
-    labels, mice, session_types = ([v] if isinstance(v, str) else v
-                                   for v in (labels, mice, session_types))
+    labels, mice, session_types, path = ([v] if isinstance(v, str) else v
+                                         for v in (labels, mice, session_types, path))
+    if path:
+        if labels or mice or session_types:
+            raise ValueError("PATH stands alone; set LABELS, MICE and SESSION_TYPES to None")
+        by_key = {i.label: i for i in items}
+        by_key.update({os.path.normpath(i.session_dir): i for i in items})
+        by_key.update({os.path.dirname(os.path.normpath(i.session_dir)): i for i in items})
+        missing = [p for p in path if p.rstrip("/") not in by_key and os.path.normpath(p) not in by_key]
+        if missing:
+            raise KeyError("not found among {} scanned sessions: {}".format(len(items), missing))
+        return [by_key.get(p.rstrip("/"), by_key.get(os.path.normpath(p))) for p in path]
     matching = items
     if labels:
         matching = [i for i in matching if any(re.search(p, i.label) for p in labels)]
@@ -818,13 +834,13 @@ def run_session(
     keep_scratch: bool = False,
     n_workers: Optional[int] = None,
     reason: str = "caban.minian_runner",
-    recompute_yra: bool = True,
+    recompute_yra: Optional[bool] = None,
 ) -> dict:
     """Prepare, execute, report, recompute YrA, re-encode, clean up, record (§5).
 
-    ``recompute_yra`` runs :func:`recompute_yra` on the new output (see there). It is
-    refused for a session with production output, whose recomputed ``YrA`` already
-    occupies the output folder -- pass ``False`` for gate runs.
+    ``recompute_yra`` runs :func:`recompute_yra` on the new output (see there). ``None``
+    runs it except on a session with production output, whose recomputed ``YrA`` already
+    occupies the output folder (a gate run); ``True`` there is refused.
 
     ``keep_scratch`` keeps the intermediates -- for a gate run, which is compared
     against ``minian_intermediate-ORIG`` stage by stage. Any failure is recorded in
@@ -834,6 +850,8 @@ def run_session(
     status = run_status(item)
     if status != "pending":
         raise ValueError("{} is {}, not pending".format(item.label, status))
+    if recompute_yra is None:
+        recompute_yra = not item.candidate.complete_minian_dirs
     if recompute_yra and item.candidate.complete_minian_dirs:
         raise ValueError("{} has production output ({}); its recomputed YrA lives in the "
                          "folder this run would write to. Use recompute_yra=False.".format(

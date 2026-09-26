@@ -389,4 +389,7 @@ Backfilled on the G13 dry run: non-overlapping units match the notebook's `YrA` 
 Choosing sessions (VS): no mode switch — `LABELS`, `MICE`, `SESSION_TYPES`, all filters on the
 never-processed sessions, combined by AND (values within one OR'd). `LABELS` are regex patterns
 searched in `<mouse>/<day>/<session>` (`"track_day0"`). Matches that already have Minian output
-are listed as not queued — production sessions cannot be queued from the notebook (parent §3.1).
+are listed as not queued. `PATH` (VS) is separate and stands alone: exact sessions (label or
+folder), processed or not, in the order given — the way to re-run a processed session as a gate
+run. `run_session(recompute_yra=None)` skips the YrA step on such a session, since production's
+recompute occupies its output folder.
