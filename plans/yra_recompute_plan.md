@@ -534,7 +534,43 @@ real — so the saved `motion.zarr` is not the motion that was applied. The reco
 motion before replaying and before accepting an earlier output, and refuses to write a `YrA` whose
 correlation with `C` is undefined for every unit (commit `c83cd4b`). The bad G05 LT1 output was deleted.
 
-**Open: how to recompute these two.** Motion re-estimation reproduced production exactly on G06 and
-G10 (`minian_batch_runner_plan.md` §13), so re-estimating motion from the `.avi` in `minian-native`,
-checking it against production's saved `max_proj` (exact, as in the gate), then replaying with it,
-would recover them without touching `A`/`C`/`S`. Not built; VS to decide.
+**Was it only NaN motion?** Yes, as far as the outputs show: the five recomputes on disk all have a
+clip floor of 0–0.24 % and median corr(C, YrA) 0.42–0.62, and the four with an old `YrA` agree with it
+at r ≈ 0.9999999 on non-overlapping units — the replay check of §12.3. The bug was a missing guard.
+But a session with **no** old `YrA` (G05 LT2; every recall session) has no independent check of its
+replay: finite-but-wrong motion would still pass. §14.2 closes that.
+
+### 14.1 Recovering the two sessions (VS, 2026-09-26: plan it)
+
+Re-estimate motion the way production did, prove it against production, replay with it.
+`A`/`C`/`S` and the saved `motion.zarr` are never touched.
+
+1. **Re-estimate with the notebook itself**, not re-implemented code: run the protected template
+   (`notebooks/minian_pipeline_BASELINE.ipynb`) through `caban.minian_runner`'s machinery, **cut
+   after the cell that saves `max_proj`** (baseline cell 104) — loading, glow removal, denoise,
+   background removal, `estimate_motion`, `apply_transform`, `max_proj`; no CNMF. One more recorded
+   edit: `minian_ds_path` points at a scratch folder, so nothing is written into the session. About
+   10–20 min per session.
+2. **Prove it**: the re-estimated `max_proj` must equal production's saved `max_proj` exactly
+   (G06 and G10: identical in the gate). That shows the re-estimated motion reproduces the movie
+   production's `A`/`C`/`S` came from.
+3. **Keep it**: copy it into the production folder as `motion_reestimated.zarr`, beside the NaN
+   `motion.zarr`, with a sidecar naming the run, the template md5 and the `max_proj` check.
+4. **Recompute `YrA`** with it: `recompute_session_yra` gains a `motion_name` argument (default
+   `"motion"`) that also enters the input hash, so the sidecar records which motion was used.
+
+Alternative with no new code: re-run the whole notebook on each session via the runner's `PATH`
+(about 1 h each) and take its `motion.zarr` — but that leaves a second full CNMF output beside
+production, against the "one `minian` folder per session" goal (`crossreg_batch_runner_plan.md` §4).
+
+### 14.2 A replay check for every session: `max_proj`
+
+Every production folder saves `max_proj` = max over frames of the motion-corrected movie. The replay
+can compute the same reduction in the same dask pass as `YrA` (nearly free), and compare. This proves
+the replay for sessions with no old `YrA`, and catches finite-but-wrong motion anywhere.
+Tolerance to calibrate on the five existing recomputes before it becomes a hard check: the recompute
+applies motion with `caban`'s cv2 5.0, which differed from production by ±1 grey level in 132 of
+5,972 frames of G06 (`minian_gate.py`, `MOTION_APPLIED_NOTE`) — so expect `max_proj` to match to
+within 1 grey level at a small fraction of pixels, not bit for bit.
+
+Order: 14.2 first (it also re-checks everything already written), then 14.1.
