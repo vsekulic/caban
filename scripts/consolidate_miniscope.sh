@@ -29,7 +29,7 @@ DEST=${DEST:-/Volumes/MINISCOPE}
 SRC_A=/Volumes/1a-MINISCOPE-BAK
 SRC_B=/Volumes/1b-MINISCOPE-BAK
 SRC_C=/Volumes/4-MINISCOPE   # third drive: G22-G31, plus Yijun/Yinghao test data (2026-09-23)
-LOG="$DEST/consolidate.log"
+LOG="$DEST/_provenance/consolidate.log"
 NEED_GB=3700   # refuse to start without room for the whole thing plus headroom
 
 # macOS ships openrsync, not GNU rsync: no --info=progress2, no --no-perms/--no-owner/
