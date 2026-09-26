@@ -131,6 +131,34 @@ NOTEBOOK_DEL_FRAMES = {
 NOTEBOOK_DEL_FRAMES_DEFAULT: List[int] = []
 
 
+# Videos production never read, per session: recordings whose last files were never
+# finalised, so their header carries no frame count (`ffprobe` nb_frames N/A) --
+# Minian's load_avi_lazy needs it and cannot have read them. Established 2026-09-26
+# (plan §15): production's C frame count equals exactly the sum over the remaining
+# files, and the replay's own frame-count check re-proves that every run. Listed
+# explicitly rather than skipped by rule, so an unreadable file anywhere else is
+# still a hard failure.
+UNUSED_VIDEOS = {
+    # 19.avi: 865 decodable frames, no header count; at the end of the recording.
+    "G15-ST721-hM4D/2022_01_13-TFC_test_B/16_19_13-TFC_test_B": ["19.avi"],
+    # 11.avi: 593 decodable frames; 12.avi, 13.avi: 14 KB, no frames. In the MIDDLE of
+    # the recording: production's C skips 3,000 timestamp rows after frame 10,999 (§15).
+    "G21-ST762-hM4D/2022_03_24-TFC_test_B/14_35_02-TFC_test_B": ["11.avi", "12.avi", "13.avi"],
+}
+
+
+def _session_tail(session_dir: str) -> str:
+    parts = os.path.normpath(session_dir).split(os.sep)
+    if parts and parts[-1] == "Miniscope":
+        parts = parts[:-1]
+    return "/".join(parts[-3:])
+
+
+def unused_videos(session_dir: str) -> List[str]:
+    """The ``.avi`` files production did not read for this session (see :data:`UNUSED_VIDEOS`)."""
+    return list(UNUSED_VIDEOS.get(_session_tail(session_dir), []))
+
+
 def notebook_del_frames(session_dir: str) -> List[int]:
     """The ``del_frames`` the pipeline notebook recorded for this session.
 
@@ -138,11 +166,7 @@ def notebook_del_frames(session_dir: str) -> List[int]:
     root the data is read from.  See :data:`NOTEBOOK_DEL_FRAMES` for where the table
     comes from and why the default is empty.
     """
-    parts = os.path.normpath(session_dir).split(os.sep)
-    if parts and parts[-1] == "Miniscope":
-        parts = parts[:-1]
-    tail = "/".join(parts[-3:])
-    return list(NOTEBOOK_DEL_FRAMES.get(tail, NOTEBOOK_DEL_FRAMES_DEFAULT))
+    return list(NOTEBOOK_DEL_FRAMES.get(_session_tail(session_dir), NOTEBOOK_DEL_FRAMES_DEFAULT))
 
 
 # ---------------------------------------------------------------------------
@@ -221,12 +245,30 @@ def load_avi_lazy(fname: str) -> darr.Array:
     )
 
 
+def _video_list(vpath: str, pattern: str, exclude=()) -> List[str]:
+    """The videos matching ``pattern``, natsorted, minus ``exclude`` (basenames).
+
+    Every name in ``exclude`` must exist, so a stale exclusion is an error, not a no-op.
+    """
+    names = [v for v in os.listdir(vpath) if re.search(pattern, v)]
+    missing = [e for e in exclude if e not in names]
+    if missing:
+        raise FileNotFoundError("videos to exclude not found in {}: {}".format(vpath, missing))
+    vlist = natsorted([os.path.join(vpath, v) for v in names if v not in exclude])
+    if not vlist:
+        raise FileNotFoundError(
+            "No data with pattern {} found in the specified folder {}".format(pattern, vpath)
+        )
+    return vlist
+
+
 def load_videos(
     vpath: str,
     pattern=r"msCam[0-9]+\.avi$",
     dtype=np.float64,
     downsample=None,
     downsample_strategy="subset",
+    exclude=(),
 ) -> xr.DataArray:
     """Load and concatenate the videos in a folder into an ``xr.DataArray``.
 
@@ -234,17 +276,13 @@ def load_videos(
     branch and the ``post_process`` hook are dropped (this pipeline uses neither,
     and an unsupported extension still raises), and the trailing
     ``custom_arr_optimize`` dask-graph rewrite is dropped -- it is a scheduler
-    optimisation with no effect on values.
+    optimisation with no effect on values.  Addition: ``exclude`` drops named files
+    (see :data:`UNUSED_VIDEOS`).
     """
     vpath = os.path.normpath(vpath)
-    vlist = natsorted(
-        [vpath + os.sep + v for v in os.listdir(vpath) if re.search(pattern, v)]
-    )
-    if not vlist:
-        raise FileNotFoundError(
-            "No data with pattern {} found in the specified folder {}".format(pattern, vpath)
-        )
-    print("loading {} videos in folder {}".format(len(vlist), vpath))
+    vlist = _video_list(vpath, pattern, exclude)
+    print("loading {} videos in folder {}{}".format(
+        len(vlist), vpath, " (excluding {})".format(list(exclude)) if exclude else ""))
 
     file_extension = os.path.splitext(vlist[0])[1]
     if file_extension not in (".avi", ".mkv"):
@@ -474,16 +512,9 @@ def derive_deleted_frames(n_video_frames: int, frame_coord: np.ndarray) -> list:
     return sorted(set(range(n_video_frames)) - set(frame_coord.tolist()))
 
 
-def count_video_frames(video_dir: str, pattern: str) -> int:
+def count_video_frames(video_dir: str, pattern: str, exclude=()) -> int:
     """Total frame count over the ``.avi`` files the replay will read."""
-    vlist = natsorted(
-        [os.path.join(video_dir, v) for v in os.listdir(video_dir) if re.search(pattern, v)]
-    )
-    if not vlist:
-        raise FileNotFoundError(
-            "No data with pattern {} found in the specified folder {}".format(pattern, video_dir)
-        )
-    return sum(probe_video(v)["n_frames"] for v in vlist)
+    return sum(probe_video(v)["n_frames"] for v in _video_list(video_dir, pattern, exclude))
 
 
 def replay_motion_corrected_movie(
@@ -491,6 +522,7 @@ def replay_motion_corrected_movie(
     motion: xr.DataArray,
     del_frames: list,
     frame_chunk: int = DEFAULT_FRAME_CHUNK,
+    exclude_videos=(),
 ) -> xr.DataArray:
     """Regenerate ``Y``: the motion-corrected, background-removed movie.
 
@@ -498,7 +530,7 @@ def replay_motion_corrected_movie(
     order.  The result is lazy -- nothing but the per-pixel minimum used for glow
     removal is computed here.
     """
-    varr = load_videos(video_dir, **PARAM_LOAD_VIDEOS)
+    varr = load_videos(video_dir, exclude=exclude_videos, **PARAM_LOAD_VIDEOS)
     if del_frames:
         varr = varr.where(~varr.frame.isin(del_frames), drop=True).astype("uint8")
     # The notebook's `subset = dict(frame=slice(0, None))` and `subset_mc = None`,
@@ -1048,13 +1080,16 @@ def recompute_session_yra(
             print(format_report(done["report"]))
             return done
 
-    n_video_frames = count_video_frames(session_dir, PARAM_LOAD_VIDEOS["pattern"])
+    excluded_videos = unused_videos(session_dir)
+    n_video_frames = count_video_frames(session_dir, PARAM_LOAD_VIDEOS["pattern"], excluded_videos)
     del_frames_derived = derive_deleted_frames(n_video_frames, C.frame.values)
 
     print("session      : {}".format(session_dir))
     print("minian output: {}".format(minian_dir))
     print("units        : {}   frames in C: {}   frames in videos: {}".format(
         len(S_unit_id), C.sizes["frame"], n_video_frames))
+    if excluded_videos:
+        print("unused videos: {} (never read by production; UNUSED_VIDEOS)".format(excluded_videos))
     print("del_frames   : derived {}  |  notebook {}".format(
         del_frames_derived or "[]", list(del_frames_notebook) or "[]"))
     if dry_run:
@@ -1062,7 +1097,8 @@ def recompute_session_yra(
         return {"dry_run": True, "del_frames_derived": del_frames_derived,
                 "del_frames_notebook": list(del_frames_notebook)}
 
-    Y = replay_motion_corrected_movie(session_dir, motion, del_frames_derived, frame_chunk)
+    Y = replay_motion_corrected_movie(session_dir, motion, del_frames_derived, frame_chunk,
+                                      exclude_videos=excluded_videos)
 
     movie_check = None
     if saved_movie_path:
@@ -1116,6 +1152,7 @@ def recompute_session_yra(
         "param_background_removal": PARAM_BACKGROUND_REMOVAL,
         "frame_chunk": frame_chunk,
         "del_frames": del_frames_derived,
+        "unused_videos": excluded_videos,
         "n_video_frames": n_video_frames,
         "input_hashes": {
             name: hash_zarr_store(os.path.join(minian_dir, name + ".zarr"))

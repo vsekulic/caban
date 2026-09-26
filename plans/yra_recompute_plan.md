@@ -574,3 +574,37 @@ applies motion with `caban`'s cv2 5.0, which differed from production by ±1 gre
 within 1 grey level at a small fraction of pixels, not bit for bit.
 
 Order: 14.2 first (it also re-checks everything already written), then 14.1.
+
+## 15. Unfinished recordings, and a timing gap in G21 TFC_test_B (2026-09-27)
+
+The overnight batch finished **126 of 130**. The two §14 NaN-motion sessions failed as expected. Two more
+failed on frame counting: **G15 `2022_01_13-TFC_test_B/16_19_13-TFC_test_B`** and **G21
+`2022_03_24-TFC_test_B/14_35_02-TFC_test_B`** contain `.avi` files whose header was never finalised
+(`ffprobe` `nb_frames` N/A), which `probe_video` did not handle.
+
+| session | files without a header count | frames in the files that have one | production `C` frames | `timeStamps.csv` rows |
+|---|---|---|---|---|
+| G15 TFC_test_B | `19.avi` (865 decodable frames) — **at the end** | 19,000 | 19,000 | 19,866 |
+| G21 TFC_test_B | `11.avi` (593 decodable), `12.avi`, `13.avi` (14 KB, empty) — **in the middle** | 14,856 | 14,856 | 17,856 |
+
+Production never read those files — Minian's `load_avi_lazy` needs the header count — so its `C` is
+exactly the other files. `yra_recompute.UNUSED_VIDEOS` now lists them per session (explicitly, not by
+rule: an unreadable file anywhere else is still a hard failure), the replay leaves them out, and the
+replay's frame-count check against `C` re-proves the list every run. Both sessions then recomputed
+cleanly (corr(C, YrA) median 0.37 and 0.43 — in step with `C`, which a misplaced gap would break).
+**130 of 132 accounted for: 128 done, the 2 NaN-motion sessions pending §14.1.**
+
+A scan of all 130 production sessions for `C` frames ≠ timestamp rows finds only these, plus G09
+`2021_11_08-TFC_cond/18_54_05-TFC_cond` (19,000 frames, 19,586 timestamps, every file readable —
+the extra timestamps have no video frames, presumably at the end).
+
+### 15.1 Open: G21 TFC_test_B's frames after 10,999 are 3,000 timestamps late in the analyses
+
+`sessions.py` (`get_timestamps`, `find_exp_boundaries`) uses the `timeStamps.csv` row number as the
+frame index into `C`. In G21 TFC_test_B, `C` frame 11,000 was recorded at timestamp row 14,000
+(files 11–13 missing, 1,000 timestamp rows each), so every frame from 11,000 to 14,855 is paired with
+a timestamp **3,000 frames (150 s at 20 fps) too early**, and an experiment boundary past row 14,855
+points beyond the end of `C`. This is in the existing, published pipeline, independent of the YrA work,
+and affects one conditioning-test session. Not fixed here: the fix belongs in the loader (map `C`
+frames to timestamp rows through the files actually read), and whether any published G21 Test_B
+result moves has to be checked. G15's unused file is at the end, so its alignment is unaffected.
