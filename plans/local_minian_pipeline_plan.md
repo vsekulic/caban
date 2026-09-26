@@ -600,6 +600,12 @@ mismatch:
 Stages 1–3 should be reproducible to floating-point tolerance. From stage 4 on,
 divergence is expected and the question becomes how much.
 
+**Result on `09_52_24-HC1`, 2026-09-26** (`minian_batch_runner_plan.md` §13): stages 1–3 exact,
+`A_init`/`C_init` exact; divergence starts at the first merge and becomes 105 vs 334 units after
+the second update. The reference intermediates date from 2022-02-22, from a run with no
+surviving notebook, on a session never cross-registered — so they calibrate reproducibility
+only up to seeding, not the final unit set.
+
 ### 6.2 Acceptance must be distributional from stage 4 on
 
 CNMF-E is not deterministic and we already know by how much: the same session re-run gave

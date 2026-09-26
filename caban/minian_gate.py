@@ -242,8 +242,14 @@ def run_gate(session_dir: str, out_dir: Optional[str] = None,
         stages.append(result)
         passed = result.get("passed", True)
         blocking = result.get("blocking", True)
-        print("  {:26s} {}".format(result["stage_array"], "pass" if passed else
-                                   ("MISMATCH" if blocking else "differs (diagnostic)")))
+        if result["kind"] == "distributional":
+            checks = result["provisional_checks"]
+            verdict = "{}/{} provisional §6.2 checks met ({})".format(
+                sum(checks.values()), len(checks),
+                ", ".join(k for k, v in checks.items() if not v) or "all")
+        else:
+            verdict = "pass" if passed else ("MISMATCH" if blocking else "differs (diagnostic)")
+        print("  {:26s} {}".format(result["stage_array"], verdict))
         if not passed and blocking and report["first_mismatch"] is None:
             report["first_mismatch"] = result["stage_array"]
         return passed or not blocking

@@ -1,7 +1,8 @@
 # Plan: a top-level runner that executes the Minian pipeline notebook over many sessions
 
-Status: **§11 steps 1–3 done** (2026-09-26): `caban/minian_runner.py`,
-`notebooks/run_minian_pipeline.ipynb`, dry run passed; see §13. Next: step 4, the gate.
+Status: **§11 steps 1–3 done; step 4 run, not passed** (2026-09-26): stages 1–3 and seed
+initialisation reproduce exactly, the final unit set does not; see §13. Awaiting VS's decision
+on what the gate should be calibrated against.
 Depends on: `plans/local_minian_pipeline_plan.md` — the `minian-native` env (§4.2), the
 `-ORIG` set-aside and `--scratch` link (§5.2), the gate (§6), the queue in
 `caban/session_queue.py` (§9). This plan is §9's "shape of the code", revised by VS's
@@ -307,3 +308,35 @@ measured on G06 in §7, presumably content-dependent.
 - The notebook's ffmpeg writes its progress into `papermill.log`; the progress reader now
   scans the whole log for papermill's last cell count.
 - Empty `<mouse>/<day>/<session>/` folders stay under `minian_scratch/` after cleanup.
+
+**Step 4, gate run** (2026-09-26): G06 `2021_10_18-TFC_cond/09_52_24-HC1`, 5,972 frames,
+`keep_scratch=True`; 15 min wall, peak 5.1 GB. Compared by `caban/minian_gate.py`; report at
+`<session>/Miniscope/minian_run/gate_report.json`, figures `gate_units_*.png` beside it.
+
+| stage | result |
+|---|---|
+| `varr`, `varr_ref` | identical |
+| `motion` (re-estimated) | identical, all 5,972 frames |
+| `Y_fm_chk` (re-run) | identical |
+| `Y_fm_chk` (2021 motion applied in `caban`, cv2 5.0) | ±1 in 132 frames — diagnostic only |
+| `sn_spatial` / `max_res` | rel. diff 4e-15 / 0 |
+| `A_init`/`C_init` | 450 = 450, all matched, corr 1.000 |
+| `A_mrg` | 325 → 334; 275 matched with centroid shift ~1e-13 px (identical footprints), corr median 0.947 |
+| final `A`/`C` | **105 → 334**; 89 of 105 matched (85 %), matched corr median 0.973, p5 0.82 |
+
+So the pipeline reproduces everything deterministic, exactly, and the two runs share most
+footprints through the first CNMF update. They differ in which units merge, and then
+decisively in the second spatial/temporal update: the reference run went 325 → 105, the re-run
+334 → 334. Many of the 245 re-run-only footprints are large or ragged; the reference's are compact.
+
+**What the reference is.** The "2021" intermediates are dated **2022-02-22**, four months after
+the recording. This session has no `minian_crossreg*`, and HC sessions were never
+cross-registered (`local_minian_pipeline_plan.md` §2), so this output never fed a published
+number. No surviving notebook matches it: the two that name `09_52_24` (`prev/pipeline-WORKING_clean`,
+`prev/pipeline-WORKING_prev`) use `pnr_refine noise_freq 0.02`, which would have given
+different seeds, whereas the seeds here are identical. The fork's CNMF code is unchanged since
+2021-09-10. So the reference ran the template's parameters up to seeding, then something else
+in the CNMF updates — parameters or solver versions — that no record shows.
+
+Also: `local_minian_pipeline_plan.md` §3.2 lists `seeds_init max_wnd 7`. The template has 15,
+and identical seeds show the 2022 run used 15 as well.
