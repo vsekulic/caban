@@ -386,6 +386,7 @@ Backfilled on the G13 dry run: non-overlapping units match the notebook's `YrA` 
 (the replay is right); overlapping ones differ (r ≥ 0.984) because the notebook's `YrA` uses
 `C` from before the second temporal update and the recompute uses the final `C`.
 
-Choosing sessions (VS): no mode switch — `LABELS`, `MICE`, `SESSION_TYPES`. All `None` =
-never-processed; `LABELS` stands alone (exact sessions, processed or not); `MICE` and
-`SESSION_TYPES` narrow the never-processed set and combine by AND (values within one are OR'd).
+Choosing sessions (VS): no mode switch — `LABELS`, `MICE`, `SESSION_TYPES`, all filters on the
+never-processed sessions, combined by AND (values within one OR'd). `LABELS` are regex patterns
+searched in `<mouse>/<day>/<session>` (`"track_day0"`). Matches that already have Minian output
+are listed as not queued — production sessions cannot be queued from the notebook (parent §3.1).

@@ -298,33 +298,37 @@ def select_sessions(
     mice=None,
     session_types=None,
 ) -> List[sq.SessionWork]:
-    """Choose the queue (§8).
+    """Choose the queue (§8) from the never-processed sessions.
 
-    - Nothing set: every never-processed session (stubs listed and left out).
-    - ``labels``: exactly these ``<mouse>/<day>/<session>``, in that order, processed or
-      not. Stands alone -- with ``mice`` or ``session_types`` also set it is an error.
-    - ``mice`` and/or ``session_types``: never-processed sessions of those mice (G05 or
-      G08) whose type starts with one of those prefixes (``"HC"`` = HC1-HC4). Both set
-      means both must hold: ``mice=["G05"], session_types=["HC"]`` is G05's HC sessions.
+    With nothing set, all of them. Each filter that is set must hold (AND); the values
+    within one are alternatives (OR):
 
-    A single string stands for a one-item list.
+    - ``labels``: regex patterns searched in ``<mouse>/<day>/<session>`` --
+      ``"track_day0"``, ``"2021_08_20"``, a full label, ``"HC[12]$"``;
+    - ``mice``: e.g. ``["G05", "G08"]``;
+    - ``session_types``: type prefixes, e.g. ``["HC"]`` (HC1-HC4) or ``["LT", "CNO"]``.
+
+    Sessions that match but already have Minian output (production, or partial) are
+    listed as not queued (parent plan §3.1: the processed ones are never re-run). Stubs
+    are listed and left out. A single string stands for a one-item list.
     """
     labels, mice, session_types = ([v] if isinstance(v, str) else v
                                    for v in (labels, mice, session_types))
+    matching = items
     if labels:
-        if mice or session_types:
-            raise ValueError("LABELS stands alone; set MICE and SESSION_TYPES to None")
-        by_label = {i.label: i for i in items}
-        missing = [w for w in labels if w not in by_label]
-        if missing:
-            raise KeyError("not found among {} scanned sessions: {}".format(len(items), missing))
-        return [by_label[w] for w in labels]
-    fresh = [i for i in items if is_never_processed(i)]
+        matching = [i for i in matching if any(re.search(p, i.label) for p in labels)]
     if mice:
-        fresh = [i for i in fresh if i.mouse in mice]
+        matching = [i for i in matching if i.mouse in mice]
     if session_types:
-        fresh = [i for i in fresh
-                 if any(re.match(p, session_type(i.session)) for p in session_types)]
+        matching = [i for i in matching
+                    if any(re.match(p, session_type(i.session)) for p in session_types)]
+    fresh = [i for i in matching if is_never_processed(i)]
+    if labels or mice or session_types:
+        have_output = [i for i in matching if not is_never_processed(i)]
+        print("{} sessions match; {} already have Minian output, not queued{}".format(
+            len(matching), len(have_output), ":" if have_output else "."))
+        for item in have_output:
+            print("  " + item.label)
     stubs = [i for i in fresh if is_stub(i)]
     print("{} never-processed sessions in this selection; {} of them are stubs, left out{}".format(
         len(fresh), len(stubs), ":" if stubs else "."))
