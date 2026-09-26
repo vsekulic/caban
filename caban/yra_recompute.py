@@ -38,7 +38,7 @@ files.
 Vendored Minian code
 --------------------
 The five operations above come from the Minian fork at
-``~/cbp-db/vsekulic/minian_vsekulic`` (commit :data:`MINIAN_SOURCE_COMMIT`).  They
+``~/code/minian_vsekulic`` (commit :data:`MINIAN_SOURCE_COMMIT`).  They
 are vendored here rather than installed: Minian pins numpy 1.20 against this
 environment's 2.4, so installing it would mean a second environment for five
 functions, four of which are thin wrappers around cv2 and SimpleITK.  Each
@@ -68,7 +68,7 @@ from skimage.morphology import disk
 from caban import session_queue as sq
 
 # Provenance of the vendored code below.
-MINIAN_SOURCE_REPO = "minian_vsekulic (origin/vsekulic_v4), mirrored at ~/cbp-db/vsekulic/minian_vsekulic"
+MINIAN_SOURCE_REPO = "minian_vsekulic (origin/vsekulic_v4), at ~/code/minian_vsekulic"
 MINIAN_SOURCE_COMMIT = "a3216ae2d9a1231146cdd9540f759f5fccbf7450"
 
 # Preprocessing parameters, read out of the parameter cell of
@@ -94,10 +94,10 @@ DEFAULT_FRAME_CHUNK = 250
 OUTPUT_ARRAY_NAME = "YrA_recomputed.zarr"
 SIDECAR_NAME = "YrA_recompute.json"
 
-# Where the raw sessions live.  Both backup drives are mounted read-only, which is
-# why the output goes to DEFAULT_OUTPUT_ROOT rather than beside A/C/S.
+# Where the raw sessions live.  The output goes beside the A/C/S it was computed from
+# (VS, 2026-09-26): YrA_recomputed.zarr and its sidecar inside that minian_crossreg*
+# (or minian/) folder, next to the exported YrA.zarr, which is never touched.
 DATA_ROOTS = sq.DATA_ROOTS_BACKUP
-DEFAULT_OUTPUT_ROOT = "~/cbp-db/yra_recomputed"
 
 # A session is work for this module exactly when it has numbered .avi files and one
 # minian_crossreg* folder holding all of these.  Globbing the folder rather than
@@ -108,7 +108,7 @@ MOUSE_DIR_PATTERN = sq.MOUSE_DIR_PATTERN
 REQUIRED_MINIAN_ARRAYS = sq.REQUIRED_MINIAN_ARRAYS
 
 # Per-session `del_frames`, harvested from every notebook in the Minian mirror
-# (~/cbp-db/vsekulic, all 60 *.ipynb including .ipynb_checkpoints and prev/).
+# (the RIKEN share mirror, now /Volumes/MINISCOPE/riken_share_mirror/vsekulic; all 60 *.ipynb including .ipynb_checkpoints and prev/).
 #
 # The scan found exactly one session anywhere in the corpus with a non-empty value,
 # and it is not in this cohort: G25 is an SGFR1 mouse outside G05-G21 and its data is
@@ -846,7 +846,6 @@ def compare_replayed_movie(Y_new: xr.DataArray, saved_movie_path: str, n_frames:
 
 def discover_sessions(
     roots=None,
-    output_root: str = DEFAULT_OUTPUT_ROOT,
     mouse_pattern: str = sq.MOUSE_DIR_PATTERN,
     minian_dir_overrides: Optional[dict] = None,
 ) -> List[sq.SessionWork]:
@@ -864,10 +863,11 @@ def discover_sessions(
     for candidate in candidates:
         if not candidate.n_avi or not candidate.complete_minian_dirs:
             continue
+        minian_dir = sq.resolve_minian_dir(candidate, minian_dir_overrides)
         items.append(sq.SessionWork(
             candidate=candidate,
-            minian_dir=sq.resolve_minian_dir(candidate, minian_dir_overrides),
-            output_dir=sq.session_output_dir(candidate, output_root),
+            minian_dir=minian_dir,
+            output_dir=minian_dir,
         ))
     print("  -> {} of these are work for the YrA recompute".format(len(items)))
     return items

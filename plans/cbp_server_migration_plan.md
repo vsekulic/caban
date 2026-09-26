@@ -2,9 +2,12 @@
 
 Status: **mirror complete and verified 2026-09-22; two items earmarked (§5b).** Access ends within days. Written for VS on
 `osgiliath` (MacBook Pro, **arm64**, macOS 26.6).
-Mirror destination: **`~/cbp-db/vsekulic/`** — host/share structure preserved, so `~/cbp-ndb/` can
-hold that server's shares later without collision. Driven by `~/cbp-db/mirror_cbp_db.sh`
-(restartable; log at `~/cbp-db/mirror.log`).
+Mirror location: **`/Volumes/MINISCOPE/riken_share_mirror/vsekulic/`**, moved there 2026-09-26
+(VS: not on the local disk, and nothing named after the obsolete RIKEN host); verified identical by
+checksum (1,655 files) before `~/cbp-db` was deleted. The scripts and log moved with it
+(`riken_share_mirror/mirror_cbp_db.sh`, `mirror.log`); they still name their original
+`~/cbp-db` destination and are kept as a record, not for re-running. Below, `~/cbp-db/vsekulic/`
+is the original location, as it was when this plan was written.
 Share: `//vsekulic@cbp-db.bnf.brain.riken.jp/vsekulic` → `/Volumes/vsekulic`.
 Goal: be able to run the Minian framework as it ran on the server, and keep anything else on that
 share that is not reproducible from elsewhere.

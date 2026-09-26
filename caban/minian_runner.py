@@ -793,8 +793,8 @@ def _remove_scratch(session_dir: str, scratch: str) -> None:
 
 
 def yra_output_dir(item: sq.SessionWork) -> str:
-    """Where :func:`recompute_yra` writes: beside the production sessions' recomputes."""
-    return sq.session_output_dir(item.candidate, yr.DEFAULT_OUTPUT_ROOT)
+    """Where :func:`recompute_yra` writes: the run's own ``minian/``, beside ``A``/``C``/``S``."""
+    return os.path.join(item.session_dir, OUTPUT_NAME)
 
 
 def recompute_yra(item: sq.SessionWork, n_workers: Optional[int] = None) -> dict:
@@ -804,15 +804,13 @@ def recompute_yra(item: sq.SessionWork, n_workers: Optional[int] = None) -> dict
     see :func:`unit_counts`), so the same recompute the production sessions get is run
     here, unchanged: the movie is replayed from the ``.avi`` files and ``YrA`` computed
     against the saved ``A``/``C``/``b``/``f``, which puts ``S``'s ``unit_id`` on it by
-    construction. Output: ``YrA_recomputed.zarr`` and its sidecar in
-    :func:`yra_output_dir`; ``minian/YrA.zarr`` is untouched and serves as the comparison.
+    construction. Output: ``YrA_recomputed.zarr`` and its sidecar in ``minian/`` beside
+    ``A``/``C``/``S`` (:func:`yra_output_dir`); ``minian/YrA.zarr`` is untouched and serves
+    as the comparison.
     While the run's scratch still exists, the replayed movie is also checked against
     its saved ``Y_fm_chk``.
     """
     session_dir = item.session_dir
-    if item.candidate.complete_minian_dirs:
-        raise ValueError("{} has production output; its recomputed YrA is in {} already"
-                         .format(item.label, yra_output_dir(item)))
     minian_dir = os.path.join(session_dir, OUTPUT_NAME)
     saved_movie = os.path.join(session_dir, sq.SCRATCH_DIR_NAME, "Y_fm_chk.zarr")
     with dask.config.set(scheduler="threads", num_workers=n_workers or 6):
@@ -834,13 +832,13 @@ def run_session(
     keep_scratch: bool = False,
     n_workers: Optional[int] = None,
     reason: str = "caban.minian_runner",
-    recompute_yra: Optional[bool] = None,
+    recompute_yra: bool = True,
 ) -> dict:
     """Prepare, execute, report, recompute YrA, re-encode, clean up, record (§5).
 
-    ``recompute_yra`` runs :func:`recompute_yra` on the new output (see there). ``None``
-    runs it except on a session with production output, whose recomputed ``YrA`` already
-    occupies the output folder (a gate run); ``True`` there is refused.
+    ``recompute_yra`` runs :func:`recompute_yra` on the new output (see there). It writes
+    into the run's own ``minian/``, so a gate re-run of a production session is safe too:
+    production's recompute sits in its ``minian_crossreg*`` folder.
 
     ``keep_scratch`` keeps the intermediates -- for a gate run, which is compared
     against ``minian_intermediate-ORIG`` stage by stage. Any failure is recorded in
@@ -850,12 +848,6 @@ def run_session(
     status = run_status(item)
     if status != "pending":
         raise ValueError("{} is {}, not pending".format(item.label, status))
-    if recompute_yra is None:
-        recompute_yra = not item.candidate.complete_minian_dirs
-    if recompute_yra and item.candidate.complete_minian_dirs:
-        raise ValueError("{} has production output ({}); its recomputed YrA lives in the "
-                         "folder this run would write to. Use recompute_yra=False.".format(
-                             item.label, item.candidate.complete_minian_dirs))
     template = load_template()
     if not os.path.isdir(MINIAN_FORK_DIR):
         raise FileNotFoundError("minian fork not found at {}".format(MINIAN_FORK_DIR))

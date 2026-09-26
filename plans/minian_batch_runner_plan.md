@@ -377,10 +377,11 @@ longer fails on it. A run that failed only after the notebook finishes with
 **Step 2 per session: recompute `YrA`** (VS, 2026-09-26). The notebook's `YrA.zarr` can hold
 wrong units (above), so every new run gets the production sessions' recompute: after the
 report, `run_session` calls `caban.yra_recompute.recompute_session_yra` unchanged on the new
-`minian/`, writing `YrA_recomputed.zarr` + sidecar to `~/cbp-db/yra_recomputed/<mouse>/<day>/<session>/`
-beside the production recomputes. While the scratch exists, the replayed movie is also checked
-against the run's saved `Y_fm_chk`. It is refused for sessions with production output (their
-recompute already occupies that folder), so gate runs pass `recompute_yra=False`. The queue
+`minian/`, writing `YrA_recomputed.zarr` + sidecar into that same `minian/`, beside `A`/`C`/`S`
+(moved there from `~/cbp-db/yra_recomputed` on 2026-09-26, VS; production recomputes likewise
+sit in their `minian_crossreg*`). While the scratch exists, the replayed movie is also checked
+against the run's saved `Y_fm_chk`. Since each recompute sits in its own run's folder, a gate
+re-run of a production session recomputes into its new `minian/` without touching production's. The queue
 table's `YrA_recomputed` column reads DONE only for a recompute made from that run's own `minian/`.
 Backfilled on the G13 dry run: non-overlapping units match the notebook's `YrA` at r ≥ 0.999999
 (the replay is right); overlapping ones differ (r ≥ 0.984) because the notebook's `YrA` uses
@@ -391,5 +392,4 @@ never-processed sessions, combined by AND (values within one OR'd). `LABELS` are
 searched in `<mouse>/<day>/<session>` (`"track_day0"`). Matches that already have Minian output
 are listed as not queued. `PATH` (VS) is separate and stands alone: exact sessions (label or
 folder), processed or not, in the order given — the way to re-run a processed session as a gate
-run. `run_session(recompute_yra=None)` skips the YrA step on such a session, since production's
-recompute occupies its output folder.
+run.

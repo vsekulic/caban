@@ -354,6 +354,12 @@ Output at `~/cbp-db/yra_recomputed/G10/2021_11_23-TFC_cond/16_32_14-TFC_cond/YrA
 `YrA_recompute.json` sidecar. The BAK drives are mounted read-only, so the output
 is staged locally rather than written beside `A`/`C`/`S`.
 
+> **Moved 2026-09-26** (VS): recomputed `YrA` now lives beside the `A`/`C`/`S` it was computed
+> from — `YrA_recomputed.zarr` + `YrA_recompute.json` inside the session's `minian_crossreg*`
+> folder on MINISCOPE (`discover_sessions` sets `output_dir = minian_dir`). The G10 and G05 LT1
+> outputs were moved there and still pass `completed_run` against the MINISCOPE inputs.
+> `~/cbp-db/yra_recomputed` no longer exists.
+
 ### 12.1 Hard checks — all passed
 
 | check | result |

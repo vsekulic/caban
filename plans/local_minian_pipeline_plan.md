@@ -204,7 +204,7 @@ per-session-type notebook in `prev/` — opened in Jupyter and run. What that to
   only one importable.
 - *Where it runs.* A working copy of the fork at `~/code/minian_vsekulic` (clone of
   `vsekulic_v4`; the `WORKING` notebooks and `prev/` are untracked in git and were copied from the
-  `~/cbp-db` mirror, which stays untouched). Launch: `cd ~/code/minian_vsekulic && conda
+  RIKEN share mirror, now `/Volumes/MINISCOPE/riken_share_mirror/vsekulic`, which stays untouched). Launch: `cd ~/code/minian_vsekulic && conda
   activate minian-native && jupyter notebook` — classic Notebook 6 in a browser, as the server
   did; the 2021 bokeh/panel viewers are not expected to work in VS Code's renderer.
 - *Verified:* the notebooks' own import cells, `hv.notebook_extension("bokeh")` and the
