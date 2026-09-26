@@ -320,7 +320,8 @@ def select_sessions(
         chosen = [i for i in fresh if not is_stub(i)]
         print("{} of {} sessions never processed; {} of them are stubs, left out:".format(
             len(fresh), len(items), len(stubs)))
-        print("  " + ", ".join(i.label for i in stubs))
+        for stub in stubs:
+            print("  " + stub.label)
     else:
         raise ValueError("which must be 'never_processed', 'gate' or 'labels', not {!r}".format(which))
     if mice:
@@ -364,7 +365,12 @@ def _status_columns(item: sq.SessionWork, record: dict) -> dict:
 
 
 def queue_status(items: List[sq.SessionWork]) -> pd.DataFrame:
-    return sq.queue_frame(items, SIDECAR_NAME, OUTPUT_NAME, extra_columns=_status_columns)
+    """One row per session, indexed mouse -> day -> session so each prints once.
+
+    ``done`` from the shared queue frame is dropped: ``status`` says the same and more.
+    """
+    frame = sq.queue_frame(items, SIDECAR_NAME, OUTPUT_NAME, extra_columns=_status_columns)
+    return frame.drop(columns="done").set_index(["mouse", "day", "session"]).sort_index()
 
 
 def pending_items(items: List[sq.SessionWork]) -> List[sq.SessionWork]:
