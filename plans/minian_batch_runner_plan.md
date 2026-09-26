@@ -147,7 +147,7 @@ notebook's own file is already lossy (crf 18). Over ~657 sessions: ~330 GB at th
 setting vs ~35 GB at crf 23.
 
 Decided (VS, 2026-09-26): same pixel dimensions, compressed only.
-- `minian.mp4` — **re-encoded in place** at crf 23 (proposed; VS to confirm), after the
+- `minian.mp4` — **re-encoded in place** at **crf 23** (VS, 2026-09-26), after the
   re-encode is verified readable with the right frame count. Still the full 2×2 sanity check.
 - `minian_mc.mp4` — likewise.
 - **Two extra runner-made videos**, small, in `minian_run/`, the notebook's video untouched:
