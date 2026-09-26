@@ -205,3 +205,37 @@ Same four-cell shape as `recompute_yra.ipynb`, code in `caban/minian_runner.py`:
 4. **Gate**: G06 `2021_10_18-TFC_cond/09_52_24-HC1` — set aside, run, compare stage by stage
    against `minian_intermediate-ORIG/` (parent plan §6.1). Nothing is batched before it passes.
 5. Batch in the parent plan's §8 order.
+
+## 12. Working notes for whoever implements this
+
+Practical gotchas found while setting this up (2026-09-23 → 26), not recorded elsewhere:
+
+- **Activating envs:** `source ~/bin/conda-init.sh && conda activate <env>` (it evals
+  `conda shell.zsh hook`). `python`/`conda` are not on `PATH` otherwise. Each tool-driven shell
+  command starts fresh, so prefix every command with it: `caban` for the runner, the queue and
+  the set-aside scripts; `minian-native` for anything that imports `minian`.
+- **Shell:** zsh, with `grep` aliased to `ugrep` — `grep -e "-x"` style patterns and some flags
+  behave differently; use `/usr/bin/grep` in scripts. A space-separated list held in one zsh
+  variable does **not** word-split in `for x in $LIST` — use arrays or Python.
+- **Dask from a piped script gets no workers.** `LocalCluster` launched from Python read on
+  stdin (`python - <<EOF`) starts with `{}` workers on macOS (spawn cannot re-import `<stdin>`).
+  Test cluster code as a real notebook (`jupyter nbconvert --execute`) or a `.py` file with an
+  `if __name__ == "__main__":` guard.
+- **Notebooks that import `minian` must sit in `~/code/minian_vsekulic`** (or run with it as
+  working directory): the first cell imports `minian` before `sys.path.append(minian_path)`.
+  For papermill, pass the fork as `cwd`; the output notebook can be written anywhere.
+- **`minian-native` bokeh:** any `conda install` into the env reinstates bokeh 2.4.3 under the
+  pip-installed 1.4.0 (datashader's dependency). Re-run `envs/minian-native-postinstall.sh`
+  afterwards; it re-applies the server's jinja2 patch and checks it by md5.
+- **`param` warnings flood stderr** (`WARNING:param.Dimension: Use method 'get_param_values'…`)
+  from param 1.13 + holoviews 1.12.7 — the server's own combination. Filter them from logs;
+  they are not errors.
+- **Registering the kernel** for papermill:
+  `conda activate minian-native && python -m ipykernel install --user --name minian-native`.
+- **Drives:** MINISCOPE and FUTROLA each on their own port, never a shared hub (MINISCOPE's
+  README, rule 2). Spotlight is off for both. The notebook writes into the session folder on
+  MINISCOPE; with `--scratch`, intermediates go to `/Volumes/FUTROLA/minian_scratch/…`.
+- **Test data locations:** the gate session is
+  `/Volumes/MINISCOPE/SSTCa2/G06-ST688_hM4D/2021_10_18-TFC_cond/09_52_24-HC1/Miniscope`
+  (all 27 intermediate arrays in `minian_intermediate/`). Never point a notebook at a session
+  with existing output without the set-aside first.
