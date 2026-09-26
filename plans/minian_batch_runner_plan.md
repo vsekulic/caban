@@ -65,6 +65,12 @@ Only what VS changed by hand, all in the parameter cell, all recorded in the run
 
 `interactive_noparam` needs no setting: it only acts inside `interactive` blocks.
 
+**One addition: a final, read-only cell** appended to the executed copy, after everything else
+has run. It writes every `param_*` dict, the §4 flags, `FRAMERATE`, `subset`, `n_workers` and
+the package versions, *as the kernel holds them at the end*, to `minian_run/parameters.json`.
+Reading them from the live kernel rather than from the notebook text is the only reliable way,
+since later cells override the parameter cell (§2). It changes no computed value.
+
 ### 4.1 Consequence: no `unit_labels` coordinate
 
 Cell ≈128, under `interactive_CNMF`, does `A.assign_coords(unit_labels=cnmfviewer.unit_labels)`
@@ -99,6 +105,9 @@ copy of `unit_id` (`CNMFViewer.__init__`'s fallback). Recorded per run.
     ├── pipeline.html        the same, viewable in any browser
     ├── summary_*.png        max projection + footprints, sample traces, report plots
     ├── minian_raw_traces.mp4, minian_preprocessing.mp4   the two extra videos (§7)
+    ├── parameters.json      every effective parameter, from the kernel (§4)
+    ├── README.md            what each video shows, panel by panel; the parameter table; the run
+    ├── minian_methods.md    copy of the paper Methods text (§7a)
     └── run.json             the record (§5 step 7)
 ```
 
@@ -106,9 +115,18 @@ copy of `unit_id` (`CNMFViewer.__init__`'s fallback). Recorded per run.
 
 ## 7. Videos
 
-`minian.mp4` is a 2×2 grid (`generate_videos`): **raw** (`varr`) | **CNMF input** (`Y_fm_chk`:
-denoised, background-removed, motion-corrected, ×1.5 gain) / **residual** `Y − A·C` |
-**reconstruction** `A·C`. No YrA panel.
+What the notebook's two videos contain (baseline cells 38 and 125):
+
+- `minian.mp4` (`generate_videos`), 2×2: **top-left** raw movie (`varr`) · **top-right** CNMF
+  input (`Y_fm_chk`: denoised, background-removed, motion-corrected; ×255/max × 1.5 gain) ·
+  **bottom-left** residual `Y − A·C` · **bottom-right** reconstruction `A·C` (footprints ×
+  denoised traces), scaled to `Y` by a least-squares factor fitted on 200 random frames. No
+  YrA panel.
+- `minian_mc.mp4`, 1×2: **left** `varr_ref` (denoised + background-removed, *before* motion
+  correction) · **right** `Y_fm_chk` (the same, *after* motion correction).
+
+Each session's `minian_run/README.md` spells this out, for every video in the folder, so it
+never has to be looked up again.
 
 The notebook encodes at `crf 18, preset ultrafast` — fast, large. The runner re-encodes at the
 **same pixel dimensions**, higher CRF, slow preset: much smaller files, small visual cost.
@@ -135,7 +153,18 @@ Decided (VS, 2026-09-26): same pixel dimensions, compressed only.
 - **Two extra runner-made videos**, small, in `minian_run/`, the notebook's video untouched:
   `minian_raw_traces.mp4` — `A·(C+YrA)`, each cell's activity before temporal denoising,
   beside `A·C`; and `minian_preprocessing.mp4` — raw → denoised → background-removed →
-  motion-corrected, as a strip.
+  motion-corrected, one panel per stage (the steps `minian_mc.mp4` does not show).
+
+### 7a. Paper Methods
+
+`analysis_methods_templates/minian_preprocessing_paper_methods.md`, a Nature-style Methods
+section for the whole Minian procedure (acquisition format → preprocessing → motion correction
+→ seed initialisation and refinement → CNMF-E spatial/temporal updates and merges → outputs),
+with citations (Minian: Dong et al. 2022, *eLife*; CNMF-E: Zhou et al. 2018, *eLife*). Its
+numbers are taken from the first run's `parameters.json`, not from reading the notebook — the
+top cell alone gives wrong values (§2). Copied into every `minian_run/` at runtime
+(`_copy_analysis_methods_template`, as `CLAUDE.md` requires), so each session carries the text
+describing how it was made.
 
 ## 8. The top-level notebook: `notebooks/run_minian_pipeline.ipynb`
 
