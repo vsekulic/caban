@@ -353,11 +353,16 @@ def run_status(item: sq.SessionWork) -> str:
     return record["status"]
 
 
+# How the queue table shows a status: nothing for a session never run, DONE as in the
+# `# ... - DONE` marks of the hand-run notebooks; failures keep their names so they stand out.
+STATUS_LABELS = {"pending": "", "done": "DONE"}
+
+
 def _status_columns(item: sq.SessionWork, record: dict) -> dict:
     report = record.get("report", {})
     return {
         "type": session_type(item.session),
-        "status": record.get("status", "pending"),
+        "status": STATUS_LABELS.get(record.get("status", "pending"), record.get("status")),
         "wall_h": round(record["timings"]["total_s"] / 3600, 2) if "total_s" in record.get("timings", {}) else None,
         "peak_mem_gb": record.get("memory", {}).get("peak_rss_gb"),
         "n_units": report.get("n_units"),
