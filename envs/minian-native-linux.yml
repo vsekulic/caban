@@ -49,4 +49,14 @@ dependencies:
   - jupyter_client=7.3.4
   - tornado=6.1
   - tqdm
+  # Added 2026-09-28 after the first Razer run: minian.visualization imports skvideo; the import cell
+  # runs under %%capture, which hid the ImportError until visualize_motion was missing at cell 87.
+  # The rest: the Mac env's widget/markdown packages. NOT netcdf4/cftime -- off the CNMF-E path, and
+  # on linux-64 they pull hdf5 1.12 and with it opencv 4.5.3 instead of 4.5.0.
+  - sk-video=1.1.10
+  - ipywidgets=8.1.5
+  - jupyterlab_widgets=3.0.13
+  - widgetsnbextension=4.0.13
+  - markdown=3.6
+  - importlib-metadata=8.5.0
   - pip
