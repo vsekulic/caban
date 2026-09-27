@@ -3,23 +3,16 @@
 Written 2026-09-27 at the end of a long session, as the agenda for the next chat(s). Each item is
 self-contained: what, why, where it is documented, what it needs from VS, rough effort.
 
-## ⚠ In the background right now: the MINIRAZER copy
+## ✅ The MINIRAZER copy is done and verified (2026-09-28)
 
-**Phase 2 of [razer_runner_plan.md](razer_runner_plan.md) is running** — `robocopy` on the Razer
-(`screen` session `minirazer_copy`) copies all of MINISCOPE (the Mac, over SMB) to MINIRAZER (`E:`).
-Started 2026-09-27 12:22 JST; ~74 MB/s; **expected to finish ~03:30–04:00 on 2026-09-28**.
+Finished 08:06, verified 08:28: 863,373 of 863,375 files identical to MINISCOPE; the other 2 are the
+gate-run links of item 6. See [razer_runner_plan.md](razer_runner_plan.md) §5. From here on only the
+Razer processes sessions; every command on it goes through `~/bin/logrun` into `~/razer_setup.log`.
 
-- **Check it**: `ssh razer tail -f razer_setup.log` (a progress line every 10 min; the last line on
-  completion gives robocopy's exit code — below 8 is success). Full robocopy summary on the Razer at
-  `C:\Users\vlads\robocopy_minirazer.log`.
-- **Until it finishes**: keep the Mac's lid open (`caffeinate -i` prevents idle sleep, not lid sleep),
-  MINISCOPE and Ethernet connected; don't run the Mac's Minian runner (it would change MINISCOPE
-  mid-copy); avoid heavy reads of MINISCOPE (they slow the copy). If it is interrupted, re-running
-  `~/bin/minirazer_copy.sh` on the Razer resumes it (copied files are skipped).
-- **Known, harmless robocopy errors**: `.DocumentRevisions-V100-bad-1` (a macOS system folder), and
-  the gate-run `minian_intermediate` symlinks in G06 `09_52_24-HC1` and G10 `16_32_14-TFC_cond`
-  (links to FUTROLA; the share cannot follow them) — see item 6.
-- Every command on the Razer goes through `~/bin/logrun` into `~/razer_setup.log` (VS's rule).
+**Work in this repo happens in one chat at a time** (VS, 2026-09-27): a second chat working the items
+in parallel rewrote shared code and plans; its 5 commits are parked, unmerged, on the branch
+`review/timing-and-yra-fixes` (the `max_proj` check, the G05 recovery, a loader timing change that made
+`ds_cache.pkl` unloadable, a collaborator notice, frame-rate findings), to be reviewed one by one.
 
 ## After the copy: the Razer track (continues [razer_runner_plan.md](razer_runner_plan.md))
 

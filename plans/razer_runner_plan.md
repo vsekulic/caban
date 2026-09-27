@@ -1,6 +1,6 @@
 # Plan: run the Minian batch on the Razer Blade 16, driven from the Mac
 
-Status: **Phase 0 and Phase 1 done** (2026-09-27); next Phase 2, the data copy. Every command on the
+Status: **Phases 0–2 done** (copy verified 2026-09-28 08:28); next Phase 3 checks on the Razer. Every command on the
 Razer is logged in `~/razer_setup.log` there (`ssh razer tail -f razer_setup.log`).
 Depends on: `plans/minian_batch_runner_plan.md` (the runner, the G10 gate, the 492-session queue),
 `plans/local_minian_pipeline_plan.md` §5 (MINISCOPE is the only APFS copy; drive rules).
@@ -184,3 +184,11 @@ change MINISCOPE mid-copy):
   `$CABAN_DATA_ROOTS`; scratch FUTROLA on macOS, `~/minian_scratch` on Linux, or `$CABAN_SCRATCH_ROOT`.
 - `scripts/run_minian_batch.py`: the notebook's Choose + Run cells as a command for `screen`
   (unattended; `--dry-run` lists the queue).
+
+**Phase 2 done** 2026-09-28. Copy finished 08:06 (13 h 7 min, avg 91 MB/s): 3.901 TB, 859,083 files;
+robocopy exit 11 only because of three known items — the gate-run `minian_intermediate` symlinks in
+G06 `09_52_24-HC1` and G10 `16_32_14-TFC_cond` (links to FUTROLA; not followable over SMB) and the
+macOS folder `.DocumentRevisions-V100-bad-1`. **Verification** (`~/bin/minirazer_verify.sh`,
+robocopy `/L` with the copy's settings, 3 min): of 863,375 files, **863,373 identical in size and
+timestamp, 0 mismatched or missing**; the 2 listed are those two links. From here on the Mac and
+MINISCOPE are not needed by the Razer; only the Razer processes sessions.
