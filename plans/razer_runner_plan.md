@@ -47,20 +47,49 @@ throughput ≈ 2–3× the Mac's single stream: the ~490 remaining sessions in d
    - *fresh*: `wsl --unregister Ubuntu` (deletes it), then
      `wsl --install -d Ubuntu-24.04 --location D:\WSL\Ubuntu`; or, on older WSL,
      `wsl --export` to a `.tar` / `wsl --unregister` / `wsl --import Ubuntu D:\WSL\Ubuntu <tar>`.
-3. **`C:\Users\<you>\.wslconfig`**:
+3. **WSL settings** — the WSL Settings app edits the same `C:\Users\<you>\.wslconfig`:
+   memory **56 GB** (leaves ~8 GB for Windows); processors **all**; swap **14–16 GB** (a cushion,
+   not a working area), swap file **`D:\WSL\swap.vhdx`** (off the system drive); networking mode
+   **mirrored** (Windows 11 22H2+; the Mac reaches Linux at the Razer's own IP); auto memory
+   reclaim **gradual**; sparse VHD **on**. Then `wsl --shutdown`. As a file:
    ```
    [wsl2]
    networkingMode=mirrored
    memory=56GB
+   swap=16GB
+   swapFile=D:\\WSL\\swap.vhdx
+   [experimental]
+   autoMemoryReclaim=gradual
+   sparseVhd=true
    ```
-   (`mirrored` needs Windows 11 22H2+; it lets the Mac reach Linux at the Razer's own IP.)
 4. **systemd and SSH** inside Ubuntu: `printf '[boot]\nsystemd=true\n' | sudo tee /etc/wsl.conf`,
    `wsl --shutdown`, reopen, `sudo apt update && sudo apt install -y openssh-server screen`,
    `sudo systemctl enable --now ssh`.
 5. **Firewall** (PowerShell, admin):
    `New-NetFirewallRule -DisplayName "WSL SSH" -Direction Inbound -Protocol TCP -LocalPort 22 -Action Allow`.
-6. **24/7 settings**: never sleep when plugged in; closing the lid does nothing; pause Windows
-   Update restarts.
+6. **24/7 settings** (administrator PowerShell, except where a Settings click is given):
+   - Never sleep or hibernate on AC, and never power down idle USB devices (USB selective
+     suspend — MINIRAZER is an external drive in constant use):
+     ```
+     powercfg /change standby-timeout-ac 0
+     powercfg /change hibernate-timeout-ac 0
+     powercfg /setacvalueindex SCHEME_CURRENT 2a737441-1930-4402-8d77-b2bebba308a3 48e6b7a6-50f5-4782-a5d4-53bb8f07e226 0
+     powercfg /setactive SCHEME_CURRENT
+     ```
+   - Closing the lid does nothing on AC (or Control Panel → Power Options → *Choose what closing
+     the lid does* → *When plugged in: Do nothing*):
+     ```
+     powercfg /setacvalueindex SCHEME_CURRENT SUB_BUTTONS LIDACTION 0
+     powercfg /setactive SCHEME_CURRENT
+     ```
+   - No update restarts: Settings → Windows Update → *Pause updates* for the longest period
+     (usually 5 weeks); *Advanced options* → "Get me up to date" **off**, *Active hours* as wide
+     as allowed.
+   - Network adapter stays awake: Device Manager → *Network adapters* → the Ethernet adapter →
+     *Properties* → *Power Management* → untick "Allow the computer to turn off this device to
+     save power" (an idle-dropped link does not stop a batch, but cuts SSH).
+   - On the charger throughout; any Razer Synapse battery-care mode balanced or performance.
+   - Check: `powercfg /query SCHEME_CURRENT SUB_SLEEP` — the AC values read `0x00000000`.
 7. **Send**: the Razer's Ethernet IP, the Ubuntu username, CPU, Windows version, `wsl --version`.
 
 ### Phase 1 — environment, by Claude over SSH (~1–2 h)
