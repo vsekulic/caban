@@ -19,12 +19,16 @@ throughput ≈ 2–3× the Mac's single stream: the ~490 remaining sessions in d
 - **WSL2 (Linux), not native Windows.** Production ran on Linux (the RIKEN server); its env export
   `~/code/minian_vsekulic/minian_vsekulic_cbp-db.yaml` is a linux-64 build with exact pins, so the
   Razer can run production's own environment.
-- **Working drive: 4-MINISCOPE**, 5 TB, already NTFS, repurposed. Verified 2026-09-27: every file
+- **Working drive: 4-MINISCOPE, renamed `MINIRAZER`**, 5 TB, already NTFS, repurposed, plugged into the Razer. Verified 2026-09-27: every file
   on it is on MINISCOPE with the same size (10,738 research files + drive-root files); the
   consolidation had verified G26/G27 and small folders byte for byte and G24/G25/G30/G31 by a 2 %
   video sample (`MINISCOPE/_provenance/verify_4.txt`). VS accepts that; 4-MINISCOPE-BAK mirrors it.
 - **NTFS, not exFAT** (journaled; the Mac reads NTFS natively). MINISCOPE (APFS) stays untouched and
   becomes the second copy of the raw data.
+- **The Razer works on its own copy, not over the network** (VS, 2026-09-27). Considered: the Razer
+  reading and writing MINISCOPE on the Mac over SMB, scratch only local — no copy, no sync, one
+  source of truth. Rejected because the Mac would have to stay parked, awake and connected for the
+  whole batch. The Mac is needed only once, for the ~10 h copy (Phase 2), and again for syncs.
 - **Scratch on the Razer's internal 2 TB SSD** (1.5 TB free; the Steam library stays). A stream
   needs ≤ ~25 GB scratch, so 3 streams + the Linux system fit in < 200 GB.
 
@@ -34,7 +38,10 @@ throughput ≈ 2–3× the Mac's single stream: the ~490 remaining sessions in d
 
 1. **What exists**: in PowerShell, `wsl --version` and `wsl -l -v`; Settings → System → About for
    the CPU and Windows version. Anything of value in the existing Ubuntu? If not, it is replaced.
-2. **Put Ubuntu on the 2 TB SSD** (say it is `D:`). Either:
+2. **Put Ubuntu on the 2 TB SSD** (say it is `D:`). *Done 2026-09-27 as a fresh install: the
+   in-place move failed half-way (disk image moved to `D:`, WSL's record left pointing at `C:`) and
+   the moved image was then deleted on a wrong instruction from Claude — lesson: before any delete
+   or unregister, confirm where the live copy is.* The options were:
    - *move the existing one* (WSL ≥ 2.3): `wsl --shutdown` then
      `wsl --manage Ubuntu --move D:\WSL\Ubuntu`; or
    - *fresh*: `wsl --unregister Ubuntu` (deletes it), then
@@ -71,7 +78,7 @@ throughput ≈ 2–3× the Mac's single stream: the ~490 remaining sessions in d
 ### Phase 2 — the working drive (~10–12 h unattended)
 
 1. 4-MINISCOPE into the Razer (its own USB port, no hub — `local_minian_pipeline_plan.md` §5.3);
-   quick-format NTFS, label TBD by VS (not `MINISCOPE-BAK`, which names the APFS backup).
+   quick-format NTFS, label **`MINIRAZER`**.
 2. The Mac shares MINISCOPE over SMB, read-only (System Settings → General → Sharing → File
    Sharing). The Razer pulls it with `robocopy /MIR /MT:16` (Windows-native: fastest for ~830k
    files) — ~3.9 TB at gigabit (~110 MB/s): ~10 h.
@@ -103,6 +110,5 @@ throughput ≈ 2–3× the Mac's single stream: the ~490 remaining sessions in d
 
 ## 4. Open
 
-- Label for the working drive.
 - Keeping WSL alive unattended — checked in Phase 1.
 - Whether the Razer gate passes as exactly as the Mac's; if not, what tolerance VS accepts.
