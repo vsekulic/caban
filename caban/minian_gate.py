@@ -85,9 +85,14 @@ def gate_dirs(session_dir: str, reference_final: Optional[str] = None,
     """
     old_intermediate = os.path.join(session_dir, sq.set_aside_name(sq.SCRATCH_DIR_NAME))
     has_intermediates = os.path.isdir(old_intermediate)
+    # The re-run's intermediates: its scratch folder (runs from 2026-09-27 point intpath at it;
+    # earlier runs linked it as <session>/minian_intermediate).
+    scratch, linked = mr.run_scratch(sq.read_sidecar(session_dir, mr.SIDECAR_NAME))
+    new_intermediate = (os.path.join(session_dir, sq.SCRATCH_DIR_NAME) if linked or scratch is None
+                        else scratch)
     dirs = {
         "old_intermediate": old_intermediate if has_intermediates else None,
-        "new_intermediate": os.path.join(session_dir, sq.SCRATCH_DIR_NAME) if has_intermediates else None,
+        "new_intermediate": new_intermediate if has_intermediates else None,
         "old_final": reference_final or os.path.join(session_dir, sq.set_aside_name(mr.OUTPUT_NAME)),
         "new_final": new_final or os.path.join(session_dir, mr.OUTPUT_NAME),
     }

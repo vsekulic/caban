@@ -40,6 +40,11 @@ DATA_ROOTS_BACKUP = (
     "/Volumes/1b-MINISCOPE-BAK/data/vsekulic/OF_test",
 )
 DATA_ROOTS_CONSOLIDATED = ("/Volumes/MINISCOPE/SSTCa2",)
+# The Razer's working copy of MINISCOPE: drive MINIRAZER (E:) seen from WSL
+# (`plans/razer_runner_plan.md`).
+DATA_ROOTS_MINIRAZER = ("/mnt/e/SSTCa2",)
+# Overrides the search below: data roots separated by os.pathsep.
+DATA_ROOTS_ENV = "CABAN_DATA_ROOTS"
 
 MOUSE_DIR_PATTERN = r"^G\d\d"
 VIDEO_PATTERN = r"^[0-9]+\.avi$"
@@ -61,20 +66,26 @@ SET_ASIDE_RECORD = "minian_set_aside.json"
 
 
 def default_data_roots() -> tuple:
-    """The consolidated volume if it is mounted, else the two backup drives.
+    """``$CABAN_DATA_ROOTS`` if set; else MINISCOPE (the Mac), MINIRAZER (the Razer), or
+    the two backup drives -- the first that is mounted.
 
     Hard-fails rather than returning an empty tuple: a queue built from no roots
     would silently report "nothing to do", which is the one answer that must never
-    be produced by accident.
+    be produced by accident. So does an override that names a missing folder.
     """
-    for roots in (DATA_ROOTS_CONSOLIDATED, DATA_ROOTS_BACKUP):
+    override = os.environ.get(DATA_ROOTS_ENV)
+    if override:
+        roots = tuple(r for r in override.split(os.pathsep) if r)
+        missing = [r for r in roots if not os.path.isdir(r)]
+        if missing:
+            raise FileNotFoundError("{} names missing folders: {}".format(DATA_ROOTS_ENV, missing))
+        return roots
+    candidates = (DATA_ROOTS_CONSOLIDATED, DATA_ROOTS_MINIRAZER, DATA_ROOTS_BACKUP)
+    for roots in candidates:
         if all(os.path.isdir(r) for r in roots):
             return roots
     raise FileNotFoundError(
-        "no data root is mounted; tried {} and {}".format(
-            list(DATA_ROOTS_CONSOLIDATED), list(DATA_ROOTS_BACKUP)
-        )
-    )
+        "no data root is mounted; tried {}".format([list(c) for c in candidates]))
 
 
 @dataclasses.dataclass
@@ -308,7 +319,7 @@ def _set_aside(base_dir: str, names, record_name: str, reason: str) -> dict:
     return record
 
 
-def _scratch_target(session_dir: str, scratch_root: str) -> str:
+def scratch_target(session_dir: str, scratch_root: str) -> str:
     """``<scratch_root>/<mouse>/<day>/<session>/minian_intermediate``, checked unused."""
     if not os.path.isdir(scratch_root):
         raise FileNotFoundError("scratch root {} is not mounted".format(scratch_root))
@@ -324,7 +335,8 @@ def _scratch_target(session_dir: str, scratch_root: str) -> str:
     return target
 
 
-def set_aside_minian_output(session_dir: str, reason: str, scratch_root: Optional[str] = None) -> dict:
+def set_aside_minian_output(session_dir: str, reason: str, scratch_root: Optional[str] = None,
+                            link_scratch: bool = True) -> dict:
     """Prepare a session's ``Miniscope/`` folder for a pipeline-notebook run.
 
     Renames existing notebook output -- ``minian/``, ``minian_intermediate/``,
@@ -337,6 +349,10 @@ def set_aside_minian_output(session_dir: str, reason: str, scratch_root: Optiona
     on the fast drive. A session with no output yet needs only this step, so that is
     not an error. Every check runs before anything is renamed or created.
 
+    ``link_scratch=False`` creates the scratch folder but no symlink: the caller points the
+    notebook's ``intpath`` at it instead (``caban.minian_runner`` does, 2026-09-27 -- NTFS seen
+    from WSL cannot hold the link reliably, and the session folder then holds only output).
+
     A ``minian_intermediate`` that is already a symlink is an earlier run's scratch,
     not an original, and is refused: remove the link (and its scratch folder, if
     disposable) first. After a run, delete both when the intermediates are no longer
@@ -348,7 +364,7 @@ def set_aside_minian_output(session_dir: str, reason: str, scratch_root: Optiona
         raise FileExistsError(
             "{} is a symlink to {} -- an earlier run's scratch, not an original. Remove "
             "the link first.".format(link, os.readlink(link)))
-    target = _scratch_target(session_dir, scratch_root) if scratch_root is not None else None
+    target = scratch_target(session_dir, scratch_root) if scratch_root is not None else None
     names = NOTEBOOK_OUTPUT_DIRS + NOTEBOOK_OUTPUT_FILES
     has_output = any(os.path.lexists(os.path.join(session_dir, n)) for n in names)
     record = {}
@@ -356,8 +372,10 @@ def set_aside_minian_output(session_dir: str, reason: str, scratch_root: Optiona
         record = _set_aside(session_dir, names, SET_ASIDE_RECORD, reason)
     if target is not None:
         os.makedirs(target)
-        os.symlink(target, link)
+        if link_scratch:
+            os.symlink(target, link)
         record["scratch"] = target
+        record["scratch_linked"] = link_scratch
     return record
 
 

@@ -50,7 +50,11 @@ TEMPLATE_SOURCE_MD5 = "5eb502c4a0252de26fc6170626d8ad00"
 # The first cell imports `minian` before `sys.path.append`, so the fork is the cwd.
 MINIAN_FORK_DIR = os.path.expanduser("~/code/minian_vsekulic")
 KERNEL_NAME = "minian-native"
-DEFAULT_SCRATCH_ROOT = "/Volumes/FUTROLA/minian_scratch"
+# Scratch for Minian's intermediates, per machine (`plans/razer_runner_plan.md`): FUTROLA on
+# the Mac; the Razer's own Linux disk on its 2 TB SSD. `$CABAN_SCRATCH_ROOT` overrides.
+SCRATCH_ROOTS = {"darwin": "/Volumes/FUTROLA/minian_scratch",
+                 "linux": os.path.expanduser("~/minian_scratch")}
+DEFAULT_SCRATCH_ROOT = os.environ.get("CABAN_SCRATCH_ROOT") or SCRATCH_ROOTS[sys.platform]
 
 RUN_DIR_NAME = sq.RUN_DIR_NAME
 SIDECAR_NAME = os.path.join(RUN_DIR_NAME, "run.json")
@@ -196,8 +200,13 @@ print("parameters written to", {path!r})
 '''.format(packages=list(KERNEL_PACKAGES), flags=list(RECORDED_FLAGS), path=parameters_path)
 
 
-def build_run_notebook(template, session_dir: str, parameters_path: str):
+def build_run_notebook(template, session_dir: str, parameters_path: str,
+                       scratch: Optional[str] = None):
     """The copy that runs: ``dpath`` set, the §4 flags set, the parameters cell appended.
+
+    With ``scratch``, ``intpath`` -- where the notebook writes its intermediates -- is set to
+    that folder instead of ``<dpath>/minian_intermediate``, so the session folder holds only
+    output and no link to scratch is needed.
 
     Every edit must land exactly once, and the flags must be assigned nowhere but the
     parameter cell -- otherwise a later cell would silently undo the edit. Returns the
@@ -236,6 +245,13 @@ def build_run_notebook(template, session_dir: str, parameters_path: str):
     dpath_line = "dpath = {!r}  # set by caban.minian_runner".format(os.path.abspath(session_dir))
     lines.insert(anchor_line[0], dpath_line)
     edits.append({"cell": param_idx, "was": None, "now": dpath_line})
+    if scratch is not None:
+        hits = [k for k, ln in enumerate(lines) if re.match(r"intpath\s*=", ln)]
+        if len(hits) != 1:
+            raise ValueError("expected one `intpath =` line in the parameter cell, found {}".format(len(hits)))
+        new = "intpath = {!r}  # set by caban.minian_runner".format(scratch)
+        edits.append({"cell": param_idx, "was": lines[hits[0]], "now": new})
+        lines[hits[0]] = new
     nb.cells[param_idx].source = "\n".join(lines)
 
     appended = nbformat.v4.new_code_cell(parameters_cell_source(parameters_path))
@@ -799,12 +815,22 @@ def write_readme(item: sq.SessionWork, record: dict, parameters: dict) -> str:
 # --- one session ------------------------------------------------------------------
 
 
-def _remove_scratch(session_dir: str, scratch: str) -> None:
+def run_scratch(record: dict) -> tuple:
+    """``(scratch folder, linked)`` of a run: ``linked`` for runs before 2026-09-27, which put
+    a ``minian_intermediate`` symlink in the session folder; later runs point ``intpath`` at it."""
+    set_aside = record.get("set_aside", {})
+    return set_aside.get("scratch"), set_aside.get("scratch_linked", True)
+
+
+def _remove_scratch(session_dir: str, scratch: str, linked: bool) -> None:
     link = os.path.join(session_dir, sq.SCRATCH_DIR_NAME)
-    if not os.path.islink(link) or os.readlink(link) != scratch:
+    if linked and (not os.path.islink(link) or os.readlink(link) != scratch):
         raise ValueError("{} is not the symlink to {} that preparation made".format(link, scratch))
+    if not linked and os.path.lexists(link):
+        raise ValueError("{} exists, but this run's scratch is unlinked at {}".format(link, scratch))
     shutil.rmtree(scratch)
-    os.unlink(link)
+    if linked:
+        os.unlink(link)
 
 
 def yra_output_dir(item: sq.SessionWork) -> str:
@@ -812,7 +838,8 @@ def yra_output_dir(item: sq.SessionWork) -> str:
     return os.path.join(item.session_dir, OUTPUT_NAME)
 
 
-def recompute_yra(item: sq.SessionWork, n_workers: Optional[int] = None) -> dict:
+def recompute_yra(item: sq.SessionWork, n_workers: Optional[int] = None,
+                  scratch: Optional[str] = None) -> dict:
     """Recompute ``YrA`` for this run's ``minian/`` with ``caban.yra_recompute`` (step 2).
 
     The notebook's own ``YrA.zarr`` can hold a few wrong units (``YrA.sel(unit_id=mask)``;
@@ -827,7 +854,8 @@ def recompute_yra(item: sq.SessionWork, n_workers: Optional[int] = None) -> dict
     """
     session_dir = item.session_dir
     minian_dir = os.path.join(session_dir, OUTPUT_NAME)
-    saved_movie = os.path.join(session_dir, sq.SCRATCH_DIR_NAME, "Y_fm_chk.zarr")
+    saved_movie = os.path.join(scratch or os.path.join(session_dir, sq.SCRATCH_DIR_NAME),
+                               "Y_fm_chk.zarr")
     with dask.config.set(scheduler="threads", num_workers=n_workers or 6):
         done = yr.recompute_session_yra(
             session_dir,
@@ -870,10 +898,12 @@ def run_session(
     started = time.time()
     session_dir = item.session_dir
     run_dir = os.path.join(session_dir, RUN_DIR_NAME)
-    set_aside = sq.set_aside_minian_output(session_dir, reason, scratch_root=scratch_root)
+    set_aside = sq.set_aside_minian_output(session_dir, reason, scratch_root=scratch_root,
+                                           link_scratch=False)
     os.makedirs(run_dir)
     parameters_path = os.path.join(run_dir, PARAMETERS_JSON)
-    nb, edits = build_run_notebook(template, session_dir, parameters_path)
+    nb, edits = build_run_notebook(template, session_dir, parameters_path,
+                                   scratch=set_aside["scratch"])
     record = {
         "label": item.label,
         "session_dir": session_dir,
@@ -941,6 +971,10 @@ def _finish_after_notebook(item: sq.SessionWork, record: dict, started: float) -
     if wrong or parameters["dpath"] != os.path.abspath(session_dir):
         raise ValueError("kernel ended with flags {} / dpath {} -- the edits did not "
                          "hold".format(wrong, parameters["dpath"]))
+    scratch, linked = run_scratch(record)
+    if not linked and parameters["intpath"] != scratch:
+        raise ValueError("kernel ended with intpath {}, not the run's scratch {} -- the edit "
+                         "did not hold".format(parameters["intpath"], scratch))
 
     mark = time.time()
     record["report"] = report_session(os.path.join(session_dir, OUTPUT_NAME), run_dir,
@@ -950,7 +984,8 @@ def _finish_after_notebook(item: sq.SessionWork, record: dict, started: float) -
     # Records written before this step existed carry no flag; they did not run it.
     if record.get("recompute_yra", False):
         mark = time.time()
-        record["yra_recompute"] = recompute_yra(item, n_workers=record.get("n_workers"))
+        record["yra_recompute"] = recompute_yra(item, n_workers=record.get("n_workers"),
+                                                scratch=scratch)
         record["timings"]["yra_s"] = round(time.time() - mark, 1)
 
     mark = time.time()
@@ -959,7 +994,7 @@ def _finish_after_notebook(item: sq.SessionWork, record: dict, started: float) -
     record["timings"]["videos_s"] = round(time.time() - mark, 1)
 
     if not record["scratch_kept"]:
-        _remove_scratch(session_dir, record["set_aside"]["scratch"])
+        _remove_scratch(session_dir, scratch, linked)
     record["timings"]["total_s"] = round(time.time() - started, 1)
     record["finished"] = pd.Timestamp.now().isoformat(timespec="seconds")
     write_readme(item, record, parameters)
@@ -1025,9 +1060,10 @@ def clear_failed_run(item: sq.SessionWork, even_if_running: bool = False) -> str
                      os.path.join(session_dir, name[:-len(".mp4")] + ".reencode.mp4")):
             if os.path.isfile(path):
                 os.remove(path)
-    scratch = record["set_aside"].get("scratch")
-    if scratch and os.path.islink(os.path.join(session_dir, sq.SCRATCH_DIR_NAME)):
-        _remove_scratch(session_dir, scratch)
+    scratch, linked = run_scratch(record)
+    if scratch and (os.path.islink(os.path.join(session_dir, sq.SCRATCH_DIR_NAME))
+                    if linked else os.path.isdir(scratch)):
+        _remove_scratch(session_dir, scratch, linked)
     kept = os.path.join(session_dir, "{}-failed-{}".format(
         RUN_DIR_NAME, pd.Timestamp.now().strftime("%Y%m%dT%H%M%S")))
     os.rename(os.path.join(session_dir, RUN_DIR_NAME), kept)

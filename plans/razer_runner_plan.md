@@ -166,3 +166,21 @@ Home 25H2, WSL 2.7.10; fresh Ubuntu 24.04 on `D:\WSL\Ubuntu`; mirrored networkin
   /bin/sleep infinity`, restart every minute if it stops. Test: 3 min with no window and no SSH, WSL
   stayed up. Caveat: it starts at *logon*, so after a Windows reboot someone must log in (or automatic
   sign-in is enabled — VS's call).
+
+**Phase 2 started** 2026-09-27 12:22: `~/bin/minirazer_copy.sh` in `screen` `minirazer_copy` —
+`robocopy \\192.168.3.3\MINISCOPE E:\ /E /COPY:DAT /DCOPY:DAT /MT:2` (tests: 66 MB/s at `/MT:16`,
+**111 MB/s at `/MT:2`** — the source is a spinning USB disk), macOS housekeeping excluded, robocopy's
+log `C:\Users\vlads\robocopy_minirazer.log`; progress every 10 min in `razer_setup.log`. The Mac is
+kept awake by `caffeinate`; the share is read-only to Windows through a stored credential (`cmdkey`).
+
+**Phase 3 code** (2026-09-27, on the Mac; end-to-end test waits for the copy — a Mac run now would
+change MINISCOPE mid-copy):
+- Scratch without a link, on every machine: `set_aside_minian_output(..., link_scratch=False)` creates
+  the scratch folder only, and `build_run_notebook(..., scratch=)` sets the parameter cell's `intpath`
+  to it (a recorded edit; the notebook's `MINIAN_INTERMEDIATE` follows). The kernel's final `intpath`
+  is checked. Runs from before keep their links (`run_scratch` tells them apart); `minian_gate` reads
+  the scratch from `run.json`.
+- Defaults per machine: data roots MINISCOPE → MINIRAZER (`/mnt/e/SSTCa2`) → backups, or
+  `$CABAN_DATA_ROOTS`; scratch FUTROLA on macOS, `~/minian_scratch` on Linux, or `$CABAN_SCRATCH_ROOT`.
+- `scripts/run_minian_batch.py`: the notebook's Choose + Run cells as a command for `screen`
+  (unattended; `--dry-run` lists the queue).
