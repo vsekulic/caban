@@ -413,3 +413,9 @@ preparation sets it aside as `minian-ORIG`. Partial output (G09 `19_28_33-HC3`) 
 `YrA` was backfilled: its replayed movie matched its own saved `Y_fm_chk` except 5 pixels off by 1
 grey level over 50 frames (the cv2-version difference) — a first calibration point for
 `yra_recompute_plan.md` §14.2.
+
+**Re-encode preset: `medium`** (VS, 2026-09-27), replacing `slow`. On a 30 s clip of G10 TFC_cond's
+video at crf 23: `slow` 16.9 s, 7.2 MB, SSIM 0.9823; `medium` 8.9 s, 7.1 MB, SSIM 0.9824; `fast` 7.3 s,
+7.4 MB. `slow` gained nothing on this footage; `medium` halves the re-encode (~10 → ~5 min per
+26-file session). Sessions re-encoded before the change keep their `slow` files (`run.json` records
+the preset per session).

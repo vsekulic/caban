@@ -94,7 +94,9 @@ GATE_LABELS = (
 # §7: same pixel dimensions, compressed only.
 NOTEBOOK_VIDEOS = ("minian.mp4", "minian_mc.mp4")
 VIDEO_CRF = 23
-VIDEO_PRESET = "slow"
+# medium, not slow (VS, 2026-09-27): on a 30 s clip of G10 TFC_cond at crf 23, slow took 16.9 s
+# for 7.2 MB (SSIM 0.9823), medium 8.9 s for 7.1 MB (SSIM 0.9824) -- slow bought nothing.
+VIDEO_PRESET = "medium"
 
 MEMORY_SAMPLE_INTERVAL_S = 5
 PROGRESS_PRINT_INTERVAL_S = 600
