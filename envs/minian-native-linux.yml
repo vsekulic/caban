@@ -1,0 +1,52 @@
+# Linux twin of envs/minian-native.yml, pinning the numerically relevant packages at the Mac's
+# exact versions (the env that passed the G10 gate); everything else is left to the solver.
+# PyPI packages (bokeh 1.4.0, panel 0.8.0, SimpleITK 2.1.1, MedPy 0.4.0, selenium 3.141.0) and the
+# server's jinja2 patch come after, as envs/minian-native-postinstall.sh does on the Mac.
+name: minian-native
+channels:
+  - conda-forge
+dependencies:
+  - python=3.8.15
+  - numpy=1.20.2
+  - scipy=1.9.1
+  - pandas=1.2.3
+  - xarray=0.17.0
+  - dask=2021.2.0
+  - distributed=2021.2.0
+  - zarr=2.17.1
+  - numcodecs=0.12.1
+  - numba=0.52.0
+  - llvmlite=0.35.0
+  - opencv=4.5.0
+  - cvxpy=1.2.1
+  - ecos=2.0.10
+  - scs=3.2.0
+  - osqp=0.6.2.post0
+  - pyfftw=0.12.0
+  - fftw=3.3.10
+  - pymetis=2020.1
+  - scikit-image=0.18.1
+  - scikit-learn=0.23.2
+  - networkx=2.4
+  - sparse=0.11.2
+  - rechunker=0.3.3
+  - natsort=8.4.0
+  - ffmpeg=4.3.2
+  - ffmpeg-python=0.2.0
+  - holoviews=1.12.7
+  - datashader=0.12.1
+  - param=1.13.0
+  - pyviz_comms=2.1.0
+  - jinja2=3.1.4
+  - markupsafe=2.1.5
+  - matplotlib-base=3.5.3
+  - pillow=9.2.0
+  - pywavelets=1.3.0
+  - statsmodels=0.13.2
+  - libblas=*=*openblas
+  - libopenblas=0.3.25
+  - ipykernel=6.29.5
+  - jupyter_client=7.3.4
+  - tornado=6.1
+  - tqdm
+  - pip

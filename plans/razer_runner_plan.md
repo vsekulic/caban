@@ -1,6 +1,7 @@
 # Plan: run the Minian batch on the Razer Blade 16, driven from the Mac
 
-Status: **planning**, written 2026-09-27. Nothing done on the Razer yet.
+Status: **Phase 0 and Phase 1 done** (2026-09-27); next Phase 2, the data copy. Every command on the
+Razer is logged in `~/razer_setup.log` there (`ssh razer tail -f razer_setup.log`).
 Depends on: `plans/minian_batch_runner_plan.md` (the runner, the G10 gate, the 492-session queue),
 `plans/local_minian_pipeline_plan.md` §5 (MINISCOPE is the only APFS copy; drive rules).
 
@@ -141,3 +142,27 @@ throughput ≈ 2–3× the Mac's single stream: the ~490 remaining sessions in d
 
 - Keeping WSL alive unattended — checked in Phase 1.
 - Whether the Razer gate passes as exactly as the Mac's; if not, what tolerance VS accepts.
+
+## 5. Record
+
+**Phase 0** (VS, 2026-09-27): Razer `minastirith`, i9-13950HX (24 cores / 32 threads), 64 GB, Windows 11
+Home 25H2, WSL 2.7.10; fresh Ubuntu 24.04 on `D:\WSL\Ubuntu`; mirrored networking; Ethernet
+192.168.3.10. The Mac reaches it as `ssh razer` (`~/.ssh/config`, key `~/.ssh/id_ed25519`).
+
+**Phase 1** (Claude over SSH, 2026-09-27), all logged by `~/bin/logrun`:
+- Miniforge (conda 26.7.2). **`minian-native`**: `envs/minian-native-linux.yml` pins the 45 numerically
+  relevant packages at the Mac `minian-native` versions (python 3.8.15, numpy 1.20.2, dask 2021.2.0,
+  xarray 0.17.0, opencv 4.5.0, cvxpy 1.2.1, pyfftw 0.12.0, pymetis 2020.1, …; OpenBLAS) and leaves the
+  rest to the solver — pinning all 310 Mac versions stalled the solver for 9 min and was stopped. Then
+  `envs/minian-native-linux-postinstall.sh`: the PyPI set at the Mac versions and the server's jinja2
+  patch, both patched files md5-identical to the server's.
+- **`caban`**: `envs/caban-runner-linux.yml`, the runner's imports at the Mac `caban` versions.
+- Repos cloned from GitHub into `~/code/` (caban `feat/yra-unit-alignment`, the fork `vsekulic_v4`
+  at `a3216ae`); the template re-made read-only and accepted by `load_template` (md5 `5eb502c4…`).
+- Smoke test: papermill (caban) → `minian-native` kernel, cwd the fork → `minian` imported from the fork.
+- **Keep-alive**: WSL powered itself off ~1 min after the last WSL window closed, **with an SSH
+  session connected** — SSH does not keep WSL alive, only `wsl.exe` clients do. Fix (VS): Windows
+  scheduled task **"WSL keep-alive"** — at logon, `conhost.exe --headless wsl.exe -d <distro> --exec
+  /bin/sleep infinity`, restart every minute if it stops. Test: 3 min with no window and no SSH, WSL
+  stayed up. Caveat: it starts at *logon*, so after a Windows reboot someone must log in (or automatic
+  sign-in is enabled — VS's call).

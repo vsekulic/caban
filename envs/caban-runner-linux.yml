@@ -1,0 +1,30 @@
+# caban env on the Razer: what caban.minian_runner, minian_gate, yra_recompute and session_queue
+# import, at the Mac caban env's versions where they touch numbers (2026-09-27).
+name: caban
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - numpy=2.4.6
+  - scipy=1.17.1
+  - pandas=3.0.5
+  - xarray=2026.4.0
+  - zarr=3.1.6
+  - dask=2026.8.0
+  - distributed=2026.8.0
+  - sparse=0.17.0
+  - opencv=5.0.0
+  - scikit-image=0.26.0
+  - simpleitk=2.5.6
+  - matplotlib-base=3.10.9
+  - natsort=8.4.0
+  - ffmpeg=8.1.2
+  - nbformat=5.11.1
+  - nbconvert=7.17.1
+  - nbclient=0.11.0
+  - papermill=2.7.0
+  - psutil=7.2.2
+  - ipython
+  - ipykernel=7.3.0
+  - tqdm
+  - pip
