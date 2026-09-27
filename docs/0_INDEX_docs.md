@@ -1,6 +1,6 @@
 # docs/ index
 
-Reference documents, runbooks and manuscript text for caban. Grouped by role; within each group the document a newcomer needs first comes first. See also: [plans index](../plans/0_INDEX_plans.md).
+Reference documents, runbooks and manuscript text for caban. Grouped by role; within each group the document a newcomer needs first comes first. See also: [plans index](../plans/0_INDEX_plans.md), [notebooks index](../notebooks/0_INDEX_notebooks.md).
 
 ## Setup and runbooks
 
