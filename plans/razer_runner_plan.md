@@ -14,8 +14,8 @@ throughput ≈ 2–3× the Mac's single stream: the ~490 remaining sessions in d
 ## 2. Decisions so far (VS, 2026-09-27)
 
 - **Driven from the Mac, in this Claude Code session**, over `ssh` into the Razer's WSL2 Ubuntu —
-  not via VS Code Remote-SSH (a separate workspace, a separate chat). Batches run headless in `tmux`
-  on the Razer and survive the Mac sleeping or VS Code disconnecting.
+  not via VS Code Remote-SSH (a separate workspace, a separate chat). Batches run headless in `screen`
+  (VS's preference over tmux) on the Razer and survive the Mac sleeping or VS Code disconnecting.
 - **WSL2 (Linux), not native Windows.** Production ran on Linux (the RIKEN server); its env export
   `~/code/minian_vsekulic/minian_vsekulic_cbp-db.yaml` is a linux-64 build with exact pins, so the
   Razer can run production's own environment.
@@ -55,7 +55,7 @@ throughput ≈ 2–3× the Mac's single stream: the ~490 remaining sessions in d
    ```
    (`mirrored` needs Windows 11 22H2+; it lets the Mac reach Linux at the Razer's own IP.)
 4. **systemd and SSH** inside Ubuntu: `printf '[boot]\nsystemd=true\n' | sudo tee /etc/wsl.conf`,
-   `wsl --shutdown`, reopen, `sudo apt update && sudo apt install -y openssh-server tmux`,
+   `wsl --shutdown`, reopen, `sudo apt update && sudo apt install -y openssh-server screen`,
    `sudo systemctl enable --now ssh`.
 5. **Firewall** (PowerShell, admin):
    `New-NetFirewallRule -DisplayName "WSL SSH" -Direction Inbound -Protocol TCP -LocalPort 22 -Action Allow`.
@@ -101,7 +101,7 @@ throughput ≈ 2–3× the Mac's single stream: the ~490 remaining sessions in d
 
 ### Phase 4 — the batch
 
-1. 2–3 streams in `tmux`, each a disjoint selection (by `MICE` / `SESSION_TYPES`), `N_WORKERS` 4–6.
+1. 2–3 streams, each in its own `screen` session, each a disjoint selection (by `MICE` / `SESSION_TYPES`), `N_WORKERS` 4–6.
 2. Monitoring from the Mac through this session: queue status, per-session memory and wall time.
 3. **Results back to MINISCOPE**, from the Mac, periodically: the Mac mounts the Razer's share
    (or reads 4-MINISCOPE directly once it is back on the Mac). A sync script first applies each
