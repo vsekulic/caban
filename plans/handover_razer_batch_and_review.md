@@ -198,5 +198,5 @@ with the current branch; a Time Machine local snapshot of 2026-09-27 15:36 also 
    2026-09-28).
 1. Read §1. Run `git status`/`git log -5` (branch `feat/yra-unit-alignment` at the latest pushed commit).
 2. `ssh minastirith '~/bin/logrun "new chat: state check" bash -c "screen -ls; df -h /mnt/e; tail -5 ~/razer_setup.log"'`
-   (only on the home network).
+   (works from any network over Tailscale; checked 2026-09-28).
 3. Ask VS which to take first: the Razer track (§3 "Next on the Razer") or the review branch (§6).

@@ -207,7 +207,11 @@ Wall 1.44 h (notebook 66 min, YrA 7 min, re-encode 13 min); peak RSS 12.2 GB, 45
 - **First attempt failed**: `minian-native` lacked `sk-video` (my reduced spec dropped it); the notebook's
   import cell runs under `%%capture`, which hid the ImportError until cell 87. Fixed by adding the Mac's
   missing packages at the Mac versions (`envs/minian-native-linux.yml`), refusing `netcdf4`, which would
-  have moved opencv to 4.5.3. **To add**: a pre-flight import check in the runner, so a missing package
-  fails in seconds.
+  have moved opencv to 4.5.3. **Pre-flight import check added** (2026-09-28): `minian_runner.preflight_kernel`
+  makes every top-level import of the template and of the appended parameters cell (cell magics such as
+  `%%capture` stripped), reads the recorded packages' versions and refuses a `minian` not from the fork — in a
+  fresh `minian-native` kernel started in the fork, before the session is touched (~5 s; recorded in
+  `run.json` as `preflight`). `run_minian_batch.py` runs it once before the queue. Tested on the Mac and the Razer (and a Razer dry run: 492 queued, 5 DONE, 487 to run, unchanged): passes on
+  the real template; a missing package hidden under `%%capture` and a `minian` outside the fork both fail.
 - **Also found**: the 3 G05 sessions run on the Mac on 2026-09-27 have no recomputed `YrA` (that kernel
   predated the step) — backfill on the Razer.
