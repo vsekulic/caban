@@ -116,7 +116,7 @@ in single runs (G10: 343/346 vs 344/347; G05 TFC_cond: 70 vs 71).
 
 **Cross-registration**: planned only ([crossreg_batch_runner_plan.md](crossreg_batch_runner_plan.md)).
 
-## 4. The sync script (not written) — requirements
+## 4. The sync script — ✅ built 2026-09-28 (`scripts/sync_manifest.py` + `scripts/sync_to_miniscope.py`; razer plan §5); the requirements it meets
 
 Carry each finished session's results MINIRAZER → MINISCOPE: new `minian/` (incl. `YrA_recomputed.zarr`),
 `minian_run/`, `minian.mp4`, `minian_mc.mp4`, `minian_set_aside.json`, any `minian_run-failed-*`. First

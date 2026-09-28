@@ -306,3 +306,15 @@ not rise. **One stream, 6 workers stays.** (The per-LP clock split by P/E in thi
 Windows' `Processor Information` numbering evidently differs from the hypervisor's; only the frames/s are.)
 The earlier "power-limited at ~6 cores" (Phase 3.4b) stands in substance; its clock figures were averages
 over idle logical processors too.
+
+**The sync MINIRAZER → MINISCOPE** (handover §4; built and first run 2026-09-28): `scripts/sync_manifest.py`
+on the Razer lists every `done` session not yet synced with the md5 + size of every file it carries
+(`minian/`, `minian_run/`, the two videos, `minian_set_aside.json`, `minian_run-failed-*`; never raw data);
+`scripts/sync_to_miniscope.py` on the Mac replays the set-aside renames on MINISCOPE, pulls each item with
+rsync into `<name>.sync-partial`, checks every file against the manifest, then renames; an item already on
+MINISCOPE must match the manifest exactly (Finder's `.DS_Store` ignored), else it stops. Nothing on
+MINISCOPE is deleted or overwritten. Afterwards `sync_manifest.py mark` writes
+`minian_run/synced_to_miniscope.json` on MINIRAZER (the report's `on_MINISCOPE`). **First run, 22:5x**: 29
+sessions — 5 already there (the Mac's runs, identical file for file), 24 copied (99 items, 59,637 files,
+9.84 GB, all verified), 17 renames replayed (incl. the three G06 CNO/HC `minian_intermediate` → `-ORIG`);
+record `MINISCOPE/_provenance/sync_minirazer_20260928T225838.json`. Runs whenever MINISCOPE is on the Mac.
