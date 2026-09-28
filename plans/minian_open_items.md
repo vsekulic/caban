@@ -101,6 +101,11 @@ G09 `2021_11_08-TFC_cond/19_28_33-HC3` holds partial output (and all-NaN motion)
 Eyeball them ([local_minian_pipeline_plan.md](local_minian_pipeline_plan.md) §2) and decide which, if any,
 join the batch.
 
+**Test sessions processed but not for analysis by default** (VS, 2026-09-28): G05
+`2021_09_07-TFC_test_B_1wk-redux/16_22_40-TFC_test_B_1wk` — most likely a test recorded when the bedding
+was changed. Processed by the batch like any session; whether any analysis uses it is decided
+separately. Any loader or crossreg grouping that picks sessions by type must not include it silently.
+
 ### 11. A second copy of MINISCOPE — VS decision
 After Phase 2, MINIRAZER (NTFS) holds a copy of MINISCOPE's raw data, but it becomes the *working* drive
 and will diverge in outputs. [local_minian_pipeline_plan.md](local_minian_pipeline_plan.md) §5.1 planned
