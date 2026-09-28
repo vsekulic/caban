@@ -115,8 +115,32 @@ backup drive is still wanted.
 - Renaming production output folders to plain `minian`
   ([crossreg_batch_runner_plan.md](crossreg_batch_runner_plan.md) §4) waits for item 5.
 
+### 14. Tailscale: reach the Razer from anywhere — set up (VS decided, 2026-09-28)
+`ssh razer` works only on the home network (192.168.3.10). Tailscale gives both machines private
+addresses reachable from anywhere, with no ports opened to the internet. **First step of the handover**
+([handover_razer_batch_and_review.md](handover_razer_batch_and_review.md) §8). Steps:
+1. **Account**: one Tailscale account (free Personal plan), with two-factor login — anyone in it can
+   reach the Razer.
+2. **Mac**: install the Tailscale app (tailscale.com/download or the App Store), log in.
+3. **Razer, Windows side** (not inside WSL — WSL's mirrored networking shares Windows' interfaces,
+   Tailscale's included): install Tailscale for Windows, log in with the same account; in its settings
+   turn on **Run unattended** (stays connected when nobody is logged in); in the admin console
+   (login.tailscale.com) **disable key expiry** for the Razer (keys otherwise expire after months).
+4. **Test from the Mac**: `tailscale status` lists both machines; `ssh vsekulic@minastirith` (Tailscale's
+   name for the Razer, or its 100.x.y.z address) reaches WSL's sshd — the existing Windows firewall rule
+   "WSL SSH" (port 22) should cover it; if not, allow port 22 on the Tailscale interface. Log the test on
+   the Razer with `logrun`.
+5. **Switch `ssh razer`** to it: in `~/.ssh/config`, `HostName minastirith` (or the 100.x address) in
+   place of `192.168.3.10` — then it works at home and away alike. Keep a backup of the file first.
+6. Check the lab/university network's rules on VPN-style software; Tailscale falls back to its relays
+   (slower, still working) where UDP is blocked.
+Cost: free (Personal plan). Alternative considered: Cloudflare Tunnel — free, but needs a domain on
+Cloudflare (~$10/year), `cloudflared` on both machines and access rules, and routes everything through
+Cloudflare; built for publishing services, overkill for two personal machines (VS chose Tailscale,
+2026-09-28).
+
 ## Suggested order
 
-During the copy: 5 (registry, directory listings only), 1 and 2 (code only), 9, and the decisions
+First: 14 (Tailscale). During the copy: 5 (registry, directory listings only), 1 and 2 (code only), 9, and the decisions
 3, 4, 6, 8, 10, 11. After the copy: the Razer track, then 1's re-check and 2's runs on the Razer.
 After the batch: 7, then the crossreg runner.
