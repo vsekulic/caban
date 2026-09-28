@@ -196,7 +196,12 @@ def main(out_path: str) -> None:
                   markdown_table(sub), ""]
     with open(out_path, "w") as fh:
         fh.write("\n".join(lines))
-    print("wrote {}: {} sessions".format(out_path, len(rows)))
+    counts = collections.Counter(runner["status"])
+    print("status {}: {} of {} batch sessions done, {} failed, {} pending; now: {} -> {}".format(
+        pd.Timestamp.now().strftime("%H:%M"), counts.get("done", 0), len(runner),
+        counts.get("failed", 0) + counts.get("interrupted", 0), counts.get("pending", 0),
+        "; ".join("{}/{}/{}".format(r.mouse, r.day, r.session) for r in running.itertuples()) or "nothing",
+        out_path))
 
 
 if __name__ == "__main__":
