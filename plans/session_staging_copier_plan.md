@@ -217,3 +217,12 @@ and the next one's, plus any `computed` session waiting for its copy back.
   byte-identical; refuses an existing work folder and an existing output; replaces leftover
   `.stage-partial` copies; detects a second source read that disagrees with the copy (the G14
   case, simulated); the free-space refusal.
+- 2026-09-28, Razer, first real use. The **full-frame check** finished G14 (`resume_after_notebook`,
+  unstaged): all 17,683 frames equal, 0 pixels differ; G14 `done`. Then **two staged sessions** through
+  `run_minian_batch.py` (G05 `track_day1-tests/13_52_23-HC1`, `TFC_cond/17_12_02-CNO1`, 6 videos each):
+  stage-in 2.20 GB in 38 s and 2.21 GB in 62 s (the second prefetched during the first run); notebook
+  634 s and 666 s (~107 s per 1,000 frames vs 173 s for the unstaged single run of Phase 3.4 — different
+  sessions, so indicative only); full-frame check equal in all 5,962 and 5,990 frames; stage-out 943 files
+  0.45 GB in 86 s (during the second run) and 1,269 files 0.32 GB in 58 s; both `done`, queue table DONE
+  and `YrA_recomputed` DONE (compared by session), session folders as after an unstaged run, work folders
+  deleted.
