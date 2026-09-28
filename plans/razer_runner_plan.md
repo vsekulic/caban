@@ -2,7 +2,7 @@
 
 Status: **Phases 0–2 done; Phase 3 production check passed** (2026-09-28); next: one short
 session and the 1–3-stream memory test, the sync script, then the batch. Every command on the
-Razer is logged in `~/razer_setup.log` there (`ssh minastirith tail -f razer_setup.log`).
+Razer is logged in `~/minian.log` there (`~/razer_setup.log` until 2026-09-28) (`ssh minastirith tail -f minian.log`).
 Depends on: `plans/minian_batch_runner_plan.md` (the runner, the G10 gate, the 492-session queue),
 `plans/local_minian_pipeline_plan.md` §5 (MINISCOPE is the only APFS copy; drive rules).
 
@@ -171,7 +171,7 @@ Home 25H2, WSL 2.7.10; fresh Ubuntu 24.04 on `D:\WSL\Ubuntu`; mirrored networkin
 **Phase 2 started** 2026-09-27 12:22: `~/bin/minirazer_copy.sh` in `screen` `minirazer_copy` —
 `robocopy \\192.168.3.3\MINISCOPE E:\ /E /COPY:DAT /DCOPY:DAT /MT:2` (tests: 66 MB/s at `/MT:16`,
 **111 MB/s at `/MT:2`** — the source is a spinning USB disk), macOS housekeeping excluded, robocopy's
-log `C:\Users\vlads\robocopy_minirazer.log`; progress every 10 min in `razer_setup.log`. The Mac is
+log `C:\Users\vlads\robocopy_minirazer.log`; progress every 10 min in `razer_setup.log` (now `~/minian.log`). The Mac is
 kept awake by `caffeinate`; the share is read-only to Windows through a stored credential (`cmdkey`).
 
 **Phase 3 code** (2026-09-27, on the Mac; end-to-end test waits for the copy — a Mac run now would

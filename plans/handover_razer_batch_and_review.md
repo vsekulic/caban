@@ -11,8 +11,8 @@ here replaces them; it tells you where the truth is and what exists only in the 
   the only one.
 - **Every command on the Razer goes through `~/bin/logrun "<title>" <command…>`** — including
   read-only checks and file copies (after an `scp`, log a line such as `logrun "copied X from the Mac"
-  md5sum X`). It appends to `~/razer_setup.log` and also shows the output; VS follows it with
-  `ssh minastirith tail -f razer_setup.log`. If something was done without it, backfill a note.
+  md5sum X`). It appends to `~/minian.log` and also shows the output; VS follows it with
+  `ssh minastirith tail -f minian.log`. If something was done without it, backfill a note.
 - **Before any delete or unregister, confirm on screen where the live copy is.** (On 2026-09-27 Claude
   told VS to delete a WSL disk image assuming another copy existed; it did not — the old Ubuntu was lost.)
 - **Link every plan/report/markdown file** you mention: `[plans/x.md](plans/x.md)`, plus the section
@@ -50,7 +50,7 @@ Notebooks: `notebooks/run_minian_pipeline.ipynb` (runner), `notebooks/recompute_
 Live data to read (don't trust summaries — re-measure):
 - On the Mac: each session's `Miniscope/minian_run/run.json`, `YrA_recompute.json` inside the output
   folder, `MINISCOPE/README.md` and `MINISCOPE/_provenance/`.
-- On the Razer: `~/razer_setup.log` (everything done there, timestamped), `~/gate_g05_tfc_cond.log`,
+- On the Razer: `~/minian.log` (everything done there, timestamped), `~/gate_g05_tfc_cond.log`,
   `C:\Users\vlads\robocopy_minirazer*.log`.
 
 ## 2. The machines and drives
@@ -197,6 +197,6 @@ with the current branch; a Time Machine local snapshot of 2026-09-27 15:36 also 
    Cloudflare; built for publishing services, overkill for two personal machines (VS chose Tailscale,
    2026-09-28).
 1. Read §1. Run `git status`/`git log -5` (branch `feat/yra-unit-alignment` at the latest pushed commit).
-2. `ssh minastirith '~/bin/logrun "new chat: state check" bash -c "screen -ls; df -h /mnt/e; tail -5 ~/razer_setup.log"'`
+2. `ssh minastirith '~/bin/logrun "new chat: state check" bash -c "screen -ls; df -h /mnt/e; tail -5 ~/minian.log"'`
    (works from any network over Tailscale; checked 2026-09-28).
 3. Ask VS which to take first: the Razer track (§3 "Next on the Razer") or the review branch (§6).

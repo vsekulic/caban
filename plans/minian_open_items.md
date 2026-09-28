@@ -7,7 +7,7 @@ self-contained: what, why, where it is documented, what it needs from VS, rough 
 
 Finished 08:06, verified 08:28: 863,373 of 863,375 files identical to MINISCOPE; the other 2 are the
 gate-run links of item 6. See [razer_runner_plan.md](razer_runner_plan.md) §5. From here on only the
-Razer processes sessions; every command on it goes through `~/bin/logrun` into `~/razer_setup.log`.
+Razer processes sessions; every command on it goes through `~/bin/logrun` into `~/minian.log`.
 
 **Work in this repo happens in one chat at a time** (VS, 2026-09-27): a second chat working the items
 in parallel rewrote shared code and plans; its 5 commits are parked, unmerged, on the branch
