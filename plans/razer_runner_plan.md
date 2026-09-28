@@ -294,3 +294,15 @@ sessions run on the Mac (`~/bin/backfill_yra.py`): a no-op — their recomputes 
 correction under Phase 3.2); the numbers it printed (462, 180, 202 units; corr(C, YrA) median 0.32 / 0.56 /
 0.49) are those recomputes'. Queue at launch: 482 pending (after the 3.4 runs, G14 and the
 copier test). Still to do alongside: the sync script MINIRAZER → MINISCOPE; the power-mode check (VS).
+
+**Phase 4 — power settings and the worker count settled** (2026-09-28 evening). VS confirmed Windows "Best
+performance" and Razer Synapse "High performance" (on AC). With the batch running (one stream, 6 workers) the
+work sits on the 8 P-cores, one thread per core, at ~165 % of nominal (~3.6 GHz; per-logical-processor
+counters, `per_lp.ps1`) — no efficiency-mode (EcoQoS) problem. A clean test at a session boundary (stop
+switch, `cpu_ab_test.sh`; batch paused 21:05:56–21:08:09, nothing lost): the preprocessing ops at **6
+processes 920 frames/s in total, 12 → 701, 18 → 966**, every process at CPU time / wall 1.00 and 12.4 / 18.6
+logical processors busy. More busy cores lower every core's clock (sustained power limit), so the total does
+not rise. **One stream, 6 workers stays.** (The per-LP clock split by P/E in this run is not trustworthy —
+Windows' `Processor Information` numbering evidently differs from the hypervisor's; only the frames/s are.)
+The earlier "power-limited at ~6 cores" (Phase 3.4b) stands in substance; its clock figures were averages
+over idle logical processors too.
