@@ -17,6 +17,7 @@ notebook's two videos in place; delete the scratch; write ``minian_run/run.json`
 which is also the queue's sidecar (`caban.session_queue`).
 """
 
+import ast
 import copy
 import hashlib
 import json
@@ -35,7 +36,9 @@ import numpy as np
 import pandas as pd
 import papermill
 import psutil
+from IPython.core.inputtransformer2 import TransformerManager
 from IPython.display import Image, Markdown, display
+from jupyter_client.manager import start_new_kernel
 from nbconvert import HTMLExporter
 
 from caban import session_queue as sq
@@ -101,6 +104,8 @@ VIDEO_CRF = 23
 # medium, not slow (VS, 2026-09-27): on a 30 s clip of G10 TFC_cond at crf 23, slow took 16.9 s
 # for 7.2 MB (SSIM 0.9823), medium 8.9 s for 7.1 MB (SSIM 0.9824) -- slow bought nothing.
 VIDEO_PRESET = "medium"
+
+PREFLIGHT_TIMEOUT_S = 300
 
 MEMORY_SAMPLE_INTERVAL_S = 5
 PROGRESS_PRINT_INTERVAL_S = 600
@@ -259,6 +264,61 @@ def build_run_notebook(template, session_dir: str, parameters_path: str,
     nb.cells.append(appended)
     edits.append({"cell": len(nb.cells) - 1, "was": None, "now": "appended parameters cell"})
     return nb, edits
+
+
+def _import_statements(source: str) -> List[str]:
+    """The top-level import statements of one code cell, a leading cell magic
+    (``%%capture``, ``%%time``) dropped so its body is parsed as code."""
+    body = source.lstrip()
+    if body.startswith("%%"):
+        body = body.split("\n", 1)[1] if "\n" in body else ""
+    tree = ast.parse(TransformerManager().transform_cell(body))
+    return [ast.unparse(n) for n in tree.body if isinstance(n, (ast.Import, ast.ImportFrom))]
+
+
+def preflight_source(template) -> str:
+    """Code that makes every import the run will make, and nothing else.
+
+    Taken from the template itself plus the appended parameters cell, so it follows any
+    change to either. Also reads the version of every recorded package (the appended cell
+    does, at the very end) and refuses a ``minian`` not imported from the fork.
+    """
+    cells = [c.source for c in template.cells if c.cell_type == "code"]
+    cells.append(parameters_cell_source(os.devnull))
+    cells.append("import os as _os\nfrom importlib import metadata as _metadata\n"
+                 "import minian as _minian")
+    statements = []
+    for source in cells:
+        statements += [s for s in _import_statements(source) if s not in statements]
+    return "\n".join(statements + [
+        "_versions = [_metadata.version(p) for p in {!r}]".format(list(KERNEL_PACKAGES)),
+        "_fork = _os.path.realpath({!r}) + _os.sep".format(MINIAN_FORK_DIR),
+        "if not _os.path.realpath(_minian.__file__).startswith(_fork):",
+        "    raise ImportError('minian imported from ' + _minian.__file__ + ', not the fork ' + _fork)",
+    ])
+
+
+def preflight_kernel(template) -> dict:
+    """Make every import of the run in a fresh ``minian-native`` kernel, in seconds.
+
+    The template's import cells run under ``%%capture``, which hides an ImportError until
+    the first cell that uses the name -- on the Razer, a missing ``sk-video`` surfaced at
+    cell 87, ten minutes in (`plans/razer_runner_plan.md` §5, Phase 3.2). The kernel starts
+    in the fork folder, as papermill's does.
+    """
+    code = preflight_source(template)
+    started = time.time()
+    km, kc = start_new_kernel(kernel_name=KERNEL_NAME, cwd=MINIAN_FORK_DIR, startup_timeout=120)
+    try:
+        reply = kc.execute_interactive(code, timeout=PREFLIGHT_TIMEOUT_S, output_hook=lambda msg: None)
+    finally:
+        kc.stop_channels()
+        km.shutdown_kernel(now=True)
+    content = reply["content"]
+    if content["status"] != "ok":
+        raise ImportError("pre-flight in the {} kernel failed: {}: {}".format(
+            KERNEL_NAME, content["ename"], content["evalue"]))
+    return {"passed_s": round(time.time() - started, 1)}
 
 
 def _git_state(path: str) -> dict:
@@ -894,6 +954,8 @@ def run_session(
     template = load_template()
     if not os.path.isdir(MINIAN_FORK_DIR):
         raise FileNotFoundError("minian fork not found at {}".format(MINIAN_FORK_DIR))
+    # Before anything in the session is touched: a failure here leaves it pending.
+    preflight = preflight_kernel(template)
 
     started = time.time()
     session_dir = item.session_dir
@@ -917,6 +979,7 @@ def run_session(
         "papermill": papermill.__version__,
         "minian_nworkers_env": n_workers,
         "notebook_edits": edits,
+        "preflight": preflight,
         "set_aside": set_aside,
         "scratch_kept": keep_scratch,
         "recompute_yra": recompute_yra,

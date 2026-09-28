@@ -42,6 +42,9 @@ def main() -> int:
     for tool in ("ffmpeg", "ffprobe"):
         if shutil.which(tool) is None:
             raise SystemExit("{} not on PATH -- activate the caban env first".format(tool))
+    # Once up front, so a missing package stops the batch rather than failing every session;
+    # run_session repeats it per session.
+    print("pre-flight: {}".format(mr.preflight_kernel(mr.load_template())))
 
     pd.set_option("display.max_rows", 1000, "display.width", 220)
     items = mr.discover_sessions(roots=args.data_root)
