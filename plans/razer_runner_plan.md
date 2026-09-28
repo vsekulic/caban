@@ -279,3 +279,7 @@ Wall 1.44 h (notebook 66 min, YrA 7 min, re-encode 13 min); peak RSS 12.2 GB, 45
   event ties it to 13:32. The checks that exist catch a changed frame count; a read that changed pixel
   values without changing the count would pass them, except for the replay-vs-`Y_fm_chk` comparison (50
   frames today).
+- *Decision* (VS, 2026-09-28): don't dig further — watch the drive. Guard every run with the
+  **full-frame check** (the YrA step compares the replayed movie with the notebook's `Y_fm_chk` in
+  every frame and refuses unless equal) and run on local copies through **the copier**:
+  [session_staging_copier_plan.md](session_staging_copier_plan.md).

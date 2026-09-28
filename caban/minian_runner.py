@@ -18,6 +18,7 @@ which is also the queue's sidecar (`caban.session_queue`).
 """
 
 import ast
+import concurrent.futures
 import copy
 import hashlib
 import json
@@ -42,6 +43,7 @@ from jupyter_client.manager import start_new_kernel
 from nbconvert import HTMLExporter
 
 from caban import session_queue as sq
+from caban import session_staging as ss
 from caban import yra_recompute as yr
 
 REPO_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -58,6 +60,12 @@ KERNEL_NAME = "minian-native"
 SCRATCH_ROOTS = {"darwin": "/Volumes/FUTROLA/minian_scratch",
                  "linux": os.path.expanduser("~/minian_scratch")}
 DEFAULT_SCRATCH_ROOT = os.environ.get("CABAN_SCRATCH_ROOT") or SCRATCH_ROOTS[sys.platform]
+# Work folders for staged runs (the copier, `caban.session_staging`,
+# `plans/session_staging_copier_plan.md`): on the Razer the data drive is a USB HDD, so a run
+# works on a local copy. On the Mac runs work in place (no stage root). `$CABAN_STAGE_ROOT`
+# overrides.
+STAGE_ROOTS = {"linux": os.path.expanduser("~/minian_stage")}
+DEFAULT_STAGE_ROOT = os.environ.get("CABAN_STAGE_ROOT") or STAGE_ROOTS.get(sys.platform)
 
 RUN_DIR_NAME = sq.RUN_DIR_NAME
 SIDECAR_NAME = os.path.join(RUN_DIR_NAME, "run.json")
@@ -108,7 +116,7 @@ VIDEO_PRESET = "medium"
 PREFLIGHT_TIMEOUT_S = 300
 
 MEMORY_SAMPLE_INTERVAL_S = 5
-PROGRESS_PRINT_INTERVAL_S = 600
+PROGRESS_PRINT_INTERVAL_S = 120
 
 # Figure colours: categorical slot 1 for the fitted trace, muted ink for its context.
 COLOR_C = "#2a78d6"
@@ -499,10 +507,16 @@ def _status_columns(item: sq.SessionWork, record: dict) -> dict:
 
 
 def yra_recomputed(item: sq.SessionWork) -> bool:
-    """A complete recompute made from *this* run's ``minian/`` -- not production's."""
+    """A complete recompute made from *this* run's ``minian/`` -- not production's.
+
+    Compared by session (``<mouse>/<day>/<session>``) and folder name, not by absolute
+    path: the recompute ran in the work folder or on another machine's mount of the same
+    drive, so the path it recorded is not this one.
+    """
     sidecar = sq.read_sidecar(yra_output_dir(item), yr.SIDECAR_NAME)
-    return bool(sidecar.get("complete")) and sidecar.get("minian_dir") == os.path.join(
-        item.session_dir, OUTPUT_NAME)
+    minian_dir = sidecar.get("minian_dir", "")
+    return (bool(sidecar.get("complete")) and os.path.basename(minian_dir) == OUTPUT_NAME
+            and yr.session_tail(os.path.dirname(minian_dir)) == yr.session_tail(item.session_dir))
 
 
 def queue_status(items: List[sq.SessionWork]) -> pd.DataFrame:
@@ -816,7 +830,7 @@ def reencode_video(path: str, crf: int = VIDEO_CRF, preset: str = VIDEO_PRESET) 
 
 def write_readme(item: sq.SessionWork, record: dict, parameters: dict) -> str:
     """``minian_run/README.md``: the run, each video panel by panel, every parameter."""
-    run_dir = os.path.join(item.session_dir, RUN_DIR_NAME)
+    run_dir = os.path.join(work_dir_of(item, record), RUN_DIR_NAME)
     report = record["report"]
     lines = [
         "# {}".format(item.label), "",
@@ -875,6 +889,12 @@ def write_readme(item: sq.SessionWork, record: dict, parameters: dict) -> str:
 # --- one session ------------------------------------------------------------------
 
 
+def work_dir_of(item: sq.SessionWork, record: dict) -> str:
+    """Where the run's notebook worked: its work folder if staged, else the session folder
+    (every run before the copier, 2026-09-28)."""
+    return record.get("work_dir", item.session_dir)
+
+
 def run_scratch(record: dict) -> tuple:
     """``(scratch folder, linked)`` of a run: ``linked`` for runs before 2026-09-27, which put
     a ``minian_intermediate`` symlink in the session folder; later runs point ``intpath`` at it."""
@@ -898,35 +918,59 @@ def yra_output_dir(item: sq.SessionWork) -> str:
     return os.path.join(item.session_dir, OUTPUT_NAME)
 
 
-def recompute_yra(item: sq.SessionWork, n_workers: Optional[int] = None,
-                  scratch: Optional[str] = None) -> dict:
-    """Recompute ``YrA`` for this run's ``minian/`` with ``caban.yra_recompute`` (step 2).
+def recompute_yra(item: sq.SessionWork, work_dir: str, scratch: Optional[str],
+                  n_workers: Optional[int] = None) -> dict:
+    """Recompute ``YrA`` for the run's ``minian/`` in ``work_dir`` with ``caban.yra_recompute``.
 
     The notebook's own ``YrA.zarr`` can hold a few wrong units (``YrA.sel(unit_id=mask)``;
     see :func:`unit_counts`), so the same recompute the production sessions get is run
     here, unchanged: the movie is replayed from the ``.avi`` files and ``YrA`` computed
     against the saved ``A``/``C``/``b``/``f``, which puts ``S``'s ``unit_id`` on it by
     construction. Output: ``YrA_recomputed.zarr`` and its sidecar in ``minian/`` beside
-    ``A``/``C``/``S`` (:func:`yra_output_dir`); ``minian/YrA.zarr`` is untouched and serves
-    as the comparison.
-    While the run's scratch still exists, the replayed movie is also checked against
-    its saved ``Y_fm_chk``.
+    ``A``/``C``/``S``; ``minian/YrA.zarr`` is untouched and serves as the comparison.
+
+    ``work_dir`` is where the run's videos and ``minian/`` are: the session folder, or its
+    work folder in a staged run. With ``scratch`` -- the run's intermediates, which must
+    still exist -- the replayed movie is compared with the notebook's ``Y_fm_chk`` in every
+    frame and must equal it exactly (the full-frame check, `plans/razer_runner_plan.md`,
+    G14). ``scratch=None`` only for a backfill after the scratch was deleted: no movie check.
     """
-    session_dir = item.session_dir
-    minian_dir = os.path.join(session_dir, OUTPUT_NAME)
-    saved_movie = os.path.join(scratch or os.path.join(session_dir, sq.SCRATCH_DIR_NAME),
-                               "Y_fm_chk.zarr")
+    minian_dir = os.path.join(work_dir, OUTPUT_NAME)
+    saved_movie = None
+    if scratch is not None:
+        saved_movie = os.path.join(scratch, "Y_fm_chk.zarr")
+        if not os.path.isdir(saved_movie):
+            raise FileNotFoundError("{} is missing; the full-frame check needs it".format(saved_movie))
     with dask.config.set(scheduler="threads", num_workers=n_workers or 6):
         done = yr.recompute_session_yra(
-            session_dir,
+            work_dir,
             minian_dir,
-            yra_output_dir(item),
-            yr.notebook_del_frames(session_dir),
+            minian_dir,
+            yr.notebook_del_frames(work_dir),
             existing_yra_path=os.path.join(minian_dir, "YrA.zarr"),
-            saved_movie_path=saved_movie if os.path.isdir(saved_movie) else None,
+            saved_movie_path=saved_movie,
+            full_movie_check=saved_movie is not None,
         )
     return {"output": os.path.join(yra_output_dir(item), yr.OUTPUT_ARRAY_NAME),
             "written_utc": done["written_utc"], "report": done["report"]}
+
+
+def stage_inputs(item: sq.SessionWork, stage_root: str) -> dict:
+    """Copy a pending session's videos into its work folder, verified (the copier's stage-in).
+
+    Only for a session still pending in its own folder: a work folder that already exists
+    then holds nothing but an earlier, unused stage-in of the same videos (a prefetch whose
+    run never started), so it is replaced -- the videos' only copy is on the data drive.
+    """
+    status = run_status(item)
+    if status != "pending":
+        raise ValueError("{} is {}, not pending; not staging it in".format(item.label, status))
+    work_dir = ss.work_dir_for(item.session_dir, stage_root)
+    if os.path.lexists(work_dir):
+        print("replacing {}: an unused stage-in of {} (the session is still pending)".format(
+            work_dir, item.label))
+        shutil.rmtree(work_dir)
+    return ss.stage_in(item.session_dir, stage_root, yr.PARAM_LOAD_VIDEOS["pattern"])
 
 
 def run_session(
@@ -936,12 +980,22 @@ def run_session(
     n_workers: Optional[int] = None,
     reason: str = "caban.minian_runner",
     recompute_yra: bool = True,
+    stage_root: Optional[str] = None,
+    staged: Optional[dict] = None,
+    stage_out_now: bool = True,
 ) -> dict:
     """Prepare, execute, report, recompute YrA, re-encode, clean up, record (§5).
 
     ``recompute_yra`` runs :func:`recompute_yra` on the new output (see there). It writes
     into the run's own ``minian/``, so a gate re-run of a production session is safe too:
     production's recompute sits in its ``minian_crossreg*`` folder.
+
+    With ``stage_root`` the run works on a local copy (`plans/session_staging_copier_plan.md`):
+    the videos are copied into the work folder first -- or ``staged`` is that copy, made
+    ahead by the copier (:func:`stage_inputs`) -- the notebook and every later step run
+    there, and the results are then copied back and verified (:func:`stage_out_session`):
+    here, or with ``stage_out_now=False`` by the caller's copier, the session showing as
+    ``computed`` until then. The run record stays in the session folder throughout.
 
     ``keep_scratch`` keeps the intermediates -- for a gate run, which is compared
     against ``minian_intermediate-ORIG`` stage by stage. Any failure is recorded in
@@ -956,19 +1010,27 @@ def run_session(
         raise FileNotFoundError("minian fork not found at {}".format(MINIAN_FORK_DIR))
     # Before anything in the session is touched: a failure here leaves it pending.
     preflight = preflight_kernel(template)
+    if staged is None and stage_root is not None:
+        staged = stage_inputs(item, stage_root)
+    if staged is not None and staged["session_dir"] != item.session_dir:
+        raise ValueError("staged copy of {} passed for {}".format(staged["session_dir"], item.label))
 
     started = time.time()
     session_dir = item.session_dir
-    run_dir = os.path.join(session_dir, RUN_DIR_NAME)
+    work_dir = staged["work_dir"] if staged is not None else session_dir
     set_aside = sq.set_aside_minian_output(session_dir, reason, scratch_root=scratch_root,
                                            link_scratch=False)
-    os.makedirs(run_dir)
+    os.makedirs(os.path.join(session_dir, RUN_DIR_NAME))
+    run_dir = os.path.join(work_dir, RUN_DIR_NAME)
+    if work_dir != session_dir:
+        os.makedirs(run_dir)
     parameters_path = os.path.join(run_dir, PARAMETERS_JSON)
-    nb, edits = build_run_notebook(template, session_dir, parameters_path,
+    nb, edits = build_run_notebook(template, work_dir, parameters_path,
                                    scratch=set_aside["scratch"])
     record = {
         "label": item.label,
         "session_dir": session_dir,
+        "work_dir": work_dir,
         "status": "running",
         "complete": False,
         "started": pd.Timestamp.now().isoformat(timespec="seconds"),
@@ -980,12 +1042,15 @@ def run_session(
         "minian_nworkers_env": n_workers,
         "notebook_edits": edits,
         "preflight": preflight,
+        "stage_in": staged,
         "set_aside": set_aside,
         "scratch_kept": keep_scratch,
         "recompute_yra": recompute_yra,
         "n_workers": n_workers,
         "timings": {"prepare_s": round(time.time() - started, 1)},
     }
+    if staged is not None:
+        record["timings"]["stage_in_s"] = staged["seconds"]
     sq.write_sidecar(session_dir, SIDECAR_NAME, record)
     try:
         executed = execute_notebook(nb, run_dir, n_workers=n_workers)
@@ -1006,8 +1071,14 @@ def run_session(
                 os.path.join(run_dir, PAPERMILL_LOG)))
 
         _finish_after_notebook(item, record, started)
+        sq.write_sidecar(session_dir, SIDECAR_NAME, record)
+        if record["status"] == "computed" and stage_out_now:
+            stage_out_session(item, record)
     except BaseException as error:
-        _record_failure(record, error, started)
+        # A failed stage-out keeps "computed": the results exist only in the work folder,
+        # and stage_out_session has recorded why; finish_stage_out retries it.
+        if record["status"] != "computed":
+            _record_failure(record, error, started)
         raise
     finally:
         sq.write_sidecar(session_dir, SIDECAR_NAME, record)
@@ -1023,15 +1094,17 @@ def _record_failure(record: dict, error: BaseException, started: float) -> None:
 def _finish_after_notebook(item: sq.SessionWork, record: dict, started: float) -> None:
     """Everything after a notebook that ran to the end: check, report, videos, clean up.
 
-    ``started`` is the wall-clock origin of the run, for ``total_s``.
+    ``started`` is the wall-clock origin of the run, for ``total_s``. Ends ``done``, or
+    ``computed`` for a staged run, whose results still have to be copied back.
     """
     session_dir = item.session_dir
-    run_dir = os.path.join(session_dir, RUN_DIR_NAME)
+    work_dir = work_dir_of(item, record)
+    run_dir = os.path.join(work_dir, RUN_DIR_NAME)
     with open(os.path.join(run_dir, PARAMETERS_JSON)) as fh:
         parameters = json.load(fh)
     wrong = {k: parameters["flags"][k] for k, v in NOTEBOOK_FLAGS.items()
              if parameters["flags"][k] != v}
-    if wrong or parameters["dpath"] != os.path.abspath(session_dir):
+    if wrong or parameters["dpath"] != os.path.abspath(work_dir):
         raise ValueError("kernel ended with flags {} / dpath {} -- the edits did not "
                          "hold".format(wrong, parameters["dpath"]))
     scratch, linked = run_scratch(record)
@@ -1040,43 +1113,84 @@ def _finish_after_notebook(item: sq.SessionWork, record: dict, started: float) -
                          "did not hold".format(parameters["intpath"], scratch))
 
     mark = time.time()
-    record["report"] = report_session(os.path.join(session_dir, OUTPUT_NAME), run_dir,
+    record["report"] = report_session(os.path.join(work_dir, OUTPUT_NAME), run_dir,
                                       parameters["FRAMERATE"])
     record["timings"]["report_s"] = round(time.time() - mark, 1)
 
     # Records written before this step existed carry no flag; they did not run it.
     if record.get("recompute_yra", False):
         mark = time.time()
-        record["yra_recompute"] = recompute_yra(item, n_workers=record.get("n_workers"),
-                                                scratch=scratch)
+        record["yra_recompute"] = recompute_yra(item, work_dir, scratch,
+                                                n_workers=record.get("n_workers"))
         record["timings"]["yra_s"] = round(time.time() - mark, 1)
 
     mark = time.time()
-    record["videos"] = {name: reencode_video(os.path.join(session_dir, name))
+    record["videos"] = {name: reencode_video(os.path.join(work_dir, name))
                         for name in NOTEBOOK_VIDEOS}
     record["timings"]["videos_s"] = round(time.time() - mark, 1)
 
     if not record["scratch_kept"]:
-        _remove_scratch(session_dir, scratch, linked)
+        _remove_scratch(work_dir, scratch, linked)
     record["timings"]["total_s"] = round(time.time() - started, 1)
     record["finished"] = pd.Timestamp.now().isoformat(timespec="seconds")
     write_readme(item, record, parameters)
-    record["status"] = "done"
-    record["complete"] = True
+    if work_dir == session_dir:
+        record["status"] = "done"
+        record["complete"] = True
+    else:
+        record["status"] = "computed"
+
+
+def stage_out_session(item: sq.SessionWork, record: dict) -> dict:
+    """Copy a ``computed`` run's results from its work folder into the session folder,
+    verified, mark it ``done``, then delete the work folder (the copier's stage-out).
+
+    On a failure the session stays ``computed`` with ``stage_out_error`` recorded, and the
+    work folder -- then the only copy of the results -- is kept; :func:`finish_stage_out`
+    retries.
+    """
+    work_dir = work_dir_of(item, record)
+    if record.get("status") != "computed" or work_dir == item.session_dir:
+        raise ValueError("{} is {} with work folder {}; nothing to stage out".format(
+            item.label, record.get("status"), work_dir))
+    try:
+        record["stage_out"] = ss.stage_out(work_dir, item.session_dir,
+                                           (OUTPUT_NAME,) + NOTEBOOK_VIDEOS, RUN_DIR_NAME,
+                                           os.path.basename(SIDECAR_NAME))
+        record.pop("stage_out_error", None)
+        record["timings"]["stage_out_s"] = record["stage_out"]["seconds"]
+        record["staged_out"] = pd.Timestamp.now().isoformat(timespec="seconds")
+        record["status"] = "done"
+        record["complete"] = True
+    except BaseException as error:
+        record["stage_out_error"] = "{}: {}".format(type(error).__name__, error)
+        raise
+    finally:
+        sq.write_sidecar(item.session_dir, SIDECAR_NAME, record)
+    shutil.rmtree(work_dir)
+    return record
+
+
+def finish_stage_out(item: sq.SessionWork) -> dict:
+    """Retry the stage-out of a ``computed`` session (after a failed or interrupted one)."""
+    record = run_record(item)
+    if record.get("status") != "computed":
+        raise ValueError("{} is {}, not computed".format(item.label, record.get("status", "pending")))
+    return stage_out_session(item, record)
 
 
 def resume_after_notebook(item: sq.SessionWork) -> dict:
     """Finish a ``failed`` run whose notebook itself completed, without re-running it.
 
-    For a failure in the steps after the notebook (report, videos, clean-up): refuses
+    For a failure in the steps after the notebook (report, YrA, videos, clean-up): refuses
     unless the executed notebook holds no error and ``parameters.json`` was written, so
     the CNMF-E output on disk is the notebook's complete output. The earlier error is
-    kept in the record as ``resumed_from``.
+    kept in the record as ``resumed_from``. A staged run is then staged out as well.
     """
     record = run_record(item)
     if record.get("status") != "failed":
         raise ValueError("{} is {}, not failed".format(item.label, record.get("status", "pending")))
-    run_dir = os.path.join(item.session_dir, RUN_DIR_NAME)
+    run_dir = os.path.join(work_dir_of(item, record), RUN_DIR_NAME)
     nb_path = os.path.join(run_dir, EXECUTED_NOTEBOOK)
     if "notebook_error" in record or "execute_s" not in record["timings"] \
             or notebook_error(nb_path) is not None \
@@ -1092,8 +1206,12 @@ def resume_after_notebook(item: sq.SessionWork) -> dict:
     sq.write_sidecar(item.session_dir, SIDECAR_NAME, record)
     try:
         _finish_after_notebook(item, record, started)
+        sq.write_sidecar(item.session_dir, SIDECAR_NAME, record)
+        if record["status"] == "computed":
+            stage_out_session(item, record)
     except BaseException as error:
-        _record_failure(record, error, started)
+        if record["status"] != "computed":
+            _record_failure(record, error, started)
         raise
     finally:
         sq.write_sidecar(item.session_dir, SIDECAR_NAME, record)
@@ -1104,10 +1222,15 @@ def clear_failed_run(item: sq.SessionWork, even_if_running: bool = False) -> str
     """Return a failed session to ``pending``; the failed run's folder is kept.
 
     Removes what the run wrote into the session -- ``minian/``, the notebook videos,
-    the scratch link and its folder -- and renames ``minian_run/`` to
-    ``minian_run-failed-<timestamp>/`` so its notebook and traceback survive. Set-aside
-    originals (``*-ORIG``) are not touched. Preparation guaranteed none of these existed
-    before the run, so everything removed was the run's own.
+    unverified ``.stage-partial`` copies, the scratch link and its folder -- and renames
+    ``minian_run/`` to ``minian_run-failed-<timestamp>/`` so its record and traceback
+    survive. A staged run's work folder is deleted too, after its ``minian_run/`` (the
+    executed notebook, the logs) is copied into the kept folder as ``work_dir_run/``.
+    Set-aside originals (``*-ORIG``) are not touched. Preparation guaranteed none of these
+    existed before the run, so everything removed was the run's own.
+
+    Never a ``computed`` session: its results are complete and exist only in the work
+    folder -- :func:`finish_stage_out` instead.
     """
     record = run_record(item)
     allowed = ("failed", "interrupted") + (("running",) if even_if_running else ())
@@ -1115,6 +1238,7 @@ def clear_failed_run(item: sq.SessionWork, even_if_running: bool = False) -> str
         raise ValueError("{} is {}; only {} can be cleared".format(
             item.label, record.get("status", "pending"), allowed))
     session_dir = item.session_dir
+    work_dir = work_dir_of(item, record)
     minian = os.path.join(session_dir, OUTPUT_NAME)
     if os.path.isdir(minian):
         shutil.rmtree(minian)
@@ -1123,13 +1247,22 @@ def clear_failed_run(item: sq.SessionWork, even_if_running: bool = False) -> str
                      os.path.join(session_dir, name[:-len(".mp4")] + ".reencode.mp4")):
             if os.path.isfile(path):
                 os.remove(path)
+    for name in (OUTPUT_NAME,) + NOTEBOOK_VIDEOS:
+        partial = os.path.join(session_dir, name + ss.PARTIAL_SUFFIX)
+        if os.path.lexists(partial):
+            shutil.rmtree(partial) if os.path.isdir(partial) else os.remove(partial)
     scratch, linked = run_scratch(record)
     if scratch and (os.path.islink(os.path.join(session_dir, sq.SCRATCH_DIR_NAME))
                     if linked else os.path.isdir(scratch)):
-        _remove_scratch(session_dir, scratch, linked)
+        _remove_scratch(work_dir, scratch, linked)
     kept = os.path.join(session_dir, "{}-failed-{}".format(
         RUN_DIR_NAME, pd.Timestamp.now().strftime("%Y%m%dT%H%M%S")))
     os.rename(os.path.join(session_dir, RUN_DIR_NAME), kept)
+    if work_dir != session_dir and os.path.isdir(work_dir):
+        local_run = os.path.join(work_dir, RUN_DIR_NAME)
+        if os.path.isdir(local_run):
+            shutil.copytree(local_run, os.path.join(kept, "work_dir_run"))
+        shutil.rmtree(work_dir)
     return kept
 
 
@@ -1195,3 +1328,64 @@ def run_all(items: List[sq.SessionWork], attended: bool = True,
     return sq.run_queue(pending_items(items), one,
                         stop_on_error=attended if stop_on_error is None else stop_on_error,
                         **kwargs)
+
+
+def run_all_staged(items: List[sq.SessionWork], stage_root: str, **kwargs) -> List[dict]:
+    """Every pending session in ``items``, unattended, with the copier
+    (`plans/session_staging_copier_plan.md`).
+
+    One background thread -- the copier -- does all of the data drive's bulk I/O, one job at
+    a time: the next session's stage-in (:func:`stage_inputs`) while the current one
+    computes, and each finished session's stage-out (:func:`stage_out_session`) while the
+    next computes. The main thread runs the sessions one after another in their work
+    folders. A failure is recorded and the queue moves on, as in unattended
+    :func:`run_all`; a failed stage-in leaves its session untouched and pending, a failed
+    stage-out leaves it ``computed`` with its work folder kept. Each stage-out is reported
+    as soon as it has finished. Returns one record per session, in the order they ended.
+    """
+    queue = pending_items(items)
+    records, stage_outs = [], []
+
+    def failed(item, step, error):
+        print("FAILED ({}): {}: {}".format(step, type(error).__name__, error))
+        records.append({"label": item.label, "failed": "{}: {}: {}".format(
+            step, type(error).__name__, error)})
+
+    def harvest(wait):
+        for entry in [e for e in stage_outs if wait or e[1].done()]:
+            stage_outs.remove(entry)
+            item, future = entry
+            try:
+                record = future.result()
+            except Exception as error:
+                failed(item, "stage-out", error)
+                continue
+            print("{}: done, staged out in {:.0f} s".format(item.label, record["timings"]["stage_out_s"]))
+            records.append(record)
+
+    copier = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="copier")
+    try:
+        prefetch = copier.submit(stage_inputs, queue[0], stage_root) if queue else None
+        for n, item in enumerate(queue, start=1):
+            harvest(wait=False)
+            print("\n{}\n[{}/{}] {}\n{}".format("=" * 78, n, len(queue), item.label, "=" * 78))
+            staging, prefetch = prefetch, (copier.submit(stage_inputs, queue[n], stage_root)
+                                           if n < len(queue) else None)
+            try:
+                staged = staging.result()
+            except Exception as error:
+                failed(item, "stage-in", error)
+                continue
+            try:
+                record = run_session(item, staged=staged, stage_out_now=False, **kwargs)
+            except Exception as error:
+                failed(item, "run", error)
+                continue
+            print(format_report(record))
+            stage_outs.append((item, copier.submit(stage_out_session, item, record)))
+        harvest(wait=True)
+    finally:
+        # On an interrupt: finish the copy in progress (its partial names keep it safe
+        # either way), drop the queued ones.
+        copier.shutdown(wait=True, cancel_futures=True)
+    return records

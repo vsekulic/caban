@@ -39,6 +39,8 @@ Plans (`plans/`):
 6. [crossreg_batch_runner_plan.md](crossreg_batch_runner_plan.md) — cross-registration by a registry;
    all output folders to be plain `minian`.
 7. [yra_unit_alignment_plan.md](yra_unit_alignment_plan.md) — the load-time YrA aligner (implemented).
+8. [session_staging_copier_plan.md](session_staging_copier_plan.md) — the copier (2026-09-28): every run
+   works on a verified local copy; states, verification, recovery.
 
 Code (`caban/`): `minian_runner.py` (the runner), `minian_gate.py` (production/gate comparison),
 `session_queue.py` (scan, set-aside, queue), `yra_recompute.py` (YrA recompute), `sessions.py`

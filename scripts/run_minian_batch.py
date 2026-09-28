@@ -7,6 +7,10 @@ Selection is the notebook's: nothing = every session that needs Minian; --labels
 patterns in <mouse>/<day>/<session>), --mice and --session-types narrow it (AND); --path
 names exact sessions, processed or not, and stands alone.
 
+With a stage root (the Razer's default) the copier moves every session's videos onto local
+disk before its run and its results back after, in a background thread
+(plans/session_staging_copier_plan.md).
+
 Run with the caban env activated -- ffmpeg/ffprobe come from it:
     conda activate caban
     python scripts/run_minian_batch.py --mice G05 G06 --n-workers 4
@@ -30,6 +34,11 @@ def main() -> int:
                         help="folders holding <mouse>/<day>/<session> (default: the mounted one, "
                              "see session_queue.default_data_roots)")
     parser.add_argument("--scratch-root", default=mr.DEFAULT_SCRATCH_ROOT)
+    parser.add_argument("--stage-root", default=mr.DEFAULT_STAGE_ROOT,
+                        help="work folders on local disk: each session's videos are copied there, "
+                             "the run works there, results are copied back -- by the copier "
+                             "(plans/session_staging_copier_plan.md); default ~/minian_stage on Linux. "
+                             "Without it (the Mac's default) runs work in the session folder.")
     parser.add_argument("--n-workers", type=int, default=6, help="dask workers (MINIAN_NWORKERS)")
     parser.add_argument("--keep-scratch", action="store_true", help="keep intermediates (gate runs)")
     parser.add_argument("--labels", nargs="+")
@@ -56,8 +65,14 @@ def main() -> int:
     if args.dry_run:
         return 0
 
-    records = mr.run_all(queue, attended=False, scratch_root=args.scratch_root,
-                         keep_scratch=args.keep_scratch, n_workers=args.n_workers)
+    run_options = dict(scratch_root=args.scratch_root, keep_scratch=args.keep_scratch,
+                       n_workers=args.n_workers)
+    if args.stage_root:
+        print("staged: work folders under {}".format(args.stage_root))
+        records = mr.run_all_staged(queue, args.stage_root, **run_options)
+    else:
+        print("not staged: runs work in the session folders")
+        records = mr.run_all(queue, attended=False, **run_options)
     failed = [r for r in records if "failed" in r]
     print("\n{} sessions run; {} failed".format(len(records), len(failed)))
     for r in failed:

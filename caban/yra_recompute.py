@@ -147,7 +147,9 @@ UNUSED_VIDEOS = {
 }
 
 
-def _session_tail(session_dir: str) -> str:
+def session_tail(session_dir: str) -> str:
+    """``<mouse folder>/<day>/<session>`` of a session (or its ``Miniscope``) folder -- the
+    same whichever drive or work folder the session is read from."""
     parts = os.path.normpath(session_dir).split(os.sep)
     if parts and parts[-1] == "Miniscope":
         parts = parts[:-1]
@@ -156,7 +158,7 @@ def _session_tail(session_dir: str) -> str:
 
 def unused_videos(session_dir: str) -> List[str]:
     """The ``.avi`` files production did not read for this session (see :data:`UNUSED_VIDEOS`)."""
-    return list(UNUSED_VIDEOS.get(_session_tail(session_dir), []))
+    return list(UNUSED_VIDEOS.get(session_tail(session_dir), []))
 
 
 def notebook_del_frames(session_dir: str) -> List[int]:
@@ -166,7 +168,7 @@ def notebook_del_frames(session_dir: str) -> List[int]:
     root the data is read from.  See :data:`NOTEBOOK_DEL_FRAMES` for where the table
     comes from and why the default is empty.
     """
-    return list(NOTEBOOK_DEL_FRAMES.get(_session_tail(session_dir), NOTEBOOK_DEL_FRAMES_DEFAULT))
+    return list(NOTEBOOK_DEL_FRAMES.get(session_tail(session_dir), NOTEBOOK_DEL_FRAMES_DEFAULT))
 
 
 # ---------------------------------------------------------------------------
@@ -843,17 +845,36 @@ def format_report(report: dict) -> str:
     return "\n".join(lines)
 
 
-def compare_replayed_movie(Y_new: xr.DataArray, saved_movie_path: str, n_frames: int = 50) -> dict:
-    """Compare the replayed ``Y`` against a saved ``Y_fm_chk.zarr``, on a frame sample.
+def compare_replayed_movie(Y_new: xr.DataArray, saved_movie_path: str,
+                           n_frames: Optional[int] = 50) -> dict:
+    """Compare the replayed ``Y`` against a saved ``Y_fm_chk.zarr``, on a frame sample or all.
 
-    This is step (1) of the plan's 7.1 gate, and it exists for exactly one session:
-    G10's conditioning session is the only one whose ``minian_intermediate/`` was
-    kept.  Comparing a sample rather than the whole movie keeps the check to one
-    extra pass over a few hundred MB instead of 77 GB.
+    This is step (1) of the plan's 7.1 gate. With ``n_frames`` a sample of that many
+    frames is compared. With ``None`` every frame is, streamed chunk by chunk under the
+    caller's dask scheduler: the per-frame count of differing pixels and largest
+    difference, never the movie itself in memory. That is the runner's check
+    (`plans/razer_runner_plan.md`, G14): the notebook and the replay read the videos
+    independently, so exact equality over every frame proves both reads were right.
     """
     saved = xr.open_zarr(saved_movie_path, consolidated=False)["Y_fm_chk"]
     if not np.array_equal(Y_new.frame.values, saved.frame.values):
         raise ValueError("replayed Y and saved Y_fm_chk have different frame coordinates")
+    if n_frames is None:
+        saved = saved.transpose(*Y_new.dims).chunk(dict(zip(Y_new.dims, Y_new.chunks)))
+        diff = np.abs(Y_new - saved)
+        per_frame_n, per_frame_max, per_frame_sum = dask.compute(
+            (diff > 0).sum(["height", "width"]).data, diff.max(["height", "width"]).data,
+            diff.sum(["height", "width"]).data)
+        differing = np.flatnonzero(per_frame_n)
+        return {
+            "n_frames_compared": int(len(per_frame_n)),
+            "exactly_equal": bool(len(differing) == 0),
+            "max_abs_diff": float(per_frame_max.max()),
+            "mean_abs_diff": float(per_frame_sum.sum() / (diff.size or 1)),
+            "n_pixels_differing": int(per_frame_n.sum()),
+            "n_frames_differing": int(len(differing)),
+            "first_differing_frames": differing[:50].tolist(),
+        }
     idx = np.unique(np.linspace(0, Y_new.sizes["frame"] - 1, n_frames).astype(int))
     a = Y_new.isel(frame=idx).values
     b = saved.isel(frame=idx).values
@@ -1011,6 +1032,7 @@ def recompute_session_yra(
     frame_chunk: int = DEFAULT_FRAME_CHUNK,
     dry_run: bool = False,
     force: bool = False,
+    full_movie_check: bool = False,
 ) -> dict:
     """Recompute one session's ``YrA`` and verify it.
 
@@ -1039,7 +1061,14 @@ def recompute_session_yra(
         computing or writing anything.
     force
         Recompute even when the sidecar says this session is already done.
+    full_movie_check
+        Compare the replayed ``Y`` with ``saved_movie_path`` in every frame, not a sample,
+        and refuse -- before computing anything -- unless they are exactly equal. Requires
+        ``saved_movie_path``. The runner's setting: the notebook's ``Y_fm_chk`` and the
+        replay come from two independent reads of the videos.
     """
+    if full_movie_check and not saved_movie_path:
+        raise ValueError("full_movie_check needs saved_movie_path")
     A = open_minian_array(minian_dir, "A")
     C = open_minian_array(minian_dir, "C")
     b = open_minian_array(minian_dir, "b")
@@ -1103,8 +1132,16 @@ def recompute_session_yra(
     movie_check = None
     if saved_movie_path:
         print("comparing the replayed Y against {}".format(saved_movie_path))
-        movie_check = compare_replayed_movie(Y, saved_movie_path)
+        movie_check = compare_replayed_movie(Y, saved_movie_path,
+                                             n_frames=None if full_movie_check else 50)
         print("  {}".format(movie_check))
+        if full_movie_check and not movie_check["exactly_equal"]:
+            raise ValueError(
+                "the replayed movie differs from {} in {} of {} frames (first: {}; max "
+                "difference {}): the notebook and the replay read different video data".format(
+                    saved_movie_path, movie_check["n_frames_differing"],
+                    movie_check["n_frames_compared"], movie_check["first_differing_frames"][:10],
+                    movie_check["max_abs_diff"]))
 
     print("computing YrA over {} units x {} frames".format(len(S_unit_id), C.sizes["frame"]))
     YrA_new = compute_trace(
@@ -1147,6 +1184,7 @@ def recompute_session_yra(
         "minian_dir": minian_dir,
         "existing_yra_path": existing_yra_path,
         "saved_movie_path": saved_movie_path,
+        "full_movie_check": full_movie_check,
         "param_load_videos": {k: str(v) for k, v in PARAM_LOAD_VIDEOS.items()},
         "param_denoise": PARAM_DENOISE,
         "param_background_removal": PARAM_BACKGROUND_REMOVAL,
