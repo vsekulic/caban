@@ -239,3 +239,20 @@ Wall 1.44 h (notebook 66 min, YrA 7 min, re-encode 13 min); peak RSS 12.2 GB, 45
   18 G14 videos under the 2 remaining streams gave identical md5s and frame counts. Cause open. G14 left
   as failed, scratch kept (a full replay-vs-`Y_fm_chk` check is still possible); VS to decide before
   `resume_after_notebook`.
+
+**Phase 3.4b — why 3 streams did not help** (2026-09-28, all read-only, scripts in `~/bin/` on the Razer):
+- *Per-cell times* (papermill cell metadata; `cell_timings.py`), per 1,000 frames, single run vs the three
+  concurrent ones: 148 s vs 457 s (×3.1) — i.e. three streams did the work of one. Not only the HDD cells:
+  loading the videos (cell 32) ×5.3, but motion estimation (cell 82, scratch + CPU only) ×3.4, spatial
+  updates ×2.3–2.9 (temporal updates ×13–15 also scale with the 4–5× larger unit count).
+- *MINIRAZER* is a **WD My Passport HDD on USB** (`Get-PhysicalDisk`; scratch `D:` = Samsung 990 PRO NVMe).
+  Sequential reads through `/mnt/e` (`hdd_read_test.sh`, sessions not read since the copy): **1 reader
+  80 MB/s; 3 readers 19 MB/s each, 58 MB/s in total** — seek contention.
+- *CPU* (`cpu_scaling.py`: the notebook's median-5 + tophat-15 on 608×608 frames, one thread per process,
+  no disk): 1 process 209–215 frames/s; **6 processes 1,000 in total; 18 processes 860–1,050 in total**.
+  Under 18: WSL steal 0 %, hypervisor logical-processor run time ~60 % (all scheduled), clock ~2.6 GHz (120 %
+  of the 2.2 GHz base; `cpu_sustained.sh`); a second consecutive pass fell to 710. Windows power plan
+  Balanced with the "Best performance" overlay. So **the CPU's total throughput is power-limited at about
+  6 busy cores**: more processes lower the clock and land on E-cores. One stream at 6 workers already uses it.
+- Consequence: **run one stream**, 6 workers. Throughput can only rise by raising the CPU's power budget
+  (a Razer/BIOS performance mode — VS, at the machine) — not by more streams.
