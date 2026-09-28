@@ -215,3 +215,27 @@ Wall 1.44 h (notebook 66 min, YrA 7 min, re-encode 13 min); peak RSS 12.2 GB, 45
   the real template; a missing package hidden under `%%capture` and a `minian` outside the fork both fail.
 - **Also found**: the 3 G05 sessions run on the Mac on 2026-09-27 have no recomputed `YrA` (that kernel
   predated the step) — backfill on the Razer.
+
+**Phase 3.4 — one short session, then 3 streams** (2026-09-28, driven from the Mac over Tailscale):
+- *One stream*: G05 `track_day0/15_44_41-HC2` (6 videos, 5,201 frames), 6 workers: done in 19.5 min (notebook
+  15 min, YrA 1 min, re-encode 3.3 min), peak RSS 6.6 GB, ≥ 50.9 GB always available; 167 units; the YrA
+  replay equals the run's `Y_fm_chk` bit for bit; non-overlapping units r = 1.0 against the notebook's `YrA`.
+- *Three streams at once* (6 workers each), the three longest pending LT sessions:
+
+  | session | videos / frames | units | notebook | total | peak RSS | result |
+  |---|---|---|---|---|---|---|
+  | G11 `2021_11_25-TFC_test_B/16_47_19-LT1` (old plain `minian/` → `minian-ORIG`) | 19 / 18,281 | 748 | 2.40 h | 2.77 h | 20.9 GB | done |
+  | G11 `2021_11_30-TFC_test_B_1wk/17_25_43-LT1` | 18 / 17,613 | 911 | 2.47 h | 2.82 h | 11.8 GB | done |
+  | G14 `2022_01_15-TFC_test-A/17_14_14-LT1` | 18 / 17,683 | 403 | 2.15 h | — | 10.3 GB | **failed in the YrA step** |
+
+  System-wide (`~/streams_3b.csv`, 1-min samples): at most 25.8 GB used, ≥ 29.2 GB available; load 10–16 of
+  32 threads. **Memory is not the limit; throughput is**: by the single run's rate (~3.4 min per 1,000
+  frames), each notebook would take ~50–60 min alone, so 3 streams ran each ~2.5× slower — about 1.2× the
+  throughput of one stream. CPU was not saturated; the shared input (`/mnt/e`, the USB drive through WSL)
+  or the scratch disk is the likely bottleneck — not yet measured (drvfs reads do not appear in `/proc/diskstats`).
+- *The G14 failure*: `yra_recompute.load_avi_ffmpeg` got 3 frames too many from `17.avi` (253,589,504
+  bytes = 686 frames; header and the notebook's `C`: 683) and stopped, as designed. Not reproduced: the
+  exact command gives 683 every time, in both envs' ffmpeg (8.1.2, 4.3.2), and 3 concurrent passes over all
+  18 G14 videos under the 2 remaining streams gave identical md5s and frame counts. Cause open. G14 left
+  as failed, scratch kept (a full replay-vs-`Y_fm_chk` check is still possible); VS to decide before
+  `resume_after_notebook`.
