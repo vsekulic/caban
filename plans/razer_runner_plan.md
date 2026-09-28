@@ -256,3 +256,26 @@ Wall 1.44 h (notebook 66 min, YrA 7 min, re-encode 13 min); peak RSS 12.2 GB, 45
   6 busy cores**: more processes lower the clock and land on E-cores. One stream at 6 workers already uses it.
 - Consequence: **run one stream**, 6 workers. Throughput can only rise by raising the CPU's power budget
   (a Razer/BIOS performance mode — VS, at the machine) — not by more streams.
+
+**G14's bad read, investigated** (2026-09-28; scripts in `~/bin/` on the Razer, all logged):
+- *The notebook's output is sound*: replaying the motion-corrected movie from the `.avi` files
+  (`yra_recompute`, the YrA step's own code; `g14_full_replay_check.py`) equals the run's saved `Y_fm_chk`
+  in **all 17,683 frames (0 pixels differ)**, and the replay's max over frames equals the notebook's
+  `max_proj` exactly. So every notebook read of the videos was right; the 686-frame read (13:32) was in the
+  YrA step only, and its byte-count check stopped it. The whole replay took 108 s with nothing else running.
+- *Not reproduced*: 5 later full reads of `17.avi` correct; then 20 min of 3 decode loops (the recompute's
+  exact ffmpeg command, `-v warning`) + 2 background readers (`decode_stress.py`): 899 decodes, 379 of
+  `17.avi`, all correct, no ffmpeg warning — though repeated decodes of the same 3 files were likely served
+  from the Windows file cache, so the USB read path was only lightly exercised.
+- *Windows System log* (`hw_errors.ps1`, `root_port_1b.ps1`, `nvme_map.ps1`): **one `disk` event 11,
+  "controller error on \Device\Harddisk2" = the WD My Passport (MINIRAZER), at 14:33:00** — during the full
+  replay above, which still came out exact (the read was retried). Nothing logged near 13:32. Separately,
+  **44 WHEA-17 corrected PCIe errors** (13:00–15:00 only, none since yesterday before that) on root port
+  00:1B.0 (Intel 7A44) = the link to the CA6 NVMe, **`C:`, the Windows system drive** — not scratch (`D:`,
+  Samsung 990 PRO on 1D) and not MINIRAZER; corrected, off the data path, worth watching. (Also: the Razer
+  Chroma Stream Server service crashes every 5 min, 335 times today — noise.)
+- *Conclusion*: cause **not established**. Best supported: a transient fault on MINIRAZER's USB read path,
+  which demonstrably has them (the 14:33 controller error), surfacing under the 3-stream load — but no
+  event ties it to 13:32. The checks that exist catch a changed frame count; a read that changed pixel
+  values without changing the count would pass them, except for the replay-vs-`Y_fm_chk` comparison (50
+  frames today).
