@@ -283,3 +283,12 @@ Wall 1.44 h (notebook 66 min, YrA 7 min, re-encode 13 min); peak RSS 12.2 GB, 45
   **full-frame check** (the YrA step compares the replayed movie with the notebook's `Y_fm_chk` in
   every frame and refuses unless equal) and run on local copies through **the copier**:
   [session_staging_copier_plan.md](session_staging_copier_plan.md).
+
+**Phase 4 — the batch started** (2026-09-28 16:04, `screen minian_batch`, `~/bin/minian_batch.sh`): one
+stream, 6 workers, staged through the copier, in the priority order of
+[local_minian_pipeline_plan.md](local_minian_pipeline_plan.md) §8 — TFC, LT, CNO, HC (one
+`run_minian_batch.py --session-types <type>` after the other). First, the **YrA backfill** of the three G05
+sessions run on the Mac (`~/bin/backfill_yra.py`, no movie check — their scratch was deleted): 462, 180 and
+202 units, corr(C, YrA) median 0.32 / 0.56 / 0.49, non-overlapping units vs the notebook's `YrA` r ≥
+0.999998 (the Mac's cv2, ±1 grey level). Queue at launch: 482 pending (after the 3.4 runs, G14 and the
+copier test). Still to do alongside: the sync script MINIRAZER → MINISCOPE; the power-mode check (VS).
