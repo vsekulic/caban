@@ -114,6 +114,9 @@ VIDEO_CRF = 23
 VIDEO_PRESET = "medium"
 
 PREFLIGHT_TIMEOUT_S = 300
+# The batch's stop switch: while this file exists, run_all_staged starts no new session --
+# the one running finishes and is copied back. Delete it to allow the next batch.
+STOP_FILE = os.path.expanduser("~/minian_stop")
 
 MEMORY_SAMPLE_INTERVAL_S = 5
 PROGRESS_PRINT_INTERVAL_S = 120
@@ -1340,7 +1343,9 @@ def run_all_staged(items: List[sq.SessionWork], stage_root: str, **kwargs) -> Li
     next computes. The main thread runs the sessions one after another in their work
     folders. A failure is recorded and the queue moves on, as in unattended
     :func:`run_all`; a failed stage-in leaves its session untouched and pending, a failed
-    stage-out leaves it ``computed`` with its work folder kept. Each stage-out is reported
+    stage-out leaves it ``computed`` with its work folder kept. While :data:`STOP_FILE`
+    exists no new session is started: the running one finishes and is copied back, and a
+    prefetched stage-in is left for the next batch to replace. Each stage-out is reported
     as soon as it has finished. Returns one record per session, in the order they ended.
     """
     queue = pending_items(items)
@@ -1368,6 +1373,10 @@ def run_all_staged(items: List[sq.SessionWork], stage_root: str, **kwargs) -> Li
         prefetch = copier.submit(stage_inputs, queue[0], stage_root) if queue else None
         for n, item in enumerate(queue, start=1):
             harvest(wait=False)
+            if os.path.exists(STOP_FILE):
+                print("\n{} exists: starting no new session ({} of {} not started)".format(
+                    STOP_FILE, len(queue) - n + 1, len(queue)))
+                break
             print("\n{}\n[{}/{}] {}\n{}".format("=" * 78, n, len(queue), item.label, "=" * 78))
             staging, prefetch = prefetch, (copier.submit(stage_inputs, queue[n], stage_root)
                                            if n < len(queue) else None)
