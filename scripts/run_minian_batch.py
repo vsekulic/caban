@@ -45,6 +45,10 @@ def main() -> int:
     parser.add_argument("--mice", nargs="+")
     parser.add_argument("--session-types", nargs="+")
     parser.add_argument("--path", nargs="+")
+    parser.add_argument("--by-day", action="store_true",
+                        help="the whole batch in the order of minian_runner.BATCH_DAY_GROUPS (whole "
+                             "experiment days first); stops between groups and sessions at the stop "
+                             "switch ~/minian_stop. Needs a stage root; no other selection.")
     parser.add_argument("--dry-run", action="store_true", help="show the queue, run nothing")
     args = parser.parse_args()
 
@@ -57,6 +61,8 @@ def main() -> int:
 
     pd.set_option("display.max_rows", 1000, "display.width", 220)
     items = mr.discover_sessions(roots=args.data_root)
+    if args.by_day:
+        return run_by_day(items, args)
     queue = mr.select_sessions(items, labels=args.labels, mice=args.mice,
                                session_types=args.session_types, path=args.path)
     status = mr.queue_status(queue)
@@ -75,6 +81,37 @@ def main() -> int:
         records = mr.run_all(queue, attended=False, **run_options)
     failed = [r for r in records if "failed" in r]
     print("\n{} sessions run; {} failed".format(len(records), len(failed)))
+    for r in failed:
+        print("  {}: {}".format(r["label"], r["failed"]))
+    return 1 if failed else 0
+
+
+def run_by_day(items, args) -> int:
+    """The batch in BATCH_DAY_GROUPS order, one group after another, each staged."""
+    if args.labels or args.mice or args.session_types or args.path:
+        raise SystemExit("--by-day takes no other selection")
+    if not args.stage_root:
+        raise SystemExit("--by-day needs a stage root")
+    if os.path.exists(mr.STOP_FILE) and not args.dry_run:
+        raise SystemExit("{} exists; delete it to start the batch".format(mr.STOP_FILE))
+    failed = []
+    for name, patterns in mr.BATCH_DAY_GROUPS:
+        if os.path.exists(mr.STOP_FILE):
+            print("=== {} exists: stopping before the group '{}' ===".format(mr.STOP_FILE, name))
+            break
+        print("\n=== batch: {} {}, {} ===".format(name, list(patterns) or "(all)",
+                                               pd.Timestamp.now().strftime("%F %T")))
+        queue = mr.select_sessions(items, labels=list(patterns) or None)
+        pending = mr.pending_items(queue)
+        print("{}: {} sessions, {} pending".format(name, len(queue), len(pending)))
+        if args.dry_run or not pending:
+            continue
+        records = mr.run_all_staged(pending, args.stage_root, scratch_root=args.scratch_root,
+                                    keep_scratch=args.keep_scratch, n_workers=args.n_workers)
+        failed += [r for r in records if "failed" in r]
+        print("=== batch: {} ended: {} run, {} failed ===".format(
+            name, len(records), sum("failed" in r for r in records)))
+    print("\n{} sessions failed in this batch".format(len(failed)))
     for r in failed:
         print("  {}: {}".format(r["label"], r["failed"]))
     return 1 if failed else 0

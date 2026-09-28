@@ -98,6 +98,32 @@ KERNEL_PACKAGES = (
 # types -- are recording mistakes to eyeball before queueing, never queued by default.
 MOUSE_RANGE = ("G05", "G21")
 STUB_SESSION_TYPES = ("iso", "HC1a", "HC2b", "LT1a")
+# The batch's order (VS, 2026-09-28): whole experiment days first -- every session of the day,
+# HC, LT, CNO and the TFC/test session -- then the track days, then the rest. Each group is a list
+# of regexes searched in <mouse>/<day>/<session> (select_sessions' `labels`); the trailing "/" ends
+# the day name, so "-TFC_test_B/" matches neither TFC_test_B_1wk nor TFC_test_B_1wk-redux. The
+# last group has no pattern: every session, so whatever the groups before left pending.
+BATCH_DAY_GROUPS = (
+    ("TFC_cond days", ("-TFC_cond/",)),
+    ("TFC_test_B days", ("-TFC_test_B/",)),
+    ("TFC_test_B_1wk days", ("-TFC_test_B_1wk/",)),
+    ("TFC_test_A days", ("-TFC_test_A/", "-TFC_test-A/")),
+    ("TFC_test_A_1wk days", ("-TFC_test_A_1wk/",)),
+    ("track day 1", ("-track_day1/", "-track_day1-tests/")),
+    ("track day 2", ("-track_day2/",)),
+    ("track day 3", ("-track_day3/",)),
+    ("everything else", ()),
+)
+
+
+def day_group(label: str) -> str:
+    """The :data:`BATCH_DAY_GROUPS` group a ``<mouse>/<day>/<session>`` label falls in."""
+    for name, patterns in BATCH_DAY_GROUPS:
+        if not patterns or any(re.search(p, label) for p in patterns):
+            return name
+    raise AssertionError("unreachable: the last group matches everything")
+
+
 # Parent plan §6.1: the four sessions that kept all 27 intermediate arrays.
 GATE_LABELS = (
     "G06/2021_10_18-TFC_cond/09_52_24-HC1",
