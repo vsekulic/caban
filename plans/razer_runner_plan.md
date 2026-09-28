@@ -1,6 +1,7 @@
 # Plan: run the Minian batch on the Razer Blade 16, driven from the Mac
 
-Status: **Phases 0–2 done** (copy verified 2026-09-28 08:28); next Phase 3 checks on the Razer. Every command on the
+Status: **Phases 0–2 done; Phase 3 production check passed** (2026-09-28); next: one short
+session and the 1–3-stream memory test, the sync script, then the batch. Every command on the
 Razer is logged in `~/razer_setup.log` there (`ssh razer tail -f razer_setup.log`).
 Depends on: `plans/minian_batch_runner_plan.md` (the runner, the G10 gate, the 492-session queue),
 `plans/local_minian_pipeline_plan.md` §5 (MINISCOPE is the only APFS copy; drive rules).
@@ -192,3 +193,21 @@ macOS folder `.DocumentRevisions-V100-bad-1`. **Verification** (`~/bin/minirazer
 robocopy `/L` with the copy's settings, 3 min): of 863,375 files, **863,373 identical in size and
 timestamp, 0 mismatched or missing**; the 2 listed are those two links. From here on the Mac and
 MINISCOPE are not needed by the Razer; only the Razer processes sessions.
+
+**Phase 3.2 — production check on the Razer: passed** (2026-09-28). G05 `2021_08_30-TFC_cond/18_22_57-TFC_cond`
+(26 videos, production, never runner-processed) instead of G10: on MINIRAZER G10 already carries the Mac's
+gate re-run, whose set-aside renames a second run would collide with. Compared with production
+(`minian_crossreg1_crossreg2_crossreg4_crossreg6_crossreg7`) by `minian_gate` and array by array
+(`~/bin/compare_to_production.py` on the Razer): `motion` and `max_proj` identical; 570 = 570 units, same
+`unit_id`s in the same order, all matched, median corr(C) 1.000; largest relative differences C 1.0e-5,
+S 6.9e-5, A 1.2e-3 (A: the Mac's G10 gave 4e-6 — plausibly Intel vs Apple-silicon solver paths; no unit,
+match or trace affected); the notebook's `YrA` again holds unit 70 where C has 71, as production's did.
+The YrA step's replayed movie equals the run's own `Y_fm_chk` bit for bit (the Mac: ±1 at 5 pixels).
+Wall 1.44 h (notebook 66 min, YrA 7 min, re-encode 13 min); peak RSS 12.2 GB, 45 GB still free.
+- **First attempt failed**: `minian-native` lacked `sk-video` (my reduced spec dropped it); the notebook's
+  import cell runs under `%%capture`, which hid the ImportError until cell 87. Fixed by adding the Mac's
+  missing packages at the Mac versions (`envs/minian-native-linux.yml`), refusing `netcdf4`, which would
+  have moved opencv to 4.5.3. **To add**: a pre-flight import check in the runner, so a missing package
+  fails in seconds.
+- **Also found**: the 3 G05 sessions run on the Mac on 2026-09-27 have no recomputed `YrA` (that kernel
+  predated the step) — backfill on the Razer.
