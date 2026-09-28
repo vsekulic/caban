@@ -12,7 +12,7 @@ here replaces them; it tells you where the truth is and what exists only in the 
 - **Every command on the Razer goes through `~/bin/logrun "<title>" <command…>`** — including
   read-only checks and file copies (after an `scp`, log a line such as `logrun "copied X from the Mac"
   md5sum X`). It appends to `~/razer_setup.log` and also shows the output; VS follows it with
-  `ssh razer tail -f razer_setup.log`. If something was done without it, backfill a note.
+  `ssh minastirith tail -f razer_setup.log`. If something was done without it, backfill a note.
 - **Before any delete or unregister, confirm on screen where the live copy is.** (On 2026-09-27 Claude
   told VS to delete a WSL disk image assuming another copy existed; it did not — the old Ubuntu was lost.)
 - **Link every plan/report/markdown file** you mention: `[plans/x.md](plans/x.md)`, plus the section
@@ -64,7 +64,7 @@ Live data to read (don't trust summaries — re-measure):
 
 - Razer: i9-13950HX (24 cores/32 threads), 64 GB (WSL sees 54 GB), Windows 11 Home 25H2, WSL 2.7.10,
   Ubuntu 24.04 at `D:\WSL\Ubuntu`, mirrored networking, **Ethernet 192.168.3.10** (home LAN; the Mac is
-  192.168.3.3). **`ssh razer`** from the Mac (`~/.ssh/config`, key `~/.ssh/id_ed25519`; backup of the
+  192.168.3.3). **`ssh minastirith`** from the Mac (`~/.ssh/config`, key `~/.ssh/id_ed25519`; backup of the
   old config `~/.ssh/config.bak-20260927`). Not reachable from outside the home LAN until Tailscale is set up (§8 step 0).
 - **WSL keep-alive**: Windows scheduled task "WSL keep-alive" (at logon: `conhost --headless wsl.exe -d
   <distro> --exec /bin/sleep infinity`, restarts every minute). **SSH does NOT keep WSL alive** — only
@@ -164,14 +164,17 @@ with the current branch; a Time Machine local snapshot of 2026-09-27 15:36 also 
 - robocopy from the spinning MINISCOPE: `/MT:2` 111 MB/s vs `/MT:16` 66 MB/s.
 - Operational: foreground `sleep` is blocked for Claude — wait with a single logged command on the Razer
   run in the background (`while screen -ls | grep -q X; do sleep 60; done`); an apostrophe inside a
-  single-quoted `ssh razer '…'` heredoc breaks the Mac shell's quoting (happened twice); filter the
-  harmless `param.Dimension` warning flood (`grep -v param.Dimension`); `ssh razer` + `logrun` output
+  single-quoted `ssh minastirith '…'` heredoc breaks the Mac shell's quoting (happened twice); filter the
+  harmless `param.Dimension` warning flood (`grep -v param.Dimension`); `ssh minastirith` + `logrun` output
   is already on screen, no need to `tail` the log.
 - The other chat claimed the copy was done when it was at 47 %: **measure, don't trust summaries.**
 
 ## 8. First moves for the new chat
 
-0. **First: set up Tailscale** (VS, 2026-09-28), so the Razer can be driven from anywhere, not only the
+0. **Tailscale — done 2026-09-28**: both machines on VS's tailnet (`taildef906.ts.net`, MagicDNS);
+   the Razer is `minastirith` (100.78.198.70), the Mac `osgiliath`; Run unattended on, key expiry off;
+   SSH tested by name and address (logged). The SSH alias is now **`ssh minastirith`** (was `razer`;
+   `~/.ssh/config.bak-20260928`). Setup as it was specified, for reference: set up Tailscale (VS, 2026-09-28), so the Razer can be driven from anywhere, not only the
    home LAN. Needs VS at both machines (~10 min). Steps (also in
    [minian_open_items.md](minian_open_items.md) item 14):
    1. **Account**: one Tailscale account (free Personal plan), with two-factor login — anyone in it can
@@ -185,7 +188,7 @@ with the current branch; a Time Machine local snapshot of 2026-09-27 15:36 also 
       name for the Razer, or its 100.x.y.z address) reaches WSL's sshd — the existing Windows firewall rule
       "WSL SSH" (port 22) should cover it; if not, allow port 22 on the Tailscale interface. Log the test on
       the Razer with `logrun`.
-   5. **Switch `ssh razer`** to it: in `~/.ssh/config`, `HostName minastirith` (or the 100.x address) in
+   5. **Switch `ssh minastirith`** to it: in `~/.ssh/config`, `HostName minastirith` (or the 100.x address) in
       place of `192.168.3.10` — then it works at home and away alike. Keep a backup of the file first.
    6. Check the lab/university network's rules on VPN-style software; Tailscale falls back to its relays
       (slower, still working) where UDP is blocked.
@@ -194,6 +197,6 @@ with the current branch; a Time Machine local snapshot of 2026-09-27 15:36 also 
    Cloudflare; built for publishing services, overkill for two personal machines (VS chose Tailscale,
    2026-09-28).
 1. Read §1. Run `git status`/`git log -5` (branch `feat/yra-unit-alignment` at the latest pushed commit).
-2. `ssh razer '~/bin/logrun "new chat: state check" bash -c "screen -ls; df -h /mnt/e; tail -5 ~/razer_setup.log"'`
+2. `ssh minastirith '~/bin/logrun "new chat: state check" bash -c "screen -ls; df -h /mnt/e; tail -5 ~/razer_setup.log"'`
    (only on the home network).
 3. Ask VS which to take first: the Razer track (§3 "Next on the Razer") or the review branch (§6).

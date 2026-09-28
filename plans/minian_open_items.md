@@ -115,8 +115,8 @@ backup drive is still wanted.
 - Renaming production output folders to plain `minian`
   ([crossreg_batch_runner_plan.md](crossreg_batch_runner_plan.md) §4) waits for item 5.
 
-### 14. Tailscale: reach the Razer from anywhere — set up (VS decided, 2026-09-28)
-`ssh razer` works only on the home network (192.168.3.10). Tailscale gives both machines private
+### 14. Tailscale: reach the Razer from anywhere — ✅ done 2026-09-28 (`ssh minastirith`)
+`ssh minastirith` works only on the home network (192.168.3.10). Tailscale gives both machines private
 addresses reachable from anywhere, with no ports opened to the internet. **First step of the handover**
 ([handover_razer_batch_and_review.md](handover_razer_batch_and_review.md) §8). Steps:
 1. **Account**: one Tailscale account (free Personal plan), with two-factor login — anyone in it can
@@ -130,7 +130,7 @@ addresses reachable from anywhere, with no ports opened to the internet. **First
    name for the Razer, or its 100.x.y.z address) reaches WSL's sshd — the existing Windows firewall rule
    "WSL SSH" (port 22) should cover it; if not, allow port 22 on the Tailscale interface. Log the test on
    the Razer with `logrun`.
-5. **Switch `ssh razer`** to it: in `~/.ssh/config`, `HostName minastirith` (or the 100.x address) in
+5. **Switch `ssh minastirith`** to it: in `~/.ssh/config`, `HostName minastirith` (or the 100.x address) in
    place of `192.168.3.10` — then it works at home and away alike. Keep a backup of the file first.
 6. Check the lab/university network's rules on VPN-style software; Tailscale falls back to its relays
    (slower, still working) where UDP is blocked.

@@ -2,7 +2,7 @@
 
 Status: **Phases 0–2 done; Phase 3 production check passed** (2026-09-28); next: one short
 session and the 1–3-stream memory test, the sync script, then the batch. Every command on the
-Razer is logged in `~/razer_setup.log` there (`ssh razer tail -f razer_setup.log`).
+Razer is logged in `~/razer_setup.log` there (`ssh minastirith tail -f razer_setup.log`).
 Depends on: `plans/minian_batch_runner_plan.md` (the runner, the G10 gate, the 492-session queue),
 `plans/local_minian_pipeline_plan.md` §5 (MINISCOPE is the only APFS copy; drive rules).
 
@@ -148,7 +148,7 @@ throughput ≈ 2–3× the Mac's single stream: the ~490 remaining sessions in d
 
 **Phase 0** (VS, 2026-09-27): Razer `minastirith`, i9-13950HX (24 cores / 32 threads), 64 GB, Windows 11
 Home 25H2, WSL 2.7.10; fresh Ubuntu 24.04 on `D:\WSL\Ubuntu`; mirrored networking; Ethernet
-192.168.3.10. The Mac reaches it as `ssh razer` (`~/.ssh/config`, key `~/.ssh/id_ed25519`).
+192.168.3.10. The Mac reaches it as `ssh minastirith` (`~/.ssh/config`, key `~/.ssh/id_ed25519`).
 
 **Phase 1** (Claude over SSH, 2026-09-27), all logged by `~/bin/logrun`:
 - Miniforge (conda 26.7.2). **`minian-native`**: `envs/minian-native-linux.yml` pins the 45 numerically
