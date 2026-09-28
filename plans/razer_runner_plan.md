@@ -213,8 +213,10 @@ Wall 1.44 h (notebook 66 min, YrA 7 min, re-encode 13 min); peak RSS 12.2 GB, 45
   fresh `minian-native` kernel started in the fork, before the session is touched (~5 s; recorded in
   `run.json` as `preflight`). `run_minian_batch.py` runs it once before the queue. Tested on the Mac and the Razer (and a Razer dry run: 492 queued, 5 DONE, 487 to run, unchanged): passes on
   the real template; a missing package hidden under `%%capture` and a `minian` outside the fork both fail.
-- **Also found**: the 3 G05 sessions run on the Mac on 2026-09-27 have no recomputed `YrA` (that kernel
-  predated the step) — backfill on the Razer.
+- ~~**Also found**: the 3 G05 sessions run on the Mac on 2026-09-27 have no recomputed `YrA`~~ —
+  **wrong** (corrected 2026-09-28): all three were recomputed on the Mac during their runs (sidecars written
+  2026-09-27 09:21–10:14 JST, 50-frame movie check; track_day1-tests LT1 differs by ≤ 1 grey level at 1,163
+  pixels, the Mac's cv2). The Phase 4 "backfill" found them complete and changed nothing.
 
 **Phase 3.4 — one short session, then 3 streams** (2026-09-28, driven from the Mac over Tailscale):
 - *One stream*: G05 `track_day0/15_44_41-HC2` (6 videos, 5,201 frames), 6 workers: done in 19.5 min (notebook
@@ -288,7 +290,7 @@ Wall 1.44 h (notebook 66 min, YrA 7 min, re-encode 13 min); peak RSS 12.2 GB, 45
 stream, 6 workers, staged through the copier, in the priority order of
 [local_minian_pipeline_plan.md](local_minian_pipeline_plan.md) §8 — TFC, LT, CNO, HC (one
 `run_minian_batch.py --session-types <type>` after the other). First, the **YrA backfill** of the three G05
-sessions run on the Mac (`~/bin/backfill_yra.py`, no movie check — their scratch was deleted): 462, 180 and
-202 units, corr(C, YrA) median 0.32 / 0.56 / 0.49, non-overlapping units vs the notebook's `YrA` r ≥
-0.999998 (the Mac's cv2, ±1 grey level). Queue at launch: 482 pending (after the 3.4 runs, G14 and the
+sessions run on the Mac (`~/bin/backfill_yra.py`): a no-op — their recomputes already existed (see the
+correction under Phase 3.2); the numbers it printed (462, 180, 202 units; corr(C, YrA) median 0.32 / 0.56 /
+0.49) are those recomputes'. Queue at launch: 482 pending (after the 3.4 runs, G14 and the
 copier test). Still to do alongside: the sync script MINIRAZER → MINISCOPE; the power-mode check (VS).

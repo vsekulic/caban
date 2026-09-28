@@ -74,7 +74,8 @@ def frames_checked(item) -> str:
         return "-"
     whole = check["n_frames_compared"] == sidecar["report"]["n_frames"]
     return "{} {} {}".format("all" if whole else "sample of", check["n_frames_compared"],
-                             "equal" if check["exactly_equal"] else "DIFFER")
+                             "equal" if check["exactly_equal"] else "differ: max {:g} at {} px".format(
+                                 check["max_abs_diff"], check["n_pixels_differing"]))
 
 
 def miniscope_cell(item, cat: str, record: dict) -> str:
@@ -180,7 +181,8 @@ def main(out_path: str) -> None:
         "- **finished**: when the results reached the session folder. **wall_h**: the run's own time.",
         "- **YrA**: `YrA_recomputed.zarr` present (the corrected residual traces).",
         "- **frames_checked**: the full-frame check -- the replayed movie against the notebook's own, "
-        "`all N equal` since 2026-09-28; `sample of 50` before.",
+        "`all N equal` since 2026-09-28; `sample of 50` before. On runs made on the Mac a difference of "
+        "max 1 grey level is expected (the Mac's cv2 5.0 against the notebook's 4.5; batch runner plan §13).",
         "- **on_MINISCOPE**: `Y (date)` = copied back and verified by the sync; `Y (Mac run)` = run on "
         "the Mac, so already there; `partial (YrA not)` = run on the Mac, YrA recomputed later on the "
         "Razer; `N` = only on MINIRAZER so far; `Y (source)` = production, which came from MINISCOPE.",

@@ -100,8 +100,8 @@ Live data to read (don't trust summaries — re-measure):
   trace affected; VS may want it localised).
 - **Next on the Razer, in order**: (1) a pre-flight import check in the runner (the first Razer attempt
   died 10 min in on a missing `sk-video` hidden by the notebook's `%%capture` import cell); (2) one short
-  session, then memory with 1/2/3 streams (G05 TFC_cond peaked 12.2 GB with 45 GB free); (3) backfill
-  the YrA recompute for the 3 G05 Mac sessions (`mr.recompute_yra`; their kernel predated the step);
+  session, then memory with 1/2/3 streams (G05 TFC_cond peaked 12.2 GB with 45 GB free); (3) ~~backfill
+  the YrA recompute for the 3 G05 Mac sessions~~ (not needed: done on the Mac during their runs — razer plan §5);
   (4) the sync script; (5) the batch — `scripts/run_minian_batch.py` in `screen`, disjoint selections.
 - Selection (VS's design): `LABELS` (regex in `<mouse>/<day>/<session>`), `MICE`, `SESSION_TYPES` — AND
   across, OR within, over the sessions needing Minian; `PATH` = exact sessions, processed or not, alone.
@@ -123,6 +123,9 @@ Carry each finished session's results MINIRAZER → MINISCOPE: new `minian/` (in
 **replay each `minian_set_aside.json`'s renames on MINISCOPE** (`minian` → `minian-ORIG`, videos, …) —
 rsync cannot express renames and would otherwise duplicate the old output. The Mac reads NTFS natively
 (plug MINIRAZER into the Mac) or reads over the network from the Razer. Never copy back raw data.
+
+Status of every session: [reports/minian_batch_status.md](../reports/minian_batch_status.md)
+(`scripts/minian_status_report.py`).
 
 ## 5. Open items
 
