@@ -40,6 +40,9 @@ PROVENANCE_DIR = os.path.join(MINISCOPE_ROOT, "_provenance")
 RAZER = "minastirith"
 PARTIAL_SUFFIX = ".sync-partial"
 SYNC_RECORD = "synced_to_miniscope.json"
+# Finder's window-state files: created on MINISCOPE by browsing it on the Mac, left out of the copy to
+# MINIRAZER (robocopy exclusions, razer plan Phase 2), never data.
+IGNORED_NAMES = (".DS_Store",)
 
 
 def local_manifest(root: str) -> dict:
@@ -47,7 +50,7 @@ def local_manifest(root: str) -> dict:
     out = {}
     for rel in ss._tree_files(root):
         path = os.path.join(root, rel) if rel else root
-        if os.path.basename(path) == SYNC_RECORD:
+        if os.path.basename(path) in (SYNC_RECORD,) + IGNORED_NAMES:
             continue
         out[rel] = [os.path.getsize(path), ss.md5_file(path)]
     return out
