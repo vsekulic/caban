@@ -58,6 +58,12 @@ Also G05 `2021_09_03-TFC_test_A` at 24.6 fps (recall; not Figure 2).
 
 ### 2.2 Promote the recomputed YrA in the loader (open item 7; yra plan §11.3)
 
+**Built 2026-09-29** (`BehaviourSession._load_recomputed_YrA`, `session_queue.locate_recomputed_yra`,
+`NO_RECOMPUTED_YRA`), reviewed (`/code-review`, four fixes) and tested read-only on MINIRAZER (G10
+TFC_cond found; G05 Test_B none; G16 Test_B LT1's two outputs refused). Not yet used for a load: the
+rebuild (§2.3) waits for the `max_proj` re-check of every recompute (running on the Razer since
+21:15, TFC_cond first) and for the updated sidecars to be copied to MINISCOPE. As built:
+
 Design, to be agreed before coding:
 - `sessions.py:739` reads `YrA_recomputed.zarr` from the session's output folder where it exists
   (all 17 TFC_cond), and **hard-fails** for a session whose output folder has a recompute sidecar

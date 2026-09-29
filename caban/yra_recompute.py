@@ -91,8 +91,8 @@ PARAM_BACKGROUND_REMOVAL = {"method": "tophat", "wnd": 15}
 DEFAULT_FRAME_CHUNK = 250
 
 # Written next to the recomputed array; see `plans/yra_recompute_plan.md` 11.2.
-OUTPUT_ARRAY_NAME = "YrA_recomputed.zarr"
-SIDECAR_NAME = "YrA_recompute.json"
+OUTPUT_ARRAY_NAME = sq.RECOMPUTED_YRA_NAME
+SIDECAR_NAME = sq.RECOMPUTED_YRA_SIDECAR
 
 # The replay check of `plans/yra_recompute_plan.md` §14.2: the replayed movie's maximum
 # over frames against the `max_proj` production saved (`Y_fm_chk.max("frame")`). The

@@ -131,6 +131,52 @@ def imaged_timestamp_rows(session_dir: str, n_rows: int) -> np.ndarray:
         imaged[first:stop] = False
     return imaged
 
+# --- The recomputed YrA (`caban.yra_recompute`; plans/yra_recompute_plan.md §11.3) ----------
+#
+# Defined here so the analysis loader (`caban.sessions`) can find it without importing the
+# recompute. The recompute writes both inside the output folder that holds A/C/S.
+RECOMPUTED_YRA_NAME = "YrA_recomputed.zarr"
+RECOMPUTED_YRA_SIDECAR = "YrA_recompute.json"
+
+# Sessions with an exported YrA but no recomputed one, and what the loader does instead. Explicit,
+# so that any other session missing its recompute is a hard failure rather than a silent fallback
+# to the export (which is known to be wrong: plans/yra_recompute_plan.md §1, §12.4).
+NO_RECOMPUTED_YRA = {
+    # motion.zarr is NaN in every frame (plan §14); recoverable by re-estimating the motion
+    # (review/timing-and-yra-fixes d2b74ce, deferred). Until then: no YrA for these sessions.
+    "G05-ST637_hM3D/2021_09_01-TFC_test_B/15_37_05-LT1": "no YrA until the motion is recovered (plan §14.1)",
+    "G05-ST637_hM3D/2021_09_01-TFC_test_B/16_20_07-TFC_test_B": "no YrA until the motion is recovered (plan §14.1)",
+}
+
+
+def locate_recomputed_yra(session_dir: str, roots=None) -> dict:
+    """Where a session's recomputed YrA is on the data drive, and whether it ever had an export.
+
+    ``session_dir`` may be any copy of the session (the analysis side's paths); it is matched on
+    its ``<mouse>/<day>/<session>`` tail under the data roots (:func:`default_data_roots`), which
+    must hold exactly one copy of it, with at most one complete ``minian_crossreg*`` output. Returns
+    ``{"recomputed": <zarr path or None>, "old_export": bool, "miniscope_dir": str}``.
+    """
+    tail = session_tail(session_dir)
+    roots = roots or default_data_roots()
+    folders = [os.path.join(r, tail, "Miniscope") for r in roots
+               if os.path.isdir(os.path.join(r, tail, "Miniscope"))]
+    if len(folders) != 1:
+        raise FileNotFoundError("{}: found {} copies of the session under {}".format(tail, len(folders), roots))
+    miniscope = folders[0]
+    # The loaded C/S came from the session's one complete output folder; with more than one, it
+    # would be ambiguous which, and the YrA must come from the same folder (G16 Test_B LT1 has two).
+    outputs = _complete_minian_dirs(miniscope)
+    if len(outputs) > 1:
+        raise ValueError("{}: {} complete Minian outputs ({}); which one the loaded C/S came from is "
+                         "ambiguous".format(tail, len(outputs), [os.path.basename(o) for o in outputs]))
+    recomputed = [os.path.join(o, RECOMPUTED_YRA_NAME) for o in outputs
+                  if os.path.isdir(os.path.join(o, RECOMPUTED_YRA_NAME))]
+    return {"recomputed": recomputed[0] if recomputed else None,
+            "old_export": _find_existing_yra(miniscope, outputs) is not None,
+            "miniscope_dir": miniscope}
+
+
 # Existing output is renamed with this suffix before a notebook re-run writes in its
 # place (`plans/local_minian_pipeline_plan.md` §5.2). What each notebook writes:
 #   pipeline notebook      -> <session>/Miniscope/: these dirs and videos

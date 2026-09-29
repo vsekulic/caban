@@ -1,7 +1,9 @@
 from tkinter.filedialog import SaveFileDialog
 import numpy as np
 from caban.utilities import *
-from caban.session_queue import imaged_timestamp_rows, original_output_path, unimaged_timestamp_rows
+from caban.session_queue import (NO_RECOMPUTED_YRA, RECOMPUTED_YRA_SIDECAR, imaged_timestamp_rows,
+                                  locate_recomputed_yra, original_output_path, read_sidecar,
+                                  session_tail, unimaged_timestamp_rows)
 import ast
 import glob
 from natsort import natsorted
@@ -10,8 +12,14 @@ from scipy.ndimage import gaussian_filter
 from scipy import sparse as sp_sparse
 from scipy.stats import skew
 from scipy.signal import find_peaks
+import xarray as xr
 
 ####################
+
+# Cache names of the recomputed YrA (caban.yra_recompute) in each session's YrA saver. Distinct from
+# the old 'YrA_full'/'YrA_idx' caches of the notebook's export, which are left in place untouched.
+YRA_CACHE_FULL = 'YrA_recomputed_full'
+YRA_CACHE_IDX = 'YrA_recomputed_idx'
 
 
 def filter_abnormal_cells(
@@ -462,9 +470,14 @@ class BehaviourSession:
             saver = getattr(self, 'saver_YrA', None)
             if saver is None:
                 raise AttributeError(name)
-            # The cache holds the RAW export, so a released-then-reloaded YrA_full must go
-            # through the same aligner get_CS_matrices used.
-            value = self._align_YrA_to_S_units(saver.load('YrA_full'), saver.load('YrA_idx'))
+            if self.__dict__.get('YrA_has_trace', None) is None:
+                # This session has no YrA (none recomputed and none exported, or listed in
+                # NO_RECOMPUTED_YRA): the recorded state, not a fallback.
+                self.YrA_full = None
+                return None
+            # A released-then-reloaded YrA_full goes through the same aligner get_CS_matrices
+            # used (a no-op on the recomputed YrA, whose unit order is S's).
+            value = self._align_YrA_to_S_units(saver.load(YRA_CACHE_FULL), saver.load(YRA_CACHE_IDX))
             setattr(self, name, value)
             self.YrA_idx = np.asarray(self.S_idx).copy()
             return value
@@ -750,6 +763,55 @@ class BehaviourSession:
         self.YrA_missing_unit_ids = None
         self.YrA_only_unit_ids = None
 
+    def _load_recomputed_YrA(self):
+        '''(YrA_full, YrA_idx) of this session's recomputed YrA, or (None, None) if it has none.
+
+        The export Minian's notebook saved is not used: its rows are sheared against S/C and it
+        was computed from another run's C (plans/yra_recompute_plan.md §1, §12.4). The recompute
+        is read once from the data drive and cached under YRA_CACHE_FULL / YRA_CACHE_IDX, so later
+        loads need no drive. Hard failures, each naming the session:
+        - the recompute's sidecar is not complete, or has no PASSING max_proj check (the replay
+          proof, plan §14.2; run caban.yra_recompute.verify_all first);
+        - its unit_id is not S's elementwise, or its shape is not C's;
+        - the session had an exported YrA but has no recompute and is not listed in
+          caban.session_queue.NO_RECOMPUTED_YRA.
+        A session that never had any YrA keeps having none.
+        '''
+        where = '{} {}'.format(self.mouse, self.session_type)
+        if self.saver_YrA.check_exists(YRA_CACHE_FULL) and self.saver_YrA.check_exists(YRA_CACHE_IDX):
+            return self.saver_YrA.load(YRA_CACHE_FULL), self.saver_YrA.load(YRA_CACHE_IDX)
+        tail = session_tail(self.dpath)
+        if tail in NO_RECOMPUTED_YRA:
+            print('*** [YrA] {}: no YrA -- {}'.format(where, NO_RECOMPUTED_YRA[tail]))
+            return None, None
+        found = locate_recomputed_yra(self.dpath)
+        if found['recomputed'] is None:
+            if found['old_export']:
+                raise ValueError('{}: {} has an exported YrA.zarr but no recomputed YrA; recompute it '
+                                 '(caban.yra_recompute) or list it in NO_RECOMPUTED_YRA'.format(
+                                     where, found['miniscope_dir']))
+            return None, None
+        output_dir = os.path.dirname(found['recomputed'])
+        sidecar = read_sidecar(output_dir, RECOMPUTED_YRA_SIDECAR)
+        check = sidecar.get('report', {}).get('max_proj_check')
+        if not sidecar.get('complete') or not check or not check.get('passed'):
+            raise ValueError('{}: the recomputed YrA in {} is not complete with a passing max_proj check '
+                             '(complete={}, max_proj_check={})'.format(
+                                 where, output_dir, sidecar.get('complete'), check))
+        YrA = xr.open_zarr(found['recomputed'], consolidated=False)['YrA']
+        YrA_full = np.asarray(YrA.values)
+        YrA_idx = np.asarray(YrA.coords['unit_id'].values)
+        if not np.array_equal(YrA_idx, np.asarray(self.S_idx)):
+            raise ValueError('{}: the recomputed YrA unit_id is not S_idx elementwise'.format(where))
+        if YrA_full.shape != self.C_full.shape:
+            raise ValueError('{}: the recomputed YrA has shape {}, C {}'.format(
+                where, YrA_full.shape, self.C_full.shape))
+        self.saver_YrA.save(YrA_full, YRA_CACHE_FULL)
+        self.saver_YrA.save(YrA_idx, YRA_CACHE_IDX)
+        print('*** [YrA] {}: recomputed YrA loaded from {} (max_proj check: max |diff| {:g})'.format(
+            where, output_dir, check['max_abs_diff']))
+        return YrA_full, YrA_idx
+
     def get_CS_matrices(self):
 
         # zarr.load returns zarr LazyLoader dict, so get the numpy values for the calcium and spike arrays
@@ -775,27 +837,17 @@ class BehaviourSession:
             self.saver_CS_matrices.save(self.S_full, 'S_full')
             self.saver_CS_matrices.save(self.S_idx, 'S_idx')
 
-        # Get original motion-corrected non-crosstalk fluorescence data, if available.
-        self.YrA_full = self.YrA_idx = None
-        if self.saver_YrA.check_exists('YrA_full'):
-            self.YrA_full = self.saver_YrA.load('YrA_full')
-            self.YrA_idx = self.saver_YrA.load('YrA_idx')
-        else:
-            self.set_minian_output_dir()
-            YrA_path = os.path.join(self.minian_output_dir, "YrA.zarr")
-            if os.path.exists(YrA_path):
-                self.YrA_zarr = zarr.load(YrA_path)
-                self.YrA_full = self.YrA_zarr['YrA']
-                self.YrA_idx = self.YrA_zarr['unit_id']
-                self.saver_YrA.save(self.YrA_full, 'YrA_full')
-                self.saver_YrA.save(self.YrA_idx, 'YrA_idx')
+        # YrA: the RECOMPUTED residual traces (caban.yra_recompute), never the notebook's export.
+        self.YrA_full, self.YrA_idx = self._load_recomputed_YrA()
 
-        # Both load paths above yield the RAW Minian export, whose row order is not S/C's.
-        # Align it to the S/C unit order before anything slices or indexes it. The zarr branch
-        # has already written the raw arrays to the cache, so the cache stays raw.
+        # The aligner stays as a guard: on the recomputed YrA it moves nothing and finds every unit.
         if self.YrA_full is not None:
             self.YrA_full = self._align_YrA_to_S_units(self.YrA_full, self.YrA_idx)
             self.YrA_idx = np.asarray(self.S_idx).copy()
+            if not self.YrA_has_trace.all() or len(self.YrA_only_unit_ids):
+                raise ValueError('{} {}: the recomputed YrA has all-NaN rows for units {} or extra units {}'.format(
+                    self.mouse, self.session_type, self.YrA_missing_unit_ids.tolist(),
+                    self.YrA_only_unit_ids.tolist()))
         else:
             self._clear_YrA_alignment_state()
 
