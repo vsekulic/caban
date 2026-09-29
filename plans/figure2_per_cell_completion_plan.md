@@ -76,6 +76,20 @@ Design, to be agreed before coding:
   aside, not deleted), so the rebuild writes new ones.
 - `zarr.load` → `zarr.open_group` (yra plan §8; zarr 3 cannot `load` a group).
 
+### 2.2b The max_proj re-check of every recompute (the loader's gate) — status 2026-09-29, 23:58
+
+- 17 TFC_cond: checked on the Razer, **all exact** (0 px differ); records copied to MINISCOPE (old
+  versions in `MINISCOPE/_provenance/yra_sidecars_before_max_proj_check_20260929/`).
+- 39 others: checked on the Mac against MINISCOPE, all passing (±1 at a few px, the Mac's cv2); copied
+  to MINIRAZER (backups in `/mnt/e/_provenance/…`). **The Mac run was stopped by a memory crash of
+  osgiliath** (Jetsam 23:46; the re-check peaked at 5.7 GB beside Safari's 12.7 GB) — no more heavy runs
+  on the Mac while VS works on it.
+- The remaining 72 (+ the 2 NaN-motion G05 sessions, failing as expected, listed in `NO_RECOMPUTED_YRA`):
+  running on the Razer overnight (`screen verify_yra`, nice 19). **Next**: copy their records to
+  MINISCOPE with `scripts/copy_recheck_sidecars.py`, then VS runs the rebuild and the per-cell cells of
+  `run_pipeline.ipynb` (reference kept as `plots/CURRENT-20260929-exported-YrA`; old cache as
+  `npy_files/ds_cache-20260512-exported-YrA.pkl`).
+
 ### 2.3 Rebuild the caches, offline-capable
 
 A fresh `load_all_mice(use_cache=False)` (yra plan §9; VS prefers a clean full reload), reading the
