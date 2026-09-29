@@ -107,8 +107,9 @@ templates (`analysis_methods_templates/epoch_modulation*_methods.md`) stating th
 
 ### 2.7 Decisions for VS in this phase
 
-1. **Which per-cell panels go into Figure 2** — K, L, the selectivity panels (O/P), the hierarchical
-   panel; and whether "per-cell responses" also means `event_locked_responsiveness`.
+1. ~~Which per-cell panels go into Figure 2~~ — **decided (VS, 2026-09-29): compute every per-cell
+   analysis and plot it as before; which panels enter the figure is decided at the end, from the
+   results.**
 2. **O.8**: sort panel K on held-out trials (honest by construction) — a change to a paper-facing
    panel.
 3. **O.2**: report the split-half stability (Q2), or not.
