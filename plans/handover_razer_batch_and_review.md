@@ -139,6 +139,15 @@ list): the camera runs at 19.76 fps, not 20; G05 `2021_09_03-TFC_test_A/16_34_42
 
 ## 6. The parked review branch `review/timing-and-yra-fixes` — review before anything is merged
 
+**Review status (2026-09-29):** `96137b9` merged as `e293ed5` and `5c3a1bd` as `044b4f1` (each
+cherry-picked onto the copier code, conflicts resolved, `/code-review` + scientific review, fixes
+applied; the `max_proj` check tested on a copy of G05 TFC_cond LT1). `7fcac0f` **rejected**, not
+merged: it would run the recompute notebook on the Mac against MINISCOPE, which the sync now forbids
+(MINISCOPE only receives verified copies from MINIRAZER). `9015c23` (collaborator notice) waits for VS
+(sent? needed?) before its numbers are verified. `d2b74ce` (G05 NaN-motion recovery) is recall-only
+and waits until after Figure 2's per-cell block
+([figure2_per_cell_completion_plan.md](figure2_per_cell_completion_plan.md)).
+
 The other chat's 5 commits, unpushed, moved off `feat/yra-unit-alignment` (reset to `7f217bd`) on
 2026-09-27 evening. Review each with `/code-review` on its diff; the loader/timing ones also with the
 `scientific-code-reviewer` and `statistics-checker` agents (VS's rule before any result is written up).
