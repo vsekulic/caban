@@ -90,6 +90,10 @@ Design, to be agreed before coding:
   `run_pipeline.ipynb` (reference kept as `plots/CURRENT-20260929-exported-YrA`; old cache as
   `npy_files/ds_cache-20260512-exported-YrA.pkl`).
 
+**Done 2026-09-30 05:08** (Razer): the remaining 72 re-checked, **111 of 113 non-TFC_cond pass** (the 2
+failures are the NaN-motion G05 sessions). Records copied to MINISCOPE (72 updated). **All 128 recompute
+sidecars on MINISCOPE carry a passing `max_proj` check**; both drives agree. Ready for §2.3 (VS).
+
 ### 2.3 Rebuild the caches, offline-capable
 
 A fresh `load_all_mice(use_cache=False)` (yra plan §9; VS prefers a clean full reload), reading the
