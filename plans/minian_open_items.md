@@ -58,6 +58,9 @@ recordings), so `C` frames from 11,000 on were recorded at timestamp rows 14,000
 session, and the experiment's end boundary may point past `C`. **Existing, published pipeline.** Decide:
 fix the loader (map frames to timestamps through the files actually read), and check which published
 G21 Test_B results move. The only such gap among the 130 (G15's missing file is at the end: harmless).
+**Decided and built 2026-09-27** (fix the loader; [yra_recompute_plan.md](yra_recompute_plan.md) §15.1,
+"Resolved"): tone 3 has no imaging and is excluded; G09 TFC_cond's end overhang handled too. Remaining:
+stale derived caches, rebuild `ds_cache.pkl`, re-run the Test_B analyses to see what moves.
 
 ### 4. Which new cross-registration groupings — VS decision
 [crossreg_batch_runner_plan.md](crossreg_batch_runner_plan.md) §6. Scientific choice; candidates: the
@@ -121,6 +124,21 @@ backup drive is still wanted.
   [crossreg_batch_runner_plan.md](crossreg_batch_runner_plan.md) and this file (`/index plans`).
 - Renaming production output folders to plain `minian`
   ([crossreg_batch_runner_plan.md](crossreg_batch_runner_plan.md) §4) waits for item 5.
+
+### 13. Frame rate is 19.76 fps, and G05 Test_A was recorded at 25 — VS decision (found 2026-09-27)
+Measured from `timeStamps.csv` over all 116 loaded sessions: mean rate 19.752–19.760 fps (IQR),
+essentially no dropped frames, although `metaData.json` says `frameRate: 20`. **G05
+`2021_09_03-TFC_test_A/16_34_42-TFC_test_A` was set to `frameRate: 25`** (24.6 fps measured; 7,615
+frames over 309 s). Every rate in the pipeline is spikes / (frames / `MINISCOPE_FPS = 20`)
+(`utilities.get_avg_sp_rate_in_period`, `get_avg_activity_in_period`, and other frame↔time
+conversions). Consequences:
+- all sessions: absolute rates 1.2 % high, the same factor for every group, so comparisons are
+  unaffected;
+- **G05 Test_A: rates about 19 % low**, plus any other frames-to-time conversion in that session.
+  Tone windows are found by timestamp, so they are right.
+
+Options: per-session frame rate from the timestamps (a fix like item 3's), or at least G05 Test_A.
+Decide, then check what moves in the Test_A results for the hM3D group.
 
 ### 14. Tailscale: reach the Razer from anywhere — ✅ done 2026-09-28 (`ssh minastirith`)
 `ssh minastirith` works only on the home network (192.168.3.10). Tailscale gives both machines private

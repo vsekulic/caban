@@ -140,36 +140,6 @@ NOTEBOOK_DEL_FRAMES = {
 NOTEBOOK_DEL_FRAMES_DEFAULT: List[int] = []
 
 
-# Videos production never read, per session: recordings whose last files were never
-# finalised, so their header carries no frame count (`ffprobe` nb_frames N/A) --
-# Minian's load_avi_lazy needs it and cannot have read them. Established 2026-09-26
-# (plan §15): production's C frame count equals exactly the sum over the remaining
-# files, and the replay's own frame-count check re-proves that every run. Listed
-# explicitly rather than skipped by rule, so an unreadable file anywhere else is
-# still a hard failure.
-UNUSED_VIDEOS = {
-    # 19.avi: 865 decodable frames, no header count; at the end of the recording.
-    "G15-ST721-hM4D/2022_01_13-TFC_test_B/16_19_13-TFC_test_B": ["19.avi"],
-    # 11.avi: 593 decodable frames; 12.avi, 13.avi: 14 KB, no frames. In the MIDDLE of
-    # the recording: production's C skips 3,000 timestamp rows after frame 10,999 (§15).
-    "G21-ST762-hM4D/2022_03_24-TFC_test_B/14_35_02-TFC_test_B": ["11.avi", "12.avi", "13.avi"],
-}
-
-
-def session_tail(session_dir: str) -> str:
-    """``<mouse folder>/<day>/<session>`` of a session (or its ``Miniscope``) folder -- the
-    same whichever drive or work folder the session is read from."""
-    parts = os.path.normpath(session_dir).split(os.sep)
-    if parts and parts[-1] == "Miniscope":
-        parts = parts[:-1]
-    return "/".join(parts[-3:])
-
-
-def unused_videos(session_dir: str) -> List[str]:
-    """The ``.avi`` files production did not read for this session (see :data:`UNUSED_VIDEOS`)."""
-    return list(UNUSED_VIDEOS.get(session_tail(session_dir), []))
-
-
 def notebook_del_frames(session_dir: str) -> List[int]:
     """The ``del_frames`` the pipeline notebook recorded for this session.
 
@@ -177,7 +147,7 @@ def notebook_del_frames(session_dir: str) -> List[int]:
     root the data is read from.  See :data:`NOTEBOOK_DEL_FRAMES` for where the table
     comes from and why the default is empty.
     """
-    return list(NOTEBOOK_DEL_FRAMES.get(session_tail(session_dir), NOTEBOOK_DEL_FRAMES_DEFAULT))
+    return list(NOTEBOOK_DEL_FRAMES.get(sq.session_tail(session_dir), NOTEBOOK_DEL_FRAMES_DEFAULT))
 
 
 # ---------------------------------------------------------------------------
@@ -288,7 +258,7 @@ def load_videos(
     and an unsupported extension still raises), and the trailing
     ``custom_arr_optimize`` dask-graph rewrite is dropped -- it is a scheduler
     optimisation with no effect on values.  Addition: ``exclude`` drops named files
-    (see :data:`UNUSED_VIDEOS`).
+    (see :data:`caban.session_queue.UNUSED_VIDEOS`).
     """
     vpath = os.path.normpath(vpath)
     vlist = _video_list(vpath, pattern, exclude)
@@ -518,7 +488,7 @@ def _require_finite_motion(motion: xr.DataArray, minian_dir: str) -> None:
 def replay_frame_set(session_dir: str, C: xr.DataArray) -> tuple:
     """``(excluded videos, frames in the videos read, del_frames)`` for replaying a session's
     movie against ``C``: the one definition both the recompute and its re-check use."""
-    excluded = unused_videos(session_dir)
+    excluded = sq.unused_videos(session_dir)
     n_video_frames = count_video_frames(session_dir, PARAM_LOAD_VIDEOS["pattern"], excluded)
     return excluded, n_video_frames, derive_deleted_frames(n_video_frames, C.frame.values)
 

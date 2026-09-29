@@ -31,6 +31,7 @@ import os
 import re
 from typing import Callable, List, Optional
 
+import numpy as np
 import pandas as pd
 
 # Where the raw sessions live. The backup drives are read-only; `MINISCOPE` is the
@@ -50,6 +51,85 @@ MOUSE_DIR_PATTERN = r"^G\d\d"
 VIDEO_PATTERN = r"^[0-9]+\.avi$"
 # A Minian output directory counts as complete only with all of these present.
 REQUIRED_MINIAN_ARRAYS = ("A", "C", "S", "b", "f", "motion")
+
+# --- Timestamp rows without imaging (`plans/yra_recompute_plan.md` §15) -------------
+#
+# The Miniscope software writes a `timeStamps.csv` row per frame and `framesPerFile`
+# (1000, per every session's metaData.json) frames per numbered .avi. Production's `C`
+# holds exactly the frames of the files Minian could read, so row i of the timestamps is
+# frame i of `C` only where no row before it lacks imaging. Both the YrA replay (which
+# files to read) and `caban.sessions` (which timestamp rows to drop) use these tables;
+# the analysis side reads no raw data, so they are explicit, not derived from the files.
+FRAMES_PER_FILE = 1000
+
+# Videos production never read: their header was never finalised (ffprobe nb_frames
+# N/A), which Minian's load_avi_lazy needs. Established 2026-09-26 (plan §15):
+# production's C frame count equals exactly the sum over the remaining files, and the
+# replay's frame-count check re-proves that every run. Listed explicitly rather than
+# skipped by rule, so an unreadable file anywhere else is still a hard failure.
+UNUSED_VIDEOS = {
+    # 19.avi: 865 decodable frames, no header count; at the end of the recording.
+    "G15-ST721-hM4D/2022_01_13-TFC_test_B/16_19_13-TFC_test_B": ["19.avi"],
+    # 11.avi: 593 decodable frames; 12.avi, 13.avi: 14 KB, no frames. In the MIDDLE of
+    # the recording: no imaging from 553.9 s to 705.9 s of the experiment, and C frame
+    # 11,000 is timestamp row 14,000 (§15.1).
+    "G21-ST762-hM4D/2022_03_24-TFC_test_B/14_35_02-TFC_test_B": ["11.avi", "12.avi", "13.avi"],
+}
+
+# Sessions whose timestamps run on past the last video frame, from this row on: every
+# file was read, but the recording kept logging timestamps it wrote no frames for.
+TIMESTAMPS_WITHOUT_VIDEO_FROM = {
+    # 19 full files = 19,000 frames = C; 19,586 timestamp rows. The experiment ends at
+    # row 19,022, 1.1 s after the last imaged frame (found 2026-09-27).
+    "G09-ST702_mCherry/2021_11_08-TFC_cond/18_54_05-TFC_cond": 19000,
+}
+
+
+def session_tail(session_dir: str) -> str:
+    """``<mouse>/<day>/<session>`` of a session path, ``Miniscope`` stripped.
+
+    Splits on both separators: the analysis side carries Windows-style paths.
+    """
+    parts = [p for p in re.split(r"[\\/]+", session_dir) if p]
+    if parts and parts[-1] == "Miniscope":
+        parts = parts[:-1]
+    return "/".join(parts[-3:])
+
+
+def unused_videos(session_dir: str) -> List[str]:
+    """The ``.avi`` files production did not read for this session (:data:`UNUSED_VIDEOS`)."""
+    return list(UNUSED_VIDEOS.get(session_tail(session_dir), []))
+
+
+def unimaged_timestamp_rows(session_dir: str) -> List[tuple]:
+    """``[(first_row, stop_row_or_None), ...]``: timestamp rows with no frame in ``C``."""
+    ranges = []
+    for name in unused_videos(session_dir):
+        match = re.match(r"^([0-9]+)\.avi$", name)
+        if match is None:
+            raise ValueError("UNUSED_VIDEOS entry {!r} for {} is not a numbered .avi".format(
+                name, session_tail(session_dir)))
+        k = int(match.group(1))
+        ranges.append((k * FRAMES_PER_FILE, (k + 1) * FRAMES_PER_FILE))
+    start = TIMESTAMPS_WITHOUT_VIDEO_FROM.get(session_tail(session_dir))
+    if start is not None:
+        ranges.append((start, None))
+    return sorted(ranges)
+
+
+def imaged_timestamp_rows(session_dir: str, n_rows: int) -> np.ndarray:
+    """Boolean mask over a session's ``n_rows`` timestamp rows: True where ``C`` has the frame.
+
+    A range reaching past ``n_rows`` is simply cut there: the last file of a recording
+    is usually partial.
+    """
+    imaged = np.ones(n_rows, dtype=bool)
+    for first, stop in unimaged_timestamp_rows(session_dir):
+        if first >= n_rows:
+            raise ValueError("{}: unimaged rows from {} but the session has only {} timestamp "
+                             "rows".format(session_tail(session_dir), first, n_rows))
+        imaged[first:stop] = False
+    return imaged
 
 # Existing output is renamed with this suffix before a notebook re-run writes in its
 # place (`plans/local_minian_pipeline_plan.md` §5.2). What each notebook writes:

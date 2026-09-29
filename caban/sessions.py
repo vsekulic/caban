@@ -1,7 +1,7 @@
 from tkinter.filedialog import SaveFileDialog
 import numpy as np
 from caban.utilities import *
-from caban.session_queue import original_output_path
+from caban.session_queue import imaged_timestamp_rows, original_output_path, unimaged_timestamp_rows
 import ast
 import glob
 from natsort import natsorted
@@ -418,6 +418,12 @@ class BehaviourSession:
         return state
 
     def __setstate__(self, state):
+        if 'n_timestamp_rows_imaged' not in state:
+            raise ValueError(
+                'this pickled {} {} predates the timestamp-row/frame alignment of '
+                'find_exp_boundaries (plans/yra_recompute_plan.md §15.1): its experiment '
+                'boundaries and tone windows may be off. Rebuild ds_cache.pkl '
+                '(caban.loader.load_all_mice(use_cache=False)).'.format(state.get('mouse'), state.get('session_type')))
         self.__dict__.update(state)
         # A ds_cache.pkl written before YrA alignment existed carries an unaligned, session-
         # bounded self.YrA and the raw self.YrA_idx (YrA_full is pruned by __getstate__ and
@@ -558,10 +564,24 @@ class BehaviourSession:
 
     def find_exp_boundaries(self):
 
-        [self.fnum_miniscope, self.tstamp_miniscope, self.fnum_behavcam, self.tstamp_behavcam] \
+        [fnum_miniscope, tstamp_miniscope, self.fnum_behavcam, self.tstamp_behavcam] \
             = self.get_timestamps()
 
-        # Logic: 
+        # Step 0. Drop the Miniscope timestamp rows that have no frame in C (unread or missing
+        # video: caban.session_queue.UNUSED_VIDEOS / TIMESTAMPS_WITHOUT_VIDEO_FROM, plans/yra_recompute_plan.md §15),
+        # so that from here on row i of the Miniscope timestamps IS frame i of C/S. The
+        # experiment boundaries, the tone lookups of the subclasses and the velocity mapping
+        # all index C through these rows. For almost every session nothing is dropped.
+        imaged = imaged_timestamp_rows(self.dpath, len(tstamp_miniscope))
+        self.n_timestamp_rows_imaged = int(imaged.sum())
+        self.n_timestamp_rows_unimaged = int((~imaged).sum())
+        if self.n_timestamp_rows_unimaged:
+            print('  [TS] {} {}: {} Miniscope timestamp rows without imaging dropped ({})'.format(
+                self.mouse, self.session_type, self.n_timestamp_rows_unimaged,
+                unimaged_timestamp_rows(self.dpath)))
+        frame_of_row = np.cumsum(imaged) - 1
+
+        # Logic:
         # Step 1. Find frames in actual videofiles where the session starts and ends to mark the boundaries
         #     of the experiment. These go in light_frames (required; provided in constructor).
 
@@ -569,14 +589,40 @@ class BehaviourSession:
         self.behavcam_exp_ts = [self.tstamp_behavcam.iloc[self.session_bounds[self.start_idx]], \
             self.tstamp_behavcam.iloc[self.session_bounds[self.stop_idx]]]
 
-        # Step 3. Find the closest corresponding timestamps of these frames in the **Miniscope** timestamps file.
-        # These then become directly the frame numbers.
-        beg = np.where(abs(self.tstamp_miniscope - self.behavcam_exp_ts[self.start_idx]) < self.tstamp_tol)
-        end = np.where(abs(self.tstamp_miniscope - self.behavcam_exp_ts[self.stop_idx]) < self.tstamp_tol)
+        # Step 3. Find the closest corresponding timestamps of these frames in the **Miniscope** timestamps file,
+        # over ALL rows so that a boundary falling where there is no imaging is seen as such, then convert
+        # the rows to frame numbers of C.
+        beg = np.where(abs(tstamp_miniscope - self.behavcam_exp_ts[self.start_idx]) < self.tstamp_tol)[0]
+        end = np.where(abs(tstamp_miniscope - self.behavcam_exp_ts[self.stop_idx]) < self.tstamp_tol)[0]
+        if len(beg) == 0 or len(end) == 0:
+            raise ValueError('{} {}: no Miniscope timestamp within {} ms of the BehavCam experiment '
+                             'boundaries {}'.format(self.mouse, self.session_type, self.tstamp_tol,
+                                                    self.behavcam_exp_ts))
         # there may be more than one in beg, end, so we just take the first, which is also the closest
-        self.miniscope_exp_fnum = [beg[0][0], end[0][0]] 
-        self.miniscope_exp_ts = [self.tstamp_miniscope[self.miniscope_exp_fnum[self.start_idx]], \
-            self.tstamp_miniscope[self.miniscope_exp_fnum[self.stop_idx]]]
+        beg_row, end_row = int(beg[0]), int(end[0])
+        if not imaged[beg_row]:
+            raise ValueError('{} {}: the experiment starts at timestamp row {}, which has no imaging'.format(
+                self.mouse, self.session_type, beg_row))
+        if imaged[end_row]:
+            end_frame = int(frame_of_row[end_row])
+        elif not imaged[end_row:].any():
+            # The experiment outlasts the imaging (a session listed in
+            # TIMESTAMPS_WITHOUT_VIDEO_FROM or with a trailing unread file): it ends, for C, at
+            # the last imaged frame. Explicit per session through those tables, and printed.
+            end_frame = self.n_timestamp_rows_imaged
+            print('  [TS] {} {}: experiment ends at timestamp row {}, {:.1f} s after the last imaged '
+                  'frame; its end in C is the last frame, {}'.format(
+                      self.mouse, self.session_type, end_row,
+                      (tstamp_miniscope.iloc[end_row] - tstamp_miniscope[imaged].iloc[-1]) / 1000, end_frame))
+        else:
+            raise ValueError('{} {}: the experiment ends at timestamp row {}, inside a stretch without '
+                             'imaging'.format(self.mouse, self.session_type, end_row))
+        self.miniscope_exp_fnum = [int(frame_of_row[beg_row]), end_frame]
+        # The true boundary times, whether or not the end was imaged.
+        self.miniscope_exp_ts = [tstamp_miniscope.iloc[beg_row], tstamp_miniscope.iloc[end_row]]
+
+        self.fnum_miniscope = fnum_miniscope[imaged].reset_index(drop=True)
+        self.tstamp_miniscope = tstamp_miniscope[imaged].reset_index(drop=True)
 
         # Assign the experiment-subsetted miniscope and behavcam tstamps so that we never have to worry
         # about this further on. The originals get clobbered. NB: https://en.wikipedia.org/wiki/Clobbering
@@ -752,6 +798,17 @@ class BehaviourSession:
             self.YrA_idx = np.asarray(self.S_idx).copy()
         else:
             self._clear_YrA_alignment_state()
+
+        # find_exp_boundaries() made timestamp row i frame i of C; that holds only if C has exactly
+        # one frame per imaged timestamp row. A mismatch is an unlisted gap or overhang
+        # (caban.session_queue tables) and would silently shift every window after it.
+        if self.C_full.shape[1] != self.n_timestamp_rows_imaged:
+            raise ValueError('{} {}: C has {} frames but the Miniscope timestamps have {} imaged rows; '
+                             'list the missing rows in caban.session_queue (UNUSED_VIDEOS or '
+                             'TIMESTAMPS_WITHOUT_VIDEO_FROM), or check its FRAMES_PER_FILE against '
+                             "the session's metaData.json".format(
+                                 self.mouse, self.session_type, self.C_full.shape[1],
+                                 self.n_timestamp_rows_imaged))
 
         # Get subset of S, C corresponding to the experiment bounds of the session.
         self.S = self.S_full[:,self.miniscope_exp_fnum[self.start_idx]:self.miniscope_exp_fnum[self.stop_idx]]

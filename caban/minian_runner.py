@@ -545,7 +545,7 @@ def yra_recomputed(item: sq.SessionWork) -> bool:
     sidecar = sq.read_sidecar(yra_output_dir(item), yr.SIDECAR_NAME)
     minian_dir = sidecar.get("minian_dir", "")
     return (bool(sidecar.get("complete")) and os.path.basename(minian_dir) == OUTPUT_NAME
-            and yr.session_tail(os.path.dirname(minian_dir)) == yr.session_tail(item.session_dir))
+            and sq.session_tail(os.path.dirname(minian_dir)) == sq.session_tail(item.session_dir))
 
 
 def queue_status(items: List[sq.SessionWork]) -> pd.DataFrame:

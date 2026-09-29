@@ -123,37 +123,6 @@ def add_significance_bars(ax, comparisons, p_values, y_max,
         ax.set_ylim(y_low, max(y_high, top_needed))
 
 
-def _apply_test_b_tone_onset_override(sess, tone_onsets_frames):
-    """Apply a manual Test_B tone-onset correction and rebuild dependent windows."""
-    if not tone_onsets_frames:
-        return
-
-    # Test_B tones are fixed to 20 seconds.
-    tone_duration_frames = int(20 * MINISCOPE_FPS)
-
-    sess.tone_onsets = [int(x) for x in tone_onsets_frames]
-    exp_stop = int(sess.miniscope_exp_fnum[sess.stop_idx])
-    sess.tone_offsets = [min(int(on) + tone_duration_frames, exp_stop) for on in sess.tone_onsets]
-
-    sess.post_tone_onsets = []
-    sess.post_tone_offsets = []
-    sess.tone_post_tone_onsets = []
-    sess.tone_post_tone_offsets = []
-    for i in range(len(sess.tone_onsets)):
-        sess.post_tone_onsets.append(sess.tone_offsets[i])
-        sess.tone_post_tone_onsets.append(sess.tone_onsets[i])
-        if i == len(sess.tone_onsets) - 1:
-            sess.post_tone_offsets.append(exp_stop)
-            sess.tone_post_tone_offsets.append(exp_stop)
-        else:
-            sess.post_tone_offsets.append(sess.tone_onsets[i + 1])
-            sess.tone_post_tone_offsets.append(sess.tone_onsets[i + 1])
-
-    # Rebuild labels/bounds to keep downstream epoch helpers consistent.
-    sess.period_bounds = []
-    sess.find_period_bounds()
-
-
 # ---------------------------------------------------------------------------
 def _resolve_plots_dir(plots_dir: Optional[str], plots_dir_singular: bool = False) -> str:
     """Mirror caban/main.py's host-aware PLOTS_DIR choice."""
@@ -715,7 +684,12 @@ def _build_dataset(
 
     test_unit_id = {'G05': 22, 'G06': 413}
     period_overrides = {'G09': [0, 1, 2, 3]}
-    test_b_tone_onset_overrides = {'G21': [3600, 8400, 11793]}
+    # G21 Test_B has no imaging from 553.9 s to 705.9 s (11.avi-13.avi unread), so tone 3
+    # (660-680 s) has no calcium data at all; the loader drops those timestamp rows
+    # (caban.session_queue.UNUSED_VIDEOS) and tones 1-2 are found by time as for every mouse.
+    # Replaces the hand-set onsets [3600, 8400, 11793] of fecf698, whose tone 3 pointed at
+    # 749-769 s (plans/yra_recompute_plan.md §15.1).
+    test_b_period_overrides = {'G21': [0, 1]}
 
     # ---- Test_A / Test_A_1wk -------------------------------------------
     dpath_Test_A_day = {
@@ -1249,6 +1223,7 @@ def _build_dataset(
                 Test_B[mouse] = TestBSession(  # noqa: F405
                     mouse, dpath_Test_B[mouse],
                     session_bounds=Test_B_exp_frames[mouse],
+                    period_override=test_b_period_overrides.get(mouse, []),
                     plot_sample_cell=plot_sample_cell,
                     crossreg=TFC_B_B_1wk_crossreg[mouse], savepath=Test_B_savepath,
                     session_group=TFC_B_B_1wk_crossreg[mouse].mappings_labels['Test_B'],
@@ -1257,9 +1232,6 @@ def _build_dataset(
                 )
                 Test_B[mouse].crossreg_full = TFC_AB_48hr_1wk_crossreg[mouse]
                 B = Test_B[mouse]
-                _tb_onsets_override = test_b_tone_onset_overrides.get(mouse)
-                if _tb_onsets_override:
-                    _apply_test_b_tone_onset_override(B, _tb_onsets_override)
                 mappings_all_list = mappings_all_Test_B_G15 if mouse == 'G15' else mappings_all_Test_B
                 for mapping in mappings_all_list:
                     B.process_avg_sp_rates_mapping(mapping)
@@ -1529,7 +1501,7 @@ def _build_dataset(
         dpath_mouse=dpath_mouse,
         test_unit_id=test_unit_id,
         period_overrides=period_overrides,
-        test_b_tone_onset_overrides=test_b_tone_onset_overrides,
+        test_b_period_overrides=test_b_period_overrides,
         # dpath / exp_frames dicts (post-join, absolute)
         dpath_TFC_cond_day=dpath_TFC_cond_day,
         dpath_TFC_cond=dpath_TFC_cond,

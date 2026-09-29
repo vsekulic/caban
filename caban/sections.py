@@ -290,9 +290,12 @@ def dump_behaviour_params(ds, cfg=None, filename='behaviour_params.py',
       2. Tone / shock onsets / offsets in SECONDS for TFC_cond, Test_B,
          Test_B_1wk, in two reference frames:
            * ``*_rel_exp_s``: relative to start of experiment (light on)
-           * ``*_rel_rec_s``: relative to start of raw recording
-             (i.e. ``rel_exp_s + miniscope_exp_fnum[0] / MINISCOPE_FPS``)
-         Per-mouse exceptions (G09 ``period_override``, G21 Test_B override,
+           * ``*_rel_rec_s``: on the Miniscope clock, i.e. relative to the start of
+             the raw recording
+         Both are read from the Miniscope timestamps of those frames, not computed as
+         frames / MINISCOPE_FPS: the camera ran at 19.76 fps (G05 Test_A at 24.6), and G21 Test_B has a
+         152 s stretch without imaging (plans/yra_recompute_plan.md §15.1).
+         Per-mouse exceptions (G09 ``period_override``, G21 Test_B tone 3 excluded,
          missing G07/G15 sessions, etc.) are already baked in.
       3. Original hard-coded ``*_def`` arrays (no exceptions applied) for
          cross-checking.
@@ -306,7 +309,6 @@ def dump_behaviour_params(ds, cfg=None, filename='behaviour_params.py',
     full raw-recording / ``.avi`` frame count, one per session) — see
     ``_dump_behaviour_velocity_mobility``.
     """
-    fps = float(MINISCOPE_FPS)  # noqa: F405 — from caban.utilities star-import
 
     # -------------------------------------------------------------------
     # Gather all data as plain Python containers, then emit in Py + MATLAB.
@@ -320,14 +322,25 @@ def dump_behaviour_params(ds, cfg=None, filename='behaviour_params.py',
             out[m] = [int(fnum[0]), int(fnum[1])]
         return out
 
+    def _frame_time_ms(s, frame):
+        # Experiment-relative frame -> ms after light on, from the frame's own timestamp.
+        # The experiment's stop frame (one past the last) is the experiment end.
+        n = len(s.tstamp_miniscope)
+        if 0 <= frame < n:
+            return float(s.tstamp_miniscope[frame])
+        if frame == n:
+            return float(s.miniscope_exp_ts[s.stop_idx] - s.miniscope_exp_ts[s.start_idx])
+        raise ValueError('{} {}: frame {} is outside the experiment ({} frames)'.format(
+            s.mouse, s.session_type, frame, n))
+
     def _seconds_dict(sess_dict, attr, *, add_offset):
         out = {}
         for m, s in sess_dict.items():
             vals = getattr(s, attr, None)
             if vals is None or len(vals) == 0:
                 continue
-            offset_frames = int(s.miniscope_exp_fnum[s.start_idx]) if add_offset else 0
-            out[m] = [round((int(v) + offset_frames) / fps, 3) for v in vals]
+            offset_ms = float(s.miniscope_exp_ts[s.start_idx]) if add_offset else 0.0
+            out[m] = [round((_frame_time_ms(s, int(v)) + offset_ms) / 1000.0, 3) for v in vals]
         return out
 
     def _first_session(sess_dict):
@@ -378,7 +391,7 @@ def dump_behaviour_params(ds, cfg=None, filename='behaviour_params.py',
     records.append(('comment', 'Tone / shock onset & offset times (SECONDS)'))
     records.append(('comment', '  *_rel_exp_s : relative to start of experiment (light on)'))
     records.append(('comment', '  *_rel_rec_s : relative to start of raw recording'))
-    records.append(('comment', 'Per-mouse exceptions (period_override, G21 Test_B override, etc.)'))
+    records.append(('comment', 'Per-mouse exceptions (period_override, G21 Test_B tone 3 excluded, etc.)'))
     records.append(('comment', 'are already reflected since values come from the live session objs.'))
     records.append(('comment', '------------------------------------------------------------'))
     for label, sd, fields in timed_groups:

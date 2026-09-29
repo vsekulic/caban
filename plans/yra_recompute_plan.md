@@ -643,3 +643,48 @@ points beyond the end of `C`. This is in the existing, published pipeline, indep
 and affects one conditioning-test session. Not fixed here: the fix belongs in the loader (map `C`
 frames to timestamp rows through the files actually read), and whether any published G21 Test_B
 result moves has to be checked. G15's unused file is at the end, so its alignment is unaffected.
+
+**Resolved 2026-09-27 (VS: fix the loader properly).** The timestamps show more than the paragraph
+above assumed:
+
+- **What the recording is.** The Miniscope clock runs without a break at 19.76 fps. There is no
+  imaging from **553.9 s to 705.9 s** of the experiment, so **tone 3 (660–680 s) has no calcium
+  data at all**.
+- **The May override was wrong for all three tones.** Commit `fecf698` hand-set G21's tone onsets
+  to `[3600, 8400, 11793]`. Tone 3 then pointed at 748.9–769.1 s, which is post-tone activity
+  labelled as tone. Tones 1–2 at 3600 and 8400 assume exactly 20 fps and were 2.2 s and 5.2 s
+  late. The loader's own lookup, without the override, would have put tone 3 at 812–832 s.
+- **What else was off.** Everything after 553.9 s was paired with velocity and time 150 s too
+  early. The experiment end (row 17,810) lay beyond `C` (14,856 frames).
+- **A second, smaller case: G09 TFC_cond.** Its 586 trailing timestamp rows have no video, and
+  the experiment ends 1.2 s after the last imaged frame.
+
+**The fix:**
+
+- `caban.session_queue` holds the tables: `UNUSED_VIDEOS` (moved from `yra_recompute`) and
+  `TIMESTAMPS_WITHOUT_VIDEO_FROM` (G09), with `FRAMES_PER_FILE = 1000`. They are explicit tables
+  because the analysis side reads only caches, never the raw files.
+- `BehaviourSession.find_exp_boundaries` drops the timestamp rows without imaging, so row *i* is
+  `C` frame *i*. It finds the boundaries over all rows, then converts them to frames:
+  - an experiment start without imaging is a hard failure;
+  - an end inside a gap is a hard failure;
+  - an end after the imaging stops (G09) is clamped to the last frame, and printed.
+- `get_CS_matrices` hard-fails unless `C` has exactly one frame per imaged row. A scan of all 116
+  sessions the loader builds finds that true for every one, given the tables.
+- The loader replaces G21's onset override with `test_b_period_overrides = {'G21': [0, 1]}`, so
+  tone 3 is excluded.
+- `__setstate__` refuses a pickled session from before the fix, so `ds_cache.pkl` must be
+  rebuilt.
+- `write_behaviour_params` (`caban/sections.py`) now reads seconds from the timestamps instead of
+  frames / 20. This was a separate bug affecting **every session** in the file written for
+  collaborators: at 19.76 fps, tone 3 at 660 s was written as 652 s (frame 13,041 / 20).
+- Checked by building G21 Test_B, G15 Test_B, G09 TFC_cond and G10 Test_B (control) from the
+  local caches:
+  - tones land at 179.96 / 419.94 / 659.96 s;
+  - `S`, timestamps and velocity have equal length in all four;
+  - G10 is unchanged.
+
+**Still open:** stale derived caches for G21 Test_B and G09 TFC_cond (`sig_responses`,
+`PlaceFields`, `S_shuffled`; possibly isomap and `Population_PCA`), and re-running the published
+Test_B analyses to see how much the hM4D group moves.
+
