@@ -94,6 +94,15 @@ DEFAULT_FRAME_CHUNK = 250
 OUTPUT_ARRAY_NAME = "YrA_recomputed.zarr"
 SIDECAR_NAME = "YrA_recompute.json"
 
+# The replay check of `plans/yra_recompute_plan.md` §14.2: the replayed movie's maximum
+# over frames against the `max_proj` production saved (`Y_fm_chk.max("frame")`). The
+# replay applies motion in caban's env, which differs from the 2021 run by +-1 grey
+# level at a few values (`minian_gate.MOTION_APPLIED_NOTE`), so a maximum over frames
+# can differ by at most 1 at a pixel; more than that means the movie is not
+# production's. The count of pixels off by exactly 1 is reported, not bounded, until
+# the re-check of every recompute has calibrated it.
+MAX_PROJ_TOLERANCE = 1.0
+
 # Where the raw sessions live.  The output goes beside the A/C/S it was computed from
 # (VS, 2026-09-26): YrA_recomputed.zarr and its sidecar inside that minian_crossreg*
 # (or minian/) folder, next to the exported YrA.zarr, which is never touched.
@@ -490,6 +499,30 @@ def open_minian_array(minian_dir: str, name: str) -> xr.DataArray:
     return xr.open_zarr(path, consolidated=False)[name]
 
 
+def _require_finite_motion(motion: xr.DataArray, minian_dir: str) -> None:
+    """Refuse a ``motion.zarr`` with NaN shifts.
+
+    A NaN shift moves every pixel out of frame: the replayed Y would be all zeros and
+    so would YrA. Found 2026-09-26 in two G05 TFC_test_B production sessions whose
+    saved motion.zarr is NaN in every frame (plan §14).
+    """
+    nan_frames = int(np.isnan(motion.values).any(axis=1).sum())
+    if nan_frames:
+        raise ValueError(
+            "{}: motion.zarr is NaN in {} of {} frames, so Y cannot be replayed from it "
+            "(it would be all zeros, and so would YrA). Production's movie was not: its "
+            "C and max_proj are nonzero, so the saved motion is not the one that was "
+            "applied.".format(minian_dir, nan_frames, motion.sizes["frame"]))
+
+
+def replay_frame_set(session_dir: str, C: xr.DataArray) -> tuple:
+    """``(excluded videos, frames in the videos read, del_frames)`` for replaying a session's
+    movie against ``C``: the one definition both the recompute and its re-check use."""
+    excluded = unused_videos(session_dir)
+    n_video_frames = count_video_frames(session_dir, PARAM_LOAD_VIDEOS["pattern"], excluded)
+    return excluded, n_video_frames, derive_deleted_frames(n_video_frames, C.frame.values)
+
+
 def derive_deleted_frames(n_video_frames: int, frame_coord: np.ndarray) -> list:
     """Recover the per-session ``del_frames`` from a saved ``frame`` coordinate.
 
@@ -818,6 +851,13 @@ def format_report(report: dict) -> str:
     fl = report["clip_floor_fraction"]
     lines.append("  clip(0) floor             : {:.4f} of all samples; per cell median {:.4f}, p95 {:.4f}".format(
         fl["overall"], fl["per_cell"]["median"], fl["per_cell"]["p95"]))
+    mp = report.get("max_proj_check")
+    if mp is None:
+        lines.append("  max_proj vs production    : not checked (recomputed before the check existed)")
+    else:
+        lines.append("  max_proj vs production    : max |diff| {:g}; {} of {} pixels differ, {} over {:g}".format(
+            mp["max_abs_diff"], mp["n_pixels_differing"], mp["n_pixels"],
+            mp["n_pixels_over_tolerance"], mp["tolerance"]))
     lines.append("")
     vo = report["vs_old_YrA"]
     if vo is None:
@@ -843,6 +883,54 @@ def format_report(report: dict) -> str:
         lines.append("      unit {:>5}  r = {:.6f}  max|diff| = {:.6g}".format(
             entry["unit_id"], entry["corr"], entry["max_abs_diff"]))
     return "\n".join(lines)
+
+
+def check_max_proj(max_proj_replayed: xr.DataArray, minian_dir: str) -> dict:
+    """Compare the replayed movie's maximum over frames with production's ``max_proj``.
+
+    The replay check of plan §14.2, for every session: unlike the old-``YrA``
+    comparison it needs nothing but what every production folder saved, so it also
+    stands behind the sessions that never had a ``YrA`` exported, and it catches
+    finite-but-wrong motion, which the NaN guard cannot.
+
+    What it cannot prove: a maximum over frames ignores frame order, and it is set at each
+    pixel by that pixel's brightest frame, so an error that only misplaces frames in time
+    (motion applied to the wrong frames, a time shift) can pass it. The time-resolved check
+    is the old-``YrA`` comparison at units whose footprints overlap nothing
+    (:func:`check_and_report`), where an old export exists -- all 17 TFC_cond sessions --
+    and ``corr(C, YrA)``, which a time shift would drop (reported, not bounded).
+    Scientific review, 2026-09-29. Measured the same day on a copy of G05
+    `2021_08_30-TFC_cond/16_47_02-LT1`: real inputs 0 pixels differ; motion offset by 1.3 px
+    fails (max 12, 8,937 pixels over 1); motion shifted by one frame fails too, but narrowly
+    (max 4, 209 pixels over 1) -- frame-to-frame motion makes a shift visible, a session with
+    little motion could hide one.
+    """
+    saved = open_minian_array(minian_dir, "max_proj").compute()
+    for dim in ("height", "width"):
+        if not np.array_equal(max_proj_replayed[dim].values, saved[dim].values):
+            raise ValueError("replayed and saved max_proj differ in their {} coordinate".format(dim))
+    diff = np.abs(max_proj_replayed.transpose("height", "width").values.astype(float)
+                  - saved.transpose("height", "width").values.astype(float))
+    max_abs_diff = float(diff.max())
+    return {
+        "n_pixels": int(diff.size),
+        "n_pixels_differing": int((diff > 0).sum()),
+        "n_pixels_over_tolerance": int((diff > MAX_PROJ_TOLERANCE).sum()),
+        "max_abs_diff": max_abs_diff,
+        "tolerance": MAX_PROJ_TOLERANCE,
+        "passed": max_abs_diff <= MAX_PROJ_TOLERANCE,
+        "max_proj_sha256": hash_zarr_store(os.path.join(minian_dir, "max_proj.zarr")),
+    }
+
+
+def _require_max_proj_match(check: dict, minian_dir: str) -> None:
+    if not check["passed"]:
+        raise ValueError(
+            "{}: the replayed movie is not production's -- its maximum over frames differs "
+            "from the saved max_proj by up to {:g} grey levels ({} of {} pixels over the "
+            "tolerance of {:g})".format(minian_dir, check["max_abs_diff"],
+                                        check["n_pixels_over_tolerance"], check["n_pixels"],
+                                        check["tolerance"]))
 
 
 def compare_replayed_movie(Y_new: xr.DataArray, saved_movie_path: str,
@@ -954,6 +1042,7 @@ def _status_columns(item: sq.SessionWork, record: dict) -> dict:
     corr = against_old.get("corr") or {}
     by_overlap = against_old.get("corr_by_footprint_overlap") or []
     no_overlap = next((e for e in by_overlap if e["overlap"] == "none"), {})
+    max_proj = report.get("max_proj_check") or {}
     return {
         "has_old_YrA": item.existing_yra_path is not None,
         "has_saved_Y": item.saved_movie_path is not None,
@@ -961,6 +1050,8 @@ def _status_columns(item: sq.SessionWork, record: dict) -> dict:
         "n_frames": report.get("n_frames"),
         "r_vs_old_median": corr.get("median"),
         "r_zero_overlap_median": no_overlap.get("median"),
+        "max_proj_max_abs_diff": max_proj.get("max_abs_diff"),
+        "max_proj_n_differing": max_proj.get("n_pixels_differing"),
     }
 
 
@@ -968,7 +1059,8 @@ def queue_status(items: List[sq.SessionWork]) -> pd.DataFrame:
     """One row per session: what it is, and whether it still needs doing."""
     frame = sq.queue_frame(items, SIDECAR_NAME, OUTPUT_ARRAY_NAME, _status_columns)
     order = ["mouse", "day", "session", "n_avi", "has_old_YrA", "has_saved_Y", "done",
-             "n_units", "n_frames", "r_vs_old_median", "r_zero_overlap_median"]
+             "n_units", "n_frames", "r_vs_old_median", "r_zero_overlap_median",
+             "max_proj_max_abs_diff", "max_proj_n_differing"]
     return frame[[c for c in order if c in frame.columns]]
 
 
@@ -1074,17 +1166,9 @@ def recompute_session_yra(
     b = open_minian_array(minian_dir, "b")
     f = open_minian_array(minian_dir, "f")
     motion = open_minian_array(minian_dir, "motion")
-    # A NaN shift moves every pixel out of frame: the replayed Y would be all zeros and
-    # so would YrA. Checked before `completed_run`, so an output already written from
-    # such a motion is not accepted either. Found 2026-09-26 in two G05 TFC_test_B
-    # production sessions whose saved motion.zarr is NaN in every frame.
-    nan_frames = int(np.isnan(motion.values).any(axis=1).sum())
-    if nan_frames:
-        raise ValueError(
-            "{}: motion.zarr is NaN in {} of {} frames, so Y cannot be replayed from it "
-            "(it would be all zeros, and so would YrA). Production's movie was not: its "
-            "C and max_proj are nonzero, so the saved motion is not the one that was "
-            "applied.".format(minian_dir, nan_frames, motion.sizes["frame"]))
+    # Checked before `completed_run`, so an output already written from such a motion
+    # is not accepted either.
+    _require_finite_motion(motion, minian_dir)
     S_unit_id = np.asarray(open_minian_array(minian_dir, "S").coords["unit_id"].values)
 
     A_unit_id = np.asarray(A.coords["unit_id"].values)
@@ -1109,9 +1193,7 @@ def recompute_session_yra(
             print(format_report(done["report"]))
             return done
 
-    excluded_videos = unused_videos(session_dir)
-    n_video_frames = count_video_frames(session_dir, PARAM_LOAD_VIDEOS["pattern"], excluded_videos)
-    del_frames_derived = derive_deleted_frames(n_video_frames, C.frame.values)
+    excluded_videos, n_video_frames, del_frames_derived = replay_frame_set(session_dir, C)
 
     print("session      : {}".format(session_dir))
     print("minian output: {}".format(minian_dir))
@@ -1143,10 +1225,16 @@ def recompute_session_yra(
                     movie_check["n_frames_compared"], movie_check["first_differing_frames"][:10],
                     movie_check["max_abs_diff"]))
 
-    print("computing YrA over {} units x {} frames".format(len(S_unit_id), C.sizes["frame"]))
-    YrA_new = compute_trace(
-        Y, A, b, C.chunk({"unit_id": -1, "frame": frame_chunk}), f.chunk({"frame": frame_chunk})
-    ).compute()
+    print("computing YrA over {} units x {} frames, and the movie's max over frames".format(
+        len(S_unit_id), C.sizes["frame"]))
+    # One pass: both reductions share Y's graph, so the movie is replayed once.
+    YrA_new, max_proj_new = dask.compute(
+        compute_trace(Y, A, b, C.chunk({"unit_id": -1, "frame": frame_chunk}),
+                      f.chunk({"frame": frame_chunk})),
+        Y.max("frame"),
+    )
+    max_proj_check = check_max_proj(max_proj_new, minian_dir)
+    _require_max_proj_match(max_proj_check, minian_dir)
 
     YrA_old = None
     if existing_yra_path:
@@ -1160,6 +1248,7 @@ def recompute_session_yra(
             "{}: corr(C, YrA_new) is undefined for every unit -- the recomputed YrA is "
             "constant (all-zero clip floor {:.3f}); not writing it".format(
                 minian_dir, report["clip_floor_fraction"]["overall"]))
+    report["max_proj_check"] = max_proj_check
     if movie_check is not None:
         report["replayed_Y_vs_saved_Y_fm_chk"] = movie_check
 
@@ -1202,3 +1291,61 @@ def recompute_session_yra(
     write_sidecar(output_dir, record)
     print(format_report(report))
     return record
+
+
+def verify_session_replay(
+    session_dir: str,
+    minian_dir: str,
+    output_dir: str,
+    frame_chunk: int = DEFAULT_FRAME_CHUNK,
+    force: bool = False,
+) -> dict:
+    """Check an existing recompute's replay against production's ``max_proj`` (plan §14.2).
+
+    For the recomputes written before :func:`check_max_proj` existed: replays the movie
+    alone (no ``YrA``), records the result in the sidecar as ``report.max_proj_check``,
+    and raises if it fails -- after recording it, so a failure is on disk, not only in
+    a log. ``YrA_recomputed.zarr`` is never rewritten. A session whose sidecar already
+    holds a passing check is skipped unless ``force``.
+    """
+    motion = open_minian_array(minian_dir, "motion")
+    _require_finite_motion(motion, minian_dir)
+    S_unit_id = np.asarray(open_minian_array(minian_dir, "S").coords["unit_id"].values)
+    record = completed_run(output_dir, minian_dir, S_unit_id)
+    if record is None:
+        raise ValueError("{}: no valid, complete recompute to verify".format(output_dir))
+    previous = record["report"].get("max_proj_check")
+    current_hash = hash_zarr_store(os.path.join(minian_dir, "max_proj.zarr"))
+    if previous is not None and previous["passed"] and not force \
+            and previous.get("max_proj_sha256") == current_hash:
+        print("{}: max_proj already checked (max |diff| {:g}); nothing to do.".format(
+            output_dir, previous["max_abs_diff"]))
+        return record
+
+    C = open_minian_array(minian_dir, "C")
+    excluded_videos, _, del_frames = replay_frame_set(session_dir, C)
+    if del_frames != record["del_frames"]:
+        raise ValueError("{}: del_frames derived now ({}) differ from the recompute's ({})".format(
+            minian_dir, del_frames, record["del_frames"]))
+    Y = replay_motion_corrected_movie(session_dir, motion, del_frames, frame_chunk,
+                                      exclude_videos=excluded_videos)
+    print("computing the replayed movie's max over {} frames".format(Y.sizes["frame"]))
+    check = check_max_proj(Y.max("frame").compute(), minian_dir)
+    record["report"]["max_proj_check"] = check
+    record["max_proj_checked_utc"] = datetime.now(timezone.utc).isoformat()
+    write_sidecar(output_dir, record)
+    print(format_report(record["report"]))
+    _require_max_proj_match(check, minian_dir)
+    return record
+
+
+def verify_item(item: sq.SessionWork, frame_chunk: int = DEFAULT_FRAME_CHUNK,
+                force: bool = False) -> dict:
+    """:func:`verify_session_replay` for one work item."""
+    return verify_session_replay(item.session_dir, item.minian_dir, item.output_dir,
+                                 frame_chunk=frame_chunk, force=force)
+
+
+def verify_all(items: List[sq.SessionWork], stop_on_error: bool = True, **kwargs) -> List[dict]:
+    """Re-check every recompute's replay, serially; see :func:`verify_session_replay`."""
+    return sq.run_queue(items, verify_item, stop_on_error=stop_on_error, **kwargs)

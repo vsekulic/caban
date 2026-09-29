@@ -580,6 +580,36 @@ within 1 grey level at a small fraction of pixels, not bit for bit.
 
 Order: 14.2 first (it also re-checks everything already written), then 14.1.
 
+**Built 2026-09-27** (`caban/yra_recompute.py`):
+
+- `recompute_session_yra` now computes `YrA` and `Y.max("frame")` in one `dask.compute`, so
+  the movie is replayed once. `check_max_proj` compares the result with the saved
+  `max_proj.zarr`, and the result goes into the sidecar as `report.max_proj_check`. If it
+  fails, nothing is written.
+- **Hard check: max |diff| ≤ 1 grey level** (`MAX_PROJ_TOLERANCE`). A maximum over frames
+  cannot differ by more than the frames do. Pixels off by exactly 1 are counted
+  (`n_pixels_differing`) but not bounded until the re-check has calibrated them.
+- `verify_session_replay` / `verify_all(items)` is the re-check for recomputes made before
+  the check existed. It replays the movie only, never rewrites `YrA_recomputed.zarr`, and
+  records the result in the sidecar even when it fails, then raises. Sessions that already
+  have a passing check are skipped. `queue_status` shows `max_proj_max_abs_diff` and
+  `max_proj_n_differing`.
+- All 128 recomputes have a production `max_proj.zarr` beside them (checked by listing).
+- Synthetic end-to-end test (a two-`.avi` session): the joint pass gives the same `YrA` as a
+  separate `compute_trace`. The check passes exactly and accepts ±1 at a few pixels. A
+  finite motion error of 1.3 px fails, with differences up to 51 grey levels at 88 % of
+  pixels.
+- **Its limit** (scientific review, 2026-09-29): a maximum over frames ignores frame order and is set
+  by each pixel's brightest frame, so errors that only misplace frames in time can pass it. The
+  time-resolved check remains the old-`YrA` comparison at zero-overlap units (all 17 TFC_cond
+  sessions have an old export) and `corr(C, YrA)`. Measured on a copy of G05 TFC_cond `16_47_02-LT1`:
+  real inputs exact (0 px differ); motion + 1.3 px fails (max 12, 8,937 px over 1); motion shifted one
+  frame fails, narrowly (max 4, 209 px over 1). The check records `max_proj_sha256`; the re-check
+  skips a session only if that still matches.
+- **Still to run**: `verify_all` over the 128 production recomputes on the Razer after the
+  copy (`stop_on_error=False`, then read the failures and the ±1 counts). Promotion
+  (§11.3; open item 7) should require a passing `max_proj_check`.
+
 ## 15. Unfinished recordings, and a timing gap in G21 TFC_test_B (2026-09-27)
 
 The overnight batch finished **126 of 130**. The two §14 NaN-motion sessions failed as expected. Two more

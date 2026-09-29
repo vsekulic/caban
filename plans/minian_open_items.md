@@ -41,6 +41,8 @@ caught; finite-but-wrong motion would not be). Compare the replayed movie's maxi
 `max_proj` production saved. Tolerance: expect ±1 grey level at a few pixels (cv2 5.0 vs 4.5 — G06 HC1's
 backfill showed 5 pixels over 50 frames). Then re-check all 128 production recomputes — **after the
 copy, on the Razer**, where the data will be local. Effort: ~1 h code + the re-check run.
+**Code built 2026-09-27** ([yra_recompute_plan.md](yra_recompute_plan.md) §14.2, "Built"): hard
+check max |diff| ≤ 1; re-check with `yr.verify_all(items, stop_on_error=False)` on the Razer.
 
 ### 2. Recover the two G05 NaN-motion sessions — build + run
 [yra_recompute_plan.md](yra_recompute_plan.md) §14.1. G05 `2021_09_01-TFC_test_B` `15_37_05-LT1` and
