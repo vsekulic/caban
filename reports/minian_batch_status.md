@@ -1,6 +1,6 @@
 # Minian batch: status of every session
 
-Generated 2026-09-28 23:01 on the Razer from MINIRAZER by `scripts/minian_status_report.py` -- from the runs' own records, not by hand. How the batch runs: [plans/razer_runner_plan.md](../plans/razer_runner_plan.md) (Phase 4), [plans/session_staging_copier_plan.md](../plans/session_staging_copier_plan.md).
+Generated 2026-09-29 12:29 on the Razer from MINIRAZER by `scripts/minian_status_report.py` -- from the runs' own records, not by hand. How the batch runs: [plans/razer_runner_plan.md](../plans/razer_runner_plan.md) (Phase 4), [plans/session_staging_copier_plan.md](../plans/session_staging_copier_plan.md).
 
 ## Summary
 
@@ -8,7 +8,7 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 
 | # | group | sessions | done | computed | running | failed | interrupted | pending | on MINISCOPE |
 |---|---|---|---|---|---|---|---|---|---|
-| 1 | TFC_cond days | 88 | 17 | 0 | 1 | 0 | 0 | 70 | 16 |
+| 1 | TFC_cond days | 88 | 60 | 0 | 1 | 0 | 0 | 27 | 16 |
 | 2 | TFC_test_B days | 54 | 1 | 0 | 0 | 1 | 0 | 52 | 1 |
 | 3 | TFC_test_B_1wk days | 63 | 2 | 0 | 0 | 1 | 0 | 60 | 2 |
 | 4 | TFC_test_A days | 66 | 1 | 0 | 0 | 0 | 0 | 65 | 1 |
@@ -17,11 +17,11 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 | 7 | track day 2 | 48 | 1 | 0 | 0 | 0 | 0 | 47 | 1 |
 | 8 | track day 3 | 48 | 1 | 0 | 0 | 0 | 0 | 47 | 1 |
 | 9 | everything else | 19 | 3 | 0 | 0 | 0 | 0 | 16 | 3 |
-|  | **all** | 492 | 28 | 0 | 1 | 2 | 0 | 461 | 27 |
+|  | **all** | 492 | 71 | 0 | 1 | 2 | 0 | 418 | 27 |
 
-**Now**: G08/2021_11_08-TFC_cond/14_23_22-CNO2 (running)
+**Now**: G17/2022_01_24-TFC_cond/17_49_36-HC2 (running)
 
-**Next**: G08/2021_11_08-TFC_cond/15_50_16-HC3; G09/2021_11_08-TFC_cond/16_33_10-HC1; G09/2021_11_08-TFC_cond/17_24_22-CNO1; G09/2021_11_08-TFC_cond/17_49_48-CNO2; G09/2021_11_08-TFC_cond/18_29_51-HC2
+**Next**: G17/2022_01_24-TFC_cond/17_57_20-CNO1; G17/2022_01_24-TFC_cond/18_18_19-CNO2; G17/2022_01_24-TFC_cond/18_52_59-HC3; G17/2022_01_24-TFC_cond/19_13_33-HC4; G18/2022_02_07-TFC_cond/14_03_44-HC1
 
 ## Columns
 
@@ -170,7 +170,7 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 | 2021_10_27-TFC_test_A_1wk | 16_49_38-TFC_test_A_1wk | TFC_test_A_1wk | 8 | TFC_test_A_1wk days | production |  |  |  | Y |  | Y (source) |  |
 | 2021_10_27-TFC_test_A_1wk | 17_09_53-HC3 | HC3 | 7 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
 
-## G08 -- 2 of 19 batch sessions done
+## G08 -- 4 of 19 batch sessions done
 
 | day | session | type | videos | group | status | finished | wall_h | units | YrA | frames_checked | on_MINISCOPE | note |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -192,10 +192,10 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 | 2021_11_08-TFC_cond | 13_05_47-HC1 | HC1 | 6 | TFC_cond days | done | 2026-09-28 22:23 | 0.26 | 179 | Y | all 5953 equal | Y (2026-09-28) |  |
 | 2021_11_08-TFC_cond | 13_22_42-LT1 | LT1 | 13 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
 | 2021_11_08-TFC_cond | 14_07_31-CNO1 | CNO1 | 6 | TFC_cond days | done | 2026-09-28 22:43 | 0.31 | 197 | Y | all 5947 equal | N |  |
-| 2021_11_08-TFC_cond | 14_23_22-CNO2 | CNO2 | 7 | TFC_cond days | running |  |  |  |  |  |  |  |
+| 2021_11_08-TFC_cond | 14_23_22-CNO2 | CNO2 | 7 | TFC_cond days | done | 2026-09-28 23:04 | 0.35 | 240 | Y | all 6453 equal | N |  |
 | 2021_11_08-TFC_cond | 14_43_03-LT2 | LT2 | 13 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
 | 2021_11_08-TFC_cond | 15_13_23-TFC_cond | TFC_cond | 27 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
-| 2021_11_08-TFC_cond | 15_50_16-HC3 | HC3 | 8 | TFC_cond days | pending |  |  |  |  |  |  |  |
+| 2021_11_08-TFC_cond | 15_50_16-HC3 | HC3 | 8 | TFC_cond days | done | 2026-09-28 23:22 | 0.30 | 158 | Y | all 7777 equal | N |  |
 | 2021_11_10-TFC_test_B | 13_27_20-HC1 | HC1 | 7 | TFC_test_B days | pending |  |  |  |  |  |  |  |
 | 2021_11_10-TFC_test_B | 13_54_11-LT1 | LT1 | 15 | TFC_test_B days | production |  |  |  | Y |  | Y (source) |  |
 | 2021_11_10-TFC_test_B | 14_18_51-HC2 | HC2 | 6 | TFC_test_B days | pending |  |  |  |  |  |  |  |
@@ -217,7 +217,7 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 | 2021_11_17-TFC_test_A_1wk | 15_24_18-TFC_test_A_1wk | TFC_test_A_1wk | 7 | TFC_test_A_1wk days | production |  |  |  | Y |  | Y (source) |  |
 | 2021_11_17-TFC_test_A_1wk | 16_02_26-HC3 | HC3 | 7 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
 
-## G09 -- 0 of 34 batch sessions done
+## G09 -- 4 of 34 batch sessions done
 
 | day | session | type | videos | group | status | finished | wall_h | units | YrA | frames_checked | on_MINISCOPE | note |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -236,12 +236,12 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 | 2021_11_05-track_day5 | 14_11_23-HC1 | HC1 | 6 | everything else | pending |  |  |  |  |  |  |  |
 | 2021_11_05-track_day5 | 14_28_11-LT1 | LT1 | 13 | everything else | pending |  |  |  |  |  |  |  |
 | 2021_11_05-track_day5 | 14_50_19-HC2 | HC2 | 7 | everything else | pending |  |  |  |  |  |  |  |
-| 2021_11_08-TFC_cond | 16_33_10-HC1 | HC1 | 7 | TFC_cond days | pending |  |  |  |  |  |  |  |
+| 2021_11_08-TFC_cond | 16_33_10-HC1 | HC1 | 7 | TFC_cond days | done | 2026-09-28 23:40 | 0.30 | 224 | Y | all 6644 equal | N |  |
 | 2021_11_08-TFC_cond | 16_53_07-LT1 | LT1 | 13 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
-| 2021_11_08-TFC_cond | 17_24_22-CNO1 | CNO1 | 6 | TFC_cond days | pending |  |  |  |  |  |  |  |
-| 2021_11_08-TFC_cond | 17_49_48-CNO2 | CNO2 | 7 | TFC_cond days | pending |  |  |  |  |  |  |  |
+| 2021_11_08-TFC_cond | 17_24_22-CNO1 | CNO1 | 6 | TFC_cond days | done | 2026-09-28 23:54 | 0.24 | 70 | Y | all 5966 equal | N |  |
+| 2021_11_08-TFC_cond | 17_49_48-CNO2 | CNO2 | 7 | TFC_cond days | done | 2026-09-29 00:10 | 0.26 | 77 | Y | all 6667 equal | N |  |
 | 2021_11_08-TFC_cond | 18_08_37-LT2 | LT2 | 13 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
-| 2021_11_08-TFC_cond | 18_29_51-HC2 | HC2 | 7 | TFC_cond days | pending |  |  |  |  |  |  |  |
+| 2021_11_08-TFC_cond | 18_29_51-HC2 | HC2 | 7 | TFC_cond days | done | 2026-09-29 00:25 | 0.25 | 46 | Y | all 6313 equal | N |  |
 | 2021_11_08-TFC_cond | 18_54_05-TFC_cond | TFC_cond | 19 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
 | 2021_11_08-TFC_cond | 19_28_33-HC3 | HC3 | 7 | TFC_cond days | partial output (excluded) |  |  |  |  |  |  | partial old output, all-NaN motion; VS to decide (open items 10) |
 | 2021_11_10-TFC_test_B | 15_58_30-HC1 | HC1 | 7 | TFC_test_B days | pending |  |  |  |  |  |  |  |
@@ -265,7 +265,7 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 | 2021_11_17-TFC_test_A_1wk | 17_47_11-TFC_test_A_1wk | TFC_test_A_1wk | 7 | TFC_test_A_1wk days | production |  |  |  | Y |  | Y (source) |  |
 | 2021_11_17-TFC_test_A_1wk | 18_03_11-HC3 | HC3 | 7 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
 
-## G10 -- 0 of 28 batch sessions done
+## G10 -- 5 of 28 batch sessions done
 
 | day | session | type | videos | group | status | finished | wall_h | units | YrA | frames_checked | on_MINISCOPE | note |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -279,14 +279,14 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 | 2021_11_20-track_day3 | 14_05_55-HC1_high_led | HC1_high_led | 7 | track day 3 | pending |  |  |  |  |  |  |  |
 | 2021_11_20-track_day3 | 14_22_22-LT1 | LT1 | 15 | track day 3 | pending |  |  |  |  |  |  |  |
 | 2021_11_20-track_day3 | 14_45_34-HC2 | HC2 | 6 | track day 3 | pending |  |  |  |  |  |  |  |
-| 2021_11_23-TFC_cond | 14_34_39-HC1 | HC1 | 6 | TFC_cond days | pending |  |  |  |  |  |  |  |
+| 2021_11_23-TFC_cond | 14_34_39-HC1 | HC1 | 6 | TFC_cond days | done | 2026-09-29 00:53 | 0.38 | 737 | Y | all 5951 equal | N |  |
 | 2021_11_23-TFC_cond | 14_51_37-LT1 | LT1 | 14 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
-| 2021_11_23-TFC_cond | 15_22_29-CNO1 | CNO1 | 7 | TFC_cond days | pending |  |  |  |  |  |  |  |
-| 2021_11_23-TFC_cond | 15_38_21-CNO2 | CNO2 | 6 | TFC_cond days | pending |  |  |  |  |  |  |  |
+| 2021_11_23-TFC_cond | 15_22_29-CNO1 | CNO1 | 7 | TFC_cond days | done | 2026-09-29 01:13 | 0.36 | 495 | Y | all 6475 equal | N |  |
+| 2021_11_23-TFC_cond | 15_38_21-CNO2 | CNO2 | 6 | TFC_cond days | done | 2026-09-29 01:30 | 0.30 | 393 | Y | all 5951 equal | N |  |
 | 2021_11_23-TFC_cond | 15_53_29-LT2 | LT2 | 18 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
-| 2021_11_23-TFC_cond | 16_18_55-HC2 | HC2 | 7 | TFC_cond days | pending |  |  |  |  |  |  |  |
+| 2021_11_23-TFC_cond | 16_18_55-HC2 | HC2 | 7 | TFC_cond days | done | 2026-09-29 01:55 | 0.38 | 682 | Y | all 6251 equal | N |  |
 | 2021_11_23-TFC_cond | 16_32_14-TFC_cond | TFC_cond | 26 | TFC_cond days | production |  |  |  | Y |  | Y (source) | production; also the Mac gate re-run in minian/ (batch runner plan §13) |
-| 2021_11_23-TFC_cond | 17_07_00-HC3 | HC3 | 7 | TFC_cond days | pending |  |  |  |  |  |  |  |
+| 2021_11_23-TFC_cond | 17_07_00-HC3 | HC3 | 7 | TFC_cond days | done | 2026-09-29 02:14 | 0.33 | 516 | Y | all 6106 equal | N |  |
 | 2021_11_25-TFC_test_B | 14_18_38-HC1 | HC1 | 7 | TFC_test_B days | pending |  |  |  |  |  |  |  |
 | 2021_11_25-TFC_test_B | 14_39_23-LT1 | LT1 | 17 | TFC_test_B days | pending |  |  |  |  |  |  |  |
 | 2021_11_25-TFC_test_B | 15_16_15-HC2 | HC2 | 8 | TFC_test_B days | pending |  |  |  |  |  |  |  |
@@ -305,7 +305,7 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 | 2021_12_02-TFC_test_A_1wk | 13_59_52-TFC_test_A_1wk | TFC_test_A_1wk | 7 | TFC_test_A_1wk days | production |  |  |  | Y |  | Y (source) |  |
 | 2021_12_02-TFC_test_A_1wk | 14_17_43-HC2 | HC2 | 7 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
 
-## G11 -- 2 of 26 batch sessions done
+## G11 -- 7 of 26 batch sessions done
 
 | day | session | type | videos | group | status | finished | wall_h | units | YrA | frames_checked | on_MINISCOPE | note |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -318,14 +318,14 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 | 2021_11_20-track_day3 | 15_13_38-HC1 | HC1 | 7 | track day 3 | pending |  |  |  |  |  |  |  |
 | 2021_11_20-track_day3 | 15_30_53-LT1 | LT1 | 17 | track day 3 | pending |  |  |  |  |  |  |  |
 | 2021_11_20-track_day3 | 15_55_01-HC2 | HC2 | 7 | track day 3 | pending |  |  |  |  |  |  |  |
-| 2021_11_23-TFC_cond | 17_33_23-HC1 | HC1 | 6 | TFC_cond days | pending |  |  |  |  |  |  |  |
+| 2021_11_23-TFC_cond | 17_33_23-HC1 | HC1 | 6 | TFC_cond days | done | 2026-09-29 02:33 | 0.33 | 515 | Y | all 5965 equal | N |  |
 | 2021_11_23-TFC_cond | 17_51_25-LT1 | LT1 | 18 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
-| 2021_11_23-TFC_cond | 18_25_41-CNO1 | CNO1 | 7 | TFC_cond days | pending |  |  |  |  |  |  |  |
-| 2021_11_23-TFC_cond | 18_41_08-CNO2 | CNO2 | 7 | TFC_cond days | pending |  |  |  |  |  |  |  |
+| 2021_11_23-TFC_cond | 18_25_41-CNO1 | CNO1 | 7 | TFC_cond days | done | 2026-09-29 02:51 | 0.30 | 380 | Y | all 6116 equal | N |  |
+| 2021_11_23-TFC_cond | 18_41_08-CNO2 | CNO2 | 7 | TFC_cond days | done | 2026-09-29 03:10 | 0.32 | 368 | Y | all 6643 equal | N |  |
 | 2021_11_23-TFC_cond | 18_55_26-LT2 | LT2 | 14 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
-| 2021_11_23-TFC_cond | 19_15_48-HC2 | HC2 | 7 | TFC_cond days | pending |  |  |  |  |  |  |  |
+| 2021_11_23-TFC_cond | 19_15_48-HC2 | HC2 | 7 | TFC_cond days | done | 2026-09-29 03:29 | 0.30 | 379 | Y | all 6128 equal | N |  |
 | 2021_11_23-TFC_cond | 19_24_52-TFC_cond | TFC_cond | 26 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
-| 2021_11_23-TFC_cond | 19_59_33-HC3 | HC3 | 7 | TFC_cond days | pending |  |  |  |  |  |  |  |
+| 2021_11_23-TFC_cond | 19_59_33-HC3 | HC3 | 7 | TFC_cond days | done | 2026-09-29 03:49 | 0.32 | 453 | Y | all 6122 equal | N |  |
 | 2021_11_25-TFC_test_B | 16_29_57-HC1 | HC1 | 7 | TFC_test_B days | pending |  |  |  |  |  |  |  |
 | 2021_11_25-TFC_test_B | 16_47_19-LT1 | LT1 | 19 | TFC_test_B days | done | 2026-09-28 14:03 | 2.77 | 748 | Y | sample of 50 equal | Y (2026-09-28) |  |
 | 2021_11_25-TFC_test_B | 17_17_33-TFC_test_B | TFC_test_B | 18 | TFC_test_B days | production |  |  |  | Y |  | Y (source) |  |
@@ -343,7 +343,7 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 | 2021_12_02-TFC_test_A_1wk | 15_20_57-TFC_test_A_1wk | TFC_test_A_1wk | 8 | TFC_test_A_1wk days | production |  |  |  | Y |  | Y (source) |  |
 | 2021_12_02-TFC_test_A_1wk | 15_32_02-HC2 | HC2 | 6 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
 
-## G12 -- 0 of 32 batch sessions done
+## G12 -- 5 of 32 batch sessions done
 
 | day | session | type | videos | group | status | finished | wall_h | units | YrA | frames_checked | on_MINISCOPE | note |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -360,14 +360,14 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 | 2021_12_31-track_day3 | 15_18_18-LT1 | LT1 | 13 | track day 3 | pending |  |  |  |  |  |  |  |
 | 2021_12_31-track_day3 | 15_29_21-HC2 | HC2 | 7 | track day 3 | pending |  |  |  |  |  |  |  |
 | 2021_12_31-track_day3 | 15_34_36-HC3 | HC3 | 7 | track day 3 | pending |  |  |  |  |  |  |  |
-| 2022_01_03-TFC_cond | 13_59_56-HC1 | HC1 | 6 | TFC_cond days | pending |  |  |  |  |  |  |  |
+| 2022_01_03-TFC_cond | 13_59_56-HC1 | HC1 | 6 | TFC_cond days | done | 2026-09-29 04:02 | 0.26 | 129 | Y | all 5994 equal | N |  |
 | 2022_01_03-TFC_cond | 14_11_51-LT1 | LT1 | 13 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_03-TFC_cond | 14_23_02-HC2 | HC2 | 7 | TFC_cond days | pending |  |  |  |  |  |  |  |
-| 2022_01_03-TFC_cond | 14_32_19-CNO1 | CNO1 | 7 | TFC_cond days | pending |  |  |  |  |  |  |  |
+| 2022_01_03-TFC_cond | 14_23_02-HC2 | HC2 | 7 | TFC_cond days | done | 2026-09-29 04:23 | 0.32 | 283 | Y | all 6660 equal | N |  |
+| 2022_01_03-TFC_cond | 14_32_19-CNO1 | CNO1 | 7 | TFC_cond days | done | 2026-09-29 04:42 | 0.32 | 258 | Y | all 6269 equal | N |  |
 | 2022_01_03-TFC_cond | 14_52_29-LT2 | LT2 | 13 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_03-TFC_cond | 15_03_39-HC3 | HC3 | 6 | TFC_cond days | pending |  |  |  |  |  |  |  |
+| 2022_01_03-TFC_cond | 15_03_39-HC3 | HC3 | 6 | TFC_cond days | done | 2026-09-29 05:00 | 0.29 | 266 | Y | all 5990 equal | N |  |
 | 2022_01_03-TFC_cond | 15_12_38-TFC_cond | TFC_cond | 26 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_03-TFC_cond | 15_37_11-HC4 | HC4 | 7 | TFC_cond days | pending |  |  |  |  |  |  |  |
+| 2022_01_03-TFC_cond | 15_37_11-HC4 | HC4 | 7 | TFC_cond days | done | 2026-09-29 05:16 | 0.28 | 237 | Y | all 6062 equal | N |  |
 | 2022_01_05-TFC_test_B | 13_57_17-HC1 | HC1 | 7 | TFC_test_B days | pending |  |  |  |  |  |  |  |
 | 2022_01_05-TFC_test_B | 14_03_29-LT1 | LT1 | 14 | TFC_test_B days | production |  |  |  | Y |  | Y (source) |  |
 | 2022_01_05-TFC_test_B | 14_15_33-HC2 | HC2 | 7 | TFC_test_B days | pending |  |  |  |  |  |  |  |
@@ -389,7 +389,7 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 | 2022_01_12-TFC_test_A_1wk | 14_03_29-TFC_test_A_1wk | TFC_test_A_1wk | 8 | TFC_test_A_1wk days | production |  |  |  | Y |  | Y (source) |  |
 | 2022_01_12-TFC_test_A_1wk | 14_12_53-HC3 | HC3 | 7 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
 
-## G13 -- 1 of 33 batch sessions done
+## G13 -- 7 of 33 batch sessions done
 
 | day | session | type | videos | group | status | finished | wall_h | units | YrA | frames_checked | on_MINISCOPE | note |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -406,15 +406,15 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 | 2021_12_31-track_day3 | 16_39_19-LT1 | LT1 | 13 | track day 3 | pending |  |  |  |  |  |  |  |
 | 2021_12_31-track_day3 | 16_50_18-HC2 | HC2 | 7 | track day 3 | pending |  |  |  |  |  |  |  |
 | 2021_12_31-track_day3 | 16_55_33-HC3 | HC3 | 7 | track day 3 | pending |  |  |  |  |  |  |  |
-| 2022_01_03-TFC_cond | 16_05_10-HC1 | HC1 | 7 | TFC_cond days | pending |  |  |  |  |  |  |  |
+| 2022_01_03-TFC_cond | 16_05_10-HC1 | HC1 | 7 | TFC_cond days | done | 2026-09-29 05:32 | 0.27 | 105 | Y | all 6132 equal | N |  |
 | 2022_01_03-TFC_cond | 16_10_53-LT1 | LT1 | 13 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_03-TFC_cond | 16_21_45-HC2 | HC2 | 7 | TFC_cond days | pending |  |  |  |  |  |  |  |
-| 2022_01_03-TFC_cond | 16_28_35-CNO1 | CNO1 | 9 | TFC_cond days | pending |  |  |  |  |  |  |  |
-| 2022_01_03-TFC_cond | 16_48_37-CNO2 | CNO2 | 7 | TFC_cond days | pending |  |  |  |  |  |  |  |
+| 2022_01_03-TFC_cond | 16_21_45-HC2 | HC2 | 7 | TFC_cond days | done | 2026-09-29 05:47 | 0.26 | 100 | Y | all 6083 equal | N |  |
+| 2022_01_03-TFC_cond | 16_28_35-CNO1 | CNO1 | 9 | TFC_cond days | done | 2026-09-29 06:09 | 0.36 | 85 | Y | all 8434 equal | N |  |
+| 2022_01_03-TFC_cond | 16_48_37-CNO2 | CNO2 | 7 | TFC_cond days | done | 2026-09-29 06:25 | 0.27 | 65 | Y | all 6181 equal | N |  |
 | 2022_01_03-TFC_cond | 16_53_52-LT2 | LT2 | 13 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_03-TFC_cond | 17_04_37-HC3 | HC3 | 7 | TFC_cond days | pending |  |  |  |  |  |  |  |
+| 2022_01_03-TFC_cond | 17_04_37-HC3 | HC3 | 7 | TFC_cond days | done | 2026-09-29 06:40 | 0.26 | 50 | Y | all 6104 equal | N |  |
 | 2022_01_03-TFC_cond | 17_13_06-TFC_cond | TFC_cond | 26 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_03-TFC_cond | 17_37_35-HC4 | HC4 | 8 | TFC_cond days | pending |  |  |  |  |  |  |  |
+| 2022_01_03-TFC_cond | 17_37_35-HC4 | HC4 | 8 | TFC_cond days | done | 2026-09-29 06:58 | 0.29 | 36 | Y | all 7048 equal | N |  |
 | 2022_01_05-TFC_test_B | 15_24_03-HC1 | HC1 | 7 | TFC_test_B days | pending |  |  |  |  |  |  |  |
 | 2022_01_05-TFC_test_B | 15_29_44-LT1 | LT1 | 14 | TFC_test_B days | production |  |  |  | Y |  | Y (source) |  |
 | 2022_01_05-TFC_test_B | 15_41_23-HC2 | HC2 | 8 | TFC_test_B days | pending |  |  |  |  |  |  |  |
@@ -437,7 +437,7 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 | 2022_01_12-TFC_test_A_1wk | 15_07_47-TFC_test_A_1wk | TFC_test_A_1wk | 7 | TFC_test_A_1wk days | production |  |  |  | Y |  | Y (source) |  |
 | 2022_01_12-TFC_test_A_1wk | 15_16_01-HC3 | HC3 | 6 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
 
-## G14 -- 1 of 31 batch sessions done
+## G14 -- 6 of 31 batch sessions done
 
 | day | session | type | videos | group | status | finished | wall_h | units | YrA | frames_checked | on_MINISCOPE | note |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -451,14 +451,14 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 | 2022_01_08-track_day3 | 12_48_36-HC1 | HC1 | 7 | track day 3 | pending |  |  |  |  |  |  |  |
 | 2022_01_08-track_day3 | 12_54_19-LT1 | LT1 | 13 | track day 3 | pending |  |  |  |  |  |  |  |
 | 2022_01_08-track_day3 | 13_06_00-HC2 | HC2 | 7 | track day 3 | pending |  |  |  |  |  |  |  |
-| 2022_01_11-TFC_cond | 14_47_56-HC1 | HC1 | 7 | TFC_cond days | pending |  |  |  |  |  |  |  |
+| 2022_01_11-TFC_cond | 14_47_56-HC1 | HC1 | 7 | TFC_cond days | done | 2026-09-29 07:19 | 0.31 | 341 | Y | all 6209 equal | N |  |
 | 2022_01_11-TFC_cond | 14_53_32-LT1 | LT1 | 14 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_11-TFC_cond | 15_05_21-HC2 | HC2 | 9 | TFC_cond days | pending |  |  |  |  |  |  |  |
-| 2022_01_11-TFC_cond | 15_33_45-CNO1 | CNO1 | 7 | TFC_cond days | pending |  |  |  |  |  |  |  |
+| 2022_01_11-TFC_cond | 15_05_21-HC2 | HC2 | 9 | TFC_cond days | done | 2026-09-29 07:42 | 0.38 | 325 | Y | all 8157 equal | N |  |
+| 2022_01_11-TFC_cond | 15_33_45-CNO1 | CNO1 | 7 | TFC_cond days | done | 2026-09-29 07:58 | 0.29 | 231 | Y | all 6647 equal | N |  |
 | 2022_01_11-TFC_cond | 15_39_23-LT2 | LT2 | 14 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_11-TFC_cond | 15_51_35-HC3 | HC3 | 7 | TFC_cond days | pending |  |  |  |  |  |  |  |
+| 2022_01_11-TFC_cond | 15_51_35-HC3 | HC3 | 7 | TFC_cond days | done | 2026-09-29 08:17 | 0.30 | 310 | Y | all 6259 equal | N |  |
 | 2022_01_11-TFC_cond | 16_00_53-TFC_cond | TFC_cond | 29 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_11-TFC_cond | 16_28_19-HC4 | HC4 | 7 | TFC_cond days | pending |  |  |  |  |  |  |  |
+| 2022_01_11-TFC_cond | 16_28_19-HC4 | HC4 | 7 | TFC_cond days | done | 2026-09-29 08:34 | 0.29 | 244 | Y | all 6239 equal | N |  |
 | 2022_01_13-TFC_test_B | 14_32_17-HC1 | HC1 | 9 | TFC_test_B days | pending |  |  |  |  |  |  |  |
 | 2022_01_13-TFC_test_B | 14_39_28-LT1 | LT1 | 14 | TFC_test_B days | production |  |  |  | Y |  | Y (source) |  |
 | 2022_01_13-TFC_test_B | 14_51_39-HC2 | HC2 | 10 | TFC_test_B days | pending |  |  |  |  |  |  |  |
@@ -481,7 +481,7 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 | 2022_01_21-TFC_test_A_1wk | 16_13_09-TFC_test_A_1wk | TFC_test_A_1wk | 7 | TFC_test_A_1wk days | production |  |  |  | Y |  | Y (source) |  |
 | 2022_01_21-TFC_test_A_1wk | 16_21_48-HC3 | HC3 | 7 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
 
-## G15 -- 0 of 21 batch sessions done
+## G15 -- 5 of 21 batch sessions done
 
 | day | session | type | videos | group | status | finished | wall_h | units | YrA | frames_checked | on_MINISCOPE | note |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -494,14 +494,14 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 | 2022_01_08-track_day3 | 13_34_11-HC1 | HC1 | 7 | track day 3 | pending |  |  |  |  |  |  |  |
 | 2022_01_08-track_day3 | 13_39_54-LT1 | LT1 | 14 | track day 3 | pending |  |  |  |  |  |  |  |
 | 2022_01_08-track_day3 | 13_51_27-HC2 | HC2 | 7 | track day 3 | pending |  |  |  |  |  |  |  |
-| 2022_01_11-TFC_cond | 16_57_42-HC1 | HC1 | 10 | TFC_cond days | pending |  |  |  |  |  |  |  |
+| 2022_01_11-TFC_cond | 16_57_42-HC1 | HC1 | 10 | TFC_cond days | done | 2026-09-29 08:53 | 0.33 | 92 | Y | all 9104 equal | N |  |
 | 2022_01_11-TFC_cond | 17_05_25-LT1 | LT1 | 14 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_11-TFC_cond | 17_16_49-HC2 | HC2 | 9 | TFC_cond days | pending |  |  |  |  |  |  |  |
-| 2022_01_11-TFC_cond | 17_45_31-CNO1 | CNO1 | 7 | TFC_cond days | pending |  |  |  |  |  |  |  |
+| 2022_01_11-TFC_cond | 17_16_49-HC2 | HC2 | 9 | TFC_cond days | done | 2026-09-29 09:15 | 0.35 | 163 | Y | all 8178 equal | N |  |
+| 2022_01_11-TFC_cond | 17_45_31-CNO1 | CNO1 | 7 | TFC_cond days | done | 2026-09-29 09:31 | 0.28 | 81 | Y | all 6788 equal | N |  |
 | 2022_01_11-TFC_cond | 17_51_17-LT2 | LT2 | 13 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_11-TFC_cond | 18_02_26-HC3 | HC3 | 7 | TFC_cond days | pending |  |  |  |  |  |  |  |
+| 2022_01_11-TFC_cond | 18_02_26-HC3 | HC3 | 7 | TFC_cond days | done | 2026-09-29 09:49 | 0.29 | 194 | Y | all 6137 equal | N |  |
 | 2022_01_11-TFC_cond | 18_10_56-TFC_cond | TFC_cond | 30 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_11-TFC_cond | 18_39_20-HC4 | HC4 | 9 | TFC_cond days | pending |  |  |  |  |  |  |  |
+| 2022_01_11-TFC_cond | 18_39_20-HC4 | HC4 | 9 | TFC_cond days | done | 2026-09-29 10:10 | 0.34 | 142 | Y | all 8173 equal | N |  |
 | 2022_01_13-TFC_test_B | 15_51_23-HC1 | HC1 | 8 | TFC_test_B days | pending |  |  |  |  |  |  |  |
 | 2022_01_13-TFC_test_B | 15_57_25-LT1 | LT1 | 14 | TFC_test_B days | production |  |  |  | Y |  | Y (source) |  |
 | 2022_01_13-TFC_test_B | 16_09_14-HC2 | HC2 | 8 | TFC_test_B days | pending |  |  |  |  |  |  |  |
@@ -513,7 +513,7 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 | 2022_01_15-TFC_test_A | 18_45_26-TFC_test_A | TFC_test_A | 7 | TFC_test_A days | production |  |  |  | Y |  | Y (source) |  |
 | 2022_01_15-TFC_test_A | 18_53_47-HC3 | HC3 | 9 | TFC_test_A days | pending |  |  |  |  |  |  |  |
 
-## G16 -- 0 of 29 batch sessions done
+## G16 -- 5 of 29 batch sessions done
 
 | day | session | type | videos | group | status | finished | wall_h | units | YrA | frames_checked | on_MINISCOPE | note |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -526,14 +526,14 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 | 2022_01_21-track_day3 | 13_56_35-HC1 | HC1 | 8 | track day 3 | pending |  |  |  |  |  |  |  |
 | 2022_01_21-track_day3 | 14_02_33-LT1 | LT1 | 17 | track day 3 | pending |  |  |  |  |  |  |  |
 | 2022_01_21-track_day3 | 14_16_49-HC2 | HC2 | 9 | track day 3 | pending |  |  |  |  |  |  |  |
-| 2022_01_24-TFC_cond | 14_53_32-HC1 | HC1 | 7 | TFC_cond days | pending |  |  |  |  |  |  |  |
+| 2022_01_24-TFC_cond | 14_53_32-HC1 | HC1 | 7 | TFC_cond days | done | 2026-09-29 10:35 | 0.37 | 509 | Y | all 6743 equal | N |  |
 | 2022_01_24-TFC_cond | 14_59_15-LT1 | LT1 | 15 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_24-TFC_cond | 15_12_16-HC2 | HC2 | 7 | TFC_cond days | pending |  |  |  |  |  |  |  |
-| 2022_01_24-TFC_cond | 15_41_33-CNO1 | CNO1 | 7 | TFC_cond days | pending |  |  |  |  |  |  |  |
+| 2022_01_24-TFC_cond | 15_12_16-HC2 | HC2 | 7 | TFC_cond days | done | 2026-09-29 10:56 | 0.36 | 469 | Y | all 6668 equal | N |  |
+| 2022_01_24-TFC_cond | 15_41_33-CNO1 | CNO1 | 7 | TFC_cond days | done | 2026-09-29 11:14 | 0.31 | 356 | Y | all 6040 equal | N |  |
 | 2022_01_24-TFC_cond | 15_47_20-LT2 | LT2 | 13 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_24-TFC_cond | 15_58_23-HC3 | HC3 | 6 | TFC_cond days | pending |  |  |  |  |  |  |  |
+| 2022_01_24-TFC_cond | 15_58_23-HC3 | HC3 | 6 | TFC_cond days | done | 2026-09-29 11:36 | 0.33 | 461 | Y | all 5968 equal | N |  |
 | 2022_01_24-TFC_cond | 16_06_44-TFC_cond | TFC_cond | 28 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_24-TFC_cond | 16_33_17-HC4 | HC4 | 9 | TFC_cond days | pending |  |  |  |  |  |  |  |
+| 2022_01_24-TFC_cond | 16_33_17-HC4 | HC4 | 9 | TFC_cond days | done | 2026-09-29 12:05 | 0.47 | 529 | Y | all 8862 equal | N |  |
 | 2022_01_26-TFC_test_B | 14_17_03-HC1 | HC1 | 7 | TFC_test_B days | pending |  |  |  |  |  |  |  |
 | 2022_01_26-TFC_test_B | 14_23_45-LT1 | LT1 | 14 | TFC_test_B days | production |  |  |  | Y |  | Y (source) |  |
 | 2022_01_26-TFC_test_B | 14_36_08-HC2 | HC2 | 7 | TFC_test_B days | pending |  |  |  |  |  |  |  |
@@ -555,7 +555,7 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 | 2022_02_02-TFC_test_A_1wk | 14_49_27-TFC_test_A_1wk | TFC_test_A_1wk | 7 | TFC_test_A_1wk days | production |  |  |  | Y |  | Y (source) |  |
 | 2022_02_02-TFC_test_A_1wk | 14_58_24-HC3 | HC3 | 10 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
 
-## G17 -- 0 of 30 batch sessions done
+## G17 -- 1 of 30 batch sessions done
 
 | day | session | type | videos | group | status | finished | wall_h | units | YrA | frames_checked | on_MINISCOPE | note |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -568,9 +568,9 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 | 2022_01_21-track_day3 | 14_48_20-HC1 | HC1 | 7 | track day 3 | pending |  |  |  |  |  |  |  |
 | 2022_01_21-track_day3 | 14_53_55-LT1 | LT1 | 14 | track day 3 | pending |  |  |  |  |  |  |  |
 | 2022_01_21-track_day3 | 15_06_06-HC2 | HC2 | 8 | track day 3 | pending |  |  |  |  |  |  |  |
-| 2022_01_24-TFC_cond | 17_31_07-HC1 | HC1 | 9 | TFC_cond days | pending |  |  |  |  |  |  |  |
+| 2022_01_24-TFC_cond | 17_31_07-HC1 | HC1 | 9 | TFC_cond days | done | 2026-09-29 12:23 | 0.35 | 269 | Y | all 8027 equal | N |  |
 | 2022_01_24-TFC_cond | 17_38_16-LT1 | LT1 | 13 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_24-TFC_cond | 17_49_36-HC2 | HC2 | 7 | TFC_cond days | pending |  |  |  |  |  |  |  |
+| 2022_01_24-TFC_cond | 17_49_36-HC2 | HC2 | 7 | TFC_cond days | running |  |  |  |  |  |  |  |
 | 2022_01_24-TFC_cond | 17_57_20-CNO1 | CNO1 | 6 | TFC_cond days | pending |  |  |  |  |  |  |  |
 | 2022_01_24-TFC_cond | 18_18_19-CNO2 | CNO2 | 7 | TFC_cond days | pending |  |  |  |  |  |  |  |
 | 2022_01_24-TFC_cond | 18_26_30-TFC_cond | TFC_cond | 27 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
