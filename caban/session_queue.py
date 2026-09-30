@@ -142,10 +142,10 @@ RECOMPUTED_YRA_SIDECAR = "YrA_recompute.json"
 # so that any other session missing its recompute is a hard failure rather than a silent fallback
 # to the export (which is known to be wrong: plans/yra_recompute_plan.md §1, §12.4).
 NO_RECOMPUTED_YRA = {
-    # motion.zarr is NaN in every frame (plan §14); recoverable by re-estimating the motion
-    # (review/timing-and-yra-fixes d2b74ce, deferred). Until then: no YrA for these sessions.
-    "G05-ST637_hM3D/2021_09_01-TFC_test_B/15_37_05-LT1": "no YrA until the motion is recovered (plan §14.1)",
-    "G05-ST637_hM3D/2021_09_01-TFC_test_B/16_20_07-TFC_test_B": "no YrA until the motion is recovered (plan §14.1)",
+    # Empty since 2026-09-30: the two G05 TFC_test_B sessions whose motion.zarr is NaN in every
+    # frame (plan §14) were recovered -- motion re-estimated with the notebook and proven by an exact
+    # max_proj match (motion_reestimated.zarr), YrA recomputed with it. Add a session here only with
+    # a stated reason.
 }
 
 

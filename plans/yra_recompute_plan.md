@@ -716,3 +716,16 @@ above assumed:
 `PlaceFields`, `S_shuffled`; possibly isomap and `Population_PCA`), and re-running the published
 Test_B analyses to see how much the hM4D group moves.
 
+**§14.1 done, 2026-09-30** (Razer, `mr.reestimate_motion` then `yr.run_item`; reviewed code `081be37`). The
+protected notebook up to `max_proj`, production's arrays hashed before and after (unchanged):
+- G05 `15_37_05-LT1`: 12,511 frames, max shift 5.98 px, **`max_proj` 0 of 369,664 px differ**; YrA 519 units,
+  corr(C, YrA) median 0.549, its own `max_proj` check exact.
+- G05 `16_20_07-TFC_test_B`: 24,714 frames, max shift 5.80 px, **0 px differ**; YrA 348 units, median 0.460,
+  check exact.
+Published as `motion_reestimated.zarr` (+ `.json`, `motion_reestimated_run/`) beside the untouched NaN
+`motion.zarr`; copied to MINISCOPE and verified (`_provenance/sync_minirazer_20260930T233115.json`).
+**All 130 production sessions now have a recomputed, `max_proj`-proven YrA.** Why the saved motion is NaN: in
+both folders `motion.zarr` was written 2022-04-25 10:19–10:20, the morning after the complete run
+(`max_proj` 2022-04-24 18:37/18:47, `A`/`C`/`S` 21:00/21:05) -- evidently a second notebook run the next
+morning that saved a NaN motion (overwrite) and stopped before `max_proj`. G09's partial `HC3` (`minian/` with
+only a NaN `motion.zarr`, 2022-02-24) fits the same failure.
