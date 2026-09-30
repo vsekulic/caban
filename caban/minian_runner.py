@@ -232,6 +232,7 @@ _record = {{
     "n_workers": n_workers,
     "dpath": dpath,
     "intpath": intpath,
+    "minian_ds_path": minian_ds_path,
     "python": _sys.version,
     "packages": _packages,
     "minian_file": _minian.__file__,
@@ -243,17 +244,26 @@ print("parameters written to", {path!r})
 
 
 def build_run_notebook(template, session_dir: str, parameters_path: str,
-                       scratch: Optional[str] = None):
+                       scratch: Optional[str] = None, flags: Optional[dict] = None,
+                       minian_ds_path: Optional[str] = None, cut_after: Optional[str] = None):
     """The copy that runs: ``dpath`` set, the §4 flags set, the parameters cell appended.
 
     With ``scratch``, ``intpath`` -- where the notebook writes its intermediates -- is set to
     that folder instead of ``<dpath>/minian_intermediate``, so the session folder holds only
     output and no link to scratch is needed.
 
+    For a partial run (:func:`reestimate_motion`): ``flags`` replaces
+    :data:`NOTEBOOK_FLAGS` (same names), ``minian_ds_path`` moves the output out of the
+    session folder, and ``cut_after`` drops every cell after the one code cell containing
+    that text.
+
     Every edit must land exactly once, and the flags must be assigned nowhere but the
     parameter cell -- otherwise a later cell would silently undo the edit. Returns the
     notebook and the list of edits, which goes into the run record.
     """
+    flags = NOTEBOOK_FLAGS if flags is None else flags
+    if set(flags) != set(NOTEBOOK_FLAGS):
+        raise ValueError("flags must set exactly {}, got {}".format(sorted(NOTEBOOK_FLAGS), sorted(flags)))
     nb = copy.deepcopy(template)
     code = [i for i, c in enumerate(nb.cells) if c.cell_type == "code"]
     anchored = [i for i in code if PARAMETER_CELL_ANCHOR in nb.cells[i].source]
@@ -273,7 +283,7 @@ def build_run_notebook(template, session_dir: str, parameters_path: str,
         raise ValueError("the template's parameter cell has an active dpath line: {}".format(
             active_dpath))
     edits = []
-    for name, value in NOTEBOOK_FLAGS.items():
+    for name, value in flags.items():
         hits = [k for k, ln in enumerate(lines) if re.match(r"{}\s*=".format(name), ln)]
         if len(hits) != 1:
             raise ValueError("expected one `{} =` line in the parameter cell, found {}".format(
@@ -294,7 +304,26 @@ def build_run_notebook(template, session_dir: str, parameters_path: str,
         new = "intpath = {!r}  # set by caban.minian_runner".format(scratch)
         edits.append({"cell": param_idx, "was": lines[hits[0]], "now": new})
         lines[hits[0]] = new
+    if minian_ds_path is not None:
+        hits = [k for k, ln in enumerate(lines) if ln.startswith(PARAMETER_CELL_ANCHOR)]
+        if len(hits) != 1:
+            raise ValueError("expected one `{}` line in the parameter cell, found {}".format(
+                PARAMETER_CELL_ANCHOR, len(hits)))
+        new = "minian_ds_path = {!r}  # set by caban.minian_runner".format(minian_ds_path)
+        edits.append({"cell": param_idx, "was": lines[hits[0]], "now": new})
+        lines[hits[0]] = new
     nb.cells[param_idx].source = "\n".join(lines)
+
+    if cut_after is not None:
+        hits = [i for i in code if cut_after in nb.cells[i].source]
+        if len(hits) != 1:
+            raise ValueError("expected one code cell containing {!r}, found cells {}".format(
+                cut_after, hits))
+        if hits[0] < param_idx:
+            raise ValueError("cut at cell {} would drop the parameter cell {}".format(hits[0], param_idx))
+        edits.append({"cell": hits[0], "was": None,
+                      "now": "cells {}-{} removed".format(hits[0] + 1, len(nb.cells) - 1)})
+        nb.cells = nb.cells[:hits[0] + 1]
 
     appended = nbformat.v4.new_code_cell(parameters_cell_source(parameters_path))
     appended.metadata["tags"] = ["caban-minian-runner"]
@@ -666,6 +695,28 @@ def execute_notebook(nb, run_dir: str, n_workers: Optional[int] = None) -> dict:
         "n_samples": len(trace),
     }
     return result
+
+
+def execute_and_check(nb, run_dir: str, record: dict, n_workers: Optional[int] = None) -> None:
+    """:func:`execute_notebook`, then the HTML export; raises unless the notebook ran to the end.
+
+    Memory, execution time and, on failure, the failing cell go into ``record``.
+    """
+    executed = execute_notebook(nb, run_dir, n_workers=n_workers)
+    record["memory"] = executed["memory"]
+    record["timings"]["execute_s"] = round(executed["execute_s"], 1)
+    nb_path = os.path.join(run_dir, EXECUTED_NOTEBOOK)
+    log_path = os.path.join(run_dir, PAPERMILL_LOG)
+    if not os.path.isfile(nb_path):
+        with open(log_path) as fh:
+            tail = fh.read()[-2000:]
+        raise RuntimeError("papermill exited {} without writing a notebook:\n{}".format(
+            executed["returncode"], tail))
+    export_html(nb_path, os.path.join(run_dir, EXECUTED_HTML))
+    if executed["returncode"] != 0:
+        record["notebook_error"] = notebook_error(nb_path)
+        raise RuntimeError("papermill exited {}: {}; see {}".format(
+            executed["returncode"], record["notebook_error"], log_path))
 
 
 def notebook_error(path: str) -> Optional[dict]:
@@ -1082,23 +1133,7 @@ def run_session(
         record["timings"]["stage_in_s"] = staged["seconds"]
     sq.write_sidecar(session_dir, SIDECAR_NAME, record)
     try:
-        executed = execute_notebook(nb, run_dir, n_workers=n_workers)
-        record["memory"] = executed["memory"]
-        record["timings"]["execute_s"] = round(executed["execute_s"], 1)
-        nb_path = os.path.join(run_dir, EXECUTED_NOTEBOOK)
-        log_path = os.path.join(run_dir, PAPERMILL_LOG)
-        if not os.path.isfile(nb_path):
-            with open(log_path) as fh:
-                tail = fh.read()[-2000:]
-            raise RuntimeError("papermill exited {} without writing a notebook:\n{}".format(
-                executed["returncode"], tail))
-        export_html(nb_path, os.path.join(run_dir, EXECUTED_HTML))
-        if executed["returncode"] != 0:
-            record["notebook_error"] = notebook_error(nb_path)
-            raise RuntimeError("papermill exited {}: {}; see {}".format(
-                executed["returncode"], record["notebook_error"],
-                os.path.join(run_dir, PAPERMILL_LOG)))
-
+        execute_and_check(nb, run_dir, record, n_workers=n_workers)
         _finish_after_notebook(item, record, started)
         sq.write_sidecar(session_dir, SIDECAR_NAME, record)
         if record["status"] == "computed" and stage_out_now:
@@ -1120,6 +1155,25 @@ def _record_failure(record: dict, error: BaseException, started: float) -> None:
     record["timings"]["total_s"] = round(time.time() - started, 1)
 
 
+def _check_edits_held(parameters: dict, session_dir: str, flags: dict,
+                      intpath: Optional[str] = None, minian_ds_path: Optional[str] = None) -> None:
+    """Refuse a run whose kernel ended with other flags, ``dpath``, ``intpath`` or output
+    path (``minian_ds_path`` and ``param_save_minian["dpath"]``) than set."""
+    wrong = {k: parameters["flags"][k] for k, v in flags.items() if parameters["flags"][k] != v}
+    if wrong or parameters["dpath"] != os.path.abspath(session_dir):
+        raise ValueError("kernel ended with flags {} / dpath {} -- the edits did not "
+                         "hold".format(wrong, parameters["dpath"]))
+    if intpath is not None and parameters["intpath"] != intpath:
+        raise ValueError("kernel ended with intpath {}, not the run's scratch {} -- the edit "
+                         "did not hold".format(parameters["intpath"], intpath))
+    if minian_ds_path is not None:
+        saved_to = (parameters.get("minian_ds_path"),
+                    parameters["param"]["param_save_minian"]["dpath"])
+        if saved_to != (minian_ds_path, minian_ds_path):
+            raise ValueError("kernel ended with minian_ds_path / param_save_minian dpath {}, not {} "
+                             "-- the edit did not hold".format(saved_to, minian_ds_path))
+
+
 def _finish_after_notebook(item: sq.SessionWork, record: dict, started: float) -> None:
     """Everything after a notebook that ran to the end: check, report, videos, clean up.
 
@@ -1131,15 +1185,8 @@ def _finish_after_notebook(item: sq.SessionWork, record: dict, started: float) -
     run_dir = os.path.join(work_dir, RUN_DIR_NAME)
     with open(os.path.join(run_dir, PARAMETERS_JSON)) as fh:
         parameters = json.load(fh)
-    wrong = {k: parameters["flags"][k] for k, v in NOTEBOOK_FLAGS.items()
-             if parameters["flags"][k] != v}
-    if wrong or parameters["dpath"] != os.path.abspath(work_dir):
-        raise ValueError("kernel ended with flags {} / dpath {} -- the edits did not "
-                         "hold".format(wrong, parameters["dpath"]))
     scratch, linked = run_scratch(record)
-    if not linked and parameters["intpath"] != scratch:
-        raise ValueError("kernel ended with intpath {}, not the run's scratch {} -- the edit "
-                         "did not hold".format(parameters["intpath"], scratch))
+    _check_edits_held(parameters, work_dir, NOTEBOOK_FLAGS, None if linked else scratch)
 
     mark = time.time()
     record["report"] = report_session(os.path.join(work_dir, OUTPUT_NAME), run_dir,
@@ -1424,3 +1471,128 @@ def run_all_staged(items: List[sq.SessionWork], stage_root: str, **kwargs) -> Li
         # either way), drop the queued ones.
         copier.shutdown(wait=True, cancel_futures=True)
     return records
+
+
+# --- motion re-estimation (`plans/yra_recompute_plan.md` §14.1) --------------------
+
+# Baseline cell 104, the last cell kept: it saves `max_proj`, the proof of the motion.
+MOTION_CUT_ANCHOR = 'Y_fm_chk.max("frame").rename("max_proj")'
+# No videos: the run writes nothing into the session folder.
+MOTION_NOTEBOOK_FLAGS = dict(NOTEBOOK_FLAGS, want_mc_video=False, want_final_video=False)
+MOTION_SCRATCH_DIR = "motion_reestimate"
+
+
+def reestimate_motion(item: sq.SessionWork, scratch_root: str = DEFAULT_SCRATCH_ROOT,
+                      n_workers: Optional[int] = None, keep_scratch: bool = False) -> dict:
+    """Re-estimate a production session's motion with the notebook itself, and prove it.
+
+    For the sessions whose saved ``motion.zarr`` is NaN in every frame (§14), although
+    production's movie was not. The protected template runs through baseline cell 104
+    only -- loading, glow removal, denoise, background removal, ``estimate_motion``,
+    ``apply_transform``, ``max_proj``; no CNMF -- with ``intpath`` and ``minian_ds_path``
+    in scratch, both verified from the kernel afterwards.
+
+    Proof: the re-estimated ``max_proj`` must equal production's saved ``max_proj`` exactly
+    (:func:`caban.yra_recompute.check_max_proj`, 0 pixels differing). Motion is estimated
+    deterministically from the same videos, and a wrong motion changes the maximum (a 1.3 px
+    offset: 8,937 pixels over 1 on G05 LT1, plan §14.2); the check is blind only to errors that
+    move frames in time without changing any pixel's maximum.
+
+    Production is never written: the output folder's ``A``, ``C``, ``S``, ``motion`` and
+    ``max_proj`` are hashed before and after the run and must not change. The new motion is
+    copied in under a temporary name, verified by hash, then renamed to
+    ``motion_reestimated.zarr``; ``motion_reestimated.json`` records the run, the proof and the
+    hash; the executed notebook, its log and parameters are kept in
+    ``motion_reestimated_run/``. On any failure the scratch is kept for inspection and nothing
+    is published.
+    """
+    minian_dir = item.minian_dir
+    out_path = os.path.join(minian_dir, yr.MOTION_REESTIMATED_NAME + ".zarr")
+    partial = out_path + ".partial"
+    audit_dir = os.path.join(minian_dir, yr.MOTION_REESTIMATED_NAME + "_run")
+    sidecar = sq.sidecar_path(minian_dir, yr.MOTION_REESTIMATED_SIDECAR)
+    existing = [p for p in (out_path, partial, audit_dir, sidecar) if os.path.lexists(p)]
+    if existing:
+        raise FileExistsError("already re-estimated (or a leftover): {}".format(existing))
+    work = os.path.join(scratch_root, MOTION_SCRATCH_DIR, item.label.replace("/", "__"))
+    if os.path.lexists(work):
+        raise FileExistsError("{} is left from an earlier run; inspect and remove it".format(work))
+    template = load_template()
+    intpath = os.path.join(work, "minian_intermediate")
+    output = os.path.join(work, OUTPUT_NAME)
+    nb, edits = build_run_notebook(template, item.session_dir, os.path.join(work, PARAMETERS_JSON),
+                                   scratch=intpath, flags=MOTION_NOTEBOOK_FLAGS,
+                                   minian_ds_path=output, cut_after=MOTION_CUT_ANCHOR)
+    os.makedirs(intpath)
+    os.makedirs(output)
+
+    protected = ("A", "C", "S", yr.MOTION_NAME, "max_proj")
+    hashes_before = {n: yr.hash_zarr_store(os.path.join(minian_dir, n + ".zarr")) for n in protected}
+    session_before = sorted(os.listdir(item.session_dir))
+    started = time.time()
+    record = {
+        "label": item.label,
+        "session_dir": item.session_dir,
+        "minian_dir": minian_dir,
+        "started": pd.Timestamp.now().isoformat(timespec="seconds"),
+        "template": {"path": TEMPLATE_PATH, "md5": TEMPLATE_SOURCE_MD5},
+        "minian_fork": _git_state(MINIAN_FORK_DIR),
+        "caban": _git_state(REPO_DIR),
+        "kernel": KERNEL_NAME,
+        "papermill": papermill.__version__,
+        "notebook_edits": edits,
+        "scratch": work,
+        "n_workers": n_workers,
+        "production_hashes": hashes_before,
+        "timings": {},
+        "complete": False,
+    }
+    execute_and_check(nb, work, record, n_workers=n_workers)
+    with open(os.path.join(work, PARAMETERS_JSON)) as fh:
+        parameters = json.load(fh)
+    _check_edits_held(parameters, item.session_dir, MOTION_NOTEBOOK_FLAGS, intpath, output)
+    record["parameters"] = parameters
+    if sorted(os.listdir(item.session_dir)) != session_before:
+        raise RuntimeError("the run changed {}: {} -> {}".format(
+            item.session_dir, session_before, sorted(os.listdir(item.session_dir))))
+    hashes_after = {n: yr.hash_zarr_store(os.path.join(minian_dir, n + ".zarr")) for n in protected}
+    if hashes_after != hashes_before:
+        raise RuntimeError("the run changed production's {} in {}".format(
+            [n for n in protected if hashes_after[n] != hashes_before[n]], minian_dir))
+
+    motion = yr.open_minian_array(output, "motion").compute()
+    yr._require_finite_motion(motion, output, "motion.zarr (re-estimated)")
+    production_frames = yr.open_minian_array(minian_dir, "C").frame.values
+    if len(motion.frame) != len(production_frames) or \
+            not np.array_equal(motion.frame.values, production_frames):
+        raise ValueError("re-estimated motion's frames ({}, {}..{}) are not production C's ({}, {}..{})".format(
+            len(motion.frame), int(motion.frame[0]), int(motion.frame[-1]),
+            len(production_frames), int(production_frames[0]), int(production_frames[-1])))
+    check = yr.check_max_proj(yr.open_minian_array(output, "max_proj").compute(), minian_dir)
+    record["max_proj_check"] = check
+    record["motion_summary"] = {"max_abs_shift": float(np.abs(motion.values).max()),
+                                "n_frames": int(motion.sizes["frame"])}
+    if check["n_pixels_differing"] != 0:
+        raise ValueError("re-estimated max_proj differs from production's: {}; scratch kept at {}".format(
+            check, work))
+
+    source = os.path.join(output, "motion.zarr")
+    motion_hash = yr.hash_zarr_store(source)
+    shutil.copytree(source, partial)
+    if yr.hash_zarr_store(partial) != motion_hash:
+        raise IOError("the copy of the re-estimated motion to {} does not verify".format(partial))
+    os.makedirs(audit_dir)
+    for name in (EXECUTED_NOTEBOOK, PAPERMILL_LOG, PARAMETERS_JSON):
+        shutil.copy2(os.path.join(work, name), os.path.join(audit_dir, name))
+    os.rename(partial, out_path)
+    record["output"] = out_path
+    record["output_sha256"] = motion_hash
+    record["audit_dir"] = audit_dir
+    record["timings"]["total_s"] = round(time.time() - started, 1)
+    record["finished"] = pd.Timestamp.now().isoformat(timespec="seconds")
+    record["complete"] = True
+    sq.write_sidecar(minian_dir, yr.MOTION_REESTIMATED_SIDECAR, record)
+    if not keep_scratch:
+        shutil.rmtree(work)
+    print("{}: motion re-estimated, max_proj reproduced exactly; wrote {}".format(item.label, out_path))
+    return record

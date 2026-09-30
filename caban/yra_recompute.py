@@ -103,6 +103,14 @@ SIDECAR_NAME = sq.RECOMPUTED_YRA_SIDECAR
 # the re-check of every recompute has calibrated it.
 MAX_PROJ_TOLERANCE = 1.0
 
+# Motion re-estimated by `caban.minian_runner.reestimate_motion` for a session whose saved
+# motion.zarr is unusable (plan §14.1): stored beside it in the production folder, with a
+# sidecar holding the proof (production's max_proj reproduced exactly). The store holds
+# a variable named "motion", like the original.
+MOTION_NAME = "motion"
+MOTION_REESTIMATED_NAME = "motion_reestimated"
+MOTION_REESTIMATED_SIDECAR = "motion_reestimated.json"
+
 # Where the raw sessions live.  The output goes beside the A/C/S it was computed from
 # (VS, 2026-09-26): YrA_recomputed.zarr and its sidecar inside that minian_crossreg*
 # (or minian/) folder, next to the exported YrA.zarr, which is never touched.
@@ -456,20 +464,49 @@ def compute_trace(
 # ---------------------------------------------------------------------------
 
 
-def open_minian_array(minian_dir: str, name: str) -> xr.DataArray:
+def open_minian_array(minian_dir: str, name: str, variable: Optional[str] = None) -> xr.DataArray:
     """Read one Minian ``<name>.zarr`` store as a dask-backed ``xr.DataArray``.
 
     ``zarr.load`` -- what ``sessions.py`` uses -- raises ``NotImplementedError`` on
     groups under zarr 3.x, and would give eager numpy anyway.  The replay needs
-    the arrays lazy.
+    the arrays lazy.  ``variable`` is the array inside the store when it is not named
+    like the store (``motion_reestimated.zarr`` holds ``motion``).
     """
     path = os.path.join(minian_dir, name + ".zarr")
     if not os.path.isdir(path):
         raise FileNotFoundError("no {} in {}".format(name + ".zarr", minian_dir))
-    return xr.open_zarr(path, consolidated=False)[name]
+    return xr.open_zarr(path, consolidated=False)[variable or name]
 
 
-def _require_finite_motion(motion: xr.DataArray, minian_dir: str) -> None:
+def open_motion(minian_dir: str, motion_name: str = MOTION_NAME) -> xr.DataArray:
+    """The session's motion: ``motion.zarr``, or a re-estimated store (plan §14.1)."""
+    return open_minian_array(minian_dir, motion_name, variable=MOTION_NAME)
+
+
+def motion_store_name(minian_dir: str) -> str:
+    """Which motion the replay uses: the re-estimated one where it was proven, else ``motion``.
+
+    A ``motion_reestimated.zarr`` without a sidecar recording an exact ``max_proj`` match is
+    an error, not a fallback: it is either a half-finished copy or one that failed its proof.
+    """
+    store = os.path.join(minian_dir, MOTION_REESTIMATED_NAME + ".zarr")
+    record = sq.read_sidecar(minian_dir, MOTION_REESTIMATED_SIDECAR)
+    if not os.path.isdir(store):
+        if record:
+            raise FileNotFoundError("{} has {} but no {}.zarr".format(
+                minian_dir, MOTION_REESTIMATED_SIDECAR, MOTION_REESTIMATED_NAME))
+        return MOTION_NAME
+    check = record.get("max_proj_check") or {}
+    if not (record.get("complete") and check.get("n_pixels_differing") == 0):
+        raise ValueError("{}: {}.zarr has no sidecar proving it (complete, with production's "
+                         "max_proj reproduced exactly)".format(minian_dir, MOTION_REESTIMATED_NAME))
+    if hash_zarr_store(store) != record.get("output_sha256"):
+        raise ValueError("{}: {}.zarr no longer matches the hash recorded when it was proven".format(
+            minian_dir, MOTION_REESTIMATED_NAME))
+    return MOTION_REESTIMATED_NAME
+
+
+def _require_finite_motion(motion: xr.DataArray, minian_dir: str, store: str = "motion.zarr") -> None:
     """Refuse a ``motion.zarr`` with NaN shifts.
 
     A NaN shift moves every pixel out of frame: the replayed Y would be all zeros and
@@ -479,10 +516,10 @@ def _require_finite_motion(motion: xr.DataArray, minian_dir: str) -> None:
     nan_frames = int(np.isnan(motion.values).any(axis=1).sum())
     if nan_frames:
         raise ValueError(
-            "{}: motion.zarr is NaN in {} of {} frames, so Y cannot be replayed from it "
+            "{}: {} is NaN in {} of {} frames, so Y cannot be replayed from it "
             "(it would be all zeros, and so would YrA). Production's movie was not: its "
             "C and max_proj are nonzero, so the saved motion is not the one that was "
-            "applied.".format(minian_dir, nan_frames, motion.sizes["frame"]))
+            "applied.".format(minian_dir, store, nan_frames, motion.sizes["frame"]))
 
 
 def replay_frame_set(session_dir: str, C: xr.DataArray) -> tuple:
@@ -592,16 +629,28 @@ def write_sidecar(output_dir: str, record: dict) -> str:
     return sq.write_sidecar(output_dir, SIDECAR_NAME, record)
 
 
-HASHED_INPUTS = ("A", "C", "b", "f", "motion", "S")
+HASHED_INPUTS = ("A", "C", "b", "f", MOTION_NAME, "S")
 
 
-def completed_run(output_dir: str, minian_dir: str, S_unit_id: np.ndarray):
+def hashed_inputs(motion_name: str = MOTION_NAME) -> tuple:
+    """The stores a recompute depends on, with the motion store it actually used.
+
+    Hashes are keyed by store name, so a recompute from a re-estimated motion records
+    ``motion_reestimated``, and a record from the saved ``motion`` never counts as done
+    for a run that should use the re-estimated one.
+    """
+    return tuple(motion_name if name == MOTION_NAME else name for name in HASHED_INPUTS)
+
+
+def completed_run(output_dir: str, minian_dir: str, S_unit_id: np.ndarray,
+                  motion_name: str = MOTION_NAME):
     """Return the sidecar of a finished, still-valid run for this session, else ``None``.
 
     A session counts as done when the sidecar says so, the output is still on disk,
-    every input still hashes to what the sidecar recorded, and the output's
-    ``unit_id`` is still ``S``'s elementwise.  Anything less is not done: the
-    reason is printed and the session is recomputed rather than quietly reused.
+    every input (with ``motion_name`` as its motion) still hashes to what the sidecar
+    recorded, and the output's ``unit_id`` is still ``S``'s elementwise.  Anything less
+    is not done: the reason is printed and the session is recomputed rather than
+    quietly reused.
     """
     record = read_sidecar(output_dir)
     if not record:
@@ -609,12 +658,16 @@ def completed_run(output_dir: str, minian_dir: str, S_unit_id: np.ndarray):
     if not record.get("complete"):
         print("sidecar in {} marks an incomplete run; recomputing".format(output_dir))
         return None
+    if record.get("motion_name", MOTION_NAME) != motion_name:
+        print("sidecar in {} was made with {}, not {}; recomputing".format(
+            output_dir, record.get("motion_name", MOTION_NAME), motion_name))
+        return None
     output_path = os.path.join(output_dir, OUTPUT_ARRAY_NAME)
     if not os.path.isdir(output_path):
         print("sidecar in {} has no {} beside it; recomputing".format(output_dir, OUTPUT_ARRAY_NAME))
         return None
     recorded = record.get("input_hashes", {})
-    for name in HASHED_INPUTS:
+    for name in hashed_inputs(motion_name):
         current = hash_zarr_store(os.path.join(minian_dir, name + ".zarr"))
         if recorded.get(name) != current:
             print("{}.zarr has changed since the recorded run; recomputing".format(name))
@@ -1041,6 +1094,7 @@ def describe_item(item: sq.SessionWork) -> None:
     print("  minian      : {}".format(os.path.basename(item.minian_dir)))
     print("  old YrA     : {}".format(item.existing_yra_path or "none -- nothing to compare against"))
     print("  saved Y     : {}".format(item.saved_movie_path or "none"))
+    print("  motion      : {}.zarr".format(motion_store_name(item.minian_dir)))
     print("  output      : {}".format(item.output_dir))
     print("  del_frames  : {} (from the notebook corpus)".format(
         notebook_del_frames(item.session_dir) or "[]"))
@@ -1071,6 +1125,7 @@ def run_item(
         frame_chunk=frame_chunk,
         dry_run=dry_run,
         force=force,
+        motion_name=motion_store_name(item.minian_dir),
     )
 
 
@@ -1095,6 +1150,7 @@ def recompute_session_yra(
     dry_run: bool = False,
     force: bool = False,
     full_movie_check: bool = False,
+    motion_name: str = MOTION_NAME,
 ) -> dict:
     """Recompute one session's ``YrA`` and verify it.
 
@@ -1128,6 +1184,10 @@ def recompute_session_yra(
         and refuse -- before computing anything -- unless they are exactly equal. Requires
         ``saved_movie_path``. The runner's setting: the notebook's ``Y_fm_chk`` and the
         replay come from two independent reads of the videos.
+    motion_name
+        The motion store to replay with: ``motion``, or ``motion_reestimated`` for a
+        session whose saved motion is unusable (plan §14.1; see :func:`motion_store_name`).
+        Recorded in the sidecar and among the hashed inputs.
     """
     if full_movie_check and not saved_movie_path:
         raise ValueError("full_movie_check needs saved_movie_path")
@@ -1135,10 +1195,10 @@ def recompute_session_yra(
     C = open_minian_array(minian_dir, "C")
     b = open_minian_array(minian_dir, "b")
     f = open_minian_array(minian_dir, "f")
-    motion = open_minian_array(minian_dir, "motion")
+    motion = open_motion(minian_dir, motion_name)
     # Checked before `completed_run`, so an output already written from such a motion
     # is not accepted either.
-    _require_finite_motion(motion, minian_dir)
+    _require_finite_motion(motion, minian_dir, motion_name + ".zarr")
     S_unit_id = np.asarray(open_minian_array(minian_dir, "S").coords["unit_id"].values)
 
     A_unit_id = np.asarray(A.coords["unit_id"].values)
@@ -1156,7 +1216,7 @@ def recompute_session_yra(
         )
 
     if not force and not dry_run:
-        done = completed_run(output_dir, minian_dir, S_unit_id)
+        done = completed_run(output_dir, minian_dir, S_unit_id, motion_name)
         if done is not None:
             print("{} is already recomputed from these inputs ({}); nothing to do.".format(
                 os.path.join(output_dir, OUTPUT_ARRAY_NAME), done["written_utc"]))
@@ -1167,6 +1227,8 @@ def recompute_session_yra(
 
     print("session      : {}".format(session_dir))
     print("minian output: {}".format(minian_dir))
+    if motion_name != MOTION_NAME:
+        print("motion       : {}.zarr (re-estimated; the saved motion.zarr is unusable)".format(motion_name))
     print("units        : {}   frames in C: {}   frames in videos: {}".format(
         len(S_unit_id), C.sizes["frame"], n_video_frames))
     if excluded_videos:
@@ -1253,8 +1315,9 @@ def recompute_session_yra(
         "n_video_frames": n_video_frames,
         "input_hashes": {
             name: hash_zarr_store(os.path.join(minian_dir, name + ".zarr"))
-            for name in HASHED_INPUTS
+            for name in hashed_inputs(motion_name)
         },
+        "motion_name": motion_name,
         "report": report,
         "complete": True,
     }
@@ -1269,6 +1332,7 @@ def verify_session_replay(
     output_dir: str,
     frame_chunk: int = DEFAULT_FRAME_CHUNK,
     force: bool = False,
+    motion_name: str = MOTION_NAME,
 ) -> dict:
     """Check an existing recompute's replay against production's ``max_proj`` (plan §14.2).
 
@@ -1278,10 +1342,10 @@ def verify_session_replay(
     a log. ``YrA_recomputed.zarr`` is never rewritten. A session whose sidecar already
     holds a passing check is skipped unless ``force``.
     """
-    motion = open_minian_array(minian_dir, "motion")
-    _require_finite_motion(motion, minian_dir)
+    motion = open_motion(minian_dir, motion_name)
+    _require_finite_motion(motion, minian_dir, motion_name + ".zarr")
     S_unit_id = np.asarray(open_minian_array(minian_dir, "S").coords["unit_id"].values)
-    record = completed_run(output_dir, minian_dir, S_unit_id)
+    record = completed_run(output_dir, minian_dir, S_unit_id, motion_name)
     if record is None:
         raise ValueError("{}: no valid, complete recompute to verify".format(output_dir))
     previous = record["report"].get("max_proj_check")
@@ -1313,7 +1377,8 @@ def verify_item(item: sq.SessionWork, frame_chunk: int = DEFAULT_FRAME_CHUNK,
                 force: bool = False) -> dict:
     """:func:`verify_session_replay` for one work item."""
     return verify_session_replay(item.session_dir, item.minian_dir, item.output_dir,
-                                 frame_chunk=frame_chunk, force=force)
+                                 frame_chunk=frame_chunk, force=force,
+                                 motion_name=motion_store_name(item.minian_dir))
 
 
 def verify_all(items: List[sq.SessionWork], stop_on_error: bool = True, **kwargs) -> List[dict]:

@@ -564,6 +564,34 @@ Re-estimate motion the way production did, prove it against production, replay w
 4. **Recompute `YrA`** with it: `recompute_session_yra` gains a `motion_name` argument (default
    `"motion"`) that also enters the input hash, so the sidecar records which motion was used.
 
+**Built 2026-09-27**, not yet run on real data:
+
+- **Run:** `caban.minian_runner.reestimate_motion(item)`.
+  - `build_run_notebook` gained `flags`, `minian_ds_path` and `cut_after`. The run is the
+    template cut after cell 104 (cells 105–304 dropped), with `want_mc_video` and
+    `want_final_video` off.
+  - `intpath` and `minian_ds_path` point at `<scratch>/motion_reestimate/<label>/`. The run
+    hard-fails if the session folder's listing changed.
+  - It checks that the edits held, that the motion is finite, and that the frames equal
+    production's `C.frame`.
+  - It then requires the re-estimated `max_proj` to equal production's **exactly**. Only
+    then does it copy `motion_reestimated.zarr` into the production folder, with
+    `motion_reestimated.json` (template md5, fork and caban commits, edits, parameters,
+    the check). On any failure the scratch is kept and nothing is written to production.
+- **Recompute:** `recompute_session_yra(motion_name=...)` and `verify_session_replay` take
+  the motion store to use. The input hashes are keyed by store name, so a `YrA` computed
+  from `motion` never counts as done for a session that should use `motion_reestimated`.
+  The sidecar records `motion_name`.
+- **Queue:** `run_item` / `verify_item` choose the store with `motion_store_name(minian_dir)`:
+  `motion_reestimated` when its sidecar proves it, `motion` otherwise. A re-estimated store
+  without that proof is an error.
+- **Tests:** synthetic tests pass (NaN motion refused; unproven store refused; recompute
+  from the re-estimated store, with its hash key and `completed_run` behaviour; verify
+  path). The notebook build was inspected: no CNMF call and no write outside
+  scratch survive the cut.
+- **Scratch:** about 165 GB for the 24,714-frame session (`Y_fm_chk` and `Y_hw_chk` in
+  float64). FUTROLA has 1.1 TB free.
+
 Alternative with no new code: re-run the whole notebook on each session via the runner's `PATH`
 (about 1 h each) and take its `motion.zarr` — but that leaves a second full CNMF output beside
 production, against the "one `minian` folder per session" goal (`crossreg_batch_runner_plan.md` §4).

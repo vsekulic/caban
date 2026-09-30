@@ -50,6 +50,9 @@ check max |diff| ≤ 1; re-check with `yr.verify_all(items, stop_on_error=False)
 recomputed (the only 2 of 130 not done). Plan: run the template cut after `max_proj`, prove it by an exact
 `max_proj` match with production, store `motion_reestimated.zarr`, recompute `YrA` with it. `A`/`C`/`S`
 untouched. Runs on the Razer after the copy. Effort: ~1–2 h code + ~30 min compute.
+**Code built 2026-09-27** ([yra_recompute_plan.md](yra_recompute_plan.md) §14.1, "Built"): after
+the copy, for each of the two sessions `mr.reestimate_motion(item)`, then `yr.run_item(item)`
+(it picks up `motion_reestimated` by itself).
 
 ### 3. G21 TFC_test_B timing gap in the analysis loader — VS decision
 [yra_recompute_plan.md](yra_recompute_plan.md) §15.1. Production never read `11.avi`–`13.avi` (unfinished
