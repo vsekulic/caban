@@ -22,6 +22,8 @@ miniscope hardware, Minian parameters) are marked ⟨…⟩ rather than invented
 
 ## 1. Panel map
 
+All figures' panels, files and notebook sections in one place: [figure_panel_map.md](figure_panel_map.md).
+
 | panel | content | source file (relative to `PLOTS_DIR`) |
 |---|---|---|
 | **a** | Injection strategy: bilateral dorsal CA1, SST-Cre⁺ᐟ⁺; AAV.Syn.SomaGCaMP6f.f2 + AAV.DIO.hM3D(Gq).mCherry / hM4D(Gi).mCherry / EF1a.mCherry; GRIN lens | schematic ⟨not produced by this code base⟩ |
