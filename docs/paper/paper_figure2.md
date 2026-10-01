@@ -375,7 +375,8 @@ interaction-free models. This model has no *P* value and is in no multiplicity f
 
 An internal **cell-level amplitude lane** was retained from this module's earlier design and
 provides secondary evidence only: `log(amplitude) ~ group` over trace-interval cells with
-a random intercept on animal, and the two within-cell epoch changes (trace − pre-tone,
+a random intercept on animal (REML, BFGS optimizer; refitting with the L-BFGS, conjugate-gradient
+and Powell optimizers gave identical estimates), and the two within-cell epoch changes (trace − pre-tone,
 post-shock − pre-tone) over cells active in both windows, each tested by a joint Wald test on
 df = 16 and Holm-corrected across those three omnibus tests. The reported effect size for this
 lane is the equal-animal-weighted contrast, not the cell-weighted one, because cell count is
@@ -530,7 +531,9 @@ Paths are relative to `PLOTS_DIR/sp_rates_lmm/`. Rows of
     the branch cannot flip on numerical noise. **Checked 2026-10-02 (VS's session, 7,410 cells,
     17 mice):** lbfgs, bfgs, cg and powell all converge to the same fit — *F* 4.081–4.083,
     *P* 0.0369–0.0370, hM3D 0.4197, hM4D 0.1571 — so 0.037 is the model's optimum and the old
-    0.0089 belonged to the fallback. The same flip moved the recall Test B cell-level post-tone amplitude
+    0.0089 belonged to the fallback. **Done 2026-10-02:** `fit_primary_trace_amplitude` and
+    `fit_epoch_delta_model` now fit with `HIERARCHICAL_CELL_LMM_OPTIMIZER`; numbers confirmed on
+    VS's next `sp_rates_lmm` run. The same flip moved the recall Test B cell-level post-tone amplitude
     (BH *q* 0.013 → 0.445). Text above restated; the lane was already secondary (note 7).
 11. **Absolute rates assume 20 fps.** `utilities.MINISCOPE_FPS = 20`; the camera runs at
     19.76 fps (open item 13), so every absolute rate (events s⁻¹, e.g. the −0.039 above) is ~1.2 %

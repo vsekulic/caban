@@ -1369,7 +1369,9 @@ def fit_primary_trace_amplitude(df_trace_pooled, reference='mCherry'):
     df = df_trace_pooled.copy()
     df['group'] = pd.Categorical(df['group'], categories=[reference] + [g for g in GROUP_ORDER if g != reference])
     formula = f"log_amplitude ~ C(group, Treatment(reference='{reference}'))"
-    result, method, text = fit_mixed_model(df, formula, group_col='mouse')
+    # A cell-level table: see HIERARCHICAL_CELL_LMM_OPTIMIZER for why not lbfgs.
+    result, method, text = fit_mixed_model(df, formula, group_col='mouse',
+                                           method=HIERARCHICAL_CELL_LMM_OPTIMIZER)
     fe_names, _params = _fe_names_and_params(result)
     n_groups = int(df['mouse'].nunique())
     omnibus = joint_wald_test(result, _nonref_group_coef_names(fe_names, reference), n_groups)
@@ -1390,7 +1392,9 @@ def fit_epoch_delta_model(delta_df, reference='mCherry'):
     df = delta_df.copy()
     df['group'] = pd.Categorical(df['group'], categories=[reference] + [g for g in GROUP_ORDER if g != reference])
     formula = f"delta_log_amplitude ~ C(group, Treatment(reference='{reference}'))"
-    result, method, text = fit_mixed_model(df, formula, group_col='mouse')
+    # A cell-level table: see HIERARCHICAL_CELL_LMM_OPTIMIZER for why not lbfgs.
+    result, method, text = fit_mixed_model(df, formula, group_col='mouse',
+                                           method=HIERARCHICAL_CELL_LMM_OPTIMIZER)
     fe_names, _params = _fe_names_and_params(result)
     n_groups = int(df['mouse'].nunique())
     omnibus = joint_wald_test(result, _nonref_group_coef_names(fe_names, reference), n_groups)
@@ -6659,8 +6663,13 @@ HIERARCHICAL_CELL_SEED = 0
 # The list is statsmodels' own deterministic escalation over OPTIMIZERS; the model, the
 # likelihood and the estimand are identical in every case, and a genuinely degenerate or
 # non-converged fit still hard-fails. This is frozen here rather than chosen per fit so no run can
-# pick an optimizer after seeing a result. The other lanes keep 'lbfgs' and their numbers are
-# untouched.
+# pick an optimizer after seeing a result.
+# Also used by the two plain cell-level fits, fit_primary_trace_amplitude (trace amplitude, its
+# threshold sensitivity, recall post-tone amplitude) and fit_epoch_delta_model (2026-10-02). On
+# the 2026-08-24 run their lbfgs fit was degenerate and took the clustered-OLS fallback (trace
+# omnibus P 0.0089); on 2026-10-01 the same fit converged (P 0.037), a branch decided by numerical
+# noise. lbfgs/bfgs/cg/powell were checked to agree on that table (P 0.0369-0.0370).
+# The mouse-level lanes keep 'lbfgs' and their numbers are untouched.
 HIERARCHICAL_CELL_LMM_OPTIMIZER = ['bfgs', 'cg', 'powell']
 
 

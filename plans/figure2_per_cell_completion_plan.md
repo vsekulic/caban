@@ -182,7 +182,11 @@ templates (`analysis_methods_templates/epoch_modulation*_methods.md`) stating th
   - (a) Fit the cell-level `sp_rates_lmm` lane with `method=['bfgs','cg','powell']`, as the
     hierarchical lanes do, so the branch cannot flip on numerical noise. **Refit check done
     2026-10-02 (VS):** lbfgs/bfgs/cg/powell all give F 4.08, P 0.037, identical coefficients, so
-    the new value stands and switching optimizers moves no reported number.
+    the new value stands and switching optimizers moves no reported number. **Switched 2026-10-02:**
+    `fit_primary_trace_amplitude` and `fit_epoch_delta_model` use `HIERARCHICAL_CELL_LMM_OPTIMIZER`.
+    To confirm on VS's next `sp_rates_lmm` run: no "Mixed model unusable" in any stats file, and
+    trace omnibus F 4.08, P 0.037. The manipulation check, also cell-level, was left on lbfgs: it
+    never fell back.
   - (b) The event-proximal omnibus at ≥ 20,000 draws, before its P is quoted.
   - (c) G09 trial-dropped sensitivity.
   - (d) Loader guard: assert `YrA_idx == S_idx` (0 rows moved) before aligning.
