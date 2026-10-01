@@ -34,7 +34,33 @@
 > [../docs/paper/figure_panel_map.md](../docs/paper/figure_panel_map.md). Reference outputs:
 > `~/data/vsekulic/OF_test/plots/CURRENT-20260929-exported-YrA` (epoch_modulation from 2026-09-18).
 > **Later:** the frame-rate decision (20 vs 19.76 fps, open item 13); crossreg registry/runner and new groupings
-> after the batch ([crossreg_batch_runner_plan.md](crossreg_batch_runner_plan.md)).
+> after the batch ([crossreg_batch_runner_plan.md](crossreg_batch_runner_plan.md)). Small open item: G18
+> `2022_02_07-TFC_cond/14_57_23-CNO2-borked` — notebook and full-frame check passed, its YrA step failed in
+> `compute_trace` (`ValueError: All arrays must be instances of SparseArray`, after a divide-by-zero warning);
+> debug on the Razer, then `mr.resume_after_notebook` (no notebook re-run).
+>
+> **Operations cheat-sheet (all learned the hard way):**
+> - Razer env: `source ~/miniforge3/etc/profile.d/conda.sh && conda activate caban && cd ~/code/caban`; scripts kept
+>   in `~/bin` (show_run.py, status_report_loop.sh, verify/recovery one-offs) need `PYTHONPATH=.` from the repo.
+>   Long jobs: `screen -dmS <name> ~/bin/logrun "<title>" bash -c "… 2>&1 | grep --line-buffered -v param.Dimension"`
+>   (`--line-buffered` on EVERY grep in the pipe, or lines are held back); wait for them with a background
+>   `ssh minastirith '~/bin/logrun "wait" bash -c "while screen -ls | grep -q <name>; do sleep 60; done"'`.
+> - Read `minian.log` with plain `ssh minastirith 'grep …'` — through logrun the output is appended to the log and
+>   later greps find their own echoes. Anchor on the exact `----- HH:MM:SS  <title>` header line.
+> - Pull new code onto the Razer only when committed; a running batch keeps its loaded code (safe to pull).
+> - **Sync to MINISCOPE** (osgiliath, MINISCOPE mounted; light): on the Razer
+>   `python scripts/sync_manifest.py manifest ~/sync_manifest.json` (screen), then on the Mac `scp` it, check md5,
+>   `python scripts/sync_to_miniscope.py <manifest> --dry-run`, then without `--dry-run`, then `scp` the
+>   `*_synced.json` back and `python scripts/sync_manifest.py mark ~/sync_synced.json` on the Razer. A chained
+>   version used on 2026-09-30: activate conda BEFORE `set -euo pipefail` (conda's activate scripts break under `-u`).
+>   Production-folder sidecar updates (re-check results) go across with `scripts/copy_recheck_sidecars.py`.
+> - **Analysis cache rebuild** (VS runs it on osgiliath, big apps closed): move `npy_files/ds_cache.pkl` aside or
+>   delete it (regenerable from per-session caches), restart kernel, `load_all_mice(cfg, use_cache=True)` — rebuilds
+>   AND writes; `use_cache=False` rebuilds but never writes (then `caban.loader._dump_cache_payload(path, ds)`).
+> - Status report: regenerated on the Razer every 20 min; commit a snapshot with
+>   `scp minastirith:minian_batch_status.md reports/`.
+> - `$TMPDIR` on osgiliath is wiped by a reboot; keep anything needed later in the repo or on the Razer.
+> - If `git push` fails after a reboot: `ssh-add --apple-load-keychain`.
 
 
 Written 2026-09-28 ~10:30 JST, at the end of a very long chat (2026-09-26 → 28), for the chat that
