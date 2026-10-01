@@ -121,6 +121,24 @@ contrast (Inh vs Ctl at shock); whether that changes is the question to answer f
 `sp_rates_lmm` (Figure 2 main panels, on `S`) to confirm its numbers are unchanged beyond the cache
 rebuild, G09's clamp and the frame-rate decision of §2.1.
 
+**Done 2026-10-02** (VS ran the cells on 2026-10-01; reference `plots/CURRENT-20260929-exported-YrA`, its
+`epoch_modulation` from 2026-09-18, `sp_rates_lmm` from 2026-08-24). Before → after:
+- **Epoch modulation, YrA (primary)**: group × epoch F(6,16) 0.459, P 0.828 → **0.421, P 0.854**; every contrast
+  moves by ≤ 0.02, all Holm P ≥ 0.36; the named Inh-vs-Ctl shock contrast **weakens** −0.097 (P 0.12, Holm 0.24) →
+  −0.079 (P 0.18, Holm 0.36). Per-mouse index |change| median 0.005, max 0.029 (G18 shock). Cells 9,515 → 9,529
+  (the 14 cells without a YrA trace now carry one; 2 constant-trace cells still excluded).
+- **C (confirmatory)**: unchanged (per-mouse |change| ≤ 0.0009, from the 14 cells); shock Inh −0.095, Holm P 0.098.
+- **Hierarchical lane (YrA)**: F 0.900, P 0.568 → 0.916, P 0.561; shock Inh −0.097 (Holm 0.46) → −0.079 (Holm 0.63).
+- **Event-proximal lane (YrA)**: omnibus F 1.870, P 0.151 → **2.064, P 0.095** — the one lane that moved
+  noticeably; still not significant.
+- **Cross-validated selectivity (YrA)**: null in both (all exact P ≥ 0.24); estimates shift < 0.01.
+- **Sequence test**: unchanged, null (mean ρ +0.040, P 0.27).
+- **Figure 2 main (`sp_rates_lmm`)**: amplitude results identical to the last digit (Fig. 2i trace 1.552×, Holm P
+  0.0256; post-shock 1.475×, 0.0497; interaction F 0.368, P 0.828). One input changed: G09's post-shock exposure
+  −295.7 cell-s (the 13 never-imaged frames × 455 cells / 20 fps), events identical → Inh post-shock rate 0.655 →
+  0.653 (P 0.098 → 0.097), rate interaction F 1.544, P 0.237 → 1.533, P 0.240.
+- Fig. 2c (sample traces, plots YrA) not yet re-run.
+
 ### 2.6 Write it up
 
 `scientific-code-reviewer` and `statistics-checker` on the re-run before anything is written
