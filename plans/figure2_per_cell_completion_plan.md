@@ -147,6 +147,48 @@ run (the old §R kept as the superseded run); the per-cell panels and text in
 [docs/paper/paper_figure2.md](../docs/paper/paper_figure2.md) (or its supplement); the METHODS
 templates (`analysis_methods_templates/epoch_modulation*_methods.md`) stating the recomputed YrA.
 
+**Done 2026-10-02 (reviews and write-up).**
+- **Reviews:** both ran on the re-run, read-only.
+  - `scientific-code-reviewer` found no defect in the changed code paths.
+    - It confirmed the 9,529 cells, both constant-cell exclusions, the C lane and G09's 387-frame
+      handling (exposure counted as 387/20 s).
+    - The event-proximal move comes from the recomputed YrA itself. Windows, trials and G09 are
+      unchanged; the cell set changed by exactly the 14 cells, and mice that gained no cells moved
+      too.
+  - `statistics-checker`: "the nulls hold" is right as *no detectable effect*, not equivalence.
+    The lanes after the mouse-level one are post-hoc companions, and the family size is stated
+    (6 omnibus tests, smallest P 0.095). The §R.11.1 wording is corrected. The post-shock
+    Exc-vs-Inh event-proximal comparison (exact P 0.019, in no family) is disclosed as exploratory.
+- **§2.5 missed changes in `sp_rates_lmm` outside Fig. 2i**, found by diffing every stats file.
+  - **The cell-level trace-amplitude lane changed model.** On 2026-08-24 its lbfgs mixed-model
+    fit was degenerate (non-finite standard errors), so it fell back to mouse-clustered OLS:
+    P 0.0089, Holm 0.027. On 2026-10-01 the same fit of the same 7,410 cells converged and was
+    used: **P 0.037, Holm 0.111, not significant**.
+  - The same flip moved the within-cell deltas and the threshold sensitivity (0.429/0.435 →
+    0.416/0.420). It also moved recall Test B's cell-level post-tone amplitude: BH q 0.013 → 0.445.
+  - **The NB model comparison** now nominally favours the interaction model (Δelpd 1.16 ± 4.69;
+    before, 1.50 ± 4.51 the other way), within 1 s.e. in both runs.
+  - **Recall Test B moved** through the timestamp fix: G21 keeps 2 of 3 tone trials. The 48 h
+    amplitude interaction went F 3.02, P 0.079 → 3.19, P 0.070. hM4D's within-group modulation
+    0.76 (0.58–1.00), P 0.048, now excludes 1.
+- **Written:**
+  - [../docs/epoch_modulation.md](../docs/epoch_modulation.md) **Part Y**: new results; the old
+    Part R is marked superseded, with a correction note at §R.11.1.
+  - Every changed number and sentence in [../docs/paper/paper_figure2.md](../docs/paper/paper_figure2.md)
+    (new §6 notes 10–11) and [../docs/paper/paper_figure2_supplement.md](../docs/paper/paper_figure2_supplement.md).
+  - METHODS: `epoch_modulation_methods.md` (recomputed YrA) and `sp_rates_lmm_paper_methods.md`
+    (G09 window).
+- **Open:**
+  - (a) Fit the cell-level `sp_rates_lmm` lane with `method=['bfgs','cg','powell']`, as the
+    hierarchical lanes do, so the branch cannot flip on numerical noise. First, VS's refit check of
+    the optimizers.
+  - (b) The event-proximal omnibus at ≥ 20,000 draws, before its P is quoted.
+  - (c) G09 trial-dropped sensitivity.
+  - (d) Loader guard: assert `YrA_idx == S_idx` (0 rows moved) before aligning.
+  - (e) Fig. 2c re-run.
+  - (f) The frame-rate decision (§2.7.4), which now also covers window lengths:
+    seconds × 20 fps windows last 20.24 s at 19.76 fps, while timestamp-derived epochs last ~20.0 s.
+
 ### 2.7 Decisions for VS in this phase
 
 1. ~~Which per-cell panels go into Figure 2~~ — **decided (VS, 2026-09-29): compute every per-cell

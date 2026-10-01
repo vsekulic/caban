@@ -21,7 +21,10 @@ full cell distribution.
 Two signals are analysed with a fixed division of labour; this is not an open-ended comparison.
 
 **YrA is primary.** YrA is the demixed observed fluorescence trace produced by Minian, loaded with
-its own unit ids. It is primary because the deconvolved-and-denoised calcium trace `C` is the
+its own unit ids. It was recomputed for every session from that session's final spatial footprints
+and temporal traces (Minian's residual step applied to the replayed motion-corrected movie, the
+replay verified exact against the saved maximum projection), because the YrA Minian had exported
+was computed from an earlier temporal update and did not match the final units. It is primary because the deconvolved-and-denoised calcium trace `C` is the
 deconvolution-constrained fit and is exactly zero between fitted transients: in a 2 s shock window a
 cell with no fitted transient contributes an identically flat value, whereas YrA still carries graded
 fluorescence. For each cell, the session **median** of YrA is subtracted before standardization,

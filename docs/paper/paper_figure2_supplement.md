@@ -10,7 +10,10 @@ because no CNO was present at recall. Methods common to both figures are not rep
 document states only what is specific to these panels and cross-references the rest.
 
 **Provenance.** Every number was read from the run under
-`PLOTS_DIR = .../plots/CURRENT/` (`sp_rates_lmm/`); §5 maps each to its file. No value comes from
+`PLOTS_DIR = .../plots/CURRENT/` (`sp_rates_lmm/`) of 2026-10-01; §5 maps each to its file. That run
+maps Miniscope timestamps to imaged frames, which drops G21's third 48 h tone trial (its recording
+stopped first) and moves the 48 h numbers; the earlier values are in
+[../../plans/figure2_per_cell_completion_plan.md](../../plans/figure2_per_cell_completion_plan.md) §2.6. No value comes from
 `docs/sp_rates_lmm.md` §M.
 
 **Panel lettering.** The supplied composite labels five panels **A–E**. The accompanying file list
@@ -64,9 +67,9 @@ control after correction on those quantities.
 than epoch-specific effects: the hM3D per-event amplitude ratio was 1.38, 1.55, 1.47 and 1.77 at
 pre-tone, trace, post-shock and late post-shock, and the hM4D population-rate ratio was 0.63, 0.51,
 0.65 and 0.76 across the same windows, with intervals overlapping throughout. Accordingly, the
-joint group × epoch permutation test was null for **every** component (BH-adjusted *q* = 0.717 for
-fraction active, 0.738 for event rate among active cells, 0.753 for population event rate and
-0.717 for per-event amplitude), matching the null interactions of the primary models (Fig. 2i).
+joint group × epoch permutation test was null for **every** component (BH-adjusted *q* = 0.757 for
+fraction active, event rate among active cells, population event rate and per-event amplitude
+alike), matching the null interactions of the primary models (Fig. 2i).
 These four components are one decomposition computed over overlapping cells, and the number of
 panels whose interval excludes the null is not a meaningful count; epoch specificity has exactly
 one test per component and it was null in all four. The direct hM3D-versus-hM4D contrasts are
@@ -84,28 +87,28 @@ group × epoch interaction as the sole test of whether any group difference was 
 recruited by the tone.
 
 **At 48 h (Test B; 16 animals, 5 hM3D / 5 hM4D / 6 mCherry, 7,689 cells, 3 of 3 tone trials
-retained per animal), no within-epoch comparison reached significance after correction**
+retained per animal except G21 (hM4D), 2 of 3), no within-epoch comparison reached significance after correction**
 (Supplementary Fig. 2d, left). Per-event amplitude in the post-tone window was 1.41-fold in hM3D
-relative to control (95% CI 0.96 to 2.07; raw *P* = 0.073, Holm-adjusted *P* = 0.145) and
-0.98-fold in hM4D (0.67 to 1.43; adjusted *P* = 0.896); the two groups were indistinguishable from
-control at pre-tone (0.94-fold, 0.64 to 1.38 and 0.92-fold, 0.63 to 1.35; both adjusted
+relative to control (95% CI 0.96 to 2.07; raw *P* = 0.072, Holm-adjusted *P* = 0.144) and
+0.95-fold in hM4D (0.65 to 1.39; adjusted *P* = 0.779); the two groups were indistinguishable from
+control at pre-tone (0.94-fold, 0.64 to 1.38 and 0.91-fold, 0.62 to 1.33; both adjusted
 *P* = 1.0). Population event rate showed no comparison approaching significance in either window
-(post-tone hM3D 1.10-fold, 0.74 to 1.64, adjusted *P* = 0.621; hM4D 0.77-fold, 0.52 to 1.15,
-adjusted *P* = 0.371). The group × epoch interaction was *F*(2,15) = 3.02, *P* = 0.079 for
-per-event amplitude and *F*(2,15) = 0.44, *P* = 0.655 for population event rate.
+(post-tone hM3D 1.10-fold, 0.74 to 1.63, adjusted *P* = 0.617; hM4D 0.74-fold, 0.50 to 1.09,
+adjusted *P* = 0.241). The group × epoch interaction was *F*(2,15) = 3.19, *P* = 0.070 for
+per-event amplitude and *F*(2,15) = 0.47, *P* = 0.636 for population event rate.
 
 **The pre-tone → post-tone modulation makes the shape of that amplitude interaction visible**
 (Supplementary Fig. 2e, top). Control animals' per-event amplitude declined across the tone
-(0.73-fold, 95% CI 0.56 to 0.93), whereas hM3D animals showed no detectable change (1.09-fold,
-0.83 to 1.43) and hM4D animals showed no detectable change (0.77-fold, 0.59 to 1.02) — descriptive
-within-group estimates, not a treatment comparison. Comparing those changes between groups, the
-hM3D-versus-control difference in modulation was 1.50-fold (95% CI 1.03 to 2.18; unadjusted
-model-derived *P* = 0.034; Holm-adjusted *P* = 0.103 as a multiplicity reference), hM4D versus
-control 1.06-fold (0.73 to 1.54; *P* = 0.728) and hM3D versus hM4D 1.41-fold (0.96 to 2.08;
-*P* = 0.078), beneath an omnibus of *F*(2,15) = 3.02, *P* = 0.079. Population event rate showed no
+(0.73-fold, 95% CI 0.57 to 0.93), whereas hM3D animals showed no detectable change (1.09-fold,
+0.83 to 1.43); hM4D animals declined to a similar degree as control (0.76-fold, 0.58 to 1.00,
+within-group *P* = 0.048) — descriptive within-group estimates, not a treatment comparison. Comparing those changes between groups, the
+hM3D-versus-control difference in modulation was 1.50-fold (95% CI 1.04 to 2.17; unadjusted
+model-derived *P* = 0.032; Holm-adjusted *P* = 0.096 as a multiplicity reference), hM4D versus
+control 1.05-fold (0.73 to 1.51; *P* = 0.783) and hM3D versus hM4D 1.43-fold (0.98 to 2.10;
+*P* = 0.065), beneath an omnibus of *F*(2,15) = 3.19, *P* = 0.070. Population event rate showed no
 modulation difference on any comparison (hM3D vs control 1.16-fold, 0.79 to 1.72, *P* = 0.420;
-hM4D vs control 1.00-fold, 0.68 to 1.48, *P* = 0.996; hM3D vs hM4D 1.17-fold, 0.78 to 1.75,
-*P* = 0.437; omnibus *F*(2,15) = 0.44, *P* = 0.655).
+hM4D vs control 0.99-fold, 0.67 to 1.46, *P* = 0.949; hM3D vs hM4D 1.18-fold, 0.78 to 1.77,
+*P* = 0.405; omnibus *F*(2,15) = 0.47, *P* = 0.636).
 
 **At 1 week (Test B 1wk; 16 animals, 5 hM3D / 5 hM4D / 6 mCherry, 9,076 cells, 3 of 3 trials
 retained), no comparison reached significance in either outcome or either window**
@@ -115,8 +118,8 @@ population event rate 1.37-fold (0.76 to 2.45) and 0.83-fold (0.46 to 1.49), bot
 *P* = 0.543. Interactions were *F*(2,15) = 1.48, *P* = 0.260 (amplitude) and *F*(2,15) = 0.30,
 *P* = 0.745 (rate). The modulation decomposition (Supplementary Fig. 2e, bottom) showed the same
 qualitative arrangement as at 48 h with wider intervals: control animals declined across the tone
-(0.80-fold, 0.66 to 0.98) while hM3D animals did not (1.00-fold, 0.80 to 1.25) and hM4D animals did
-not (0.82-fold, 0.65 to 1.02), and no between-group comparison of that change was detectable
+(0.80-fold, 0.66 to 0.98) while hM3D animals did not (1.00-fold, 0.80 to 1.25), and the hM4D
+estimate sat with control's (0.82-fold, 0.65 to 1.02, interval just including 1), and no between-group comparison of that change was detectable
 (hM3D vs control 1.25-fold, 0.92 to 1.68, *P* = 0.136; hM4D vs control 1.01-fold, 0.75 to 1.37,
 *P* = 0.921; hM3D vs hM4D 1.23-fold, 0.90 to 1.68, *P* = 0.179; omnibus *F*(2,15) = 1.48,
 *P* = 0.260). Population event rate again showed nothing (all *P* ≥ 0.451; omnibus *F*(2,15) = 0.30,
@@ -185,7 +188,8 @@ which both windows were completely observed, determined from each window's measu
 than from a trial index; a post-tone window running past the end of the recording or into the next
 tone was treated as absent, and a pre-tone window overlapping the previous trial's post-tone
 window raised rather than being silently accepted. All 16 animals retained all 3 tone trials in
-both sessions. Both outcomes were computed from that same set of animal × trial windows.
+both sessions, except G21 (hM4D) at 48 h, which retained 2: its Miniscope recording stopped before
+the third tone's post-tone window ended (timestamps mapped to imaged frames, 2026-10-01). Both outcomes were computed from that same set of animal × trial windows.
 
 For each session, per-event amplitude and population event rate were analysed separately with the
 same model as conditioning, `log(metric) ~ group * epoch + (1|animal)`, reference levels mCherry
@@ -274,12 +278,12 @@ Paths are relative to `PLOTS_DIR/sp_rates_lmm/`.
 | all panel **a** estimates and intervals | `TFC_cond/decomposition_pre_tone_matched_contrasts.md` |
 | all panel **b** estimates and intervals | `TFC_cond/decomposition_post_shock_contrasts.md` |
 | panel **c** estimates, intervals and Exc/Inh contrasts (4 components × 4 epochs) | `TFC_cond/decomposition_grid_contrasts.md` |
-| panel **c** row *q* values 0.717 / 0.738 / 0.753 / 0.717 | `TFC_cond/stats/secondary_epoch_interaction.txt`, `TFC_cond/stats/secondary_fdr_family.txt` |
+| panel **c** row *q* values 0.757 / 0.757 / 0.757 / 0.757 | `TFC_cond/stats/secondary_epoch_interaction.txt`, `TFC_cond/stats/secondary_fdr_family.txt` |
 | all recall within-epoch ratios, CIs and Holm-adjusted *P* | `paper/recall/{Test_B,Test_B_1wk}/stats/unified_recall_posthoc_contrasts.csv` |
-| recall interactions *F*(2,15) = 3.02 / 0.44 (48 h), 1.48 / 0.30 (1 wk) | `paper/recall/*/stats/unified_recall_interactions.csv` |
+| recall interactions *F*(2,15) = 3.19 / 0.47 (48 h), 1.48 / 0.30 (1 wk) | `paper/recall/*/stats/unified_recall_interactions.csv` |
 | within-group and pairwise modulation estimates, intervals and both *P* columns | `paper/recall/*/stats/unified_recall_modulation_contrasts.md` (sections B and C) and `...contrasts.csv` |
 | per-animal change scores behind panel **e** | `paper/recall/*/stats/unified_recall_modulation_by_mouse.csv` |
-| 16 animals per session, 3 of 3 trials retained, cohort membership | `paper/recall/*/stats/unified_recall_trial_coverage.csv` |
+| 16 animals per session, 3 of 3 trials retained (G21 at 48 h: 2 of 3), cohort membership | `paper/recall/*/stats/unified_recall_trial_coverage.csv` |
 | recall cell counts 7,689 (48 h) and 9,076 (1 wk); 32-row datasets | `paper/recall/*/stats/unified_recall_mouse_epoch_values.csv` |
 
 ---
@@ -303,14 +307,14 @@ Paths are relative to `PLOTS_DIR/sp_rates_lmm/`.
    (1.06 to 2.13) but carries no star after Holm correction. Stated as an estimate with its
    interval above, with no significance claim.
 5. **Recall modulation *P* values are unadjusted by design** (`docs/sp_rates_lmm.md` §A.7.1). The
-   one comparison below 0.05 — hM3D versus control amplitude modulation at 48 h, *P* = 0.034 —
-   sits beneath a non-significant omnibus (*P* = 0.079) and has a Holm reference value of 0.103.
+   one comparison below 0.05 — hM3D versus control amplitude modulation at 48 h, *P* = 0.032 —
+   sits beneath a non-significant omnibus (*P* = 0.070) and has a Holm reference value of 0.096.
    It is written above as weak evidence with all three numbers attached; do not let it compress to
    "significantly different" in the manuscript.
 6. **The 48 h rate trajectory has an outlier-looking within-group test.** The hM4D paired
-   *t*-test on the trajectory figure is *t*(4) = −14.06, *P* = 1.5 × 10⁻⁴ — a within-group
-   question (B), from a different estimator than the model contrast (which gives 0.83-fold,
-   *P* = 0.195 for the same group). That figure is not part of this supplement's panels, but if you
+   *t*-test on the trajectory figure is *t*(4) = −18.78, *P* = 4.7 × 10⁻⁵ — a within-group
+   question (B), from a different estimator than the model contrast (which gives 0.82-fold,
+   *P* = 0.170 for the same group). That figure is not part of this supplement's panels, but if you
    add it, the two estimators' disagreement needs the sentence the companion markdown already
    supplies.
 7. **The hierarchical cell-level companion analysis was not run** in this output (no

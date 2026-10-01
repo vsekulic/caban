@@ -15,6 +15,10 @@ epoch-resolved decomposition panels.
 **Provenance of every number below.** All values were read from the run under
 `PLOTS_DIR = .../plots/CURRENT/` (`sp_rates_lmm/`), not from `docs/sp_rates_lmm.md` §M, whose
 worked example predates this run in places. §5 maps every number to its file, row and column.
+The run is that of 2026-10-01 (recomputed YrA, Miniscope timestamps mapped to imaged frames, G09's
+last post-shock window accepted at 387 of 400 frames); the numbers that moved from the 2026-08-24
+run are listed in [../../plans/figure2_per_cell_completion_plan.md](../../plans/figure2_per_cell_completion_plan.md)
+§2.6 and note 10 below.
 Items still owed by other sections of the paper (surgery, viral constructs, CNO dosing,
 miniscope hardware, Minian parameters) are marked ⟨…⟩ rather than invented here.
 
@@ -101,7 +105,7 @@ hM3D versus 4.87 ± 0.82 in control and 4.75 ± 0.29 in hM4D (mean ± s.d. of pe
 sampling), a difference **not resolved** at this sample size (mouse-label permutation
 *P* = 0.096, BH-adjusted *q* = 0.62), and the fraction of runs containing more than one local
 maximum did not differ between groups (hM3D 0.046 ± 0.010, control 0.037 ± 0.016; *P* = 0.25,
-*q* = 0.72). A burst-like origin for the larger events is therefore **suggested but not
+*q* = 0.76). A burst-like origin for the larger events is therefore **suggested but not
 established**. Consistent with a shift of the whole distribution rather than of its tail alone,
 the per-cell amplitude ECDF during the trace interval (Fig. 2h; 2,804 hM3D, 2,273 hM4D and 2,333
 control cells) was displaced rightward in hM3D across its full range, with the per-animal curves
@@ -127,17 +131,17 @@ post-shock 1.18-fold, *P* = 0.277) (Fig. 2i, top).
 
 Population event rate showed the complementary pattern. hM4D reduced the event rate during the
 **trace** interval (rate ratio 0.51, 95% CI 0.33 to 0.77; absolute difference −0.039 events s⁻¹
-per cell; Holm-adjusted *P* = 0.0069), whereas the pre-tone (0.63, 95% CI 0.42 to 0.97,
-*P* = 0.073) and post-shock (0.65, 95% CI 0.43 to 1.00, *P* = 0.098) comparisons did not survive
+per cell; Holm-adjusted *P* = 0.0070), whereas the pre-tone (0.63, 95% CI 0.42 to 0.97,
+*P* = 0.073) and post-shock (0.65, 95% CI 0.43 to 1.00, *P* = 0.097) comparisons did not survive
 correction. hM3D did not significantly alter population event rate in any epoch (trace rate ratio
-0.78, 95% CI 0.50 to 1.21, *P* = 0.246; pre-tone 0.89, *P* = 0.586; post-shock 1.10, *P* = 0.646)
+0.78, 95% CI 0.50 to 1.21, *P* = 0.247; pre-tone 0.89, *P* = 0.586; post-shock 1.10, *P* = 0.652)
 (Fig. 2i, bottom).
 
 Despite these epoch-wise simple effects, **there was no evidence that the magnitude of either
 treatment effect differed across epochs**, for per-event amplitude (group × epoch joint Wald test
-*F*(4,16) = 0.37, *P* = 0.828) or for population event rate (*F*(4,16) = 1.54, *P* = 0.237); an
+*F*(4,16) = 0.37, *P* = 0.828) or for population event rate (*F*(4,16) = 1.53, *P* = 0.240); an
 independent mouse-label permutation test of epoch specificity agreed (amplitude *T* = 1.99,
-*P* = 0.27, *q* = 0.72; population rate *T* = 0.76, *P* = 0.64, *q* = 0.75). A significant
+*P* = 0.27, *q* = 0.76; population rate *T* = 0.75, *P* = 0.64, *q* = 0.76). A significant
 comparison in one epoch and not in another is not itself evidence of epoch dependence, which was
 tested by the interaction and by nothing else. The data therefore support **differential effects
 of SST-interneuron excitation and inhibition on the magnitude versus the frequency of CA1
@@ -149,19 +153,20 @@ evidence for epoch specificity, not evidence of a uniform, tonic effect.
 Two further analyses, run independently of the mixed models, agreed. A distribution-aware
 negative-binomial mixed-effects count model of the same event counts (log cell-seconds offset,
 random intercepts for animal and animal × trial) reproduced the direction and approximate size of
-the rate result: trace-interval rate ratio 0.58 (94% HDI 0.35 to 0.83) for hM4D and 0.85 (94% HDI
-0.50 to 1.26) for hM3D, with leave-one-out comparison giving no support for the group × epoch
-interaction over the additive model (Δelpd 1.50, s.e. of the difference 4.51, favouring the
-model without the interaction). And a cell-level model of the trace interval, with animal-clustered
-inference, gave the same amplitude ordering (group omnibus *F*(2,16) = 6.44, *P* = 0.0089;
-Holm-adjusted *P* = 0.027 across that lane's three-member family), while the two within-cell
-epoch-change contrasts — trace minus pre-tone and post-shock minus pre-tone, computed on the
-7,067 and 7,609 cells active in both windows — were null (*F*(2,16) = 0.002, *P* = 0.998 and
-*F*(2,16) = 0.067, *P* = 0.935; both Holm-adjusted *P* = 1.0), consistent with the parallel profile
-in Fig. 2g and with the null interaction above.
+the rate result: trace-interval rate ratio 0.57 (94% HDI 0.34 to 0.84) for hM4D and 0.84 (94% HDI
+0.51 to 1.26) for hM3D, and leave-one-out comparison did not distinguish the group × epoch
+model from the additive one (Δelpd 1.16, s.e. of the difference 4.69, nominally favouring the
+model with the interaction, well within one standard error). A cell-level model of the trace
+interval (random intercept on animal) gave the same amplitude ordering (hM3D 1.53-fold, 95% CI
+1.14 to 2.05, equal-animal-weighted; group omnibus *F*(2,16) = 4.08, *P* = 0.037), which did not
+survive Holm correction across that lane's three-member family (adjusted *P* = 0.111); the two
+within-cell epoch-change contrasts — trace minus pre-tone and post-shock minus pre-tone, computed
+on the 7,067 and 7,609 cells active in both windows — were null (*F*(2,16) = 0.012, *P* = 0.988
+and *F*(2,16) = 0.055, *P* = 0.947; both Holm-adjusted *P* = 1.0), consistent with the parallel
+profile in Fig. 2g and with the null interaction above.
 
 **Controls.** The amplitude effect was stable across event-detection thresholds spanning 1.5–3.0
-in units of the deconvolved trace (hM3D group coefficient 0.429, 0.435 and 0.408 log units at
+in units of the deconvolved trace (hM3D group coefficient 0.416, 0.420 and 0.408 log units at
 thresholds 1.5, 2.0 and 3.0, each with an interval excluding zero), excluding a threshold-induced
 run-merging artifact as its source. Per-event amplitude declined monotonically across the five
 conditioning trials in every group at closely matched rates (−0.076, −0.092 and −0.087 log units
@@ -236,7 +241,9 @@ cell) 67–91% at 0.05–0.2 Hz).
 Because the trace interval on the first trial was 15 s rather than 20 s, analyses were restricted
 for each animal to trials in which all three windows were present at the full 20 s duration,
 determined from each window's measured exposure rather than from a trial index (3–4 of 5 trials
-per animal). **Both outcomes were computed from that same set of animal × trial windows**, so the
+per animal). One window was accepted short: one control animal's last post-shock window, whose
+recording stopped 13 frames (0.65 s) before its end, was kept at 387 of 400 frames, its exposure
+counted as imaged. **Both outcomes were computed from that same set of animal × trial windows**, so the
 amplitude and rate rows of Fig. 2i provably describe the same animals, epochs and trials.
 
 The descriptive epoch profile (Fig. 2g) instead used the five mutually disjoint windows the
@@ -362,13 +369,13 @@ with jointly estimated dispersion (Bambi/PyMC). Its epoch factor is anchored to 
 pre-tone window rather than the 20 s matched baseline the figures use, so its contrasts are
 comparable in direction and approximate magnitude but not numerically identical to the primary
 model's. Contrasts are reported as posterior rate ratios with 94% highest-density intervals.
-Convergence met the preset targets (max r̂ = 1.000, minimum bulk ESS 1,548, zero divergences), and
+Convergence met the preset targets (max r̂ = 1.000, minimum bulk ESS 1,356, zero divergences), and
 the group × epoch interaction was assessed by leave-one-out comparison of the full and
 interaction-free models. This model has no *P* value and is in no multiplicity family.
 
 An internal **cell-level amplitude lane** was retained from this module's earlier design and
 provides secondary evidence only: `log(amplitude) ~ group` over trace-interval cells with
-animal-clustered standard errors, and the two within-cell epoch changes (trace − pre-tone,
+a random intercept on animal, and the two within-cell epoch changes (trace − pre-tone,
 post-shock − pre-tone) over cells active in both windows, each tested by a joint Wald test on
 df = 16 and Holm-corrected across those three omnibus tests. The reported effect size for this
 lane is the equal-animal-weighted contrast, not the cell-weighted one, because cell count is
@@ -451,7 +458,7 @@ Paths are relative to `PLOTS_DIR/sp_rates_lmm/`. Rows of
 | 51-row inferential dataset; 9,531 cells | `paper/tfc_amplitude_rate/stats/unified_lmm_mouse_epoch_values.csv` |
 | all Fig. 2i ratios, CIs, adjusted *P* | `paper/.../unified_lmm_posthoc_contrasts.csv` — `ratio`, `ratio_ci_low/high`, `p_holm_epoch` |
 | six-comparison sensitivity *P* = 0.021 | same file, `p_holm_six` (`population_rate / trace / hM4D_vs_mCherry`) |
-| interaction *F*(4,16) = 0.37, *P* = 0.828; *F*(4,16) = 1.54, *P* = 0.237 | `paper/.../unified_lmm_interactions.csv` |
+| interaction *F*(4,16) = 0.37, *P* = 0.828; *F*(4,16) = 1.53, *P* = 0.240 | `paper/.../unified_lmm_interactions.csv` |
 | manipulation check +0.474 / +0.142 / −0.270, *F*(2,16) = 13.02, *P* = 4.4 × 10⁻⁴, 1,751 cells | `TFC_cond/stats/manipulation_check.txt` |
 | dropout 0.768 / 0.771 / 0.817 | same file, dropout block |
 | all Fig. 2e ratios, differences and intervals | `TFC_cond/decomposition_contrasts.md` |
@@ -460,13 +467,13 @@ Paths are relative to `PLOTS_DIR/sp_rates_lmm/`. Rows of
 | BH *q* values | `TFC_cond/stats/secondary_fdr_family.txt` |
 | mean/P90 permutation contrasts (+0.425, *P* = 0.0083; +0.404, *P* = 0.0067) | `TFC_cond/stats/secondary_permutation_tests.txt` |
 | ECDF cell counts 2,804 / 2,273 / 2,333 | `TFC_cond/stats/primary_trace_amplitude.txt` |
-| threshold sensitivity 0.429 / 0.435 / 0.408 | `TFC_cond/stats/threshold_sensitivity.csv` |
+| threshold sensitivity 0.416 / 0.420 / 0.408 | `TFC_cond/stats/threshold_sensitivity.csv` |
 | trial slopes −0.076 / −0.092 / −0.087; *F*(8,16) = 0.21, *P* = 0.98 | `TFC_cond/stats/group_trial_photobleaching.txt` |
-| NB rate ratios 0.58 / 0.85 with 94% HDIs | `paper/tfc_amplitude_rate/stats/rate_group_epoch_contrasts.csv` |
-| NB convergence (r̂, ESS, divergences) and LOO Δelpd 1.50 ± 4.51 | `TFC_cond/stats/secondary_rate.txt` |
-| cell-level trace omnibus *F*(2,16) = 6.44, *P* = 0.0089; 1.53× [1.14, 2.05] | `TFC_cond/stats/primary_trace_amplitude.txt` |
-| within-cell epoch deltas *P* = 0.998 / 0.935; 7,067 and 7,609 cells | `TFC_cond/stats/coprimary_epoch_delta_{trace,post_shock}.txt` |
-| Holm-adjusted 0.027 / 1.0 / 1.0 across that three-member family | `TFC_cond/stats/confirmatory_holm_correction.txt` |
+| NB rate ratios 0.57 / 0.84 with 94% HDIs | `paper/tfc_amplitude_rate/stats/rate_group_epoch_contrasts.csv` |
+| NB convergence (r̂, ESS, divergences) and LOO Δelpd 1.16 ± 4.69 | `TFC_cond/stats/secondary_rate.txt` |
+| cell-level trace omnibus *F*(2,16) = 4.08, *P* = 0.037; 1.53× [1.14, 2.05] | `TFC_cond/stats/primary_trace_amplitude.txt` |
+| within-cell epoch deltas *P* = 0.988 / 0.947; 7,067 and 7,609 cells | `TFC_cond/stats/coprimary_epoch_delta_{trace,post_shock}.txt` |
+| Holm-adjusted 0.111 / 1.0 / 1.0 across that three-member family | `TFC_cond/stats/confirmatory_holm_correction.txt` |
 
 ---
 
@@ -511,3 +518,19 @@ Paths are relative to `PLOTS_DIR/sp_rates_lmm/`. Rows of
 9. **Fig. 2i post-shock amplitude.** The hM3D post-shock adjusted *P* is 0.0497 — significant, but
    at the boundary. Reported as *P* = 0.050 above; consider printing three decimals in the final
    manuscript to avoid a reader seeing "0.05" and a star together.
+10. **The cell-level lane changed model between runs (2026-10-01).** On the 2026-08-24 run the
+    random-intercept fit of `fit_primary_trace_amplitude` and of both within-cell deltas came back
+    with non-finite fixed-effect standard errors, and `single_unit_common.fit_mixed_model` fell
+    back to mouse-clustered OLS (omnibus *P* = 0.0089, Holm 0.027). On the 2026-10-01 run the same
+    lbfgs fit of the same 7,410 cells converged (group variance 0.056) and was used: *P* = 0.037,
+    Holm 0.111 — no longer significant. The data did not change; only which branch the fit took.
+    The new value is the specified model; the old one was the fallback of a degenerate fit, the
+    lbfgs boundary solution `fit_mixed_model`'s docstring describes for cell-level tables. Open
+    (VS): fit this lane with `method=['bfgs', 'cg', 'powell']`, as the hierarchical lanes do, so
+    the branch cannot flip on numerical noise — check first that those optimizers reproduce
+    *P* ≈ 0.037. The same flip moved the recall Test B cell-level post-tone amplitude
+    (BH *q* 0.013 → 0.445). Text above restated; the lane was already secondary (note 7).
+11. **Absolute rates assume 20 fps.** `utilities.MINISCOPE_FPS = 20`; the camera runs at
+    19.76 fps (open item 13), so every absolute rate (events s⁻¹, e.g. the −0.039 above) is ~1.2 %
+    high in every group. Ratios, contrasts and *P* are unaffected (log-exposure offset). Fix or
+    state as nominal — VS's decision.

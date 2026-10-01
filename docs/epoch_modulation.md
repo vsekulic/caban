@@ -4,6 +4,10 @@ Per-cell **epoch modulation** of dorsal CA1 pyramidal neurons during trace fear 
 single-cell block of Figure 2, and the companion to the population-level amplitude/rate analysis in
 [sp_rates_lmm.md](sp_rates_lmm.md).
 
+**Current results: Part Y** (2026-10-01, recomputed YrA). The null holds; the event-proximal
+lane moved most (P 0.151 → 0.095, exploratory, still not significant). Part R below is the
+superseded run on the exported YrA, kept as the record.
+
 **The headline result of the run reported here is a null.** Neither DREADD alters the average
 cellular modulation profile across tone, trace, shock and post-shock; the group × epoch interaction
 is far from significance on both signals and no within-epoch contrast survives correction. §R
@@ -33,7 +37,7 @@ than that table makes it look (§R.10.1).
 | Companion | cross-validated sequence test (§R.9): [caban/epoch_sequence.py](../caban/epoch_sequence.py), `run_epoch_sequence(ds, cfg)`, output `PLOTS_DIR/epoch_sequence/` |
 | Companion | hierarchical cell-level lane (§A.8, §R.10), same module, gated on `cfg.epoch_modulation_hierarchical_cells` (**on**), output `<signal>/hierarchical_cells/` |
 | Companion | event-proximal short-window lane (§A.9), same module, gated on `cfg.epoch_modulation_event_proximal` (**on**), output `<signal>/event_proximal/` — results in §R.11 (null; run 2026-08-28) |
-| Companion | cross-validated per-cell selectivity (§A.10), same module, gated on `cfg.epoch_modulation_cell_selectivity` (**on**), output `<signal>/cell_selectivity/` — **implemented 2026-09-18, results pending** |
+| Companion | cross-validated per-cell selectivity (§A.10), same module, gated on `cfg.epoch_modulation_cell_selectivity` (**on**), output `<signal>/cell_selectivity/` — implemented 2026-09-18, **results in §Y.5** (null) |
 | Design | 17 mice — hM3D (Exc) n=5, hM4D (Inh) n=6, mCherry (Ctl) n=6 |
 | Run reported here | §R.1–§R.8: **2026-08-26, 12:24:51 → 12:28:09** (3 min 18 s). §R.10: **2026-08-27, 10:16 → 10:21** (3 min 0 s), which re-ran the mouse-level lane as well and reproduced every §R.2 number exactly. `PLOTS_DIR = .../plots/CURRENT` now holds the 08-27 output. |
 | Repo state at run | working tree on `feat/sp-rates-axis-labels`, last commit `6cf7ee6` |
@@ -596,7 +600,199 @@ descriptive for the reason above.
 
 ---
 
-# Part R — results of the 2026-08-26 12:24 run
+# Part Y — results of the 2026-10-01 run on the recomputed YrA (current)
+
+**This Part supersedes Part R** (kept below, unchanged, as the record of the run on the notebook's
+exported YrA). It is the run that Figure 2's per-cell block now rests on. The comparison is
+against the 2026-09-18 run (`PLOTS_DIR` reference copy `plots/CURRENT-20260929-exported-YrA`),
+whose numbers reproduce Part R exactly. Plan: [../plans/figure2_per_cell_completion_plan.md](../plans/figure2_per_cell_completion_plan.md)
+§2.4–2.6. Reviewed before this write-up by `scientific-code-reviewer` and `statistics-checker`
+(2026-10-02); their findings are folded in below, chiefly §Y.4 and §Y.7.
+
+## Y.0 What changed in the inputs
+
+- **YrA is the recomputed residual** (`YrA_recomputed.zarr`, loader commit `24fe3a9`) for all 17
+  TFC_cond sessions, each proven by an exact `max_proj` replay check
+  ([../plans/yra_recompute_plan.md](../plans/yra_recompute_plan.md) §14.2). The notebook's export is
+  no longer read anywhere.
+- **Miniscope timestamps map to imaged frames** (`044b4f1`). Among the TFC_cond sessions only G09
+  changes: its last post-shock window has 387 of 400 frames and is accepted as one listed exception
+  (`fc8e37e`). The 3 s event-proximal windows never reach those frames.
+- **The analysis cache was rebuilt** (2026-10-01). On C this moves numbers only through the 14 cells
+  that gained a YrA trace.
+
+## Y.1 Cohort and coverage
+
+**9,529 cells** analysed (9,515 in Part R). The 14 cells that had no exported YrA trace now carry
+one (per mouse: G05 1, G08 1, G10 2, G12 1, G14 1, G17 3, G18 1, G20 4). The same 2 constant-trace
+cells are excluded and listed in `tables/trial_coverage.csv`: G14 unit 148 and G18 unit 1067.
+Retained trials are identical to Part R; G09 keeps 3. Fits are `mixedlm` on both signals, with no
+OLS fallback.
+
+## Y.2 The primary result — still no group × epoch effect
+
+| Signal | Group × epoch joint Wald (Part R → now) |
+|---|---|
+| **YrA (primary)** | F(6,16) 0.459, P 0.828 → **0.421, P 0.854** |
+| C (confirmatory) | F(6,16) 0.647, P 0.692 → **0.648, P 0.692** |
+
+YrA within-epoch contrasts. Columns: difference in modulation index, 95% CI, raw P, and P Holm-adjusted over the 2 comparisons within that epoch.
+
+| Epoch | Contrast | Estimate | 95% CI | P | P_holm |
+|---|---|---|---|---|---|
+| tone | Exc vs Ctl | −0.0322 | [−0.1581, +0.0936] | 0.595 | 1 |
+| tone | Inh vs Ctl | −0.0144 | [−0.1344, +0.1055] | 0.802 | 1 |
+| trace | Exc vs Ctl | −0.0339 | [−0.1597, +0.0920] | 0.576 | 1 |
+| trace | Inh vs Ctl | −0.0326 | [−0.1526, +0.0874] | 0.573 | 1 |
+| shock | Exc vs Ctl | −0.0093 | [−0.1351, +0.1166] | 0.878 | 0.878 |
+| shock | Inh vs Ctl | **−0.0792** | [−0.1992, +0.0408] | 0.181 | **0.362** |
+| post_shock | Exc vs Ctl | +0.0460 | [−0.0799, +0.1718] | 0.450 | 0.900 |
+| post_shock | Inh vs Ctl | −0.0072 | [−0.1271, +0.1128] | 0.901 | 0.901 |
+
+Every YrA contrast moves by 0.02 or less. The per-mouse index changes by a median of 0.005 in absolute value, at most 0.029 (G18, shock).
+That holds in mice that gained no cells too, e.g. G06, G07 and G11 at about 0.02. **So the shift comes from
+the recomputed traces themselves, not from the 14 added cells.** On C the per-mouse index changes by
+at most 0.0009, from the 14 cells; its shock Inh-vs-Ctl contrast is −0.0951 [−0.1898, −0.0005],
+P 0.049, Holm 0.098.
+
+**The named shock contrast (Inh vs Ctl)** weakens on YrA: −0.097 (Holm 0.24) → −0.079 (Holm 0.36).
+- **It was chosen after seeing the data.** The Holm-over-2 adjustment does not cover the 8
+  epoch × contrast cells it was chosen from.
+- **The two signals agree on the estimate** (−0.079 and −0.095), with P values on either side of
+  0.1. That difference is noise at the boundary, not a disagreement.
+- **C is not independent confirmation.** It is a deconvolution of the same fluorescence.
+- **The YrA weakening is not evidence of an artifact being removed.** It is a change of 0.018,
+  well inside either interval.
+- It stays **named, not claimed**.
+
+## Y.3 The hierarchical cell-level companion (§A.8)
+
+The omnibus P values come from mouse-label randomization with 2,000 Monte Carlo draws.
+- YrA: F 0.900, P 0.568 → **0.916, P 0.561**.
+- C: **F 0.609, P 0.643**.
+
+The shock Inh-vs-Ctl contrast is −0.079 [−0.302, +0.143], exact P 0.32, Holm 0.63, on YrA, and
+−0.096, Holm 0.32, on C. The between-animal epoch variances keep the ordering §R.10.1 reported:
+shock is an order of magnitude above the rest (YrA 0.031, versus 0.0002–0.0041 for the other
+epochs).
+
+## Y.4 The event-proximal companion (§A.9) — the one lane that moved
+
+**The omnibus is F 1.870, P 0.151 → F 2.064, P 0.095 on YrA**, from mouse-label randomization with
+2,000 Monte Carlo draws. On C it is F 1.491 → 1.499, P 0.238. It is still not significant.
+
+**What it is not.** The code review found the inputs to this lane otherwise identical:
+- every window is exactly 3.00 s;
+- the retained trials are the same in both runs;
+- G09 plays no part;
+- the value count changed by exactly 14 cells × 4 trials × 4 events = 224.
+
+So the move comes from the recomputed YrA. A 3 s window responds more to trace content than a 20 s
+window does.
+
+**Where it sits.** The move comes from post-shock:
+
+| Comparison (post_shock, YrA) | Estimate | 95% CI | exact P | Holm family |
+|---|---|---|---|---|
+| Exc vs Ctl | +0.106 | [+0.003, +0.208] | 0.058 | 0.117 |
+| Inh vs Ctl | −0.024 | [−0.122, +0.074] | 0.623 | 0.623 |
+| Exc vs Inh | **+0.130** | [+0.028, +0.232] | **0.019** | in no family |
+
+The Exc-vs-Inh comparison is reported because it is the smallest P in the lane. It is
+**exploratory**:
+- It sits in no Holm family by design.
+- It stands under a non-significant omnibus, in a lane that was added after the primary null.
+- It matches the panel-M description in §R.11.1: Exc stays elevated after the shock and Inh is
+  blunted.
+
+**How it is reported:** "F = 2.06, P = 0.095 (mouse-label randomization, 2,000 draws), exploratory,
+not significant". It is not called a trend.
+- The Monte Carlo standard error of that P is about 0.007.
+- The value to quote in the paper should come from a run with ≥ 20,000 draws (open, §Y.8).
+
+**Dilution (paired, per mouse; YrA).** Mean over mice of the event-proximal versus the full-epoch index, with the number of mice whose index is larger in the 3 s window:
+
+| Epoch | Event-proximal | Full-epoch | Mice larger in 3 s |
+|---|---|---|---|
+| tone | −0.020 | −0.020 | 14/17 |
+| trace | −0.065 | −0.028 | 13/17 |
+| shock | +0.062 | +0.091 | 5/17 |
+| post_shock | −0.014 | +0.001 | 14/17 |
+
+This corrects §R.11.1:
+- §R.11.1's "no onset transient to dilute" overstated what panel M shows. Its "within ±0.1 SD"
+  is a visual detection limit. It is several times the full-epoch tone and trace indices (−0.02,
+  −0.03) and as large as the group effects under test.
+- The trace row shows a cohort-wide suppression after tone offset that the short window sharpens:
+  about 2× the full-epoch value, larger in 13/17 mice. So dilution is partly supported for trace.
+
+The corrected reading:
+
+> No group-mean onset transient larger than ~0.1 SD is visible at tone or trace onset. A modest
+> cohort-wide suppression after tone offset is sharpened by the 3 s window. It does not differ by
+> group.
+
+The dilution test bears on the mean only (§R.11.4).
+
+## Y.5 Cross-validated selectivity (§A.10) and the sequence test
+
+**Selectivity** — first reported here; implemented 2026-09-18, its results were never written up
+until now.
+- It is null on both signals: every exact P ≥ 0.238 on YrA.
+- Estimates move by less than 0.01 from the 2026-09-18 run.
+
+**Sequence test** (§R.9) — unchanged and null: mean held-out ρ +0.040, P 0.27.
+
+## Y.6 Before → after, one table
+
+| Lane (YrA unless stated) | 2026-09-18 (exported YrA) | 2026-10-01 (recomputed) |
+|---|---|---|
+| mouse-level omnibus | F 0.459, P 0.828 | F 0.421, P 0.854 |
+| mouse-level shock Inh vs Ctl | −0.097, P 0.12, Holm 0.24 | −0.079, P 0.18, Holm 0.36 |
+| mouse-level, C, shock Inh vs Ctl | −0.095, Holm 0.098 | −0.095, Holm 0.098 |
+| hierarchical omnibus | F 0.900, P 0.568 | F 0.916, P 0.561 |
+| hierarchical shock Inh vs Ctl | −0.097, Holm 0.46 | −0.079, Holm 0.63 |
+| event-proximal omnibus | F 1.870, P 0.151 | F 2.064, P 0.095 |
+| selectivity (all exact P) | ≥ 0.24 | ≥ 0.238 |
+| sequence test | ρ +0.040, P 0.27 | ρ +0.040, P 0.27 |
+| cells analysed | 9,515 | 9,529 |
+
+## Y.7 What the null does and does not establish (statistics review, 2026-10-02)
+
+- **Only the mouse-level model was planned before the data were seen.** Part A, and §R.6 (which
+  motivated the event-proximal lane), were written after the 2026-08-26 null. The hierarchical,
+  event-proximal and selectivity lanes are post-hoc companions.
+- **The family of omnibus tests is 6:** mouse-level, hierarchical and event-proximal, on each of
+  two signals. It is 8 if selectivity counts.
+  - These tests share cells, mice and the index, so they are not independent.
+  - Multiplicity is applied only within an epoch (Holm over 2), never across lanes or signals.
+  - The smallest P in the family is 0.095. No correction across the family changes the conclusion.
+- **This is no evidence of a difference, not evidence of equivalence.** The design is 5/6/6 mice
+  (F(6,16)), and contrast intervals span about ±0.13. Effects as large as the shock response
+  itself (+0.06 to +0.09) cannot be excluded.
+- **The unit is the animal throughout.** The mouse-level lane has df 16. The other lanes take
+  every P from mouse-label permutation, and their cell counts are descriptive.
+
+## Y.8 Open items from this run
+
+1. **Event-proximal omnibus: re-run with ≥ 20,000 Monte Carlo draws** before quoting its P.
+2. **G09 sensitivity:** one run with its 387-frame trial dropped. No change is expected; the index
+   is a window mean.
+3. **Window lengths at the true frame rate.** Windows built as seconds × 20 fps last 400 frames:
+   post_shock, pre_tone, pre_tone_matched and the 3 s event windows.
+   - At 19.76 fps those last about 20.24 s and 3.04 s.
+   - Tone, trace and shock come from timestamps, at about 20.0 s, 395 frames.
+   - The tone window does not spill into trace.
+   - The mismatch is 1.3 %. It is a mean-against-mean index, so nothing is biased. It belongs to the
+     frame-rate decision (open item 13).
+4. **Loader guard.** The YrA aligner should assert that 0 rows moved, i.e. that `YrA_idx` equals
+   `S_idx`, before aligning; today it raises only on NaN rows or YrA-only units. The cache-hit
+   path also skips the sidecar check. The output shows no misalignment.
+5. **Fig. 2c** (sample traces, plots YrA) is not yet re-run.
+
+---
+
+# Part R — results of the 2026-08-26 12:24 run (superseded by Part Y: exported YrA)
 
 All numbers below are from `PLOTS_DIR/epoch_modulation/` as written at 12:27–12:28 on 2026-08-26.
 
@@ -1083,6 +1279,10 @@ resolved cells and retained trials as §R.1; every window realised at exactly 3.
 **The conclusion is again a null on both signals** — but panel M changes what that null means.
 
 ### R.11.1 Panel M: there is no onset transient to dilute at tone or trace
+
+> **Corrected 2026-10-02 (§Y.4):** "no onset transient" overstates panel M. ±0.1 SD is a
+> detection limit, not an absence, and §R.11.2's trace row shows a cohort-wide post-offset
+> suppression the short window sharpens. Read this section with §Y.4.
 
 The group-mean event-aligned traces (YrA, mean ± SEM across mice) are **flat at tone onset and
 at tone offset in every group** — within ±0.1 SD of baseline, with no visible deflection in the

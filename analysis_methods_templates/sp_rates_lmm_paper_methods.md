@@ -40,7 +40,9 @@ by counting noise.
 
 Because the trace interval on the first trial is 15 s rather than 20 s, analyses were restricted
 for each animal to trials in which all three windows were present at the full 20 s duration,
-determined from the measured exposure of each window rather than from a trial index. **Both
+determined from the measured exposure of each window rather than from a trial index. One window
+was accepted short: one control animal's last post-shock window, whose recording stopped 13 frames
+(0.65 s) before its end, was kept at 387 of 400 frames with its exposure counted as imaged. **Both
 outcomes were computed from that same set of animal × trial windows**, so the two are directly
 parallel; amplitude is a per-event quantity and is not itself duration-sensitive, but using one
 trial set for both removes any hidden difference in the input data.
