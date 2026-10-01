@@ -26,7 +26,11 @@
 > VS re-ran the per-cell analyses (2026-10-01); the before/after comparison is in that plan, §2.5 ("Done
 > 2026-10-02"): nulls hold; YrA shock Inh-vs-Ctl weakens (−0.097→−0.079); event-proximal omnibus P 0.151→0.095;
 > Fig. 2 main unchanged except G09's corrected exposure (post-shock rate P 0.098→0.097, rate interaction F
-> 1.544→1.533, P 0.237→0.240). **Next:** (1) VS re-runs "Initial checks → Sample traces" (Fig. 2c plots YrA);
+> 1.544→1.533, P 0.237→0.240). **2026-10-02: reviews done and written up** (plan §2.6 "Done 2026-10-02
+> (reviews and write-up)"; [../docs/epoch_modulation.md](../docs/epoch_modulation.md) Part Y). They found the
+> cell-level `sp_rates_lmm` lane had changed model (degenerate fit → converged; Holm 0.027 → 0.111) and
+> recall Test B moved (G21 2 of 3 trials). Open items (a)–(f) are listed there. Older text follows.
+> **Next (as of 2026-10-01):** (1) VS re-runs "Initial checks → Sample traces" (Fig. 2c plots YrA);
 > (2) `scientific-code-reviewer` + `statistics-checker` on the re-run (incl. the event-proximal move) — before any
 > write-up; (3) write-up: new results section in [../docs/epoch_modulation.md](../docs/epoch_modulation.md) (old §R
 > kept as superseded), the three number changes in [../docs/paper/paper_figure2.md](../docs/paper/paper_figure2.md),
