@@ -327,6 +327,7 @@ from caban.single_unit_common import (
 from caban.decoder import _ANALYSIS_METHODS_TEMPLATES_DIR, _copy_analysis_methods_template
 from caban.analysis import _draw_violin_triplet, do_pairwise_holm_plot
 from caban.epoch_analysis import (get_epoch_frames, get_testb_epoch_frames,
+                                  accepted_short_post_shock_frames,
                                   TRACE_MATCHED_WINDOW_S, POST_SHOCK_LATE_ONSET_S,
                                   _stars_from_p)
 
@@ -1026,6 +1027,13 @@ def restrict_to_exposure_matched_trials(df_fine, epochs, window_seconds=TRACE_MA
     # which every cell in that window shares, so max() is that window's own length.
     per_window = sub.groupby(['mouse', 'trial', 'epoch'], as_index=False)['exposure_seconds'].max()
     per_window['matched'] = (per_window['exposure_seconds'] - window_seconds).abs() <= tol_seconds
+    # A listed short post-shock window (epoch_analysis.SHORT_POST_SHOCK_WINDOWS: G09's last
+    # trial, imaging ended 13 frames early) counts as matched at exactly its listed length.
+    for i, w in per_window.iterrows():
+        short = (accepted_short_post_shock_frames(w['mouse'], 'TFC_cond', w['trial'])
+                 if w['epoch'] == 'post_shock' and window_seconds == TRACE_MATCHED_WINDOW_S else None)
+        if short is not None and round(w['exposure_seconds'] * MINISCOPE_FPS) == short:
+            per_window.loc[i, 'matched'] = True
     ok = per_window.groupby(['mouse', 'trial'])['matched'].agg(['sum', 'size'])
     shared = set(ok[(ok['sum'] == len(epochs)) & (ok['size'] == len(epochs))].index)
     if not shared:

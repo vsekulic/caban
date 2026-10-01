@@ -74,6 +74,34 @@ from caban.utilities import MINISCOPE_FPS, get_spikes_in_period
 # matches isomap.POST_SHOCK_SEC and population.PERIOD_FRAMES['post_shock'].
 TRACE_MATCHED_WINDOW_S = 20.0
 
+# Post-shock windows accepted SHORT of the full TRACE_MATCHED_WINDOW_S, by decision -- a listed
+# exception, not a tolerance: every other post-shock window that does not fit still raises.
+# Keyed (mouse, session_type, trial_idx) -> the exact frame count accepted; any other count
+# raises, so a change in the session's timing cannot slip through.
+#   G09 TFC_cond, trial index 3 (its last retained trial): imaging stopped 1.1 s before the end
+#   of the experiment (timestamps after the last video frame, caban.session_queue
+#   TIMESTAMPS_WITHOUT_VIDEO_FROM), leaving 387 of the window's 400 frames (19.6 s at the
+#   camera's 19.76 fps). Accepted as is (VS, 2026-10-01): the window's endpoints are means and
+#   exposure-normalised rates, so 3 % less exposure costs precision for one trial of one mouse,
+#   not bias. Before the 2026-09-30 timing fix this window silently ran 13 frames past C.
+SHORT_POST_SHOCK_WINDOWS = {
+    ('G09', 'TFC_cond', 3): 387,
+}
+_SHORT_POST_SHOCK_REPORTED = set()
+
+
+def accepted_short_post_shock_frames(mouse, session_type, trial_idx):
+    """The frame count accepted for this trial's full-length post-shock window if it is a
+    listed exception (:data:`SHORT_POST_SHOCK_WINDOWS`), else None."""
+    return SHORT_POST_SHOCK_WINDOWS.get((mouse, session_type, int(trial_idx)))
+
+
+def post_shock_frames_needed(session, trial_idx):
+    """Frames the full-length post-shock window needs on this trial: the full window, or the
+    listed shorter count (:data:`SHORT_POST_SHOCK_WINDOWS`)."""
+    short = accepted_short_post_shock_frames(session.mouse, session.session_type, trial_idx)
+    return int(round(TRACE_MATCHED_WINDOW_S * MINISCOPE_FPS)) if short is None else short
+
 # Onset of the 'post_shock_late' window, measured from shock OFFSET. This is the DELAYED arm of
 # the early-vs-late post-shock contrast: Puhger et al. 2024 (iScience 27:109035) find that
 # silencing CA1 0-40 s after the footshock impairs memory while the same silencing delivered
@@ -298,6 +326,16 @@ def get_epoch_frames(session, epoch_name, trial_idx,
         onset  = session.shock_offsets[trial_idx] + int(round(start_offset_s * fps))
         offset = onset + int(round(post_shock_duration_s * fps))
         iti_end = session.post_shock_offsets[trial_idx]
+        short = (accepted_short_post_shock_frames(session.mouse, session.session_type, trial_idx)
+                 if not is_late and post_shock_duration_s == TRACE_MATCHED_WINDOW_S else None)
+        if offset > iti_end and short is not None and iti_end - onset == short:
+            key = (session.mouse, session.session_type, int(trial_idx))
+            if key not in _SHORT_POST_SHOCK_REPORTED:
+                _SHORT_POST_SHOCK_REPORTED.add(key)
+                print(f'  [epoch] {session.mouse} {session.session_type} trial {trial_idx}: post_shock '
+                      f'window accepted at {short} frames, short of {offset - onset} (listed in '
+                      f'caban.epoch_analysis.SHORT_POST_SHOCK_WINDOWS)')
+            offset = iti_end
         if offset > iti_end:
             if is_late:
                 return None

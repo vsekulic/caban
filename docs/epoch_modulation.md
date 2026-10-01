@@ -107,6 +107,14 @@ as a level it would be identically zero.
 Unequal durations are acceptable because the endpoint is a window **mean**, not a count or rate, and
 is therefore not exposure-scaled.
 
+> **G09's last post-shock window is 387 of 400 frames, accepted by decision (VS, 2026-10-01).** The
+> timing fix of 2026-09-30 (`find_exp_boundaries` drops timestamp rows without imaging) showed G09's
+> conditioning imaging stopped 1.1 s before the end of the experiment, so the 20 s window after its last
+> shock is 13 frames short; before the fix it silently ran past `C`. Listed in
+> `caban.epoch_analysis.SHORT_POST_SHOCK_WINDOWS` (exact count; anything else still raises) and used by
+> `get_epoch_frames`, `retained_trials` here and `sp_rates_lmm.restrict_to_exposure_matched_trials`, so
+> G09 keeps that trial everywhere, as in the published run.
+
 ### Trial retention uses the DECLARED protocol times, and needs no tolerance
 
 `TraceFearCondSession.__init__` declares the timing outright — `tone_onsets_def = [185, 420, 660,

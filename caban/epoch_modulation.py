@@ -92,7 +92,7 @@ from scipy import stats
 from scipy.optimize import approx_fprime, minimize
 
 from caban.utilities import MINISCOPE_FPS
-from caban.epoch_analysis import get_epoch_frames, TRACE_MATCHED_WINDOW_S
+from caban.epoch_analysis import get_epoch_frames, post_shock_frames_needed, TRACE_MATCHED_WINDOW_S
 from caban.decoder import _copy_analysis_methods_template
 from caban.single_unit_common import (
     GROUP_ORDER, GROUP_COLOURS, GROUP_LABELS, DREADD_DISPLAY_ORDER,
@@ -398,8 +398,6 @@ def retained_trials(session):
     precisely "the ITI is at least 20 s long", asked through the public accessor with no
     duplicated guard logic and no swallowed error.
     """
-    post_shock_needed = _window_frames(TRACE_MATCHED_WINDOW_S)
-
     retained, reasons = [], {}
     for trial_idx in session.periods:
         why = []
@@ -425,7 +423,7 @@ def retained_trials(session):
         iti = get_epoch_frames(session, 'iti', trial_idx)
         if iti is None:
             why.append('inter-trial interval is empty (no room for a post-shock window)')
-        elif (iti[1] - iti[0]) < post_shock_needed:
+        elif (iti[1] - iti[0]) < post_shock_frames_needed(session, trial_idx):
             why.append(f'only {(iti[1] - iti[0]) / MINISCOPE_FPS:.1f} s remain after shock '
                        f'offset, short of the {TRACE_MATCHED_WINDOW_S:.0f} s post_shock window')
 
