@@ -180,8 +180,9 @@ templates (`analysis_methods_templates/epoch_modulation*_methods.md`) stating th
     (G09 window).
 - **Open:**
   - (a) Fit the cell-level `sp_rates_lmm` lane with `method=['bfgs','cg','powell']`, as the
-    hierarchical lanes do, so the branch cannot flip on numerical noise. First, VS's refit check of
-    the optimizers.
+    hierarchical lanes do, so the branch cannot flip on numerical noise. **Refit check done
+    2026-10-02 (VS):** lbfgs/bfgs/cg/powell all give F 4.08, P 0.037, identical coefficients, so
+    the new value stands and switching optimizers moves no reported number.
   - (b) The event-proximal omnibus at ≥ 20,000 draws, before its P is quoted.
   - (c) G09 trial-dropped sensitivity.
   - (d) Loader guard: assert `YrA_idx == S_idx` (0 rows moved) before aligning.

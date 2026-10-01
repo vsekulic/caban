@@ -527,8 +527,10 @@ Paths are relative to `PLOTS_DIR/sp_rates_lmm/`. Rows of
     The new value is the specified model; the old one was the fallback of a degenerate fit, the
     lbfgs boundary solution `fit_mixed_model`'s docstring describes for cell-level tables. Open
     (VS): fit this lane with `method=['bfgs', 'cg', 'powell']`, as the hierarchical lanes do, so
-    the branch cannot flip on numerical noise — check first that those optimizers reproduce
-    *P* ≈ 0.037. The same flip moved the recall Test B cell-level post-tone amplitude
+    the branch cannot flip on numerical noise. **Checked 2026-10-02 (VS's session, 7,410 cells,
+    17 mice):** lbfgs, bfgs, cg and powell all converge to the same fit — *F* 4.081–4.083,
+    *P* 0.0369–0.0370, hM3D 0.4197, hM4D 0.1571 — so 0.037 is the model's optimum and the old
+    0.0089 belonged to the fallback. The same flip moved the recall Test B cell-level post-tone amplitude
     (BH *q* 0.013 → 0.445). Text above restated; the lane was already secondary (note 7).
 11. **Absolute rates assume 20 fps.** `utilities.MINISCOPE_FPS = 20`; the camera runs at
     19.76 fps (open item 13), so every absolute rate (events s⁻¹, e.g. the −0.039 above) is ~1.2 %
