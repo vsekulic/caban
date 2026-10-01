@@ -1,5 +1,42 @@
 # Handover: the Minian batch on the Razer, the YrA recompute, and the parked review branch
 
+> ## ▶ UPDATE 2026-10-02 — start here (supersedes §3/§6/§8 where they differ)
+>
+> **Running, autonomous (Razer `minastirith`, `screen minian_batch`):** the Minian batch by experiment day
+> (`scripts/run_minian_batch.py --by-day`, one stream, 6 workers, staged through the copier —
+> [session_staging_copier_plan.md](session_staging_copier_plan.md)). 2026-10-01 10:36: 185 of 492 done, 5 failed
+> (unreadable recordings G07 TFC_test_B and HC3, G14 TFC_test_B_1wk-borked, G18 TFC_cond HC1; G18 CNO2-borked
+> failed in its YrA step — VS decides all), ~4–6 days left. Status: `ssh minastirith tail -f minian.log`
+> (20-min `status` lines) and `~/minian_batch_status.md` (snapshots: [reports/minian_batch_status.md](../reports/minian_batch_status.md)).
+> Stop switch `~/minian_stop`. **Rules (memory):** heavy compute only on the Razer (osgiliath crashed once); never
+> run `caffeinate` (VS does); every Razer command via `~/bin/logrun`, but read `minian.log` with plain ssh (logrun
+> echoes it into itself); queue follow-ups on the Razer, not as Mac-side waits.
+>
+> **Done since 2026-09-28:** review branch fully handled — `96137b9`→`e293ed5` (max_proj check), `5c3a1bd`→`044b4f1`
+> (loader timing; forced the cache rebuild), `d2b74ce`→`081be37` (G05 motion recovery, hardened), `7fcac0f`
+> rejected, `9015c23` (collaborator notice) **parked, not sent** — verify its numbers and regenerate
+> `behaviour_params` before it goes out. Loader reads the recomputed YrA (`24fe3a9`): all **130** production
+> recomputes carry a passing max_proj check on both drives (G05's two NaN-motion sessions recovered, `76013ae`;
+> `NO_RECOMPUTED_YRA` empty). Sync MINIRAZER→MINISCOPE built (`scripts/sync_manifest.py` + `sync_to_miniscope.py`);
+> 104 batch sessions synced, **~80 waiting** (needs MINISCOPE on osgiliath at home — light, ~30 GB).
+> G09's last post-shock window accepted at 387 of 400 frames (`fc8e37e`, VS). Analysis cache rebuilt on
+> osgiliath 2026-10-01 (`ds_cache.pkl`; old one `ds_cache-20260512-exported-YrA.pkl` kept until the write-up).
+>
+> **Figure 2 per-cell work — next steps** ([figure2_per_cell_completion_plan.md](figure2_per_cell_completion_plan.md)):
+> VS re-ran the per-cell analyses (2026-10-01); the before/after comparison is in that plan, §2.5 ("Done
+> 2026-10-02"): nulls hold; YrA shock Inh-vs-Ctl weakens (−0.097→−0.079); event-proximal omnibus P 0.151→0.095;
+> Fig. 2 main unchanged except G09's corrected exposure (post-shock rate P 0.098→0.097, rate interaction F
+> 1.544→1.533, P 0.237→0.240). **Next:** (1) VS re-runs "Initial checks → Sample traces" (Fig. 2c plots YrA);
+> (2) `scientific-code-reviewer` + `statistics-checker` on the re-run (incl. the event-proximal move) — before any
+> write-up; (3) write-up: new results section in [../docs/epoch_modulation.md](../docs/epoch_modulation.md) (old §R
+> kept as superseded), the three number changes in [../docs/paper/paper_figure2.md](../docs/paper/paper_figure2.md),
+> Methods notes (recomputed YrA; G09 window). Panel → file → notebook-section map:
+> [../docs/paper/figure_panel_map.md](../docs/paper/figure_panel_map.md). Reference outputs:
+> `~/data/vsekulic/OF_test/plots/CURRENT-20260929-exported-YrA` (epoch_modulation from 2026-09-18).
+> **Later:** the frame-rate decision (20 vs 19.76 fps, open item 13); crossreg registry/runner and new groupings
+> after the batch ([crossreg_batch_runner_plan.md](crossreg_batch_runner_plan.md)).
+
+
 Written 2026-09-28 ~10:30 JST, at the end of a very long chat (2026-09-26 → 28), for the chat that
 continues it. **Read this whole file first, then the sources in §1, before doing anything.** Nothing
 here replaces them; it tells you where the truth is and what exists only in the old conversation.
