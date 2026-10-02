@@ -186,7 +186,10 @@ templates (`analysis_methods_templates/epoch_modulation*_methods.md`) stating th
     `fit_primary_trace_amplitude` and `fit_epoch_delta_model` use `HIERARCHICAL_CELL_LMM_OPTIMIZER`.
     To confirm on VS's next `sp_rates_lmm` run: no "Mixed model unusable" in any stats file, and
     trace omnibus F 4.08, P 0.037. The manipulation check, also cell-level, was left on lbfgs: it
-    never fell back.
+    never fell back. **Confirmed
+    2026-10-02 16:44 (VS's re-run):** no fallback in any `sp_rates_lmm` stats file; trace omnibus
+    F 4.08, P 0.0369, Holm 0.111; deltas P 0.988 / 0.947; thresholds 0.416 / 0.420 / 0.408; Test B
+    post-tone q 0.445; Fig. 2i and the NB model identical. Every number in the paper text stands.
   - (b) The event-proximal omnibus at ≥ 20,000 draws, before its P is quoted.
   - (c) G09 trial-dropped sensitivity.
   - (d) Loader guard: assert `YrA_idx == S_idx` (0 rows moved) before aligning.
