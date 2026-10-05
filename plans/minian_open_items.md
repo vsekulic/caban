@@ -167,6 +167,31 @@ Cloudflare (~$10/year), `cloudflared` on both machines and access rules, and rou
 Cloudflare; built for publishing services, overkill for two personal machines (VS chose Tailscale,
 2026-09-28).
 
+### 15. Five batch sessions with unfinished `.avi` files — VS decision (found 2026-10-03)
+Five batch sessions failed in the notebook's `load_videos` cell with `KeyError: 'nb_frames'`: some of
+their `.avi` headers were never finalised (`ffprobe` `nb_frames` N/A) — the same defect as
+[yra_recompute_plan.md](yra_recompute_plan.md) §15, but here the runner's pre-check did not catch it
+because the session also has finalised files. A full file is 1,000 frames / 369,702,710 bytes; 14,702
+bytes is a bare header; 0 bytes is empty. Probed on MINIRAZER with `minian-native`'s `ffprobe`:
+
+| session | finalised files (frames) | unfinished | shape |
+|---|---|---|---|
+| G05 `2021_09_09-TFC_test_A_1wk/16_11_07-LT1` | 0–9 (10,000), 12 (242) | 10 (122 MB), 11 (37 MB) | **gap in the middle**, recording resumes |
+| G06 `2021_10_22-TFC_test_A/12_18_46-LT1` | 0–6 (7,000), 11 (1,000), 12 (315) | 7 (234 MB), 8 (0 B), 9 (26 MB), 10 (3 MB) | **gap in the middle**, recording resumes |
+| G07 `2021_10_20-TFC_test_B/16_25_43-HC3` | none | 0 (39 MB), 1–2 (header), 3–6 (0 B) | ~100 frames at most; effectively no recording |
+| G11 `2021_12_02-TFC_test_A_1wk/15_32_02-HC2` | 0–2 (3,000) | 3 (246 MB), 4–5 (header) | stops early |
+| G18 `2022_02_07-TFC_cond/14_03_44-HC1` | 0–3 (4,000) | 4 (322 MB), 5–6 (header), 7 (0 B) | stops early |
+
+**Two of them are analysis sessions**: G06 `12_18_46-LT1` is the loader's `dpath_Test_A_LT1['G06']` and G05
+`16_11_07-LT1` is `dpath_Test_A_1wk_LT1['G05']` (`caban/loader.py`) — both with the mid-session gap, so
+they cannot be left out, and their existing `minian_crossreg1` output needs the §15.1 timing check
+(was it paired with timestamps as if the gap were not there?).
+
+Options per session: leave out (G07 HC3 surely); or run on the finalised files only, listing the
+unfinished ones in `session_queue.UNUSED_VIDEOS` as for G15/G21 — the loader's §15.1 row-to-frame
+mapping then handles the two mid-session gaps (both LT1, so the track timing matters). The runner's
+pre-check should also flag *any* unfinished file, not only all-unfinished sessions.
+
 ## Suggested order
 
 First: 14 (Tailscale). During the copy: 5 (registry, directory listings only), 1 and 2 (code only), 9, and the decisions

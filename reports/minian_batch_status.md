@@ -1,6 +1,6 @@
 # Minian batch: status of every session
 
-Generated 2026-09-30 03:30 on the Razer from MINIRAZER by `scripts/minian_status_report.py` -- from the runs' own records, not by hand. How the batch runs: [plans/razer_runner_plan.md](../plans/razer_runner_plan.md) (Phase 4), [plans/session_staging_copier_plan.md](../plans/session_staging_copier_plan.md).
+Generated 2026-10-05 23:47 on the Razer from MINIRAZER by `scripts/minian_status_report.py` -- from the runs' own records, not by hand. How the batch runs: [plans/razer_runner_plan.md](../plans/razer_runner_plan.md) (Phase 4), [plans/session_staging_copier_plan.md](../plans/session_staging_copier_plan.md).
 
 ## Summary
 
@@ -9,19 +9,19 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 | # | group | sessions | done | computed | running | failed | interrupted | pending | on MINISCOPE |
 |---|---|---|---|---|---|---|---|---|---|
 | 1 | TFC_cond days | 88 | 86 | 0 | 0 | 2 | 0 | 0 | 86 |
-| 2 | TFC_test_B days | 54 | 12 | 0 | 1 | 2 | 0 | 39 | 6 |
-| 3 | TFC_test_B_1wk days | 63 | 2 | 0 | 0 | 1 | 0 | 60 | 2 |
-| 4 | TFC_test_A days | 66 | 1 | 0 | 0 | 0 | 0 | 65 | 1 |
-| 5 | TFC_test_A_1wk days | 62 | 0 | 0 | 0 | 0 | 0 | 62 | 0 |
-| 6 | track day 1 | 44 | 2 | 0 | 0 | 0 | 0 | 42 | 2 |
-| 7 | track day 2 | 48 | 1 | 0 | 0 | 0 | 0 | 47 | 1 |
-| 8 | track day 3 | 48 | 1 | 0 | 0 | 0 | 0 | 47 | 1 |
+| 2 | TFC_test_B days | 54 | 52 | 0 | 0 | 2 | 0 | 0 | 52 |
+| 3 | TFC_test_B_1wk days | 63 | 62 | 0 | 0 | 1 | 0 | 0 | 62 |
+| 4 | TFC_test_A days | 66 | 65 | 0 | 0 | 1 | 0 | 0 | 65 |
+| 5 | TFC_test_A_1wk days | 62 | 60 | 0 | 0 | 2 | 0 | 0 | 47 |
+| 6 | track day 1 | 44 | 44 | 0 | 0 | 0 | 0 | 0 | 2 |
+| 7 | track day 2 | 48 | 48 | 0 | 0 | 0 | 0 | 0 | 1 |
+| 8 | track day 3 | 48 | 14 | 0 | 1 | 0 | 0 | 33 | 1 |
 | 9 | everything else | 19 | 3 | 0 | 0 | 0 | 0 | 16 | 3 |
-|  | **all** | 492 | 108 | 0 | 1 | 5 | 0 | 378 | 102 |
+|  | **all** | 492 | 434 | 0 | 1 | 8 | 0 | 49 | 319 |
 
-**Now**: G08/2021_11_10-TFC_test_B/15_23_24-HC3 (running)
+**Now**: G11/2021_11_20-track_day3/15_30_53-LT1 (running)
 
-**Next**: G09/2021_11_10-TFC_test_B/15_58_30-HC1; G09/2021_11_10-TFC_test_B/16_45_04-HC2; G09/2021_11_10-TFC_test_B/17_44_41-HC3; G10/2021_11_25-TFC_test_B/14_18_38-HC1; G10/2021_11_25-TFC_test_B/14_39_23-LT1
+**Next**: G11/2021_11_20-track_day3/15_55_01-HC2; G12/2021_12_31-track_day3/15_04_46-HC1; G12/2021_12_31-track_day3/15_18_18-LT1; G12/2021_12_31-track_day3/15_29_21-HC2; G12/2021_12_31-track_day3/15_34_36-HC3
 
 ## Columns
 
@@ -32,7 +32,7 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 - **frames_checked**: the full-frame check -- the replayed movie against the notebook's own, `all N equal` since 2026-09-28; `sample of 50` before. On runs made on the Mac a difference of max 1 grey level is expected (the Mac's cv2 5.0 against the notebook's 4.5; batch runner plan §13).
 - **on_MINISCOPE**: `Y (date)` = copied back and verified by the sync; `Y (Mac run)` = run on the Mac, so already there; `partial (YrA not)` = run on the Mac, YrA recomputed later on the Razer; `N` = only on MINIRAZER so far; `Y (source)` = production, which came from MINISCOPE.
 
-## G05 -- 15 of 37 batch sessions done
+## G05 -- 31 of 37 batch sessions done
 
 | day | session | type | videos | group | status | finished | wall_h | units | YrA | frames_checked | on_MINISCOPE | note |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -43,13 +43,13 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 | 2021_08_23-track_day1-tests | 13_59_41-HC1a | HC1a | 6 | track day 1 | stub (excluded) |  |  |  |  |  |  |  |
 | 2021_08_23-track_day1-tests | 14_16_58-LT1 | LT1 | 9 | track day 1 | done | 2026-09-27 09:49 | 0.32 | 180 | Y | sample of 50 differ: max 1 at 1163 px | Y (2026-09-28) |  |
 | 2021_08_23-track_day1-tests | 14_23_55-LT1a | LT1a | 9 | track day 1 | stub (excluded) |  |  |  |  |  |  |  |
-| 2021_08_23-track_day1-tests | 14_42_54-HC2 | HC2 | 7 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2021_08_25-track_day2 | 14_25_21-HC1 | HC1 | 8 | track day 2 | pending |  |  |  |  |  |  |  |
+| 2021_08_23-track_day1-tests | 14_42_54-HC2 | HC2 | 7 | track day 1 | done | 2026-10-04 05:13 | 0.25 | 100 | Y | all 6454 equal | N |  |
+| 2021_08_25-track_day2 | 14_25_21-HC1 | HC1 | 8 | track day 2 | done | 2026-10-04 21:36 | 0.27 | 113 | Y | all 7396 equal | N |  |
 | 2021_08_25-track_day2 | 14_41_34-LT1 | LT1 | 19 | track day 2 | done | 2026-09-27 10:24 | 0.59 | 202 | Y | sample of 50 equal | Y (2026-09-28) |  |
-| 2021_08_25-track_day2 | 15_07_25-HC2 | HC2 | 7 | track day 2 | pending |  |  |  |  |  |  |  |
-| 2021_08_27-track_day3 | 15_44_42-HC1 | HC1 | 7 | track day 3 | pending |  |  |  |  |  |  |  |
+| 2021_08_25-track_day2 | 15_07_25-HC2 | HC2 | 7 | track day 2 | done | 2026-10-04 21:51 | 0.24 | 92 | Y | all 6049 equal | N |  |
+| 2021_08_27-track_day3 | 15_44_42-HC1 | HC1 | 7 | track day 3 | done | 2026-10-05 17:56 | 0.40 | 554 | Y | all 6949 equal | N |  |
 | 2021_08_27-track_day3 | 16_08_43-LT1 | LT1 | 13 | track day 3 | done | 2026-09-28 17:43 | 0.64 | 479 | Y | all 12766 equal | Y (2026-09-28) |  |
-| 2021_08_27-track_day3 | 16_43_50-HC2 | HC2 | 7 | track day 3 | pending |  |  |  |  |  |  |  |
+| 2021_08_27-track_day3 | 16_43_50-HC2 | HC2 | 7 | track day 3 | done | 2026-10-05 18:10 | 0.28 | 210 | Y | all 6239 equal | N |  |
 | 2021_08_30-TFC_cond | 16_29_01-HC1 | HC1 | 7 | TFC_cond days | done | 2026-09-28 18:03 | 0.27 | 170 | Y | all 6145 equal | Y (2026-09-28) |  |
 | 2021_08_30-TFC_cond | 16_47_02-LT1 | LT1 | 13 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
 | 2021_08_30-TFC_cond | 17_12_02-CNO1 | CNO1 | 6 | TFC_cond days | done | 2026-09-28 16:02 | 0.25 | 135 | Y | all 5990 equal | Y (2026-09-28) |  |
@@ -60,45 +60,45 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 | 2021_08_30-TFC_cond | 18_59_38-HC3 | HC3 | 7 | TFC_cond days | done | 2026-09-28 18:51 | 0.25 | 103 | Y | all 6219 equal | Y (2026-09-28) |  |
 | 2021_09_01-TFC_test_B | 15_11_43-HC1 | HC1 | 7 | TFC_test_B days | done | 2026-09-29 22:56 | 0.46 | 434 | Y | all 6010 equal | Y (2026-09-30) |  |
 | 2021_09_01-TFC_test_B | 15_20_05-iso | iso | 5 | TFC_test_B days | stub (excluded) |  |  |  |  |  |  |  |
-| 2021_09_01-TFC_test_B | 15_37_05-LT1 | LT1 | 13 | TFC_test_B days | production |  |  |  | N |  | Y (source) |  |
+| 2021_09_01-TFC_test_B | 15_37_05-LT1 | LT1 | 13 | TFC_test_B days | production |  |  |  | Y |  | Y (source) |  |
 | 2021_09_01-TFC_test_B | 16_00_30-HC2 | HC2 | 7 | TFC_test_B days | done | 2026-09-29 23:20 | 0.43 | 315 | Y | all 6622 equal | Y (2026-09-30) |  |
-| 2021_09_01-TFC_test_B | 16_20_07-TFC_test_B | TFC_test_B | 25 | TFC_test_B days | production |  |  |  | N |  | Y (source) |  |
+| 2021_09_01-TFC_test_B | 16_20_07-TFC_test_B | TFC_test_B | 25 | TFC_test_B days | production |  |  |  | Y |  | Y (source) |  |
 | 2021_09_01-TFC_test_B | 16_54_22-HC3 | HC3 | 7 | TFC_test_B days | done | 2026-09-29 23:40 | 0.35 | 324 | Y | all 6623 equal | Y (2026-09-30) |  |
-| 2021_09_03-TFC_test_A | 15_09_20-HC1 | HC1 | 7 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2021_09_03-TFC_test_A | 15_29_57-LT1 | LT1 | 13 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2021_09_03-TFC_test_A | 15_58_41-HC2 | HC2 | 16 | TFC_test_A days | pending |  |  |  |  |  |  |  |
+| 2021_09_03-TFC_test_A | 15_09_20-HC1 | HC1 | 7 | TFC_test_A days | done | 2026-10-01 22:32 | 0.30 | 352 | Y | all 6018 equal | Y (2026-10-05) |  |
+| 2021_09_03-TFC_test_A | 15_29_57-LT1 | LT1 | 13 | TFC_test_A days | done | 2026-10-01 23:12 | 0.62 | 650 | Y | all 12472 equal | Y (2026-10-05) |  |
+| 2021_09_03-TFC_test_A | 15_58_41-HC2 | HC2 | 16 | TFC_test_A days | done | 2026-10-01 23:53 | 0.70 | 515 | Y | all 15353 equal | Y (2026-10-05) |  |
 | 2021_09_03-TFC_test_A | 16_34_42-TFC_test_A | TFC_test_A | 8 | TFC_test_A days | production |  |  |  | Y |  | Y (source) |  |
-| 2021_09_03-TFC_test_A | 16_55_42-HC3 | HC3 | 7 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2021_09_06-TFC_test_B_1wk | 15_10_04-HC1 | HC1 | 7 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2021_09_06-TFC_test_B_1wk | 15_58_07-LT1 | LT1 | 13 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2021_09_06-TFC_test_B_1wk | 16_26_39-HC2 | HC2 | 7 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
+| 2021_09_03-TFC_test_A | 16_55_42-HC3 | HC3 | 7 | TFC_test_A days | done | 2026-10-02 00:06 | 0.28 | 166 | Y | all 6549 equal | Y (2026-10-05) |  |
+| 2021_09_06-TFC_test_B_1wk | 15_10_04-HC1 | HC1 | 7 | TFC_test_B_1wk days | done | 2026-09-30 19:37 | 0.33 | 387 | Y | all 6840 equal | Y (2026-10-05) |  |
+| 2021_09_06-TFC_test_B_1wk | 15_58_07-LT1 | LT1 | 13 | TFC_test_B_1wk days | done | 2026-09-30 20:15 | 0.61 | 522 | Y | all 12494 equal | Y (2026-10-05) |  |
+| 2021_09_06-TFC_test_B_1wk | 16_26_39-HC2 | HC2 | 7 | TFC_test_B_1wk days | done | 2026-09-30 20:33 | 0.33 | 376 | Y | all 6647 equal | Y (2026-10-05) |  |
 | 2021_09_06-TFC_test_B_1wk | 16_51_41-TFC_test_B_1wk | TFC_test_B_1wk | 19 | TFC_test_B_1wk days | production |  |  |  | Y |  | Y (source) |  |
-| 2021_09_06-TFC_test_B_1wk | 17_25_35-HC3 | HC3 | 7 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
+| 2021_09_06-TFC_test_B_1wk | 17_25_35-HC3 | HC3 | 7 | TFC_test_B_1wk days | done | 2026-09-30 20:48 | 0.26 | 200 | Y | all 6088 equal | Y (2026-10-05) |  |
 | 2021_09_07-TFC_test_B_1wk-redux | 15_12_23-HC1 | HC1 | 7 | everything else | pending |  |  |  |  |  |  |  |
 | 2021_09_07-TFC_test_B_1wk-redux | 15_30_14-LT1 | LT1 | 12 | everything else | pending |  |  |  |  |  |  |  |
 | 2021_09_07-TFC_test_B_1wk-redux | 15_54_52-HC2 | HC2 | 7 | everything else | pending |  |  |  |  |  |  |  |
 | 2021_09_07-TFC_test_B_1wk-redux | 16_22_40-TFC_test_B_1wk | TFC_test_B_1wk | 18 | everything else | done | 2026-09-28 17:00 | 0.83 | 488 | Y | all 17878 equal | Y (2026-09-28) | test day (bedding change?); processed, not for analysis by default (VS, open items) |
 | 2021_09_07-TFC_test_B_1wk-redux | 16_55_30-HC3 | HC3 | 7 | everything else | pending |  |  |  |  |  |  |  |
-| 2021_09_09-TFC_test_A_1wk | 15_41_49-HC1 | HC1 | 6 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
-| 2021_09_09-TFC_test_A_1wk | 16_11_07-LT1 | LT1 | 13 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
-| 2021_09_09-TFC_test_A_1wk | 16_36_18-HC2 | HC2 | 6 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
+| 2021_09_09-TFC_test_A_1wk | 15_41_49-HC1 | HC1 | 6 | TFC_test_A_1wk days | done | 2026-10-03 01:29 | 0.31 | 414 | Y | all 5937 equal | Y (2026-10-05) |  |
+| 2021_09_09-TFC_test_A_1wk | 16_11_07-LT1 | LT1 | 13 | TFC_test_A_1wk days | failed |  | 0.00 |  |  |  |  | RuntimeError: papermill exited 1: {'executed_cell_index': 32, 'execution_count': 8, 'cell_head': 'varr = load_ |
+| 2021_09_09-TFC_test_A_1wk | 16_36_18-HC2 | HC2 | 6 | TFC_test_A_1wk days | done | 2026-10-03 01:50 | 0.29 | 298 | Y | all 5989 equal | Y (2026-10-05) |  |
 | 2021_09_09-TFC_test_A_1wk | 17_32_00-TFC_test_A_1wk | TFC_test_A_1wk | 7 | TFC_test_A_1wk days | production |  |  |  | Y |  | Y (source) |  |
-| 2021_09_09-TFC_test_A_1wk | 17_55_33-HC3 | HC3 | 10 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
+| 2021_09_09-TFC_test_A_1wk | 17_55_33-HC3 | HC3 | 10 | TFC_test_A_1wk days | done | 2026-10-03 02:18 | 0.46 | 377 | Y | all 9687 equal | Y (2026-10-05) |  |
 
-## G06 -- 8 of 29 batch sessions done
+## G06 -- 28 of 29 batch sessions done
 
 | day | session | type | videos | group | status | finished | wall_h | units | YrA | frames_checked | on_MINISCOPE | note |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 2021_10_07-check1 | 15_00_46 |  | 5 | everything else | stub (excluded) |  |  |  |  |  |  |  |
-| 2021_10_11-track_day1 | 11_41_23-HC1 | HC1 | 6 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2021_10_11-track_day1 | 11_58_00-LT1 | LT1 | 16 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2021_10_11-track_day1 | 12_22_01-HC2 | HC2 | 7 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2021_10_13-track_day2 | 11_14_18-HC1 | HC1 | 6 | track day 2 | pending |  |  |  |  |  |  |  |
-| 2021_10_13-track_day2 | 11_36_34-LT1 | LT1 | 14 | track day 2 | pending |  |  |  |  |  |  |  |
-| 2021_10_13-track_day2 | 11_59_01-HC2 | HC2 | 7 | track day 2 | pending |  |  |  |  |  |  |  |
-| 2021_10_15-track_day3 | 14_55_21-HC1 | HC1 | 7 | track day 3 | pending |  |  |  |  |  |  |  |
-| 2021_10_15-track_day3 | 15_28_28-LT1 | LT1 | 13 | track day 3 | pending |  |  |  |  |  |  |  |
-| 2021_10_15-track_day3 | 15_50_04-HC2 | HC2 | 7 | track day 3 | pending |  |  |  |  |  |  |  |
+| 2021_10_11-track_day1 | 11_41_23-HC1 | HC1 | 6 | track day 1 | done | 2026-10-04 05:29 | 0.25 | 209 | Y | all 5966 equal | N |  |
+| 2021_10_11-track_day1 | 11_58_00-LT1 | LT1 | 16 | track day 1 | done | 2026-10-04 06:10 | 0.64 | 341 | Y | all 15359 equal | N |  |
+| 2021_10_11-track_day1 | 12_22_01-HC2 | HC2 | 7 | track day 1 | done | 2026-10-04 06:22 | 0.24 | 97 | Y | all 6073 equal | N |  |
+| 2021_10_13-track_day2 | 11_14_18-HC1 | HC1 | 6 | track day 2 | done | 2026-10-04 22:05 | 0.24 | 124 | Y | all 5969 equal | N |  |
+| 2021_10_13-track_day2 | 11_36_34-LT1 | LT1 | 14 | track day 2 | done | 2026-10-04 22:35 | 0.47 | 195 | Y | all 13848 equal | N |  |
+| 2021_10_13-track_day2 | 11_59_01-HC2 | HC2 | 7 | track day 2 | done | 2026-10-04 22:47 | 0.22 | 75 | Y | all 6132 equal | N |  |
+| 2021_10_15-track_day3 | 14_55_21-HC1 | HC1 | 7 | track day 3 | done | 2026-10-05 18:29 | 0.30 | 314 | Y | all 6810 equal | N |  |
+| 2021_10_15-track_day3 | 15_28_28-LT1 | LT1 | 13 | track day 3 | done | 2026-10-05 19:05 | 0.56 | 485 | Y | all 12456 equal | N |  |
+| 2021_10_15-track_day3 | 15_50_04-HC2 | HC2 | 7 | track day 3 | done | 2026-10-05 19:18 | 0.26 | 211 | Y | all 6018 equal | N |  |
 | 2021_10_18-TFC_cond | 09_52_24-HC1 | HC1 | 6 | TFC_cond days | done | 2026-09-26 14:05 | 0.25 | 334 | Y | sample of 50 differ: max 1 at 5 px | Y (2026-09-28) |  |
 | 2021_10_18-TFC_cond | 10_14_41-LT1 | LT1 | 13 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
 | 2021_10_18-TFC_cond | 10_34_09-CNO1 | CNO1 | 6 | TFC_cond days | done | 2026-09-28 19:09 | 0.28 | 263 | Y | all 5964 equal | Y (2026-09-28) |  |
@@ -111,24 +111,24 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 | 2021_10_20-TFC_test_B | 12_45_49-LT1 | LT1 | 15 | TFC_test_B days | production |  |  |  | Y |  | Y (source) |  |
 | 2021_10_20-TFC_test_B | 13_08_37-HC2 | HC2 | 6 | TFC_test_B days | done | 2026-09-30 00:09 | 0.27 | 202 | Y | all 5997 equal | Y (2026-09-30) |  |
 | 2021_10_20-TFC_test_B | 13_32_28-TFC_test_B | TFC_test_B | 19 | TFC_test_B days | production |  |  |  | Y |  | Y (source) |  |
-| 2021_10_20-TFC_test_B | 14_10_06-HC3 | HC3 | 7 | TFC_test_B days | done | 2026-09-30 00:31 | 0.36 | 169 | Y | all 6052 equal | N |  |
-| 2021_10_22-TFC_test_A | 11_57_08-HC1 | HC1 | 8 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2021_10_22-TFC_test_A | 12_18_46-LT1 | LT1 | 13 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2021_10_22-TFC_test_A | 12_41_02-HC2 | HC2 | 7 | TFC_test_A days | pending |  |  |  |  |  |  |  |
+| 2021_10_20-TFC_test_B | 14_10_06-HC3 | HC3 | 7 | TFC_test_B days | done | 2026-09-30 00:31 | 0.36 | 169 | Y | all 6052 equal | Y (2026-10-05) |  |
+| 2021_10_22-TFC_test_A | 11_57_08-HC1 | HC1 | 8 | TFC_test_A days | done | 2026-10-02 00:26 | 0.33 | 275 | Y | all 7646 equal | Y (2026-10-05) |  |
+| 2021_10_22-TFC_test_A | 12_18_46-LT1 | LT1 | 13 | TFC_test_A days | failed |  | 0.00 |  |  |  |  | RuntimeError: papermill exited 1: {'executed_cell_index': 32, 'execution_count': 8, 'cell_head': 'varr = load_ |
+| 2021_10_22-TFC_test_A | 12_41_02-HC2 | HC2 | 7 | TFC_test_A days | done | 2026-10-02 00:45 | 0.27 | 206 | Y | all 6398 equal | Y (2026-10-05) |  |
 | 2021_10_22-TFC_test_A | 12_58_00-TFC_test_A | TFC_test_A | 7 | TFC_test_A days | production |  |  |  | Y |  | Y (source) |  |
-| 2021_10_22-TFC_test_A | 13_14_21-HC3 | HC3 | 7 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2021_10_25-TFC_test_B_1wk | 11_11_01-HC1 | HC1 | 6 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2021_10_25-TFC_test_B_1wk | 11_28_09-LT1 | LT1 | 14 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2021_10_25-TFC_test_B_1wk | 11_51_27-HC2 | HC2 | 7 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
+| 2021_10_22-TFC_test_A | 13_14_21-HC3 | HC3 | 7 | TFC_test_A days | done | 2026-10-02 01:01 | 0.26 | 177 | Y | all 6087 equal | Y (2026-10-05) |  |
+| 2021_10_25-TFC_test_B_1wk | 11_11_01-HC1 | HC1 | 6 | TFC_test_B_1wk days | done | 2026-09-30 21:02 | 0.24 | 161 | Y | all 5962 equal | Y (2026-10-05) |  |
+| 2021_10_25-TFC_test_B_1wk | 11_28_09-LT1 | LT1 | 14 | TFC_test_B_1wk days | done | 2026-09-30 21:34 | 0.50 | 337 | Y | all 13124 equal | Y (2026-10-05) |  |
+| 2021_10_25-TFC_test_B_1wk | 11_51_27-HC2 | HC2 | 7 | TFC_test_B_1wk days | done | 2026-09-30 21:46 | 0.24 | 73 | Y | all 6414 equal | Y (2026-10-05) |  |
 | 2021_10_25-TFC_test_B_1wk | 12_23_30-TFC_test_B_1wk | TFC_test_B_1wk | 18 | TFC_test_B_1wk days | production |  |  |  | Y |  | Y (source) |  |
-| 2021_10_25-TFC_test_B_1wk | 12_52_19-HC3 | HC3 | 7 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2021_10_27-TFC_test_A_1wk | 13_42_40-HC1 | HC1 | 7 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
-| 2021_10_27-TFC_test_A_1wk | 14_01_05-LT1 | LT1 | 13 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
-| 2021_10_27-TFC_test_A_1wk | 14_23_16-HC2 | HC2 | 7 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
+| 2021_10_25-TFC_test_B_1wk | 12_52_19-HC3 | HC3 | 7 | TFC_test_B_1wk days | done | 2026-09-30 22:07 | 0.31 | 324 | Y | all 6373 equal | Y (2026-10-05) |  |
+| 2021_10_27-TFC_test_A_1wk | 13_42_40-HC1 | HC1 | 7 | TFC_test_A_1wk days | done | 2026-10-03 02:33 | 0.27 | 258 | Y | all 6052 equal | Y (2026-10-05) |  |
+| 2021_10_27-TFC_test_A_1wk | 14_01_05-LT1 | LT1 | 13 | TFC_test_A_1wk days | done | 2026-10-03 03:05 | 0.51 | 389 | Y | all 12740 equal | Y (2026-10-05) |  |
+| 2021_10_27-TFC_test_A_1wk | 14_23_16-HC2 | HC2 | 7 | TFC_test_A_1wk days | done | 2026-10-03 03:20 | 0.28 | 167 | Y | all 6863 equal | Y (2026-10-05) |  |
 | 2021_10_27-TFC_test_A_1wk | 14_45_19-TFC_test_A_1wk | TFC_test_A_1wk | 7 | TFC_test_A_1wk days | production |  |  |  | Y |  | Y (source) |  |
-| 2021_10_27-TFC_test_A_1wk | 15_06_23-HC3 | HC3 | 8 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
+| 2021_10_27-TFC_test_A_1wk | 15_06_23-HC3 | HC3 | 8 | TFC_test_A_1wk days | done | 2026-10-03 03:39 | 0.32 | 203 | Y | all 7247 equal | Y (2026-10-05) |  |
 
-## G07 -- 8 of 22 batch sessions done
+## G07 -- 20 of 22 batch sessions done
 
 | day | session | type | videos | group | status | finished | wall_h | units | YrA | frames_checked | on_MINISCOPE | note |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -149,28 +149,28 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 | 2021_10_18-TFC_cond | 14_35_40-LT2 | LT2 | 16 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
 | 2021_10_18-TFC_cond | 15_14_32-TFC_cond | TFC_cond | 26 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
 | 2021_10_18-TFC_cond | 16_06_52-HC3 | HC3 | 7 | TFC_cond days | done | 2026-09-28 22:09 | 0.31 | 362 | Y | all 6625 equal | Y (2026-09-28) |  |
-| 2021_10_20-TFC_test_B | 14_39_00-HC1 | HC1 | 6 | TFC_test_B days | done | 2026-09-30 01:04 | 0.46 | 527 | Y | all 5956 equal | N |  |
-| 2021_10_20-TFC_test_B | 15_03_23-LT1 | LT1 | 15 | TFC_test_B days | done | 2026-09-30 02:07 | 1.03 | 669 | Y | all 14981 equal | N |  |
-| 2021_10_20-TFC_test_B | 15_27_47-HC2 | HC2 | 7 | TFC_test_B days | done | 2026-09-30 02:31 | 0.49 | 462 | Y | all 6019 equal | N |  |
+| 2021_10_20-TFC_test_B | 14_39_00-HC1 | HC1 | 6 | TFC_test_B days | done | 2026-09-30 01:04 | 0.46 | 527 | Y | all 5956 equal | Y (2026-10-05) |  |
+| 2021_10_20-TFC_test_B | 15_03_23-LT1 | LT1 | 15 | TFC_test_B days | done | 2026-09-30 02:07 | 1.03 | 669 | Y | all 14981 equal | Y (2026-10-05) |  |
+| 2021_10_20-TFC_test_B | 15_27_47-HC2 | HC2 | 7 | TFC_test_B days | done | 2026-09-30 02:31 | 0.49 | 462 | Y | all 6019 equal | Y (2026-10-05) |  |
 | 2021_10_20-TFC_test_B | 15_49_59-TFC_test_B | TFC_test_B | 18 | TFC_test_B days | failed |  | 0.00 |  |  |  |  | unfinished recordings (no frame count in headers; 0.47 GB for 18 files); VS to decide |
 | 2021_10_20-TFC_test_B | 16_25_43-HC3 | HC3 | 7 | TFC_test_B days | failed |  | 0.00 |  |  |  |  | RuntimeError: papermill exited 1: {'executed_cell_index': 32, 'execution_count': 8, 'cell_head': 'varr = load_ |
-| 2021_10_22-TFC_test_A | 14_19_25-HC1 | HC1 | 9 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2021_10_22-TFC_test_A | 14_41_53-LT1 | LT1 | 15 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2021_10_22-TFC_test_A | 15_05_33-HC2 | HC2 | 6 | TFC_test_A days | pending |  |  |  |  |  |  |  |
+| 2021_10_22-TFC_test_A | 14_19_25-HC1 | HC1 | 9 | TFC_test_A days | done | 2026-10-02 01:25 | 0.38 | 404 | Y | all 8286 equal | Y (2026-10-05) |  |
+| 2021_10_22-TFC_test_A | 14_41_53-LT1 | LT1 | 15 | TFC_test_A days | done | 2026-10-02 02:07 | 0.67 | 644 | Y | all 14360 equal | Y (2026-10-05) |  |
+| 2021_10_22-TFC_test_A | 15_05_33-HC2 | HC2 | 6 | TFC_test_A days | done | 2026-10-02 02:21 | 0.28 | 276 | Y | all 5991 equal | Y (2026-10-05) |  |
 | 2021_10_22-TFC_test_A | 15_26_13-TFC_test_A | TFC_test_A | 7 | TFC_test_A days | production |  |  |  | Y |  | Y (source) |  |
-| 2021_10_22-TFC_test_A | 15_46_55-HC3 | HC3 | 7 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2021_10_25-TFC_test_B_1wk | 14_08_09-HC1 | HC1 | 7 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2021_10_25-TFC_test_B_1wk | 14_31_21-LT1 | LT1 | 14 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2021_10_25-TFC_test_B_1wk | 14_55_20-HC2 | HC2 | 7 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
+| 2021_10_22-TFC_test_A | 15_46_55-HC3 | HC3 | 7 | TFC_test_A days | done | 2026-10-02 02:45 | 0.37 | 531 | Y | all 6287 equal | Y (2026-10-05) |  |
+| 2021_10_25-TFC_test_B_1wk | 14_08_09-HC1 | HC1 | 7 | TFC_test_B_1wk days | done | 2026-09-30 22:25 | 0.29 | 398 | Y | all 6028 equal | Y (2026-10-05) |  |
+| 2021_10_25-TFC_test_B_1wk | 14_31_21-LT1 | LT1 | 14 | TFC_test_B_1wk days | done | 2026-09-30 23:30 | 0.99 | 719 | Y | all 13321 equal | Y (2026-10-05) |  |
+| 2021_10_25-TFC_test_B_1wk | 14_55_20-HC2 | HC2 | 7 | TFC_test_B_1wk days | done | 2026-09-30 23:48 | 0.39 | 433 | Y | all 6257 equal | Y (2026-10-05) |  |
 | 2021_10_25-TFC_test_B_1wk | 15_19_51-TFC_test_B_1wk | TFC_test_B_1wk | 19 | TFC_test_B_1wk days | production |  |  |  | Y |  | Y (source) |  |
-| 2021_10_25-TFC_test_B_1wk | 15_50_38-HC3 | HC3 | 7 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2021_10_27-TFC_test_A_1wk | 15_48_22-HC1 | HC1 | 7 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
-| 2021_10_27-TFC_test_A_1wk | 16_06_09-LT1 | LT1 | 14 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
-| 2021_10_27-TFC_test_A_1wk | 16_30_12-HC2 | HC2 | 7 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
+| 2021_10_25-TFC_test_B_1wk | 15_50_38-HC3 | HC3 | 7 | TFC_test_B_1wk days | done | 2026-10-01 00:09 | 0.35 | 503 | Y | all 6574 equal | Y (2026-10-05) |  |
+| 2021_10_27-TFC_test_A_1wk | 15_48_22-HC1 | HC1 | 7 | TFC_test_A_1wk days | done | 2026-10-03 04:01 | 0.32 | 455 | Y | all 6053 equal | Y (2026-10-05) |  |
+| 2021_10_27-TFC_test_A_1wk | 16_06_09-LT1 | LT1 | 14 | TFC_test_A_1wk days | done | 2026-10-03 04:39 | 0.62 | 591 | Y | all 13315 equal | Y (2026-10-05) |  |
+| 2021_10_27-TFC_test_A_1wk | 16_30_12-HC2 | HC2 | 7 | TFC_test_A_1wk days | done | 2026-10-03 04:57 | 0.31 | 500 | Y | all 6001 equal | Y (2026-10-05) |  |
 | 2021_10_27-TFC_test_A_1wk | 16_49_38-TFC_test_A_1wk | TFC_test_A_1wk | 8 | TFC_test_A_1wk days | production |  |  |  | Y |  | Y (source) |  |
-| 2021_10_27-TFC_test_A_1wk | 17_09_53-HC3 | HC3 | 7 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
+| 2021_10_27-TFC_test_A_1wk | 17_09_53-HC3 | HC3 | 7 | TFC_test_A_1wk days | done | 2026-10-03 05:15 | 0.30 | 396 | Y | all 6023 equal | Y (2026-10-05) |  |
 
-## G08 -- 6 of 19 batch sessions done
+## G08 -- 19 of 19 batch sessions done
 
 | day | session | type | videos | group | status | finished | wall_h | units | YrA | frames_checked | on_MINISCOPE | note |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -196,40 +196,40 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 | 2021_11_08-TFC_cond | 14_43_03-LT2 | LT2 | 13 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
 | 2021_11_08-TFC_cond | 15_13_23-TFC_cond | TFC_cond | 27 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
 | 2021_11_08-TFC_cond | 15_50_16-HC3 | HC3 | 8 | TFC_cond days | done | 2026-09-28 23:22 | 0.30 | 158 | Y | all 7777 equal | Y (2026-09-30) |  |
-| 2021_11_10-TFC_test_B | 13_27_20-HC1 | HC1 | 7 | TFC_test_B days | done | 2026-09-30 03:02 | 0.37 | 246 | Y | all 6048 equal | N |  |
+| 2021_11_10-TFC_test_B | 13_27_20-HC1 | HC1 | 7 | TFC_test_B days | done | 2026-09-30 03:02 | 0.37 | 246 | Y | all 6048 equal | Y (2026-10-05) |  |
 | 2021_11_10-TFC_test_B | 13_54_11-LT1 | LT1 | 15 | TFC_test_B days | production |  |  |  | Y |  | Y (source) |  |
-| 2021_11_10-TFC_test_B | 14_18_51-HC2 | HC2 | 6 | TFC_test_B days | done | 2026-09-30 03:23 | 0.37 | 187 | Y | all 5988 equal | N |  |
+| 2021_11_10-TFC_test_B | 14_18_51-HC2 | HC2 | 6 | TFC_test_B days | done | 2026-09-30 03:23 | 0.37 | 187 | Y | all 5988 equal | Y (2026-10-05) |  |
 | 2021_11_10-TFC_test_B | 14_45_42-TFC_test_B | TFC_test_B | 19 | TFC_test_B days | production |  |  |  | Y |  | Y (source) |  |
-| 2021_11_10-TFC_test_B | 15_23_24-HC3 | HC3 | 8 | TFC_test_B days | running |  |  |  |  |  |  |  |
-| 2021_11_12-TFC_test_A | 13_05_51-HC1 | HC1 | 6 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2021_11_12-TFC_test_A | 13_35_08-LT1 | LT1 | 16 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2021_11_12-TFC_test_A | 14_00_29-HC2 | HC2 | 7 | TFC_test_A days | pending |  |  |  |  |  |  |  |
+| 2021_11_10-TFC_test_B | 15_23_24-HC3 | HC3 | 8 | TFC_test_B days | done | 2026-09-30 03:56 | 0.50 | 379 | Y | all 7719 equal | Y (2026-10-05) |  |
+| 2021_11_12-TFC_test_A | 13_05_51-HC1 | HC1 | 6 | TFC_test_A days | done | 2026-10-02 02:58 | 0.25 | 204 | Y | all 5996 equal | Y (2026-10-05) |  |
+| 2021_11_12-TFC_test_A | 13_35_08-LT1 | LT1 | 16 | TFC_test_A days | done | 2026-10-02 03:43 | 0.69 | 543 | Y | all 15480 equal | Y (2026-10-05) |  |
+| 2021_11_12-TFC_test_A | 14_00_29-HC2 | HC2 | 7 | TFC_test_A days | done | 2026-10-02 03:56 | 0.27 | 109 | Y | all 6229 equal | Y (2026-10-05) |  |
 | 2021_11_12-TFC_test_A | 14_38_53-TFC_test_A | TFC_test_A | 7 | TFC_test_A days | production |  |  |  | Y |  | Y (source) |  |
-| 2021_11_12-TFC_test_A | 15_04_25-HC3 | HC3 | 7 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2021_11_15-TFC_test_B_1wk | 13_40_03-HC1 | HC1 | 6 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2021_11_15-TFC_test_B_1wk | 14_08_34-LT1 | LT1 | 16 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2021_11_15-TFC_test_B_1wk | 14_32_30-HC2 | HC2 | 7 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
+| 2021_11_12-TFC_test_A | 15_04_25-HC3 | HC3 | 7 | TFC_test_A days | done | 2026-10-02 04:15 | 0.30 | 253 | Y | all 6411 equal | Y (2026-10-05) |  |
+| 2021_11_15-TFC_test_B_1wk | 13_40_03-HC1 | HC1 | 6 | TFC_test_B_1wk days | done | 2026-10-01 00:20 | 0.23 | 124 | Y | all 5968 equal | Y (2026-10-05) |  |
+| 2021_11_15-TFC_test_B_1wk | 14_08_34-LT1 | LT1 | 16 | TFC_test_B_1wk days | done | 2026-10-01 00:59 | 0.60 | 423 | Y | all 15056 equal | Y (2026-10-05) |  |
+| 2021_11_15-TFC_test_B_1wk | 14_32_30-HC2 | HC2 | 7 | TFC_test_B_1wk days | done | 2026-10-01 01:14 | 0.27 | 281 | Y | all 6246 equal | Y (2026-10-05) |  |
 | 2021_11_15-TFC_test_B_1wk | 14_58_20-TFC_test_B_1wk | TFC_test_B_1wk | 19 | TFC_test_B_1wk days | production |  |  |  | Y |  | Y (source) |  |
-| 2021_11_15-TFC_test_B_1wk | 15_28_34-HC3 | HC3 | 7 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2021_11_17-TFC_test_A_1wk | 14_15_05-HC1 | HC1 | 7 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
-| 2021_11_17-TFC_test_A_1wk | 14_39_00-LT1 | LT1 | 16 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
-| 2021_11_17-TFC_test_A_1wk | 15_04_04-HC2 | HC2 | 7 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
+| 2021_11_15-TFC_test_B_1wk | 15_28_34-HC3 | HC3 | 7 | TFC_test_B_1wk days | done | 2026-10-01 01:33 | 0.30 | 314 | Y | all 6298 equal | Y (2026-10-05) |  |
+| 2021_11_17-TFC_test_A_1wk | 14_15_05-HC1 | HC1 | 7 | TFC_test_A_1wk days | done | 2026-10-03 05:33 | 0.31 | 284 | Y | all 6619 equal | Y (2026-10-05) |  |
+| 2021_11_17-TFC_test_A_1wk | 14_39_00-LT1 | LT1 | 16 | TFC_test_A_1wk days | done | 2026-10-03 06:12 | 0.62 | 414 | Y | all 15610 equal | Y (2026-10-05) |  |
+| 2021_11_17-TFC_test_A_1wk | 15_04_04-HC2 | HC2 | 7 | TFC_test_A_1wk days | done | 2026-10-03 06:23 | 0.23 | 81 | Y | all 6177 equal | Y (2026-10-05) |  |
 | 2021_11_17-TFC_test_A_1wk | 15_24_18-TFC_test_A_1wk | TFC_test_A_1wk | 7 | TFC_test_A_1wk days | production |  |  |  | Y |  | Y (source) |  |
-| 2021_11_17-TFC_test_A_1wk | 16_02_26-HC3 | HC3 | 7 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
+| 2021_11_17-TFC_test_A_1wk | 16_02_26-HC3 | HC3 | 7 | TFC_test_A_1wk days | done | 2026-10-03 06:43 | 0.30 | 359 | Y | all 6310 equal | Y (2026-10-05) |  |
 
-## G09 -- 4 of 34 batch sessions done
+## G09 -- 28 of 34 batch sessions done
 
 | day | session | type | videos | group | status | finished | wall_h | units | YrA | frames_checked | on_MINISCOPE | note |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 2021_10_26-track_day1 | 13_45_47-HC1 | HC1 | 9 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2021_10_26-track_day1 | 14_09_57-LT1 | LT1 | 13 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2021_10_26-track_day1 | 14_30_24-HC2 | HC2 | 7 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2021_10_28-track_day2 | 12_13_39-HC1 | HC1 | 6 | track day 2 | pending |  |  |  |  |  |  |  |
-| 2021_10_28-track_day2 | 12_28_07-LT1 | LT1 | 14 | track day 2 | pending |  |  |  |  |  |  |  |
-| 2021_10_28-track_day2 | 12_50_55-HC2 | HC2 | 7 | track day 2 | pending |  |  |  |  |  |  |  |
-| 2021_11_01-track_day3 | 13_30_46-HC1 | HC1 | 7 | track day 3 | pending |  |  |  |  |  |  |  |
-| 2021_11_01-track_day3 | 13_49_47-LT1 | LT1 | 14 | track day 3 | pending |  |  |  |  |  |  |  |
-| 2021_11_01-track_day3 | 14_14_12-HC2 | HC2 | 7 | track day 3 | pending |  |  |  |  |  |  |  |
+| 2021_10_26-track_day1 | 13_45_47-HC1 | HC1 | 9 | track day 1 | done | 2026-10-04 06:43 | 0.33 | 102 | Y | all 8021 equal | N |  |
+| 2021_10_26-track_day1 | 14_09_57-LT1 | LT1 | 13 | track day 1 | done | 2026-10-04 07:13 | 0.50 | 56 | Y | all 12688 equal | N |  |
+| 2021_10_26-track_day1 | 14_30_24-HC2 | HC2 | 7 | track day 1 | done | 2026-10-04 07:27 | 0.25 | 15 | Y | all 6303 equal | N |  |
+| 2021_10_28-track_day2 | 12_13_39-HC1 | HC1 | 6 | track day 2 | done | 2026-10-04 23:04 | 0.28 | 173 | Y | all 5963 equal | N |  |
+| 2021_10_28-track_day2 | 12_28_07-LT1 | LT1 | 14 | track day 2 | done | 2026-10-04 23:38 | 0.54 | 211 | Y | all 13298 equal | N |  |
+| 2021_10_28-track_day2 | 12_50_55-HC2 | HC2 | 7 | track day 2 | done | 2026-10-04 23:54 | 0.28 | 186 | Y | all 6204 equal | N |  |
+| 2021_11_01-track_day3 | 13_30_46-HC1 | HC1 | 7 | track day 3 | done | 2026-10-05 19:36 | 0.28 | 243 | Y | all 6004 equal | N |  |
+| 2021_11_01-track_day3 | 13_49_47-LT1 | LT1 | 14 | track day 3 | done | 2026-10-05 20:16 | 0.63 | 447 | Y | all 13092 equal | N |  |
+| 2021_11_01-track_day3 | 14_14_12-HC2 | HC2 | 7 | track day 3 | done | 2026-10-05 20:29 | 0.28 | 79 | Y | all 6457 equal | N |  |
 | 2021_11_03-track_day4 | 15_18_23-HC1 | HC1 | 7 | everything else | pending |  |  |  |  |  |  |  |
 | 2021_11_03-track_day4 | 15_37_14-LT1 | LT1 | 15 | everything else | pending |  |  |  |  |  |  |  |
 | 2021_11_03-track_day4 | 16_05_26-HC2 | HC2 | 8 | everything else | pending |  |  |  |  |  |  |  |
@@ -244,41 +244,41 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 | 2021_11_08-TFC_cond | 18_29_51-HC2 | HC2 | 7 | TFC_cond days | done | 2026-09-29 00:25 | 0.25 | 46 | Y | all 6313 equal | Y (2026-09-30) |  |
 | 2021_11_08-TFC_cond | 18_54_05-TFC_cond | TFC_cond | 19 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
 | 2021_11_08-TFC_cond | 19_28_33-HC3 | HC3 | 7 | TFC_cond days | partial output (excluded) |  |  |  |  |  |  | partial old output, all-NaN motion; VS to decide (open items 10) |
-| 2021_11_10-TFC_test_B | 15_58_30-HC1 | HC1 | 7 | TFC_test_B days | pending |  |  |  |  |  |  |  |
+| 2021_11_10-TFC_test_B | 15_58_30-HC1 | HC1 | 7 | TFC_test_B days | done | 2026-09-30 04:17 | 0.40 | 213 | Y | all 6047 equal | Y (2026-10-05) |  |
 | 2021_11_10-TFC_test_B | 16_21_56-LT1 | LT1 | 14 | TFC_test_B days | production |  |  |  | Y |  | Y (source) |  |
-| 2021_11_10-TFC_test_B | 16_45_04-HC2 | HC2 | 7 | TFC_test_B days | pending |  |  |  |  |  |  |  |
+| 2021_11_10-TFC_test_B | 16_45_04-HC2 | HC2 | 7 | TFC_test_B days | done | 2026-09-30 04:40 | 0.38 | 206 | Y | all 6087 equal | Y (2026-10-05) |  |
 | 2021_11_10-TFC_test_B | 17_12_18-TFC_test_B | TFC_test_B | 18 | TFC_test_B days | production |  |  |  | Y |  | Y (source) |  |
-| 2021_11_10-TFC_test_B | 17_44_41-HC3 | HC3 | 9 | TFC_test_B days | pending |  |  |  |  |  |  |  |
-| 2021_11_12-TFC_test_A | 15_33_00-HC1 | HC1 | 6 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2021_11_12-TFC_test_A | 15_51_11-LT1 | LT1 | 14 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2021_11_12-TFC_test_A | 16_13_16-HC2 | HC2 | 7 | TFC_test_A days | pending |  |  |  |  |  |  |  |
+| 2021_11_10-TFC_test_B | 17_44_41-HC3 | HC3 | 9 | TFC_test_B days | done | 2026-09-30 05:06 | 0.44 | 75 | Y | all 8750 equal | Y (2026-10-05) |  |
+| 2021_11_12-TFC_test_A | 15_33_00-HC1 | HC1 | 6 | TFC_test_A days | done | 2026-10-02 04:33 | 0.29 | 338 | Y | all 5984 equal | Y (2026-10-05) |  |
+| 2021_11_12-TFC_test_A | 15_51_11-LT1 | LT1 | 14 | TFC_test_A days | done | 2026-10-02 05:13 | 0.64 | 532 | Y | all 13179 equal | Y (2026-10-05) |  |
+| 2021_11_12-TFC_test_A | 16_13_16-HC2 | HC2 | 7 | TFC_test_A days | done | 2026-10-02 05:27 | 0.28 | 265 | Y | all 6030 equal | Y (2026-10-05) |  |
 | 2021_11_12-TFC_test_A | 16_33_31-TFC_test_A | TFC_test_A | 7 | TFC_test_A days | production |  |  |  | Y |  | Y (source) |  |
-| 2021_11_12-TFC_test_A | 16_54_57-HC3 | HC3 | 6 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2021_11_15-TFC_test_B_1wk | 16_11_16-HC1 | HC1 | 7 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2021_11_15-TFC_test_B_1wk | 16_29_03-LT1 | LT1 | 14 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2021_11_15-TFC_test_B_1wk | 16_51_09-HC2 | HC2 | 15 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
+| 2021_11_12-TFC_test_A | 16_54_57-HC3 | HC3 | 6 | TFC_test_A days | done | 2026-10-02 05:41 | 0.25 | 133 | Y | all 5975 equal | Y (2026-10-05) |  |
+| 2021_11_15-TFC_test_B_1wk | 16_11_16-HC1 | HC1 | 7 | TFC_test_B_1wk days | done | 2026-10-01 01:45 | 0.24 | 106 | Y | all 6088 equal | Y (2026-10-05) |  |
+| 2021_11_15-TFC_test_B_1wk | 16_29_03-LT1 | LT1 | 14 | TFC_test_B_1wk days | done | 2026-10-01 02:25 | 0.59 | 456 | Y | all 13142 equal | Y (2026-10-05) |  |
+| 2021_11_15-TFC_test_B_1wk | 16_51_09-HC2 | HC2 | 15 | TFC_test_B_1wk days | done | 2026-10-01 02:50 | 0.48 | 97 | Y | all 14432 equal | Y (2026-10-05) |  |
 | 2021_11_15-TFC_test_B_1wk | 17_15_18-TFC_test_B_1wk | TFC_test_B_1wk | 18 | TFC_test_B_1wk days | production |  |  |  | Y |  | Y (source) |  |
-| 2021_11_15-TFC_test_B_1wk | 17_42_46-HC3 | HC3 | 7 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2021_11_17-TFC_test_A_1wk | 16_33_51-HC1 | HC1 | 7 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
-| 2021_11_17-TFC_test_A_1wk | 16_55_57-LT1 | LT1 | 15 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
-| 2021_11_17-TFC_test_A_1wk | 17_19_09-HC2 | HC2 | 7 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
+| 2021_11_15-TFC_test_B_1wk | 17_42_46-HC3 | HC3 | 7 | TFC_test_B_1wk days | done | 2026-10-01 03:10 | 0.30 | 275 | Y | all 6431 equal | Y (2026-10-05) |  |
+| 2021_11_17-TFC_test_A_1wk | 16_33_51-HC1 | HC1 | 7 | TFC_test_A_1wk days | done | 2026-10-03 07:05 | 0.34 | 495 | Y | all 6448 equal | Y (2026-10-05) |  |
+| 2021_11_17-TFC_test_A_1wk | 16_55_57-LT1 | LT1 | 15 | TFC_test_A_1wk days | done | 2026-10-03 07:50 | 0.72 | 658 | Y | all 14277 equal | Y (2026-10-05) |  |
+| 2021_11_17-TFC_test_A_1wk | 17_19_09-HC2 | HC2 | 7 | TFC_test_A_1wk days | done | 2026-10-03 08:06 | 0.32 | 354 | Y | all 6465 equal | Y (2026-10-05) |  |
 | 2021_11_17-TFC_test_A_1wk | 17_47_11-TFC_test_A_1wk | TFC_test_A_1wk | 7 | TFC_test_A_1wk days | production |  |  |  | Y |  | Y (source) |  |
-| 2021_11_17-TFC_test_A_1wk | 18_03_11-HC3 | HC3 | 7 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
+| 2021_11_17-TFC_test_A_1wk | 18_03_11-HC3 | HC3 | 7 | TFC_test_A_1wk days | done | 2026-10-03 08:26 | 0.32 | 363 | Y | all 6649 equal | Y (2026-10-05) |  |
 
-## G10 -- 5 of 28 batch sessions done
+## G10 -- 28 of 28 batch sessions done
 
 | day | session | type | videos | group | status | finished | wall_h | units | YrA | frames_checked | on_MINISCOPE | note |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 2021_11_16-track_day1 | 14_42_35-HC1 | HC1 | 7 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2021_11_16-track_day1 | 15_00_51-LT1 | LT1 | 15 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2021_11_16-track_day1 | 15_23_30-HC2 | HC2 | 7 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2021_11_18-track_day2 | 13_41_54-HC1 | HC1 | 8 | track day 2 | pending |  |  |  |  |  |  |  |
-| 2021_11_18-track_day2 | 14_03_01-LT1 | LT1 | 14 | track day 2 | pending |  |  |  |  |  |  |  |
-| 2021_11_18-track_day2 | 14_25_50-HC2 | HC2 | 7 | track day 2 | pending |  |  |  |  |  |  |  |
-| 2021_11_20-track_day3 | 14_00_19-HC1 | HC1 | 7 | track day 3 | pending |  |  |  |  |  |  |  |
-| 2021_11_20-track_day3 | 14_05_55-HC1_high_led | HC1_high_led | 7 | track day 3 | pending |  |  |  |  |  |  |  |
-| 2021_11_20-track_day3 | 14_22_22-LT1 | LT1 | 15 | track day 3 | pending |  |  |  |  |  |  |  |
-| 2021_11_20-track_day3 | 14_45_34-HC2 | HC2 | 6 | track day 3 | pending |  |  |  |  |  |  |  |
+| 2021_11_16-track_day1 | 14_42_35-HC1 | HC1 | 7 | track day 1 | done | 2026-10-04 07:48 | 0.31 | 334 | Y | all 6381 equal | N |  |
+| 2021_11_16-track_day1 | 15_00_51-LT1 | LT1 | 15 | track day 1 | done | 2026-10-04 08:27 | 0.63 | 508 | Y | all 14034 equal | N |  |
+| 2021_11_16-track_day1 | 15_23_30-HC2 | HC2 | 7 | track day 1 | done | 2026-10-04 08:46 | 0.33 | 351 | Y | all 6619 equal | N |  |
+| 2021_11_18-track_day2 | 13_41_54-HC1 | HC1 | 8 | track day 2 | done | 2026-10-05 00:23 | 0.42 | 624 | Y | all 7149 equal | N |  |
+| 2021_11_18-track_day2 | 14_03_01-LT1 | LT1 | 14 | track day 2 | done | 2026-10-05 01:10 | 0.80 | 756 | Y | all 13687 equal | N |  |
+| 2021_11_18-track_day2 | 14_25_50-HC2 | HC2 | 7 | track day 2 | done | 2026-10-05 01:27 | 0.32 | 346 | Y | all 6117 equal | N |  |
+| 2021_11_20-track_day3 | 14_00_19-HC1 | HC1 | 7 | track day 3 | done | 2026-10-05 20:55 | 0.37 | 513 | Y | all 6047 equal | N |  |
+| 2021_11_20-track_day3 | 14_05_55-HC1_high_led | HC1_high_led | 7 | track day 3 | done | 2026-10-05 21:21 | 0.41 | 612 | Y | all 6288 equal | N |  |
+| 2021_11_20-track_day3 | 14_22_22-LT1 | LT1 | 15 | track day 3 | done | 2026-10-05 22:18 | 0.94 | 982 | Y | all 14995 equal | N |  |
+| 2021_11_20-track_day3 | 14_45_34-HC2 | HC2 | 6 | track day 3 | done | 2026-10-05 22:41 | 0.41 | 734 | Y | all 5981 equal | N |  |
 | 2021_11_23-TFC_cond | 14_34_39-HC1 | HC1 | 6 | TFC_cond days | done | 2026-09-29 00:53 | 0.38 | 737 | Y | all 5951 equal | Y (2026-09-30) |  |
 | 2021_11_23-TFC_cond | 14_51_37-LT1 | LT1 | 14 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
 | 2021_11_23-TFC_cond | 15_22_29-CNO1 | CNO1 | 7 | TFC_cond days | done | 2026-09-29 01:13 | 0.36 | 495 | Y | all 6475 equal | Y (2026-09-30) |  |
@@ -287,36 +287,36 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 | 2021_11_23-TFC_cond | 16_18_55-HC2 | HC2 | 7 | TFC_cond days | done | 2026-09-29 01:55 | 0.38 | 682 | Y | all 6251 equal | Y (2026-09-30) |  |
 | 2021_11_23-TFC_cond | 16_32_14-TFC_cond | TFC_cond | 26 | TFC_cond days | production |  |  |  | Y |  | Y (source) | production; also the Mac gate re-run in minian/ (batch runner plan §13) |
 | 2021_11_23-TFC_cond | 17_07_00-HC3 | HC3 | 7 | TFC_cond days | done | 2026-09-29 02:14 | 0.33 | 516 | Y | all 6106 equal | Y (2026-09-30) |  |
-| 2021_11_25-TFC_test_B | 14_18_38-HC1 | HC1 | 7 | TFC_test_B days | pending |  |  |  |  |  |  |  |
-| 2021_11_25-TFC_test_B | 14_39_23-LT1 | LT1 | 17 | TFC_test_B days | pending |  |  |  |  |  |  |  |
-| 2021_11_25-TFC_test_B | 15_16_15-HC2 | HC2 | 8 | TFC_test_B days | pending |  |  |  |  |  |  |  |
+| 2021_11_25-TFC_test_B | 14_18_38-HC1 | HC1 | 7 | TFC_test_B days | done | 2026-09-30 05:29 | 0.35 | 452 | Y | all 6235 equal | Y (2026-10-05) |  |
+| 2021_11_25-TFC_test_B | 14_39_23-LT1 | LT1 | 17 | TFC_test_B days | done | 2026-09-30 06:23 | 0.86 | 709 | Y | all 16664 equal | Y (2026-10-05) |  |
+| 2021_11_25-TFC_test_B | 15_16_15-HC2 | HC2 | 8 | TFC_test_B days | done | 2026-09-30 06:46 | 0.41 | 451 | Y | all 7933 equal | Y (2026-10-05) |  |
 | 2021_11_25-TFC_test_B | 15_28_34-TFC_test_B | TFC_test_B | 18 | TFC_test_B days | production |  |  |  | Y |  | Y (source) |  |
-| 2021_11_25-TFC_test_B | 15_57_42-HC3 | HC3 | 9 | TFC_test_B days | pending |  |  |  |  |  |  |  |
-| 2021_11_27-TFC_test_A | 14_52_16-HC1 | HC1 | 7 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2021_11_27-TFC_test_A | 15_08_43-LT1 | LT1 | 15 | TFC_test_A days | pending |  |  |  |  |  |  |  |
+| 2021_11_25-TFC_test_B | 15_57_42-HC3 | HC3 | 9 | TFC_test_B days | done | 2026-09-30 07:12 | 0.43 | 583 | Y | all 8355 equal | Y (2026-10-05) |  |
+| 2021_11_27-TFC_test_A | 14_52_16-HC1 | HC1 | 7 | TFC_test_A days | done | 2026-10-02 06:07 | 0.35 | 606 | Y | all 6035 equal | Y (2026-10-05) |  |
+| 2021_11_27-TFC_test_A | 15_08_43-LT1 | LT1 | 15 | TFC_test_A days | done | 2026-10-02 06:51 | 0.73 | 698 | Y | all 14006 equal | Y (2026-10-05) |  |
 | 2021_11_27-TFC_test_A | 15_34_25-TFC_test_A | TFC_test_A | 7 | TFC_test_A days | production |  |  |  | Y |  | Y (source) |  |
-| 2021_11_27-TFC_test_A | 15_52_21-HC2 | HC2 | 6 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2021_11_30-TFC_test_B_1wk | 15_08_20-HC1 | HC1 | 7 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2021_11_30-TFC_test_B_1wk | 15_36_58-LT1 | LT1 | 13 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
+| 2021_11_27-TFC_test_A | 15_52_21-HC2 | HC2 | 6 | TFC_test_A days | done | 2026-10-02 07:04 | 0.27 | 219 | Y | all 5978 equal | Y (2026-10-05) |  |
+| 2021_11_30-TFC_test_B_1wk | 15_08_20-HC1 | HC1 | 7 | TFC_test_B_1wk days | done | 2026-10-01 03:34 | 0.37 | 644 | Y | all 6123 equal | Y (2026-10-05) |  |
+| 2021_11_30-TFC_test_B_1wk | 15_36_58-LT1 | LT1 | 13 | TFC_test_B_1wk days | done | 2026-10-01 04:13 | 0.65 | 704 | Y | all 12663 equal | Y (2026-10-05) |  |
 | 2021_11_30-TFC_test_B_1wk | 16_07_16-TFC_test_B_1wk | TFC_test_B_1wk | 18 | TFC_test_B_1wk days | production |  |  |  | Y |  | Y (source) |  |
-| 2021_11_30-TFC_test_B_1wk | 16_35_34-HC2 | HC2 | 7 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2021_12_02-TFC_test_A_1wk | 13_17_21-HC1 | HC1 | 7 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
-| 2021_12_02-TFC_test_A_1wk | 13_34_50-LT1 | LT1 | 16 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
+| 2021_11_30-TFC_test_B_1wk | 16_35_34-HC2 | HC2 | 7 | TFC_test_B_1wk days | done | 2026-10-01 04:31 | 0.32 | 452 | Y | all 6273 equal | Y (2026-10-05) |  |
+| 2021_12_02-TFC_test_A_1wk | 13_17_21-HC1 | HC1 | 7 | TFC_test_A_1wk days | done | 2026-10-03 08:54 | 0.41 | 832 | Y | all 6272 equal | Y (2026-10-05) |  |
+| 2021_12_02-TFC_test_A_1wk | 13_34_50-LT1 | LT1 | 16 | TFC_test_A_1wk days | done | 2026-10-03 09:42 | 0.82 | 745 | Y | all 15188 equal | Y (2026-10-05) |  |
 | 2021_12_02-TFC_test_A_1wk | 13_59_52-TFC_test_A_1wk | TFC_test_A_1wk | 7 | TFC_test_A_1wk days | production |  |  |  | Y |  | Y (source) |  |
-| 2021_12_02-TFC_test_A_1wk | 14_17_43-HC2 | HC2 | 7 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
+| 2021_12_02-TFC_test_A_1wk | 14_17_43-HC2 | HC2 | 7 | TFC_test_A_1wk days | done | 2026-10-03 10:01 | 0.34 | 502 | Y | all 6280 equal | Y (2026-10-05) |  |
 
-## G11 -- 7 of 26 batch sessions done
+## G11 -- 23 of 26 batch sessions done
 
 | day | session | type | videos | group | status | finished | wall_h | units | YrA | frames_checked | on_MINISCOPE | note |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 2021_11_16-track_day1 | 16_25_49-HC1 | HC1 | 7 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2021_11_16-track_day1 | 16_57_16-LT1 | LT1 | 15 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2021_11_16-track_day1 | 17_43_41-HC2 | HC2 | 9 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2021_11_18-track_day2 | 14_53_56-HC1 | HC1 | 7 | track day 2 | pending |  |  |  |  |  |  |  |
-| 2021_11_18-track_day2 | 15_20_53-LT1 | LT1 | 15 | track day 2 | pending |  |  |  |  |  |  |  |
-| 2021_11_18-track_day2 | 15_51_46-HC2 | HC2 | 8 | track day 2 | pending |  |  |  |  |  |  |  |
-| 2021_11_20-track_day3 | 15_13_38-HC1 | HC1 | 7 | track day 3 | pending |  |  |  |  |  |  |  |
-| 2021_11_20-track_day3 | 15_30_53-LT1 | LT1 | 17 | track day 3 | pending |  |  |  |  |  |  |  |
+| 2021_11_16-track_day1 | 16_25_49-HC1 | HC1 | 7 | track day 1 | done | 2026-10-04 09:08 | 0.35 | 501 | Y | all 6466 equal | N |  |
+| 2021_11_16-track_day1 | 16_57_16-LT1 | LT1 | 15 | track day 1 | done | 2026-10-04 09:53 | 0.72 | 723 | Y | all 14224 equal | N |  |
+| 2021_11_16-track_day1 | 17_43_41-HC2 | HC2 | 9 | track day 1 | done | 2026-10-04 10:15 | 0.40 | 392 | Y | all 8855 equal | N |  |
+| 2021_11_18-track_day2 | 14_53_56-HC1 | HC1 | 7 | track day 2 | done | 2026-10-05 01:53 | 0.39 | 675 | Y | all 6524 equal | N |  |
+| 2021_11_18-track_day2 | 15_20_53-LT1 | LT1 | 15 | track day 2 | done | 2026-10-05 02:49 | 0.89 | 1003 | Y | all 14324 equal | N |  |
+| 2021_11_18-track_day2 | 15_51_46-HC2 | HC2 | 8 | track day 2 | done | 2026-10-05 03:12 | 0.43 | 542 | Y | all 7763 equal | N |  |
+| 2021_11_20-track_day3 | 15_13_38-HC1 | HC1 | 7 | track day 3 | done | 2026-10-05 23:05 | 0.40 | 653 | Y | all 6743 equal | N |  |
+| 2021_11_20-track_day3 | 15_30_53-LT1 | LT1 | 17 | track day 3 | running |  |  |  |  |  |  |  |
 | 2021_11_20-track_day3 | 15_55_01-HC2 | HC2 | 7 | track day 3 | pending |  |  |  |  |  |  |  |
 | 2021_11_23-TFC_cond | 17_33_23-HC1 | HC1 | 6 | TFC_cond days | done | 2026-09-29 02:33 | 0.33 | 515 | Y | all 5965 equal | Y (2026-09-30) |  |
 | 2021_11_23-TFC_cond | 17_51_25-LT1 | LT1 | 18 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
@@ -326,36 +326,36 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 | 2021_11_23-TFC_cond | 19_15_48-HC2 | HC2 | 7 | TFC_cond days | done | 2026-09-29 03:29 | 0.30 | 379 | Y | all 6128 equal | Y (2026-09-30) |  |
 | 2021_11_23-TFC_cond | 19_24_52-TFC_cond | TFC_cond | 26 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
 | 2021_11_23-TFC_cond | 19_59_33-HC3 | HC3 | 7 | TFC_cond days | done | 2026-09-29 03:49 | 0.32 | 453 | Y | all 6122 equal | Y (2026-09-30) |  |
-| 2021_11_25-TFC_test_B | 16_29_57-HC1 | HC1 | 7 | TFC_test_B days | pending |  |  |  |  |  |  |  |
+| 2021_11_25-TFC_test_B | 16_29_57-HC1 | HC1 | 7 | TFC_test_B days | done | 2026-09-30 07:34 | 0.36 | 597 | Y | all 6527 equal | Y (2026-10-05) |  |
 | 2021_11_25-TFC_test_B | 16_47_19-LT1 | LT1 | 19 | TFC_test_B days | done | 2026-09-28 14:03 | 2.77 | 748 | Y | sample of 50 equal | Y (2026-09-28) |  |
 | 2021_11_25-TFC_test_B | 17_17_33-TFC_test_B | TFC_test_B | 18 | TFC_test_B days | production |  |  |  | Y |  | Y (source) |  |
-| 2021_11_25-TFC_test_B | 17_45_04-HC2 | HC2 | 8 | TFC_test_B days | pending |  |  |  |  |  |  |  |
-| 2021_11_27-TFC_test_A | 16_16_47-HC1 | HC1 | 6 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2021_11_27-TFC_test_A | 16_32_25-LT1 | LT1 | 16 | TFC_test_A days | pending |  |  |  |  |  |  |  |
+| 2021_11_25-TFC_test_B | 17_45_04-HC2 | HC2 | 8 | TFC_test_B days | done | 2026-09-30 07:56 | 0.37 | 458 | Y | all 7455 equal | Y (2026-10-05) |  |
+| 2021_11_27-TFC_test_A | 16_16_47-HC1 | HC1 | 6 | TFC_test_A days | done | 2026-10-02 07:34 | 0.41 | 836 | Y | all 5953 equal | Y (2026-10-05) |  |
+| 2021_11_27-TFC_test_A | 16_32_25-LT1 | LT1 | 16 | TFC_test_A days | done | 2026-10-02 08:30 | 0.93 | 988 | Y | all 15685 equal | Y (2026-10-05) |  |
 | 2021_11_27-TFC_test_A | 17_00_04-TFC_test_A | TFC_test_A | 7 | TFC_test_A days | production |  |  |  | Y |  | Y (source) |  |
-| 2021_11_27-TFC_test_A | 17_11_20-HC2 | HC2 | 7 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2021_11_30-TFC_test_B_1wk | 17_08_44-HC1 | HC1 | 6 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
+| 2021_11_27-TFC_test_A | 17_11_20-HC2 | HC2 | 7 | TFC_test_A days | done | 2026-10-02 08:46 | 0.32 | 458 | Y | all 6013 equal | Y (2026-10-05) |  |
+| 2021_11_30-TFC_test_B_1wk | 17_08_44-HC1 | HC1 | 6 | TFC_test_B_1wk days | done | 2026-10-01 04:54 | 0.35 | 694 | Y | all 5990 equal | Y (2026-10-05) |  |
 | 2021_11_30-TFC_test_B_1wk | 17_25_43-LT1 | LT1 | 18 | TFC_test_B_1wk days | done | 2026-09-28 14:06 | 2.82 | 911 | Y | sample of 50 equal | Y (2026-09-28) |  |
 | 2021_11_30-TFC_test_B_1wk | 17_57_20-TFC_test_B_1wk | TFC_test_B_1wk | 19 | TFC_test_B_1wk days | production |  |  |  | Y |  | Y (source) |  |
-| 2021_11_30-TFC_test_B_1wk | 18_30_29-HC2 | HC2 | 7 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2021_12_02-TFC_test_A_1wk | 14_43_48-HC1 | HC1 | 6 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
-| 2021_12_02-TFC_test_A_1wk | 14_57_08-LT1 | LT1 | 13 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
+| 2021_11_30-TFC_test_B_1wk | 18_30_29-HC2 | HC2 | 7 | TFC_test_B_1wk days | done | 2026-10-01 05:23 | 0.46 | 975 | Y | all 6817 equal | Y (2026-10-05) |  |
+| 2021_12_02-TFC_test_A_1wk | 14_43_48-HC1 | HC1 | 6 | TFC_test_A_1wk days | done | 2026-10-03 10:24 | 0.37 | 550 | Y | all 5987 equal | Y (2026-10-05) |  |
+| 2021_12_02-TFC_test_A_1wk | 14_57_08-LT1 | LT1 | 13 | TFC_test_A_1wk days | done | 2026-10-03 11:09 | 0.77 | 1031 | Y | all 12450 equal | Y (2026-10-05) |  |
 | 2021_12_02-TFC_test_A_1wk | 15_20_57-TFC_test_A_1wk | TFC_test_A_1wk | 8 | TFC_test_A_1wk days | production |  |  |  | Y |  | Y (source) |  |
-| 2021_12_02-TFC_test_A_1wk | 15_32_02-HC2 | HC2 | 6 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
+| 2021_12_02-TFC_test_A_1wk | 15_32_02-HC2 | HC2 | 6 | TFC_test_A_1wk days | failed |  | 0.00 |  |  |  |  | RuntimeError: papermill exited 1: {'executed_cell_index': 32, 'execution_count': 8, 'cell_head': 'varr = load_ |
 
-## G12 -- 5 of 32 batch sessions done
+## G12 -- 28 of 32 batch sessions done
 
 | day | session | type | videos | group | status | finished | wall_h | units | YrA | frames_checked | on_MINISCOPE | note |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 2021_12_13 | 14_43_31 |  | 6 | everything else | stub (excluded) |  |  |  |  |  |  |  |
-| 2021_12_27-track_day1 | 13_14_25-HC1 | HC1 | 6 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2021_12_27-track_day1 | 13_27_10-LT1 | LT1 | 13 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2021_12_27-track_day1 | 13_38_18-HC2 | HC2 | 7 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2021_12_27-track_day1 | 13_43_30-HC3 | HC3 | 7 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2021_12_29-track_day2 | 14_04_00-HC1 | HC1 | 6 | track day 2 | pending |  |  |  |  |  |  |  |
-| 2021_12_29-track_day2 | 14_15_40-LT1 | LT1 | 14 | track day 2 | pending |  |  |  |  |  |  |  |
-| 2021_12_29-track_day2 | 14_27_41-HC2 | HC2 | 7 | track day 2 | pending |  |  |  |  |  |  |  |
-| 2021_12_29-track_day2 | 14_33_15-HC3 | HC3 | 7 | track day 2 | pending |  |  |  |  |  |  |  |
+| 2021_12_27-track_day1 | 13_14_25-HC1 | HC1 | 6 | track day 1 | done | 2026-10-04 10:30 | 0.28 | 210 | Y | all 5965 equal | N |  |
+| 2021_12_27-track_day1 | 13_27_10-LT1 | LT1 | 13 | track day 1 | done | 2026-10-04 11:04 | 0.54 | 351 | Y | all 12430 equal | N |  |
+| 2021_12_27-track_day1 | 13_38_18-HC2 | HC2 | 7 | track day 1 | done | 2026-10-04 11:19 | 0.26 | 183 | Y | all 6040 equal | N |  |
+| 2021_12_27-track_day1 | 13_43_30-HC3 | HC3 | 7 | track day 1 | done | 2026-10-04 11:36 | 0.29 | 202 | Y | all 6680 equal | N |  |
+| 2021_12_29-track_day2 | 14_04_00-HC1 | HC1 | 6 | track day 2 | done | 2026-10-05 03:24 | 0.26 | 123 | Y | all 5994 equal | N |  |
+| 2021_12_29-track_day2 | 14_15_40-LT1 | LT1 | 14 | track day 2 | done | 2026-10-05 03:59 | 0.55 | 249 | Y | all 13544 equal | N |  |
+| 2021_12_29-track_day2 | 14_27_41-HC2 | HC2 | 7 | track day 2 | done | 2026-10-05 04:15 | 0.29 | 176 | Y | all 6575 equal | N |  |
+| 2021_12_29-track_day2 | 14_33_15-HC3 | HC3 | 7 | track day 2 | done | 2026-10-05 04:31 | 0.26 | 158 | Y | all 6215 equal | N |  |
 | 2021_12_31-track_day3 | 15_04_46-HC1 | HC1 | 6 | track day 3 | pending |  |  |  |  |  |  |  |
 | 2021_12_31-track_day3 | 15_18_18-LT1 | LT1 | 13 | track day 3 | pending |  |  |  |  |  |  |  |
 | 2021_12_31-track_day3 | 15_29_21-HC2 | HC2 | 7 | track day 3 | pending |  |  |  |  |  |  |  |
@@ -368,40 +368,40 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 | 2022_01_03-TFC_cond | 15_03_39-HC3 | HC3 | 6 | TFC_cond days | done | 2026-09-29 05:00 | 0.29 | 266 | Y | all 5990 equal | Y (2026-09-30) |  |
 | 2022_01_03-TFC_cond | 15_12_38-TFC_cond | TFC_cond | 26 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
 | 2022_01_03-TFC_cond | 15_37_11-HC4 | HC4 | 7 | TFC_cond days | done | 2026-09-29 05:16 | 0.28 | 237 | Y | all 6062 equal | Y (2026-09-30) |  |
-| 2022_01_05-TFC_test_B | 13_57_17-HC1 | HC1 | 7 | TFC_test_B days | pending |  |  |  |  |  |  |  |
+| 2022_01_05-TFC_test_B | 13_57_17-HC1 | HC1 | 7 | TFC_test_B days | done | 2026-09-30 08:12 | 0.29 | 206 | Y | all 6072 equal | Y (2026-10-05) |  |
 | 2022_01_05-TFC_test_B | 14_03_29-LT1 | LT1 | 14 | TFC_test_B days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_05-TFC_test_B | 14_15_33-HC2 | HC2 | 7 | TFC_test_B days | pending |  |  |  |  |  |  |  |
+| 2022_01_05-TFC_test_B | 14_15_33-HC2 | HC2 | 7 | TFC_test_B days | done | 2026-09-30 08:35 | 0.36 | 405 | Y | all 6937 equal | Y (2026-10-05) |  |
 | 2022_01_05-TFC_test_B | 14_28_46-TFC_test_B | TFC_test_B | 18 | TFC_test_B days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_05-TFC_test_B | 14_46_41-HC3 | HC3 | 7 | TFC_test_B days | pending |  |  |  |  |  |  |  |
-| 2022_01_07-TFC_test_A | 15_37_50-HC1 | HC1 | 7 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2022_01_07-TFC_test_A | 15_43_53-LT1 | LT1 | 16 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2022_01_07-TFC_test_A | 15_57_32-HC2 | HC2 | 7 | TFC_test_A days | pending |  |  |  |  |  |  |  |
+| 2022_01_05-TFC_test_B | 14_46_41-HC3 | HC3 | 7 | TFC_test_B days | done | 2026-09-30 08:56 | 0.35 | 496 | Y | all 6488 equal | Y (2026-10-05) |  |
+| 2022_01_07-TFC_test_A | 15_37_50-HC1 | HC1 | 7 | TFC_test_A days | done | 2026-10-02 09:02 | 0.30 | 220 | Y | all 6702 equal | Y (2026-10-05) |  |
+| 2022_01_07-TFC_test_A | 15_43_53-LT1 | LT1 | 16 | TFC_test_A days | done | 2026-10-02 09:45 | 0.66 | 410 | Y | all 15075 equal | Y (2026-10-05) |  |
+| 2022_01_07-TFC_test_A | 15_57_32-HC2 | HC2 | 7 | TFC_test_A days | done | 2026-10-02 10:03 | 0.32 | 310 | Y | all 6722 equal | Y (2026-10-05) |  |
 | 2022_01_07-TFC_test_A | 16_08_09-TFC_test_A | TFC_test_A | 7 | TFC_test_A days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_07-TFC_test_A | 16_16_42-HC3 | HC3 | 7 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2022_01_10-TFC_test_B_1wk | 15_01_34-HC1 | HC1 | 6 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_01_10-TFC_test_B_1wk | 15_06_38-LT1 | LT1 | 14 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_01_10-TFC_test_B_1wk | 15_18_57-HC2 | HC2 | 7 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
+| 2022_01_07-TFC_test_A | 16_16_42-HC3 | HC3 | 7 | TFC_test_A days | done | 2026-10-02 10:23 | 0.32 | 394 | Y | all 6364 equal | Y (2026-10-05) |  |
+| 2022_01_10-TFC_test_B_1wk | 15_01_34-HC1 | HC1 | 6 | TFC_test_B_1wk days | done | 2026-10-01 05:36 | 0.29 | 175 | Y | all 5968 equal | Y (2026-10-05) |  |
+| 2022_01_10-TFC_test_B_1wk | 15_06_38-LT1 | LT1 | 14 | TFC_test_B_1wk days | done | 2026-10-01 06:18 | 0.66 | 423 | Y | all 13533 equal | Y (2026-10-05) |  |
+| 2022_01_10-TFC_test_B_1wk | 15_18_57-HC2 | HC2 | 7 | TFC_test_B_1wk days | done | 2026-10-01 06:34 | 0.29 | 289 | Y | all 6001 equal | Y (2026-10-05) |  |
 | 2022_01_10-TFC_test_B_1wk | 15_31_10-TFC_test_B_1wk | TFC_test_B_1wk | 19 | TFC_test_B_1wk days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_10-TFC_test_B_1wk | 15_49_09-HC3 | HC3 | 6 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_01_12-TFC_test_A_1wk | 13_36_37-HC1 | HC1 | 8 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_01_12-TFC_test_A_1wk | 13_43_14-LT1 | LT1 | 14 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_01_12-TFC_test_A_1wk | 13_55_18-HC2 | HC2 | 7 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
+| 2022_01_10-TFC_test_B_1wk | 15_49_09-HC3 | HC3 | 6 | TFC_test_B_1wk days | done | 2026-10-01 06:52 | 0.29 | 300 | Y | all 5982 equal | Y (2026-10-05) |  |
+| 2022_01_12-TFC_test_A_1wk | 13_36_37-HC1 | HC1 | 8 | TFC_test_A_1wk days | done | 2026-10-03 11:33 | 0.34 | 276 | Y | all 7462 equal | Y (2026-10-05) |  |
+| 2022_01_12-TFC_test_A_1wk | 13_43_14-LT1 | LT1 | 14 | TFC_test_A_1wk days | done | 2026-10-03 12:10 | 0.60 | 390 | Y | all 13589 equal | Y (2026-10-05) |  |
+| 2022_01_12-TFC_test_A_1wk | 13_55_18-HC2 | HC2 | 7 | TFC_test_A_1wk days | done | 2026-10-03 12:26 | 0.29 | 215 | Y | all 6366 equal | Y (2026-10-05) |  |
 | 2022_01_12-TFC_test_A_1wk | 14_03_29-TFC_test_A_1wk | TFC_test_A_1wk | 8 | TFC_test_A_1wk days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_12-TFC_test_A_1wk | 14_12_53-HC3 | HC3 | 7 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
+| 2022_01_12-TFC_test_A_1wk | 14_12_53-HC3 | HC3 | 7 | TFC_test_A_1wk days | done | 2026-10-03 12:45 | 0.30 | 283 | Y | all 6432 equal | Y (2026-10-05) |  |
 
-## G13 -- 7 of 33 batch sessions done
+## G13 -- 29 of 33 batch sessions done
 
 | day | session | type | videos | group | status | finished | wall_h | units | YrA | frames_checked | on_MINISCOPE | note |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 2021_12_13 | 15_53_03 |  | 7 | everything else | stub (excluded) |  |  |  |  |  |  |  |
-| 2021_12_27-track_day1 | 14_19_13-HC1 | HC1 | 7 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2021_12_27-track_day1 | 14_30_13-LT1 | LT1 | 13 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2021_12_27-track_day1 | 14_41_10-HC2 | HC2 | 7 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2021_12_27-track_day1 | 14_50_49-HC3 | HC3 | 6 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2021_12_29-track_day2 | 15_01_17-HC1 | HC1 | 7 | track day 2 | pending |  |  |  |  |  |  |  |
-| 2021_12_29-track_day2 | 15_12_32-LT1 | LT1 | 14 | track day 2 | pending |  |  |  |  |  |  |  |
-| 2021_12_29-track_day2 | 15_24_29-HC2 | HC2 | 7 | track day 2 | pending |  |  |  |  |  |  |  |
-| 2021_12_29-track_day2 | 15_29_54-HC3 | HC3 | 7 | track day 2 | pending |  |  |  |  |  |  |  |
+| 2021_12_27-track_day1 | 14_19_13-HC1 | HC1 | 7 | track day 1 | done | 2026-10-04 11:51 | 0.26 | 32 | Y | all 6874 equal | N |  |
+| 2021_12_27-track_day1 | 14_30_13-LT1 | LT1 | 13 | track day 1 | done | 2026-10-04 12:17 | 0.42 | 87 | Y | all 12492 equal | N |  |
+| 2021_12_27-track_day1 | 14_41_10-HC2 | HC2 | 7 | track day 1 | done | 2026-10-04 12:31 | 0.24 | 50 | Y | all 6053 equal | N |  |
+| 2021_12_27-track_day1 | 14_50_49-HC3 | HC3 | 6 | track day 1 | done | 2026-10-04 12:45 | 0.22 | 67 | Y | all 5969 equal | N |  |
+| 2021_12_29-track_day2 | 15_01_17-HC1 | HC1 | 7 | track day 2 | done | 2026-10-05 04:45 | 0.24 | 63 | Y | all 6004 equal | N |  |
+| 2021_12_29-track_day2 | 15_12_32-LT1 | LT1 | 14 | track day 2 | done | 2026-10-05 05:20 | 0.56 | 159 | Y | all 13782 equal | N |  |
+| 2021_12_29-track_day2 | 15_24_29-HC2 | HC2 | 7 | track day 2 | done | 2026-10-05 05:35 | 0.27 | 83 | Y | all 6372 equal | N |  |
+| 2021_12_29-track_day2 | 15_29_54-HC3 | HC3 | 7 | track day 2 | done | 2026-10-05 05:52 | 0.27 | 69 | Y | all 6690 equal | N |  |
 | 2021_12_31-track_day3 | 16_22_07-HC1 | HC1 | 7 | track day 3 | pending |  |  |  |  |  |  |  |
 | 2021_12_31-track_day3 | 16_39_19-LT1 | LT1 | 13 | track day 3 | pending |  |  |  |  |  |  |  |
 | 2021_12_31-track_day3 | 16_50_18-HC2 | HC2 | 7 | track day 3 | pending |  |  |  |  |  |  |  |
@@ -415,39 +415,39 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 | 2022_01_03-TFC_cond | 17_04_37-HC3 | HC3 | 7 | TFC_cond days | done | 2026-09-29 06:40 | 0.26 | 50 | Y | all 6104 equal | Y (2026-09-30) |  |
 | 2022_01_03-TFC_cond | 17_13_06-TFC_cond | TFC_cond | 26 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
 | 2022_01_03-TFC_cond | 17_37_35-HC4 | HC4 | 8 | TFC_cond days | done | 2026-09-29 06:58 | 0.29 | 36 | Y | all 7048 equal | Y (2026-09-30) |  |
-| 2022_01_05-TFC_test_B | 15_24_03-HC1 | HC1 | 7 | TFC_test_B days | pending |  |  |  |  |  |  |  |
+| 2022_01_05-TFC_test_B | 15_24_03-HC1 | HC1 | 7 | TFC_test_B days | done | 2026-09-30 09:11 | 0.28 | 160 | Y | all 6278 equal | Y (2026-10-05) |  |
 | 2022_01_05-TFC_test_B | 15_29_44-LT1 | LT1 | 14 | TFC_test_B days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_05-TFC_test_B | 15_41_23-HC2 | HC2 | 8 | TFC_test_B days | pending |  |  |  |  |  |  |  |
+| 2022_01_05-TFC_test_B | 15_41_23-HC2 | HC2 | 8 | TFC_test_B days | done | 2026-09-30 09:28 | 0.28 | 114 | Y | all 7240 equal | Y (2026-10-05) |  |
 | 2022_01_05-TFC_test_B | 15_53_23-TFC_test_B | TFC_test_B | 19 | TFC_test_B days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_05-TFC_test_B | 16_11_43-HC3 | HC3 | 8 | TFC_test_B days | pending |  |  |  |  |  |  |  |
-| 2022_01_07-TFC_test_A | 16_43_27-HC1 | HC1 | 7 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2022_01_07-TFC_test_A | 16_49_21-LT1 | LT1 | 13 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2022_01_07-TFC_test_A | 17_00_54-HC2 | HC2 | 7 | TFC_test_A days | pending |  |  |  |  |  |  |  |
+| 2022_01_05-TFC_test_B | 16_11_43-HC3 | HC3 | 8 | TFC_test_B days | done | 2026-09-30 09:47 | 0.31 | 93 | Y | all 7121 equal | Y (2026-10-05) |  |
+| 2022_01_07-TFC_test_A | 16_43_27-HC1 | HC1 | 7 | TFC_test_A days | done | 2026-10-02 10:37 | 0.27 | 75 | Y | all 6940 equal | Y (2026-10-05) |  |
+| 2022_01_07-TFC_test_A | 16_49_21-LT1 | LT1 | 13 | TFC_test_A days | done | 2026-10-02 11:07 | 0.49 | 81 | Y | all 12879 equal | Y (2026-10-05) |  |
+| 2022_01_07-TFC_test_A | 17_00_54-HC2 | HC2 | 7 | TFC_test_A days | done | 2026-10-02 11:23 | 0.28 | 71 | Y | all 6646 equal | Y (2026-10-05) |  |
 | 2022_01_07-TFC_test_A | 17_09_27-TFC_test_A | TFC_test_A | 7 | TFC_test_A days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_07-TFC_test_A | 17_17_44-HC3 | HC3 | 8 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2022_01_10-TFC_test_B_1wk | 16_18_02-HC1 | HC1 | 7 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_01_10-TFC_test_B_1wk | 16_23_48-LT1 | LT1 | 13 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
+| 2022_01_07-TFC_test_A | 17_17_44-HC3 | HC3 | 8 | TFC_test_A days | done | 2026-10-02 11:40 | 0.28 | 56 | Y | all 7022 equal | Y (2026-10-05) |  |
+| 2022_01_10-TFC_test_B_1wk | 16_18_02-HC1 | HC1 | 7 | TFC_test_B_1wk days | done | 2026-10-01 07:06 | 0.27 | 72 | Y | all 6454 equal | Y (2026-10-05) |  |
+| 2022_01_10-TFC_test_B_1wk | 16_23_48-LT1 | LT1 | 13 | TFC_test_B_1wk days | done | 2026-10-01 07:37 | 0.50 | 107 | Y | all 12989 equal | Y (2026-10-05) |  |
 | 2022_01_10-TFC_test_B_1wk | 16_35_20-HC2 | HC2 | 4 | TFC_test_B_1wk days | done | 2026-09-26 13:32 | 0.20 | 88 | Y | - | Y (2026-09-28) |  |
 | 2022_01_10-TFC_test_B_1wk | 16_38_56-HC2b | HC2b | 7 | TFC_test_B_1wk days | stub (excluded) |  |  |  |  |  |  |  |
 | 2022_01_10-TFC_test_B_1wk | 16_50_10-TFC_test_B_1wk | TFC_test_B_1wk | 20 | TFC_test_B_1wk days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_10-TFC_test_B_1wk | 17_09_11-HC3 | HC3 | 7 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_01_12-TFC_test_A_1wk | 14_43_45-HC1 | HC1 | 6 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_01_12-TFC_test_A_1wk | 14_48_49-LT1 | LT1 | 13 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_01_12-TFC_test_A_1wk | 15_00_05-HC2 | HC2 | 7 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
+| 2022_01_10-TFC_test_B_1wk | 17_09_11-HC3 | HC3 | 7 | TFC_test_B_1wk days | done | 2026-10-01 07:52 | 0.27 | 66 | Y | all 6394 equal | Y (2026-10-05) |  |
+| 2022_01_12-TFC_test_A_1wk | 14_43_45-HC1 | HC1 | 6 | TFC_test_A_1wk days | done | 2026-10-03 12:58 | 0.24 | 84 | Y | all 5959 equal | Y (2026-10-05) |  |
+| 2022_01_12-TFC_test_A_1wk | 14_48_49-LT1 | LT1 | 13 | TFC_test_A_1wk days | done | 2026-10-03 13:26 | 0.45 | 121 | Y | all 12971 equal | Y (2026-10-05) |  |
+| 2022_01_12-TFC_test_A_1wk | 15_00_05-HC2 | HC2 | 7 | TFC_test_A_1wk days | done | 2026-10-03 13:41 | 0.26 | 119 | Y | all 6224 equal | Y (2026-10-05) |  |
 | 2022_01_12-TFC_test_A_1wk | 15_07_47-TFC_test_A_1wk | TFC_test_A_1wk | 7 | TFC_test_A_1wk days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_12-TFC_test_A_1wk | 15_16_01-HC3 | HC3 | 6 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
+| 2022_01_12-TFC_test_A_1wk | 15_16_01-HC3 | HC3 | 6 | TFC_test_A_1wk days | done | 2026-10-03 13:55 | 0.24 | 75 | Y | all 5977 equal | Y (2026-10-05) |  |
 
-## G14 -- 6 of 31 batch sessions done
+## G14 -- 27 of 31 batch sessions done
 
 | day | session | type | videos | group | status | finished | wall_h | units | YrA | frames_checked | on_MINISCOPE | note |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 2022_01_04-track_day1 | 14_28_03-HC1 | HC1 | 6 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2022_01_04-track_day1 | 14_33_47-LT1 | LT1 | 14 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2022_01_04-track_day1 | 14_45_35-HC2 | HC2 | 7 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2022_01_06-track_day2 | 15_42_26-HC1 | HC1 | 6 | track day 2 | pending |  |  |  |  |  |  |  |
-| 2022_01_06-track_day2 | 15_49_30-LT1 | LT1 | 12 | track day 2 | pending |  |  |  |  |  |  |  |
-| 2022_01_06-track_day2 | 16_00_14-HC2 | HC2 | 7 | track day 2 | pending |  |  |  |  |  |  |  |
-| 2022_01_06-track_day2 | 16_05_37-HC3 | HC3 | 7 | track day 2 | pending |  |  |  |  |  |  |  |
+| 2022_01_04-track_day1 | 14_28_03-HC1 | HC1 | 6 | track day 1 | done | 2026-10-04 13:03 | 0.27 | 289 | Y | all 5970 equal | N |  |
+| 2022_01_04-track_day1 | 14_33_47-LT1 | LT1 | 14 | track day 1 | done | 2026-10-04 13:34 | 0.50 | 287 | Y | all 13208 equal | N |  |
+| 2022_01_04-track_day1 | 14_45_35-HC2 | HC2 | 7 | track day 1 | done | 2026-10-04 13:50 | 0.29 | 266 | Y | all 6665 equal | N |  |
+| 2022_01_06-track_day2 | 15_42_26-HC1 | HC1 | 6 | track day 2 | done | 2026-10-05 06:11 | 0.30 | 310 | Y | all 5965 equal | N |  |
+| 2022_01_06-track_day2 | 15_49_30-LT1 | LT1 | 12 | track day 2 | done | 2026-10-05 06:40 | 0.47 | 330 | Y | all 11982 equal | N |  |
+| 2022_01_06-track_day2 | 16_00_14-HC2 | HC2 | 7 | track day 2 | done | 2026-10-05 06:56 | 0.28 | 299 | Y | all 6342 equal | N |  |
+| 2022_01_06-track_day2 | 16_05_37-HC3 | HC3 | 7 | track day 2 | done | 2026-10-05 07:14 | 0.29 | 289 | Y | all 6362 equal | N |  |
 | 2022_01_08-track_day3 | 12_48_36-HC1 | HC1 | 7 | track day 3 | pending |  |  |  |  |  |  |  |
 | 2022_01_08-track_day3 | 12_54_19-LT1 | LT1 | 13 | track day 3 | pending |  |  |  |  |  |  |  |
 | 2022_01_08-track_day3 | 13_06_00-HC2 | HC2 | 7 | track day 3 | pending |  |  |  |  |  |  |  |
@@ -459,38 +459,38 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 | 2022_01_11-TFC_cond | 15_51_35-HC3 | HC3 | 7 | TFC_cond days | done | 2026-09-29 08:17 | 0.30 | 310 | Y | all 6259 equal | Y (2026-09-30) |  |
 | 2022_01_11-TFC_cond | 16_00_53-TFC_cond | TFC_cond | 29 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
 | 2022_01_11-TFC_cond | 16_28_19-HC4 | HC4 | 7 | TFC_cond days | done | 2026-09-29 08:34 | 0.29 | 244 | Y | all 6239 equal | Y (2026-09-30) |  |
-| 2022_01_13-TFC_test_B | 14_32_17-HC1 | HC1 | 9 | TFC_test_B days | pending |  |  |  |  |  |  |  |
+| 2022_01_13-TFC_test_B | 14_32_17-HC1 | HC1 | 9 | TFC_test_B days | done | 2026-09-30 10:12 | 0.38 | 345 | Y | all 8472 equal | Y (2026-10-05) |  |
 | 2022_01_13-TFC_test_B | 14_39_28-LT1 | LT1 | 14 | TFC_test_B days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_13-TFC_test_B | 14_51_39-HC2 | HC2 | 10 | TFC_test_B days | pending |  |  |  |  |  |  |  |
+| 2022_01_13-TFC_test_B | 14_51_39-HC2 | HC2 | 10 | TFC_test_B days | done | 2026-09-30 10:39 | 0.44 | 394 | Y | all 9086 equal | Y (2026-10-05) |  |
 | 2022_01_13-TFC_test_B | 15_05_26-TFC_test_B | TFC_test_B | 18 | TFC_test_B days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_13-TFC_test_B | 15_24_05-HC3 | HC3 | 7 | TFC_test_B days | pending |  |  |  |  |  |  |  |
-| 2022_01_15-TFC_test-A | 17_03_52-HC1 | HC1 | 7 | TFC_test_A days | pending |  |  |  |  |  |  |  |
+| 2022_01_13-TFC_test_B | 15_24_05-HC3 | HC3 | 7 | TFC_test_B days | done | 2026-09-30 10:56 | 0.30 | 326 | Y | all 6325 equal | Y (2026-10-05) |  |
+| 2022_01_15-TFC_test-A | 17_03_52-HC1 | HC1 | 7 | TFC_test_A days | done | 2026-10-02 11:58 | 0.29 | 221 | Y | all 6765 equal | Y (2026-10-05) |  |
 | 2022_01_15-TFC_test-A | 17_14_14-LT1 | LT1 | 18 | TFC_test_A days | done | 2026-09-28 15:29 | 2.32 | 403 | Y | all 17683 equal | Y (2026-09-28) |  |
-| 2022_01_15-TFC_test-A | 17_29_31-HC2 | HC2 | 8 | TFC_test_A days | pending |  |  |  |  |  |  |  |
+| 2022_01_15-TFC_test-A | 17_29_31-HC2 | HC2 | 8 | TFC_test_A days | done | 2026-10-02 12:20 | 0.34 | 383 | Y | all 7100 equal | Y (2026-10-05) |  |
 | 2022_01_15-TFC_test-A | 17_39_32-TFC_test_A | TFC_test_A | 7 | TFC_test_A days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_15-TFC_test-A | 17_47_59-HC3 | HC3 | 9 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2022_01_18-TFC_test_B_1wk | 14_21_15-HC1 | HC1 | 9 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_01_18-TFC_test_B_1wk | 14_28_04-LT1 | LT1 | 15 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_01_18-TFC_test_B_1wk | 14_41_02-HC2 | HC2 | 8 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
+| 2022_01_15-TFC_test-A | 17_47_59-HC3 | HC3 | 9 | TFC_test_A days | done | 2026-10-02 12:43 | 0.38 | 365 | Y | all 8463 equal | Y (2026-10-05) |  |
+| 2022_01_18-TFC_test_B_1wk | 14_21_15-HC1 | HC1 | 9 | TFC_test_B_1wk days | done | 2026-10-01 08:17 | 0.37 | 345 | Y | all 8057 equal | Y (2026-10-05) |  |
+| 2022_01_18-TFC_test_B_1wk | 14_28_04-LT1 | LT1 | 15 | TFC_test_B_1wk days | done | 2026-10-01 08:57 | 0.64 | 491 | Y | all 14661 equal | Y (2026-10-05) |  |
+| 2022_01_18-TFC_test_B_1wk | 14_41_02-HC2 | HC2 | 8 | TFC_test_B_1wk days | done | 2026-10-01 09:18 | 0.37 | 365 | Y | all 7459 equal | Y (2026-10-05) |  |
 | 2022_01_18-TFC_test_B_1wk | 14_52_35-TFC_test_B_1wk-borked | TFC_test_B_1wk-borked | 18 | TFC_test_B_1wk days | failed |  | 0.00 |  |  |  |  | unfinished recordings (no frame count in headers); VS to decide |
 | 2022_01_18-TFC_test_B_1wk | 15_10_50-TFC_test_B_1wk | TFC_test_B_1wk | 18 | TFC_test_B_1wk days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_18-TFC_test_B_1wk | 15_28_43-HC3 | HC3 | 9 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_01_21-TFC_test_A_1wk | 15_41_59-HC1 | HC1 | 8 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_01_21-TFC_test_A_1wk | 15_48_10-LT1 | LT1 | 16 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_01_21-TFC_test_A_1wk | 16_02_05-HC2 | HC2 | 10 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
+| 2022_01_18-TFC_test_B_1wk | 15_28_43-HC3 | HC3 | 9 | TFC_test_B_1wk days | done | 2026-10-01 09:41 | 0.38 | 360 | Y | all 8230 equal | Y (2026-10-05) |  |
+| 2022_01_21-TFC_test_A_1wk | 15_41_59-HC1 | HC1 | 8 | TFC_test_A_1wk days | done | 2026-10-03 14:19 | 0.36 | 410 | Y | all 7289 equal | Y (2026-10-05) |  |
+| 2022_01_21-TFC_test_A_1wk | 15_48_10-LT1 | LT1 | 16 | TFC_test_A_1wk days | done | 2026-10-03 15:03 | 0.71 | 540 | Y | all 15760 equal | Y (2026-10-05) |  |
+| 2022_01_21-TFC_test_A_1wk | 16_02_05-HC2 | HC2 | 10 | TFC_test_A_1wk days | done | 2026-10-03 15:30 | 0.46 | 479 | Y | all 9109 equal | Y (2026-10-05) |  |
 | 2022_01_21-TFC_test_A_1wk | 16_13_09-TFC_test_A_1wk | TFC_test_A_1wk | 7 | TFC_test_A_1wk days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_21-TFC_test_A_1wk | 16_21_48-HC3 | HC3 | 7 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
+| 2022_01_21-TFC_test_A_1wk | 16_21_48-HC3 | HC3 | 7 | TFC_test_A_1wk days | done | 2026-10-03 15:51 | 0.34 | 427 | Y | all 6789 equal | Y (2026-10-05) |  |
 
-## G15 -- 5 of 21 batch sessions done
+## G15 -- 18 of 21 batch sessions done
 
 | day | session | type | videos | group | status | finished | wall_h | units | YrA | frames_checked | on_MINISCOPE | note |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 2022_01_04-track_day1 | 16_21_46-HC1 | HC1 | 6 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2022_01_04-track_day1 | 16_27_01-LT1 | LT1 | 13 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2022_01_04-track_day1 | 16_38_24-HC2 | HC2 | 7 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2022_01_06-track_day2 | 16_42_20-HC1 | HC1 | 10 | track day 2 | pending |  |  |  |  |  |  |  |
-| 2022_01_06-track_day2 | 16_50_04-LT1 | LT1 | 13 | track day 2 | pending |  |  |  |  |  |  |  |
-| 2022_01_06-track_day2 | 17_00_45-HC2 | HC2 | 6 | track day 2 | pending |  |  |  |  |  |  |  |
+| 2022_01_04-track_day1 | 16_21_46-HC1 | HC1 | 6 | track day 1 | done | 2026-10-04 14:03 | 0.23 | 38 | Y | all 5940 equal | N |  |
+| 2022_01_04-track_day1 | 16_27_01-LT1 | LT1 | 13 | track day 1 | done | 2026-10-04 14:37 | 0.52 | 345 | Y | all 12540 equal | N |  |
+| 2022_01_04-track_day1 | 16_38_24-HC2 | HC2 | 7 | track day 1 | done | 2026-10-04 14:50 | 0.26 | 161 | Y | all 6350 equal | N |  |
+| 2022_01_06-track_day2 | 16_42_20-HC1 | HC1 | 10 | track day 2 | done | 2026-10-05 07:38 | 0.40 | 258 | Y | all 9129 equal | N |  |
+| 2022_01_06-track_day2 | 16_50_04-LT1 | LT1 | 13 | track day 2 | done | 2026-10-05 08:15 | 0.59 | 411 | Y | all 12330 equal | N |  |
+| 2022_01_06-track_day2 | 17_00_45-HC2 | HC2 | 6 | track day 2 | done | 2026-10-05 08:30 | 0.28 | 194 | Y | all 5939 equal | N |  |
 | 2022_01_08-track_day3 | 13_34_11-HC1 | HC1 | 7 | track day 3 | pending |  |  |  |  |  |  |  |
 | 2022_01_08-track_day3 | 13_39_54-LT1 | LT1 | 14 | track day 3 | pending |  |  |  |  |  |  |  |
 | 2022_01_08-track_day3 | 13_51_27-HC2 | HC2 | 7 | track day 3 | pending |  |  |  |  |  |  |  |
@@ -502,27 +502,27 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 | 2022_01_11-TFC_cond | 18_02_26-HC3 | HC3 | 7 | TFC_cond days | done | 2026-09-29 09:49 | 0.29 | 194 | Y | all 6137 equal | Y (2026-09-30) |  |
 | 2022_01_11-TFC_cond | 18_10_56-TFC_cond | TFC_cond | 30 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
 | 2022_01_11-TFC_cond | 18_39_20-HC4 | HC4 | 9 | TFC_cond days | done | 2026-09-29 10:10 | 0.34 | 142 | Y | all 8173 equal | Y (2026-09-30) |  |
-| 2022_01_13-TFC_test_B | 15_51_23-HC1 | HC1 | 8 | TFC_test_B days | pending |  |  |  |  |  |  |  |
+| 2022_01_13-TFC_test_B | 15_51_23-HC1 | HC1 | 8 | TFC_test_B days | done | 2026-09-30 11:11 | 0.28 | 110 | Y | all 7134 equal | Y (2026-10-05) |  |
 | 2022_01_13-TFC_test_B | 15_57_25-LT1 | LT1 | 14 | TFC_test_B days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_13-TFC_test_B | 16_09_14-HC2 | HC2 | 8 | TFC_test_B days | pending |  |  |  |  |  |  |  |
+| 2022_01_13-TFC_test_B | 16_09_14-HC2 | HC2 | 8 | TFC_test_B days | done | 2026-09-30 11:34 | 0.35 | 308 | Y | all 7375 equal | Y (2026-10-05) |  |
 | 2022_01_13-TFC_test_B | 16_19_13-TFC_test_B | TFC_test_B | 20 | TFC_test_B days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_13-TFC_test_B | 16_38_14-HC3 | HC3 | 11 | TFC_test_B days | pending |  |  |  |  |  |  |  |
-| 2022_01_15-TFC_test_A | 18_16_31-HC1 | HC1 | 8 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2022_01_15-TFC_test_A | 18_22_53-LT1 | LT1 | 14 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2022_01_15-TFC_test_A | 18_35_23-HC2 | HC2 | 9 | TFC_test_A days | pending |  |  |  |  |  |  |  |
+| 2022_01_13-TFC_test_B | 16_38_14-HC3 | HC3 | 11 | TFC_test_B days | done | 2026-09-30 12:00 | 0.44 | 229 | Y | all 10314 equal | Y (2026-10-05) |  |
+| 2022_01_15-TFC_test_A | 18_16_31-HC1 | HC1 | 8 | TFC_test_A days | done | 2026-10-02 13:00 | 0.30 | 151 | Y | all 7502 equal | Y (2026-10-05) |  |
+| 2022_01_15-TFC_test_A | 18_22_53-LT1 | LT1 | 14 | TFC_test_A days | done | 2026-10-02 13:37 | 0.58 | 355 | Y | all 13852 equal | Y (2026-10-05) |  |
+| 2022_01_15-TFC_test_A | 18_35_23-HC2 | HC2 | 9 | TFC_test_A days | done | 2026-10-02 13:57 | 0.36 | 201 | Y | all 8811 equal | Y (2026-10-05) |  |
 | 2022_01_15-TFC_test_A | 18_45_26-TFC_test_A | TFC_test_A | 7 | TFC_test_A days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_15-TFC_test_A | 18_53_47-HC3 | HC3 | 9 | TFC_test_A days | pending |  |  |  |  |  |  |  |
+| 2022_01_15-TFC_test_A | 18_53_47-HC3 | HC3 | 9 | TFC_test_A days | done | 2026-10-02 14:21 | 0.39 | 242 | Y | all 8989 equal | Y (2026-10-05) |  |
 
-## G16 -- 5 of 29 batch sessions done
+## G16 -- 26 of 29 batch sessions done
 
 | day | session | type | videos | group | status | finished | wall_h | units | YrA | frames_checked | on_MINISCOPE | note |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 2022_01_17-track_day1 | 17_47_45-HC1 | HC1 | 8 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2022_01_17-track_day1 | 17_54_47-LT1 | LT1 | 15 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2022_01_17-track_day1 | 18_07_17-HC2 | HC2 | 8 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2022_01_19-track_day2 | 14_17_00-HC1 | HC1 | 7 | track day 2 | pending |  |  |  |  |  |  |  |
-| 2022_01_19-track_day2 | 14_22_35-LT1 | LT1 | 16 | track day 2 | pending |  |  |  |  |  |  |  |
-| 2022_01_19-track_day2 | 14_36_30-HC2 | HC2 | 7 | track day 2 | pending |  |  |  |  |  |  |  |
+| 2022_01_17-track_day1 | 17_47_45-HC1 | HC1 | 8 | track day 1 | done | 2026-10-04 15:16 | 0.38 | 426 | Y | all 7880 equal | N |  |
+| 2022_01_17-track_day1 | 17_54_47-LT1 | LT1 | 15 | track day 1 | done | 2026-10-04 15:59 | 0.71 | 573 | Y | all 14199 equal | N |  |
+| 2022_01_17-track_day1 | 18_07_17-HC2 | HC2 | 8 | track day 1 | done | 2026-10-04 16:21 | 0.37 | 397 | Y | all 7973 equal | N |  |
+| 2022_01_19-track_day2 | 14_17_00-HC1 | HC1 | 7 | track day 2 | done | 2026-10-05 08:50 | 0.32 | 397 | Y | all 6088 equal | N |  |
+| 2022_01_19-track_day2 | 14_22_35-LT1 | LT1 | 16 | track day 2 | done | 2026-10-05 09:39 | 0.78 | 615 | Y | all 15830 equal | N |  |
+| 2022_01_19-track_day2 | 14_36_30-HC2 | HC2 | 7 | track day 2 | done | 2026-10-05 10:00 | 0.36 | 445 | Y | all 6861 equal | N |  |
 | 2022_01_21-track_day3 | 13_56_35-HC1 | HC1 | 8 | track day 3 | pending |  |  |  |  |  |  |  |
 | 2022_01_21-track_day3 | 14_02_33-LT1 | LT1 | 17 | track day 3 | pending |  |  |  |  |  |  |  |
 | 2022_01_21-track_day3 | 14_16_49-HC2 | HC2 | 9 | track day 3 | pending |  |  |  |  |  |  |  |
@@ -534,37 +534,37 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 | 2022_01_24-TFC_cond | 15_58_23-HC3 | HC3 | 6 | TFC_cond days | done | 2026-09-29 11:36 | 0.33 | 461 | Y | all 5968 equal | Y (2026-09-30) |  |
 | 2022_01_24-TFC_cond | 16_06_44-TFC_cond | TFC_cond | 28 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
 | 2022_01_24-TFC_cond | 16_33_17-HC4 | HC4 | 9 | TFC_cond days | done | 2026-09-29 12:05 | 0.47 | 529 | Y | all 8862 equal | Y (2026-09-30) |  |
-| 2022_01_26-TFC_test_B | 14_17_03-HC1 | HC1 | 7 | TFC_test_B days | pending |  |  |  |  |  |  |  |
+| 2022_01_26-TFC_test_B | 14_17_03-HC1 | HC1 | 7 | TFC_test_B days | done | 2026-09-30 12:32 | 0.45 | 901 | Y | all 6782 equal | Y (2026-10-05) |  |
 | 2022_01_26-TFC_test_B | 14_23_45-LT1 | LT1 | 14 | TFC_test_B days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_26-TFC_test_B | 14_36_08-HC2 | HC2 | 7 | TFC_test_B days | pending |  |  |  |  |  |  |  |
+| 2022_01_26-TFC_test_B | 14_36_08-HC2 | HC2 | 7 | TFC_test_B days | done | 2026-09-30 12:52 | 0.36 | 577 | Y | all 6295 equal | Y (2026-10-05) |  |
 | 2022_01_26-TFC_test_B | 14_47_09-TFC_test_B | TFC_test_B | 18 | TFC_test_B days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_26-TFC_test_B | 15_04_50-HC3 | HC3 | 10 | TFC_test_B days | pending |  |  |  |  |  |  |  |
-| 2022_01_28-TFC_test_A | 13_32_58-HC1 | HC1 | 7 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2022_01_28-TFC_test_A | 13_38_27-LT1 | LT1 | 13 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2022_01_28-TFC_test_A | 13_51_04-HC2 | HC2 | 7 | TFC_test_A days | pending |  |  |  |  |  |  |  |
+| 2022_01_26-TFC_test_B | 15_04_50-HC3 | HC3 | 10 | TFC_test_B days | done | 2026-09-30 13:23 | 0.51 | 639 | Y | all 9232 equal | Y (2026-10-05) |  |
+| 2022_01_28-TFC_test_A | 13_32_58-HC1 | HC1 | 7 | TFC_test_A days | done | 2026-10-02 14:46 | 0.37 | 614 | Y | all 6461 equal | Y (2026-10-05) |  |
+| 2022_01_28-TFC_test_A | 13_38_27-LT1 | LT1 | 13 | TFC_test_A days | done | 2026-10-02 15:32 | 0.74 | 885 | Y | all 12775 equal | Y (2026-10-05) |  |
+| 2022_01_28-TFC_test_A | 13_51_04-HC2 | HC2 | 7 | TFC_test_A days | done | 2026-10-02 15:52 | 0.37 | 586 | Y | all 6535 equal | Y (2026-10-05) |  |
 | 2022_01_28-TFC_test_A | 14_01_26-TFC_test_A | TFC_test_A | 7 | TFC_test_A days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_28-TFC_test_A | 14_09_25-HC3 | HC3 | 9 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2022_01_31-TFC_test_B_1wk | 13_34_47-HC1 | HC1 | 10 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_01_31-TFC_test_B_1wk | 13_43_03-LT1 | LT1 | 14 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_01_31-TFC_test_B_1wk | 13_54_52-HC2 | HC2 | 7 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
+| 2022_01_28-TFC_test_A | 14_09_25-HC3 | HC3 | 9 | TFC_test_A days | done | 2026-10-02 16:20 | 0.46 | 599 | Y | all 8061 equal | Y (2026-10-05) |  |
+| 2022_01_31-TFC_test_B_1wk | 13_34_47-HC1 | HC1 | 10 | TFC_test_B_1wk days | done | 2026-10-01 10:19 | 0.56 | 908 | Y | all 9315 equal | Y (2026-10-05) |  |
+| 2022_01_31-TFC_test_B_1wk | 13_43_03-LT1 | LT1 | 14 | TFC_test_B_1wk days | done | 2026-10-01 11:03 | 0.74 | 904 | Y | all 13178 equal | Y (2026-10-05) |  |
+| 2022_01_31-TFC_test_B_1wk | 13_54_52-HC2 | HC2 | 7 | TFC_test_B_1wk days | done | 2026-10-01 11:21 | 0.35 | 455 | Y | all 6780 equal | Y (2026-10-05) |  |
 | 2022_01_31-TFC_test_B_1wk | 14_08_02-TFC_test_B_1wk | TFC_test_B_1wk | 18 | TFC_test_B_1wk days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_31-TFC_test_B_1wk | 14_28_46-HC3 | HC3 | 7 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_02_02-TFC_test_A_1wk | 14_16_41-HC1 | HC1 | 9 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_02_02-TFC_test_A_1wk | 14_24_38-LT1 | LT1 | 14 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_02_02-TFC_test_A_1wk | 14_36_32-HC2 | HC2 | 10 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
+| 2022_01_31-TFC_test_B_1wk | 14_28_46-HC3 | HC3 | 7 | TFC_test_B_1wk days | done | 2026-10-01 11:44 | 0.37 | 571 | Y | all 6574 equal | Y (2026-10-05) |  |
+| 2022_02_02-TFC_test_A_1wk | 14_16_41-HC1 | HC1 | 9 | TFC_test_A_1wk days | done | 2026-10-03 16:26 | 0.53 | 780 | Y | all 8943 equal | Y (2026-10-05) |  |
+| 2022_02_02-TFC_test_A_1wk | 14_24_38-LT1 | LT1 | 14 | TFC_test_A_1wk days | done | 2026-10-03 17:14 | 0.78 | 919 | Y | all 13624 equal | Y (2026-10-05) |  |
+| 2022_02_02-TFC_test_A_1wk | 14_36_32-HC2 | HC2 | 10 | TFC_test_A_1wk days | done | 2026-10-03 17:43 | 0.51 | 691 | Y | all 9320 equal | Y (2026-10-05) |  |
 | 2022_02_02-TFC_test_A_1wk | 14_49_27-TFC_test_A_1wk | TFC_test_A_1wk | 7 | TFC_test_A_1wk days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_02_02-TFC_test_A_1wk | 14_58_24-HC3 | HC3 | 10 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
+| 2022_02_02-TFC_test_A_1wk | 14_58_24-HC3 | HC3 | 10 | TFC_test_A_1wk days | done | 2026-10-03 18:13 | 0.51 | 666 | Y | all 9348 equal | Y (2026-10-05) |  |
 
-## G17 -- 6 of 30 batch sessions done
+## G17 -- 27 of 30 batch sessions done
 
 | day | session | type | videos | group | status | finished | wall_h | units | YrA | frames_checked | on_MINISCOPE | note |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 2022_01_17-track_day1 | 18_39_13-HC1 | HC1 | 9 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2022_01_17-track_day1 | 18_46_21-LT1 | LT1 | 16 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2022_01_17-track_day1 | 19_00_34-HC2 | HC2 | 7 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2022_01_19-track_day2 | 15_12_27-HC1 | HC1 | 7 | track day 2 | pending |  |  |  |  |  |  |  |
-| 2022_01_19-track_day2 | 15_18_08-LT1 | LT1 | 15 | track day 2 | pending |  |  |  |  |  |  |  |
-| 2022_01_19-track_day2 | 15_31_17-HC2 | HC2 | 12 | track day 2 | pending |  |  |  |  |  |  |  |
+| 2022_01_17-track_day1 | 18_39_13-HC1 | HC1 | 9 | track day 1 | done | 2026-10-04 16:38 | 0.32 | 168 | Y | all 8432 equal | N |  |
+| 2022_01_17-track_day1 | 18_46_21-LT1 | LT1 | 16 | track day 1 | done | 2026-10-04 17:24 | 0.72 | 458 | Y | all 15971 equal | N |  |
+| 2022_01_17-track_day1 | 19_00_34-HC2 | HC2 | 7 | track day 1 | done | 2026-10-04 17:40 | 0.30 | 257 | Y | all 6799 equal | N |  |
+| 2022_01_19-track_day2 | 15_12_27-HC1 | HC1 | 7 | track day 2 | done | 2026-10-05 10:16 | 0.29 | 228 | Y | all 6698 equal | N |  |
+| 2022_01_19-track_day2 | 15_18_08-LT1 | LT1 | 15 | track day 2 | done | 2026-10-05 11:00 | 0.69 | 472 | Y | all 14685 equal | N |  |
+| 2022_01_19-track_day2 | 15_31_17-HC2 | HC2 | 12 | track day 2 | done | 2026-10-05 11:26 | 0.47 | 276 | Y | all 11766 equal | N |  |
 | 2022_01_21-track_day3 | 14_48_20-HC1 | HC1 | 7 | track day 3 | pending |  |  |  |  |  |  |  |
 | 2022_01_21-track_day3 | 14_53_55-LT1 | LT1 | 14 | track day 3 | pending |  |  |  |  |  |  |  |
 | 2022_01_21-track_day3 | 15_06_06-HC2 | HC2 | 8 | track day 3 | pending |  |  |  |  |  |  |  |
@@ -577,37 +577,37 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 | 2022_01_24-TFC_cond | 18_52_59-HC3 | HC3 | 8 | TFC_cond days | done | 2026-09-29 13:40 | 0.39 | 360 | Y | all 7759 equal | Y (2026-09-30) |  |
 | 2022_01_24-TFC_cond | 19_02_10-LT2 | LT2 | 13 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
 | 2022_01_24-TFC_cond | 19_13_33-HC4 | HC4 | 6 | TFC_cond days | done | 2026-09-29 13:55 | 0.29 | 300 | Y | all 5967 equal | Y (2026-09-30) |  |
-| 2022_01_26-TFC_test_B | 15_36_39-HC1 | HC1 | 7 | TFC_test_B days | pending |  |  |  |  |  |  |  |
+| 2022_01_26-TFC_test_B | 15_36_39-HC1 | HC1 | 7 | TFC_test_B days | done | 2026-09-30 13:39 | 0.30 | 349 | Y | all 6315 equal | Y (2026-10-05) |  |
 | 2022_01_26-TFC_test_B | 15_54_39-LT1 | LT1 | 11 | TFC_test_B days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_26-TFC_test_B | 16_04_58-HC2 | HC2 | 7 | TFC_test_B days | pending |  |  |  |  |  |  |  |
+| 2022_01_26-TFC_test_B | 16_04_58-HC2 | HC2 | 7 | TFC_test_B days | done | 2026-09-30 13:57 | 0.30 | 381 | Y | all 6044 equal | Y (2026-10-05) |  |
 | 2022_01_26-TFC_test_B | 16_14_47-TFC_test_B | TFC_test_B | 18 | TFC_test_B days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_26-TFC_test_B | 16_32_17-HC3 | HC3 | 14 | TFC_test_B days | pending |  |  |  |  |  |  |  |
-| 2022_01_28-TFC_test_A | 14_37_42-HC1 | HC1 | 7 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2022_01_28-TFC_test_A | 14_42_59-LT1 | LT1 | 13 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2022_01_28-TFC_test_A | 14_54_20-HC2 | HC2 | 7 | TFC_test_A days | pending |  |  |  |  |  |  |  |
+| 2022_01_26-TFC_test_B | 16_32_17-HC3 | HC3 | 14 | TFC_test_B days | done | 2026-09-30 14:34 | 0.60 | 490 | Y | all 13304 equal | Y (2026-10-05) |  |
+| 2022_01_28-TFC_test_A | 14_37_42-HC1 | HC1 | 7 | TFC_test_A days | done | 2026-10-02 16:37 | 0.31 | 392 | Y | all 6039 equal | Y (2026-10-05) |  |
+| 2022_01_28-TFC_test_A | 14_42_59-LT1 | LT1 | 13 | TFC_test_A days | done | 2026-10-02 17:18 | 0.63 | 690 | Y | all 12368 equal | Y (2026-10-05) |  |
+| 2022_01_28-TFC_test_A | 14_54_20-HC2 | HC2 | 7 | TFC_test_A days | done | 2026-10-02 17:33 | 0.30 | 369 | Y | all 6161 equal | Y (2026-10-05) |  |
 | 2022_01_28-TFC_test_A | 15_02_16-TFC_test_A | TFC_test_A | 7 | TFC_test_A days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_28-TFC_test_A | 15_10_20-HC3 | HC3 | 7 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2022_01_31-TFC_test_B_1wk | 15_31_56-HC1 | HC1 | 8 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_01_31-TFC_test_B_1wk | 15_38_40-LT1 | LT1 | 14 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_01_31-TFC_test_B_1wk | 15_51_55-HC2 | HC2 | 12 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
+| 2022_01_28-TFC_test_A | 15_10_20-HC3 | HC3 | 7 | TFC_test_A days | done | 2026-10-02 17:53 | 0.32 | 429 | Y | all 6478 equal | Y (2026-10-05) |  |
+| 2022_01_31-TFC_test_B_1wk | 15_31_56-HC1 | HC1 | 8 | TFC_test_B_1wk days | done | 2026-10-01 12:11 | 0.42 | 653 | Y | all 7447 equal | Y (2026-10-05) |  |
+| 2022_01_31-TFC_test_B_1wk | 15_38_40-LT1 | LT1 | 14 | TFC_test_B_1wk days | done | 2026-10-01 12:58 | 0.76 | 866 | Y | all 13394 equal | Y (2026-10-05) |  |
+| 2022_01_31-TFC_test_B_1wk | 15_51_55-HC2 | HC2 | 12 | TFC_test_B_1wk days | done | 2026-10-01 13:34 | 0.64 | 579 | Y | all 11558 equal | Y (2026-10-05) |  |
 | 2022_01_31-TFC_test_B_1wk | 16_06_22-TFC_test_B_1wk | TFC_test_B_1wk | 18 | TFC_test_B_1wk days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_01_31-TFC_test_B_1wk | 16_24_36-HC3 | HC3 | 8 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_02_02-TFC_test_A_1wk | 15_28_06-HC1 | HC1 | 9 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_02_02-TFC_test_A_1wk | 15_35_03-LT1 | LT1 | 16 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_02_02-TFC_test_A_1wk | 15_48_29-HC2 | HC2 | 11 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
+| 2022_01_31-TFC_test_B_1wk | 16_24_36-HC3 | HC3 | 8 | TFC_test_B_1wk days | done | 2026-10-01 13:58 | 0.41 | 546 | Y | all 7128 equal | Y (2026-10-05) |  |
+| 2022_02_02-TFC_test_A_1wk | 15_28_06-HC1 | HC1 | 9 | TFC_test_A_1wk days | done | 2026-10-03 18:41 | 0.46 | 668 | Y | all 8218 equal | Y (2026-10-05) |  |
+| 2022_02_02-TFC_test_A_1wk | 15_35_03-LT1 | LT1 | 16 | TFC_test_A_1wk days | done | 2026-10-03 19:38 | 0.90 | 1010 | Y | all 15422 equal | Y (2026-10-05) |  |
+| 2022_02_02-TFC_test_A_1wk | 15_48_29-HC2 | HC2 | 11 | TFC_test_A_1wk days | done | 2026-10-03 20:04 | 0.50 | 432 | Y | all 10033 equal | Y (2026-10-05) |  |
 | 2022_02_02-TFC_test_A_1wk | 16_00_11-TFC_test_A_1wk | TFC_test_A_1wk | 8 | TFC_test_A_1wk days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_02_02-TFC_test_A_1wk | 16_09_29-HC3 | HC3 | 7 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
+| 2022_02_02-TFC_test_A_1wk | 16_09_29-HC3 | HC3 | 7 | TFC_test_A_1wk days | done | 2026-10-03 20:30 | 0.42 | 692 | Y | all 6895 equal | Y (2026-10-05) |  |
 
-## G18 -- 5 of 28 batch sessions done
+## G18 -- 23 of 28 batch sessions done
 
 | day | session | type | videos | group | status | finished | wall_h | units | YrA | frames_checked | on_MINISCOPE | note |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 2022_02_01-track_day1 | 13_36_06 |  | 7 | track day 1 | stub (excluded) |  |  |  |  |  |  |  |
 | 2022_02_01-track_day1 | 13_41_59 |  | 14 | track day 1 | stub (excluded) |  |  |  |  |  |  |  |
 | 2022_02_01-track_day1 | 13_54_06 |  | 7 | track day 1 | stub (excluded) |  |  |  |  |  |  |  |
-| 2022_02_03-track_day2 | 15_35_07-HC1 | HC1 | 7 | track day 2 | pending |  |  |  |  |  |  |  |
-| 2022_02_03-track_day2 | 15_41_30-LT1 | LT1 | 14 | track day 2 | pending |  |  |  |  |  |  |  |
-| 2022_02_03-track_day2 | 15_53_20-HC2 | HC2 | 14 | track day 2 | pending |  |  |  |  |  |  |  |
+| 2022_02_03-track_day2 | 15_35_07-HC1 | HC1 | 7 | track day 2 | done | 2026-10-05 11:51 | 0.39 | 636 | Y | all 6515 equal | N |  |
+| 2022_02_03-track_day2 | 15_41_30-LT1 | LT1 | 14 | track day 2 | done | 2026-10-05 12:36 | 0.72 | 686 | Y | all 13415 equal | N |  |
+| 2022_02_03-track_day2 | 15_53_20-HC2 | HC2 | 14 | track day 2 | done | 2026-10-05 13:18 | 0.71 | 647 | Y | all 13335 equal | N |  |
 | 2022_02_05-track_day3 | 14_54_56-HC1 | HC1 | 7 | track day 3 | pending |  |  |  |  |  |  |  |
 | 2022_02_05-track_day3 | 15_00_17-LT1 | LT1 | 14 | track day 3 | pending |  |  |  |  |  |  |  |
 | 2022_02_05-track_day3 | 15_11_58-HC2 | HC2 | 10 | track day 3 | pending |  |  |  |  |  |  |  |
@@ -621,37 +621,37 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 | 2022_02_07-TFC_cond | 15_21_43-HC3 | HC3 | 7 | TFC_cond days | done | 2026-09-29 15:52 | 0.36 | 704 | Y | all 6003 equal | Y (2026-09-30) |  |
 | 2022_02_07-TFC_cond | 15_29_25-TFC_cond | TFC_cond | 27 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
 | 2022_02_07-TFC_cond | 15_55_09-HC4 | HC4 | 6 | TFC_cond days | done | 2026-09-29 16:12 | 0.34 | 614 | Y | all 5970 equal | Y (2026-09-30) |  |
-| 2022_02_09-TFC_test_B | 14_55_34-HC1 | HC1 | 8 | TFC_test_B days | pending |  |  |  |  |  |  |  |
+| 2022_02_09-TFC_test_B | 14_55_34-HC1 | HC1 | 8 | TFC_test_B days | done | 2026-09-30 14:57 | 0.37 | 529 | Y | all 7059 equal | Y (2026-10-05) |  |
 | 2022_02_09-TFC_test_B | 15_01_36-LT1 | LT1 | 14 | TFC_test_B days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_02_09-TFC_test_B | 15_13_39-HC2 | HC2 | 8 | TFC_test_B days | pending |  |  |  |  |  |  |  |
+| 2022_02_09-TFC_test_B | 15_13_39-HC2 | HC2 | 8 | TFC_test_B days | done | 2026-09-30 15:24 | 0.43 | 657 | Y | all 7499 equal | Y (2026-10-05) |  |
 | 2022_02_09-TFC_test_B | 15_25_42-TFC_test_B | TFC_test_B | 19 | TFC_test_B days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_02_09-TFC_test_B | 15_43_46-HC3 | HC3 | 8 | TFC_test_B days | pending |  |  |  |  |  |  |  |
-| 2022_02_12-TFC_test_A | 11_51_11-HC1 | HC1 | 7 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2022_02_12-TFC_test_A | 11_56_41-LT1 | LT1 | 13 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2022_02_12-TFC_test_A | 12_07_42-HC2 | HC2 | 9 | TFC_test_A days | pending |  |  |  |  |  |  |  |
+| 2022_02_09-TFC_test_B | 15_43_46-HC3 | HC3 | 8 | TFC_test_B days | done | 2026-09-30 15:46 | 0.39 | 509 | Y | all 7677 equal | Y (2026-10-05) |  |
+| 2022_02_12-TFC_test_A | 11_51_11-HC1 | HC1 | 7 | TFC_test_A days | done | 2026-10-02 18:18 | 0.37 | 681 | Y | all 6164 equal | Y (2026-10-05) |  |
+| 2022_02_12-TFC_test_A | 11_56_41-LT1 | LT1 | 13 | TFC_test_A days | done | 2026-10-02 19:01 | 0.70 | 795 | Y | all 12692 equal | Y (2026-10-05) |  |
+| 2022_02_12-TFC_test_A | 12_07_42-HC2 | HC2 | 9 | TFC_test_A days | done | 2026-10-02 19:27 | 0.45 | 627 | Y | all 8418 equal | Y (2026-10-05) |  |
 | 2022_02_12-TFC_test_A | 12_19_08-TFC_test_A | TFC_test_A | 7 | TFC_test_A days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_02_12-TFC_test_A | 12_27_12-HC3 | HC3 | 8 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2022_02_15-TFC_test_B_1wk | 13_17_37-HC1 | HC1 | 8 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_02_15-TFC_test_B_1wk | 13_24_41-LT1 | LT1 | 14 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_02_15-TFC_test_B_1wk | 13_36_18-HC2 | HC2 | 9 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
+| 2022_02_12-TFC_test_A | 12_27_12-HC3 | HC3 | 8 | TFC_test_A days | done | 2026-10-02 19:58 | 0.49 | 1026 | Y | all 7365 equal | Y (2026-10-05) |  |
+| 2022_02_15-TFC_test_B_1wk | 13_17_37-HC1 | HC1 | 8 | TFC_test_B_1wk days | done | 2026-10-01 14:33 | 0.53 | 819 | Y | all 7765 equal | Y (2026-10-05) |  |
+| 2022_02_15-TFC_test_B_1wk | 13_24_41-LT1 | LT1 | 14 | TFC_test_B_1wk days | done | 2026-10-01 15:25 | 0.84 | 907 | Y | all 13152 equal | Y (2026-10-05) |  |
+| 2022_02_15-TFC_test_B_1wk | 13_36_18-HC2 | HC2 | 9 | TFC_test_B_1wk days | done | 2026-10-01 15:58 | 0.58 | 785 | Y | all 8912 equal | Y (2026-10-05) |  |
 | 2022_02_15-TFC_test_B_1wk | 13_49_23-TFC_test_B_1wk | TFC_test_B_1wk | 18 | TFC_test_B_1wk days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_02_15-TFC_test_B_1wk | 14_17_02-HC3 | HC3 | 11 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_02_16-TFC_test_A_1wk | 14_19_15-HC1 | HC1 | 9 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_02_16-TFC_test_A_1wk | 14_26_40-LT1 | LT1 | 14 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_02_16-TFC_test_A_1wk | 14_38_21-HC2 | HC2 | 7 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
+| 2022_02_15-TFC_test_B_1wk | 14_17_02-HC3 | HC3 | 11 | TFC_test_B_1wk days | done | 2026-10-01 16:34 | 0.61 | 687 | Y | all 10148 equal | Y (2026-10-05) |  |
+| 2022_02_16-TFC_test_A_1wk | 14_19_15-HC1 | HC1 | 9 | TFC_test_A_1wk days | done | 2026-10-03 21:03 | 0.52 | 725 | Y | all 8548 equal | Y (2026-10-05) |  |
+| 2022_02_16-TFC_test_A_1wk | 14_26_40-LT1 | LT1 | 14 | TFC_test_A_1wk days | done | 2026-10-03 21:55 | 0.85 | 1042 | Y | all 13419 equal | Y (2026-10-05) |  |
+| 2022_02_16-TFC_test_A_1wk | 14_38_21-HC2 | HC2 | 7 | TFC_test_A_1wk days | done | 2026-10-03 22:20 | 0.44 | 806 | Y | all 6543 equal | Y (2026-10-05) |  |
 | 2022_02_16-TFC_test_A_1wk | 14_47_39-TFC_test_A_1wk | TFC_test_A_1wk | 7 | TFC_test_A_1wk days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_02_16-TFC_test_A_1wk | 14_57_31-HC3 | HC3 | 10 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
+| 2022_02_16-TFC_test_A_1wk | 14_57_31-HC3 | HC3 | 10 | TFC_test_A_1wk days | done | 2026-10-03 22:55 | 0.58 | 773 | Y | all 9870 equal | N |  |
 
-## G19 -- 6 of 30 batch sessions done
+## G19 -- 27 of 30 batch sessions done
 
 | day | session | type | videos | group | status | finished | wall_h | units | YrA | frames_checked | on_MINISCOPE | note |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| 2022_02_01-track_day1 | 14_17_11-HC1 | HC1 | 7 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2022_02_01-track_day1 | 14_23_04-LT1 | LT1 | 14 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2022_02_01-track_day1 | 14_34_23-HC2 | HC2 | 7 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2022_02_03-track_day2 | 16_28_00-HC1 | HC1 | 7 | track day 2 | pending |  |  |  |  |  |  |  |
-| 2022_02_03-track_day2 | 16_34_41-LT1 | LT1 | 14 | track day 2 | pending |  |  |  |  |  |  |  |
-| 2022_02_03-track_day2 | 16_46_52-HC2 | HC2 | 12 | track day 2 | pending |  |  |  |  |  |  |  |
+| 2022_02_01-track_day1 | 14_17_11-HC1 | HC1 | 7 | track day 1 | done | 2026-10-04 17:57 | 0.29 | 184 | Y | all 6582 equal | N |  |
+| 2022_02_01-track_day1 | 14_23_04-LT1 | LT1 | 14 | track day 1 | done | 2026-10-04 18:29 | 0.52 | 188 | Y | all 13030 equal | N |  |
+| 2022_02_01-track_day1 | 14_34_23-HC2 | HC2 | 7 | track day 1 | done | 2026-10-04 18:45 | 0.28 | 149 | Y | all 6471 equal | N |  |
+| 2022_02_03-track_day2 | 16_28_00-HC1 | HC1 | 7 | track day 2 | done | 2026-10-05 13:34 | 0.33 | 209 | Y | all 6956 equal | N |  |
+| 2022_02_03-track_day2 | 16_34_41-LT1 | LT1 | 14 | track day 2 | done | 2026-10-05 14:13 | 0.63 | 235 | Y | all 13912 equal | N |  |
+| 2022_02_03-track_day2 | 16_46_52-HC2 | HC2 | 12 | track day 2 | done | 2026-10-05 14:47 | 0.56 | 365 | Y | all 11686 equal | N |  |
 | 2022_02_05-track_day3 | 15_45_03-HC1 | HC1 | 7 | track day 3 | pending |  |  |  |  |  |  |  |
 | 2022_02_05-track_day3 | 15_50_35-LT1 | LT1 | 16 | track day 3 | pending |  |  |  |  |  |  |  |
 | 2022_02_05-track_day3 | 16_04_02-HC3 | HC3 | 10 | track day 3 | pending |  |  |  |  |  |  |  |
@@ -664,39 +664,39 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 | 2022_02_07-TFC_cond | 17_26_10-HC3 | HC3 | 8 | TFC_cond days | done | 2026-09-29 18:11 | 0.39 | 303 | Y | all 7635 equal | Y (2026-09-30) |  |
 | 2022_02_07-TFC_cond | 17_35_25-TFC_cond | TFC_cond | 27 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
 | 2022_02_07-TFC_cond | 17_59_59-HC4 | HC4 | 10 | TFC_cond days | done | 2026-09-29 18:38 | 0.44 | 334 | Y | all 9424 equal | Y (2026-09-30) |  |
-| 2022_02_09-TFC_test_B | 16_16_42-HC1 | HC1 | 7 | TFC_test_B days | pending |  |  |  |  |  |  |  |
+| 2022_02_09-TFC_test_B | 16_16_42-HC1 | HC1 | 7 | TFC_test_B days | done | 2026-09-30 16:06 | 0.35 | 354 | Y | all 6784 equal | Y (2026-10-05) |  |
 | 2022_02_09-TFC_test_B | 16_22_27-LT1 | LT1 | 15 | TFC_test_B days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_02_09-TFC_test_B | 16_34_55-HC2 | HC2 | 7 | TFC_test_B days | pending |  |  |  |  |  |  |  |
+| 2022_02_09-TFC_test_B | 16_34_55-HC2 | HC2 | 7 | TFC_test_B days | done | 2026-09-30 16:26 | 0.32 | 284 | Y | all 6512 equal | Y (2026-10-05) |  |
 | 2022_02_09-TFC_test_B | 16_44_35-TFC_test_B | TFC_test_B | 18 | TFC_test_B days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_02_09-TFC_test_B | 17_02_26-HC3 | HC3 | 7 | TFC_test_B days | pending |  |  |  |  |  |  |  |
-| 2022_02_12-TFC_test_A | 13_06_07-HC1 | HC1 | 7 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2022_02_12-TFC_test_A | 13_11_53-LT1 | LT1 | 13 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2022_02_12-TFC_test_A | 13_23_06-HC2 | HC2 | 8 | TFC_test_A days | pending |  |  |  |  |  |  |  |
+| 2022_02_09-TFC_test_B | 17_02_26-HC3 | HC3 | 7 | TFC_test_B days | done | 2026-09-30 16:48 | 0.35 | 360 | Y | all 6928 equal | Y (2026-10-05) |  |
+| 2022_02_12-TFC_test_A | 13_06_07-HC1 | HC1 | 7 | TFC_test_A days | done | 2026-10-02 20:13 | 0.32 | 283 | Y | all 6678 equal | Y (2026-10-05) |  |
+| 2022_02_12-TFC_test_A | 13_11_53-LT1 | LT1 | 13 | TFC_test_A days | done | 2026-10-02 20:47 | 0.56 | 257 | Y | all 12815 equal | Y (2026-10-05) |  |
+| 2022_02_12-TFC_test_A | 13_23_06-HC2 | HC2 | 8 | TFC_test_A days | done | 2026-10-02 21:11 | 0.36 | 302 | Y | all 7149 equal | Y (2026-10-05) |  |
 | 2022_02_12-TFC_test_A | 13_32_18-TFC_test_A | TFC_test_A | 7 | TFC_test_A days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_02_12-TFC_test_A | 13_39_41-HC3 | HC3 | 7 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2022_02_15-TFC_test_B_1wk | 14_53_05-HC1 | HC1 | 7 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_02_15-TFC_test_B_1wk | 14_58_30-LT1 | LT1 | 13 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_02_15-TFC_test_B_1wk | 15_09_42-HC2 | HC2 | 6 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
+| 2022_02_12-TFC_test_A | 13_39_41-HC3 | HC3 | 7 | TFC_test_A days | done | 2026-10-02 21:29 | 0.31 | 318 | Y | all 6289 equal | Y (2026-10-05) |  |
+| 2022_02_15-TFC_test_B_1wk | 14_53_05-HC1 | HC1 | 7 | TFC_test_B_1wk days | done | 2026-10-01 16:56 | 0.39 | 476 | Y | all 6382 equal | Y (2026-10-05) |  |
+| 2022_02_15-TFC_test_B_1wk | 14_58_30-LT1 | LT1 | 13 | TFC_test_B_1wk days | done | 2026-10-01 17:35 | 0.65 | 432 | Y | all 12780 equal | Y (2026-10-05) |  |
+| 2022_02_15-TFC_test_B_1wk | 15_09_42-HC2 | HC2 | 6 | TFC_test_B_1wk days | done | 2026-10-01 17:57 | 0.37 | 445 | Y | all 5987 equal | Y (2026-10-05) |  |
 | 2022_02_15-TFC_test_B_1wk | 15_18_44-TFC_test_B_1wk | TFC_test_B_1wk | 18 | TFC_test_B_1wk days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_02_15-TFC_test_B_1wk | 15_35_58-HC3 | HC3 | 8 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_02_16-TFC_test_A_1wk | 15_30_15-HC1 | HC1 | 11 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_02_16-TFC_test_A_1wk | 15_38_53-LT1 | LT1 | 14 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_02_16-TFC_test_A_1wk | 16_00_42-HC2 | HC2 | 8 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
+| 2022_02_15-TFC_test_B_1wk | 15_35_58-HC3 | HC3 | 8 | TFC_test_B_1wk days | done | 2026-10-01 18:28 | 0.49 | 562 | Y | all 7873 equal | Y (2026-10-05) |  |
+| 2022_02_16-TFC_test_A_1wk | 15_30_15-HC1 | HC1 | 11 | TFC_test_A_1wk days | done | 2026-10-03 23:17 | 0.43 | 174 | Y | all 10196 equal | N |  |
+| 2022_02_16-TFC_test_A_1wk | 15_38_53-LT1 | LT1 | 14 | TFC_test_A_1wk days | done | 2026-10-04 00:00 | 0.67 | 578 | Y | all 13692 equal | N |  |
+| 2022_02_16-TFC_test_A_1wk | 16_00_42-HC2 | HC2 | 8 | TFC_test_A_1wk days | done | 2026-10-04 00:20 | 0.35 | 331 | Y | all 7656 equal | N |  |
 | 2022_02_16-TFC_test_A_1wk | 16_10_03-TFC_test_A_1wk | TFC_test_A_1wk | 8 | TFC_test_A_1wk days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_02_16-TFC_test_A_1wk | 16_18_38-HC3 | HC3 | 9 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
+| 2022_02_16-TFC_test_A_1wk | 16_18_38-HC3 | HC3 | 9 | TFC_test_A_1wk days | done | 2026-10-04 00:49 | 0.47 | 537 | Y | all 8988 equal | N |  |
 
-## G20 -- 5 of 31 batch sessions done
+## G20 -- 26 of 31 batch sessions done
 
 | day | session | type | videos | group | status | finished | wall_h | units | YrA | frames_checked | on_MINISCOPE | note |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 2022_03_01-monitor1 | 13_32_31-HC1 | HC1 | 7 | everything else | pending |  |  |  |  |  |  |  |
 | 2022_03_09-monitor2 | 14_53_06-HC1 | HC1 | 12 | everything else | pending |  |  |  |  |  |  |  |
-| 2022_03_14-track_day1 | 14_15_30-HC1 | HC1 | 7 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2022_03_14-track_day1 | 14_22_00-LT1 | LT1 | 13 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2022_03_14-track_day1 | 14_32_59-HC2 | HC2 | 7 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2022_03_16-track_day2 | 13_38_06-HC1 | HC1 | 6 | track day 2 | pending |  |  |  |  |  |  |  |
-| 2022_03_16-track_day2 | 13_43_39-LT1 | LT1 | 15 | track day 2 | pending |  |  |  |  |  |  |  |
-| 2022_03_16-track_day2 | 13_56_07-HC2 | HC2 | 8 | track day 2 | pending |  |  |  |  |  |  |  |
+| 2022_03_14-track_day1 | 14_15_30-HC1 | HC1 | 7 | track day 1 | done | 2026-10-04 19:03 | 0.28 | 250 | Y | all 6013 equal | N |  |
+| 2022_03_14-track_day1 | 14_22_00-LT1 | LT1 | 13 | track day 1 | done | 2026-10-04 19:47 | 0.66 | 793 | Y | all 12436 equal | N |  |
+| 2022_03_14-track_day1 | 14_32_59-HC2 | HC2 | 7 | track day 1 | done | 2026-10-04 20:10 | 0.40 | 728 | Y | all 6341 equal | N |  |
+| 2022_03_16-track_day2 | 13_38_06-HC1 | HC1 | 6 | track day 2 | done | 2026-10-05 15:13 | 0.38 | 773 | Y | all 5984 equal | N |  |
+| 2022_03_16-track_day2 | 13_43_39-LT1 | LT1 | 15 | track day 2 | done | 2026-10-05 15:56 | 0.73 | 756 | Y | all 14224 equal | N |  |
+| 2022_03_16-track_day2 | 13_56_07-HC2 | HC2 | 8 | track day 2 | done | 2026-10-05 16:18 | 0.39 | 565 | Y | all 7054 equal | N |  |
 | 2022_03_18-track_day3 | 14_03_26-HC1 | HC1 | 7 | track day 3 | pending |  |  |  |  |  |  |  |
 | 2022_03_18-track_day3 | 14_09_10-LT1 | LT1 | 14 | track day 3 | pending |  |  |  |  |  |  |  |
 | 2022_03_18-track_day3 | 14_21_08-HC2 | HC2 | 7 | track day 3 | pending |  |  |  |  |  |  |  |
@@ -708,40 +708,40 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 | 2022_03_22-TFC_cond | 14_28_23-HC3 | HC3 | 7 | TFC_cond days | done | 2026-09-29 19:55 | 0.33 | 401 | Y | all 6136 equal | Y (2026-09-30) |  |
 | 2022_03_22-TFC_cond | 14_37_19-TFC_cond | TFC_cond | 26 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
 | 2022_03_22-TFC_cond | 15_02_37-HC4 | HC4 | 6 | TFC_cond days | done | 2026-09-29 20:14 | 0.32 | 353 | Y | all 5981 equal | Y (2026-09-30) |  |
-| 2022_03_24-TFC_test_B | 12_44_44-HC1 | HC1 | 8 | TFC_test_B days | pending |  |  |  |  |  |  |  |
+| 2022_03_24-TFC_test_B | 12_44_44-HC1 | HC1 | 8 | TFC_test_B days | done | 2026-09-30 17:12 | 0.38 | 523 | Y | all 7068 equal | Y (2026-10-05) |  |
 | 2022_03_24-TFC_test_B | 12_51_39-LT1 | LT1 | 14 | TFC_test_B days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_03_24-TFC_test_B | 13_03_29-HC2 | HC2 | 11 | TFC_test_B days | pending |  |  |  |  |  |  |  |
+| 2022_03_24-TFC_test_B | 13_03_29-HC2 | HC2 | 11 | TFC_test_B days | done | 2026-09-30 17:46 | 0.56 | 648 | Y | all 10216 equal | Y (2026-10-05) |  |
 | 2022_03_24-TFC_test_B | 13_21_06-TFC_test_B | TFC_test_B | 19 | TFC_test_B days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_03_24-TFC_test_B | 13_39_07-HC3 | HC3 | 8 | TFC_test_B days | pending |  |  |  |  |  |  |  |
-| 2022_03_26-TFC_test_A | 16_02_48-HC1 | HC1 | 8 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2022_03_26-TFC_test_A | 16_08_55-LT1 | LT1 | 14 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2022_03_26-TFC_test_A | 16_21_16-HC2 | HC2 | 9 | TFC_test_A days | pending |  |  |  |  |  |  |  |
+| 2022_03_24-TFC_test_B | 13_39_07-HC3 | HC3 | 8 | TFC_test_B days | done | 2026-09-30 18:12 | 0.43 | 631 | Y | all 7167 equal | Y (2026-10-05) |  |
+| 2022_03_26-TFC_test_A | 16_02_48-HC1 | HC1 | 8 | TFC_test_A days | done | 2026-10-02 21:47 | 0.34 | 232 | Y | all 7207 equal | Y (2026-10-05) |  |
+| 2022_03_26-TFC_test_A | 16_08_55-LT1 | LT1 | 14 | TFC_test_A days | done | 2026-10-02 22:31 | 0.67 | 564 | Y | all 13696 equal | Y (2026-10-05) |  |
+| 2022_03_26-TFC_test_A | 16_21_16-HC2 | HC2 | 9 | TFC_test_A days | done | 2026-10-02 22:53 | 0.39 | 329 | Y | all 8203 equal | Y (2026-10-05) |  |
 | 2022_03_26-TFC_test_A | 16_33_21-TFC_test_A | TFC_test_A | 7 | TFC_test_A days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_03_26-TFC_test_A | 16_40_36-HC3 | HC3 | 7 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2022_03_29-TFC_test_B_1wk | 14_35_59-HC1 | HC1 | 7 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_03_29-TFC_test_B_1wk | 14_41_18-LT1 | LT1 | 13 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_03_29-TFC_test_B_1wk | 14_53_11-HC2 | HC2 | 11 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
+| 2022_03_26-TFC_test_A | 16_40_36-HC3 | HC3 | 7 | TFC_test_A days | done | 2026-10-02 23:17 | 0.39 | 523 | Y | all 6999 equal | Y (2026-10-05) |  |
+| 2022_03_29-TFC_test_B_1wk | 14_35_59-HC1 | HC1 | 7 | TFC_test_B_1wk days | done | 2026-10-01 18:43 | 0.30 | 200 | Y | all 6190 equal | Y (2026-10-05) |  |
+| 2022_03_29-TFC_test_B_1wk | 14_41_18-LT1 | LT1 | 13 | TFC_test_B_1wk days | done | 2026-10-01 19:31 | 0.72 | 661 | Y | all 12767 equal | Y (2026-10-05) |  |
+| 2022_03_29-TFC_test_B_1wk | 14_53_11-HC2 | HC2 | 11 | TFC_test_B_1wk days | done | 2026-10-01 20:02 | 0.55 | 438 | Y | all 10787 equal | Y (2026-10-05) |  |
 | 2022_03_29-TFC_test_B_1wk | 15_06_19-TFC_test_B_1wk | TFC_test_B_1wk | 19 | TFC_test_B_1wk days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_03_29-TFC_test_B_1wk | 15_24_36-HC3 | HC3 | 9 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_03_31-TFC_test_A_1wk | 13_09_18-HC1 | HC1 | 7 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_03_31-TFC_test_A_1wk | 13_15_54-LT1 | LT1 | 16 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_03_31-TFC_test_A_1wk | 13_30_11-HC2 | HC2 | 13 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
+| 2022_03_29-TFC_test_B_1wk | 15_24_36-HC3 | HC3 | 9 | TFC_test_B_1wk days | done | 2026-10-01 20:29 | 0.45 | 467 | Y | all 8045 equal | Y (2026-10-05) |  |
+| 2022_03_31-TFC_test_A_1wk | 13_09_18-HC1 | HC1 | 7 | TFC_test_A_1wk days | done | 2026-10-04 01:05 | 0.30 | 286 | Y | all 6482 equal | N |  |
+| 2022_03_31-TFC_test_A_1wk | 13_15_54-LT1 | LT1 | 16 | TFC_test_A_1wk days | done | 2026-10-04 01:55 | 0.77 | 688 | Y | all 15790 equal | N |  |
+| 2022_03_31-TFC_test_A_1wk | 13_30_11-HC2 | HC2 | 13 | TFC_test_A_1wk days | done | 2026-10-04 02:36 | 0.68 | 806 | Y | all 12319 equal | N |  |
 | 2022_03_31-TFC_test_A_1wk | 13_45_31-TFC_test_A_1wk | TFC_test_A_1wk | 9 | TFC_test_A_1wk days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_03_31-TFC_test_A_1wk | 13_54_45-HC3 | HC3 | 10 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
+| 2022_03_31-TFC_test_A_1wk | 13_54_45-HC3 | HC3 | 10 | TFC_test_A_1wk days | done | 2026-10-04 03:05 | 0.49 | 656 | Y | all 9116 equal | N |  |
 
-## G21 -- 5 of 32 batch sessions done
+## G21 -- 26 of 32 batch sessions done
 
 | day | session | type | videos | group | status | finished | wall_h | units | YrA | frames_checked | on_MINISCOPE | note |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | 2022_03_01-monitor1 | 14_04_19-HC1 | HC1 | 7 | everything else | pending |  |  |  |  |  |  |  |
 | 2022_03_09-monitor2 | 15_24_21-HC1 | HC1 | 7 | everything else | pending |  |  |  |  |  |  |  |
 | 2022_03_09-monitor2 | 16_22_52-HC2 | HC2 | 7 | everything else | pending |  |  |  |  |  |  |  |
-| 2022_03_14-track_day1 | 15_06_01-HC1 | HC1 | 7 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2022_03_14-track_day1 | 15_11_27-LT1 | LT1 | 13 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2022_03_14-track_day1 | 15_22_39-HC2 | HC2 | 7 | track day 1 | pending |  |  |  |  |  |  |  |
-| 2022_03_16-track_day2 | 14_38_52-HC1 | HC1 | 6 | track day 2 | pending |  |  |  |  |  |  |  |
-| 2022_03_16-track_day2 | 14_44_31-LT1 | LT1 | 14 | track day 2 | pending |  |  |  |  |  |  |  |
-| 2022_03_16-track_day2 | 14_56_16-HC2 | HC2 | 7 | track day 2 | pending |  |  |  |  |  |  |  |
+| 2022_03_14-track_day1 | 15_06_01-HC1 | HC1 | 7 | track day 1 | done | 2026-10-04 20:23 | 0.28 | 192 | Y | all 6402 equal | N |  |
+| 2022_03_14-track_day1 | 15_11_27-LT1 | LT1 | 13 | track day 1 | done | 2026-10-04 21:03 | 0.61 | 529 | Y | all 12797 equal | N |  |
+| 2022_03_14-track_day1 | 15_22_39-HC2 | HC2 | 7 | track day 1 | done | 2026-10-04 21:17 | 0.29 | 261 | Y | all 6166 equal | N |  |
+| 2022_03_16-track_day2 | 14_38_52-HC1 | HC1 | 6 | track day 2 | done | 2026-10-05 16:29 | 0.25 | 75 | Y | all 5963 equal | N |  |
+| 2022_03_16-track_day2 | 14_44_31-LT1 | LT1 | 14 | track day 2 | done | 2026-10-05 17:11 | 0.62 | 574 | Y | all 13568 equal | N |  |
+| 2022_03_16-track_day2 | 14_56_16-HC2 | HC2 | 7 | track day 2 | done | 2026-10-05 17:26 | 0.31 | 368 | Y | all 6306 equal | N |  |
 | 2022_03_18-track_day3 | 14_48_58-HC1 | HC1 | 7 | track day 3 | pending |  |  |  |  |  |  |  |
 | 2022_03_18-track_day3 | 14_54_16-LT1 | LT1 | 14 | track day 3 | pending |  |  |  |  |  |  |  |
 | 2022_03_18-track_day3 | 15_05_58-HC2 | HC2 | 8 | track day 3 | pending |  |  |  |  |  |  |  |
@@ -753,23 +753,23 @@ Sessions the batch processes, by priority group (the batch runs the groups in th
 | 2022_03_22-TFC_cond | 17_31_06-HC3 | HC3 | 7 | TFC_cond days | done | 2026-09-29 21:50 | 0.46 | 234 | Y | all 6423 equal | Y (2026-09-30) |  |
 | 2022_03_22-TFC_cond | 17_39_30-TFC_cond | TFC_cond | 26 | TFC_cond days | production |  |  |  | Y |  | Y (source) |  |
 | 2022_03_22-TFC_cond | 18_04_08-HC4 | HC4 | 7 | TFC_cond days | done | 2026-09-29 22:17 | 0.46 | 299 | Y | all 6498 equal | Y (2026-09-30) |  |
-| 2022_03_24-TFC_test_B | 14_06_57-HC1 | HC1 | 7 | TFC_test_B days | pending |  |  |  |  |  |  |  |
+| 2022_03_24-TFC_test_B | 14_06_57-HC1 | HC1 | 7 | TFC_test_B days | done | 2026-09-30 18:26 | 0.29 | 270 | Y | all 6292 equal | Y (2026-10-05) |  |
 | 2022_03_24-TFC_test_B | 14_12_17-LT1 | LT1 | 16 | TFC_test_B days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_03_24-TFC_test_B | 14_25_23-HC2 | HC2 | 7 | TFC_test_B days | pending |  |  |  |  |  |  |  |
+| 2022_03_24-TFC_test_B | 14_25_23-HC2 | HC2 | 7 | TFC_test_B days | done | 2026-09-30 18:47 | 0.31 | 425 | Y | all 6006 equal | Y (2026-10-05) |  |
 | 2022_03_24-TFC_test_B | 14_35_02-TFC_test_B | TFC_test_B | 18 | TFC_test_B days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_03_24-TFC_test_B | 14_52_11-HC3 | HC3 | 11 | TFC_test_B days | pending |  |  |  |  |  |  |  |
-| 2022_03_26-TFC_test_A | 17_19_25-HC1 | HC1 | 7 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2022_03_26-TFC_test_A | 17_25_15-LT1 | LT1 | 14 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2022_03_26-TFC_test_A | 17_37_21-HC2 | HC2 | 11 | TFC_test_A days | pending |  |  |  |  |  |  |  |
+| 2022_03_24-TFC_test_B | 14_52_11-HC3 | HC3 | 11 | TFC_test_B days | done | 2026-09-30 19:12 | 0.46 | 381 | Y | all 10323 equal | Y (2026-10-05) |  |
+| 2022_03_26-TFC_test_A | 17_19_25-HC1 | HC1 | 7 | TFC_test_A days | done | 2026-10-02 23:32 | 0.29 | 128 | Y | all 6765 equal | Y (2026-10-05) |  |
+| 2022_03_26-TFC_test_A | 17_25_15-LT1 | LT1 | 14 | TFC_test_A days | done | 2026-10-03 00:18 | 0.70 | 615 | Y | all 13887 equal | Y (2026-10-05) |  |
+| 2022_03_26-TFC_test_A | 17_37_21-HC2 | HC2 | 11 | TFC_test_A days | done | 2026-10-03 00:48 | 0.51 | 568 | Y | all 10422 equal | Y (2026-10-05) |  |
 | 2022_03_26-TFC_test_A | 17_50_05-TFC_test_A | TFC_test_A | 9 | TFC_test_A days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_03_26-TFC_test_A | 17_59_52-HC3 | HC3 | 8 | TFC_test_A days | pending |  |  |  |  |  |  |  |
-| 2022_03_29-TFC_test_B_1wk | 16_04_25-HC1 | HC1 | 7 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_03_29-TFC_test_B_1wk | 16_10_00-LT1 | LT1 | 14 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_03_29-TFC_test_B_1wk | 16_21_36-HC2 | HC2 | 8 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
+| 2022_03_26-TFC_test_A | 17_59_52-HC3 | HC3 | 8 | TFC_test_A days | done | 2026-10-03 01:08 | 0.38 | 348 | Y | all 7702 equal | Y (2026-10-05) |  |
+| 2022_03_29-TFC_test_B_1wk | 16_04_25-HC1 | HC1 | 7 | TFC_test_B_1wk days | done | 2026-10-01 20:45 | 0.32 | 119 | Y | all 6589 equal | Y (2026-10-05) |  |
+| 2022_03_29-TFC_test_B_1wk | 16_10_00-LT1 | LT1 | 14 | TFC_test_B_1wk days | done | 2026-10-01 21:30 | 0.69 | 584 | Y | all 13213 equal | Y (2026-10-05) |  |
+| 2022_03_29-TFC_test_B_1wk | 16_21_36-HC2 | HC2 | 8 | TFC_test_B_1wk days | done | 2026-10-01 21:51 | 0.37 | 449 | Y | all 7198 equal | Y (2026-10-05) |  |
 | 2022_03_29-TFC_test_B_1wk | 16_30_54-TFC_test_B_1wk | TFC_test_B_1wk | 18 | TFC_test_B_1wk days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_03_29-TFC_test_B_1wk | 16_48_17-HC3 | HC3 | 7 | TFC_test_B_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_03_31-TFC_test_A_1wk | 14_44_01-HC1 | HC1 | 8 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_03_31-TFC_test_A_1wk | 14_49_58-LT1 | LT1 | 14 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
-| 2022_03_31-TFC_test_A_1wk | 15_02_13-HC2 | HC2 | 8 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
+| 2022_03_29-TFC_test_B_1wk | 16_48_17-HC3 | HC3 | 7 | TFC_test_B_1wk days | done | 2026-10-01 22:09 | 0.34 | 468 | Y | all 6630 equal | Y (2026-10-05) |  |
+| 2022_03_31-TFC_test_A_1wk | 14_44_01-HC1 | HC1 | 8 | TFC_test_A_1wk days | done | 2026-10-04 03:18 | 0.28 | 93 | Y | all 7017 equal | N |  |
+| 2022_03_31-TFC_test_A_1wk | 14_49_58-LT1 | LT1 | 14 | TFC_test_A_1wk days | done | 2026-10-04 04:02 | 0.66 | 563 | Y | all 13867 equal | N |  |
+| 2022_03_31-TFC_test_A_1wk | 15_02_13-HC2 | HC2 | 8 | TFC_test_A_1wk days | done | 2026-10-04 04:24 | 0.38 | 457 | Y | all 7402 equal | N |  |
 | 2022_03_31-TFC_test_A_1wk | 15_12_05-TFC_test_A_1wk | TFC_test_A_1wk | 7 | TFC_test_A_1wk days | production |  |  |  | Y |  | Y (source) |  |
-| 2022_03_31-TFC_test_A_1wk | 15_20_37-HC3 | HC3 | 13 | TFC_test_A_1wk days | pending |  |  |  |  |  |  |  |
+| 2022_03_31-TFC_test_A_1wk | 15_20_37-HC3 | HC3 | 13 | TFC_test_A_1wk days | done | 2026-10-04 04:56 | 0.57 | 393 | Y | all 12624 equal | N |  |
