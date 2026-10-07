@@ -182,10 +182,12 @@ bytes is a bare header; 0 bytes is empty. Probed on MINIRAZER with `minian-nativ
 | G11 `2021_12_02-TFC_test_A_1wk/15_32_02-HC2` | 0–2 (3,000) | 3 (246 MB), 4–5 (header) | stops early |
 | G18 `2022_02_07-TFC_cond/14_03_44-HC1` | 0–3 (4,000) | 4 (322 MB), 5–6 (header), 7 (0 B) | stops early |
 
-**Two of them are analysis sessions**: G06 `12_18_46-LT1` is the loader's `dpath_Test_A_LT1['G06']` and G05
-`16_11_07-LT1` is `dpath_Test_A_1wk_LT1['G05']` (`caban/loader.py`) — both with the mid-session gap, so
-they cannot be left out, and their existing `minian_crossreg1` output needs the §15.1 timing check
-(was it paired with timestamps as if the gap were not there?).
+**None of them feeds an existing analysis** (checked 2026-10-07; corrects a claim of 10-05). G06
+`12_18_46-LT1` and G05 `16_11_07-LT1` are listed in the loader's `dpath_Test_A_LT1` /
+`dpath_Test_A_1wk_LT1` tables, but the loader builds no session from those tables (it builds TFC_cond, its
+LT1/LT2, Test_A, Test_A_1wk, Test_B, Test_B_1wk only; `caban/loader.py` ~1099–1258), nothing else reads
+them, and neither session ever had Minian output on MINISCOPE. They matter only to a future analysis
+of test-day LT1s (e.g. a crossreg grouping of LT1 across days, open item 4).
 
 Options per session: leave out (G07 HC3 surely); or run on the finalised files only, listing the
 unfinished ones in `session_queue.UNUSED_VIDEOS` as for G15/G21 — the loader's §15.1 row-to-frame

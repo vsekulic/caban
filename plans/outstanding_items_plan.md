@@ -18,7 +18,7 @@ recomputed YrA (`24fe3a9`); item 12's index part (`0e6657b`); item 14, Tailscale
 
 | # | item | where | recommendation |
 |---|---|---|---|
-| A1 | **The two analysis LT1s with a gap mid-recording**: G06 `2021_10_22-TFC_test_A/12_18_46-LT1` (`dpath_Test_A_LT1`), G05 `2021_09_09-TFC_test_A_1wk/16_11_07-LT1` (`dpath_Test_A_1wk_LT1`) | item 15 | **Do this first.** Check what their old output used: if its `C` frame count equals the finalised files only, the old pipeline skipped the broken ones. Then list the broken files in `session_queue.UNUSED_VIDEOS`, re-run, and let the loader's §15.1 mapping ([yra_recompute_plan.md](yra_recompute_plan.md) §15.1) pair the timestamps around the gap. Then check whether any Test_A / Test_A_1wk LT1 result moves, as was done for G21. |
+| A1 | **The two LT1s with a gap mid-recording**: G06 `2021_10_22-TFC_test_A/12_18_46-LT1`, G05 `2021_09_09-TFC_test_A_1wk/16_11_07-LT1` | item 15 | **Checked 2026-10-07: not analysis sessions** — no existing result depends on them. They sit in the loader's `dpath_Test_A_LT1` / `dpath_Test_A_1wk_LT1` tables, but the loader builds no session from those tables, nothing else reads them, and neither ever had Minian output. **Recommendation: park them until D1.** If a grouping of test-day LT1s is chosen, run them on their finalised files (broken files in `session_queue.UNUSED_VIDEOS`; first check that the batch runner honours that table) and pair timestamps around the gap through the §15.1 mapping ([yra_recompute_plan.md](yra_recompute_plan.md) §15.1). |
 | A2 | **Three more sessions with unfinished video files**: G07 `2021_10_20-TFC_test_B/16_25_43-HC3`, G11 `2021_12_02-TFC_test_A_1wk/15_32_02-HC2`, G18 `2022_02_07-TFC_cond/14_03_44-HC1` | item 15 | Leave out G07 HC3 (at most ~100 frames). Run G11 HC2 (3,000 frames) and G18 HC1 (4,000 frames) on their finalised files only if an HC analysis needs them; otherwise leave them out and note it. |
 | A3 | **Two unfinished recordings**: G07 `2021_10_20-TFC_test_B/15_49_59-TFC_test_B`, G14 `2022_01_18-TFC_test_B_1wk/14_52_35-TFC_test_B_1wk-borked` | item 10; Fig. 2 plan §3 | Check that neither is a session the loader reads. It already reads other sessions for those test days, so these are most likely spares. If so, leave them out. |
 | A4 | **G18 `2022_02_07-TFC_cond/14_57_23-CNO2-borked`**: the YrA step fails in `compute_trace` (`ValueError: All arrays must be instances of SparseArray`, after a divide-by-zero warning) | handover, 10-02 update | Debug on the Razer (probably an all-zero footprint), then `mr.resume_after_notebook`, with no notebook re-run. Small. It matters only if per-cell CNO analyses happen (D1). |
@@ -65,5 +65,6 @@ recomputed YrA (`24fe3a9`); item 12's index part (`0e6657b`); item 14, Tailscale
 
 ## Suggested order
 
-A1 → B1 → C1–C3 and B2 (the Figure 2 loose ends) → D2–D3, with E4 and E6 in the gaps. The decisions
-on A1, B1 and D1 are VS's; once they are made, the code and the runs on the Razer are Claude's.
+B1 → C1–C3 and B2 (the Figure 2 loose ends) → D2–D3, with E4 and E6 in the gaps; A1 waits for D1.
+(A1 was first until 2026-10-07, when it turned out to touch no existing analysis.) The decisions on B1
+and D1 are VS's; once they are made, the code and the runs on the Razer are Claude's.
