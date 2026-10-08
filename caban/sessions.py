@@ -1,9 +1,9 @@
 from tkinter.filedialog import SaveFileDialog
 import numpy as np
 from caban.utilities import *
-from caban.session_queue import (NO_RECOMPUTED_YRA, RECOMPUTED_YRA_SIDECAR, imaged_timestamp_rows,
-                                  locate_recomputed_yra, original_output_path, read_sidecar,
-                                  session_tail, unimaged_timestamp_rows)
+from caban.session_queue import (MINISCOPE_FPS_EXCEPTIONS, NO_RECOMPUTED_YRA, RECOMPUTED_YRA_SIDECAR,
+                                  imaged_timestamp_rows, locate_recomputed_yra, original_output_path,
+                                  read_sidecar, session_tail, unimaged_timestamp_rows)
 import ast
 import glob
 from natsort import natsorted
@@ -345,6 +345,39 @@ class CrossRegMapping:
             return self.mappings_df.iloc[mapping]
         return cells
 
+
+def measured_miniscope_frame_rate(tstamp_ms) -> float:
+    """Frames per second over a session's Miniscope timestamps (ms), as in the 2026-10-07 scan.
+
+    Row 0 is dropped: the Miniscope software stamps it before acquisition starts (a negative time).
+    """
+    t = np.asarray(tstamp_ms, dtype=float)[1:]
+    if t.size < 2 or not t[-1] > t[0]:
+        raise ValueError("cannot measure a frame rate from {} timestamps".format(t.size))
+    return (t.size - 1) * 1000.0 / (t[-1] - t[0])
+
+
+def check_miniscope_frame_rate(session_dir, tstamp_ms) -> float:
+    """Raise unless the session's measured rate matches the rate the analysis assumes for it.
+
+    The assumed rate is ``MINISCOPE_FPS`` or, for the sessions in
+    ``session_queue.MINISCOPE_FPS_EXCEPTIONS``, their own listed rate; both must hold to within
+    ``MINISCOPE_FPS_TOLERANCE`` (relative). Returns the measured rate.
+    plans/miniscope_frame_rate_plan.md.
+    """
+    tail = session_tail(session_dir)
+    expected = MINISCOPE_FPS_EXCEPTIONS.get(tail, MINISCOPE_FPS)
+    measured = measured_miniscope_frame_rate(tstamp_ms)
+    if abs(measured / expected - 1.0) > MINISCOPE_FPS_TOLERANCE:
+        raise ValueError(
+            "{}: Miniscope frame rate {:.4f} fps measured from timeStamps.csv, but the analysis "
+            "assumes {} fps (tolerance {:.1%}). If the session was recorded at another setting, "
+            "list it in session_queue.MINISCOPE_FPS_EXCEPTIONS; see "
+            "plans/miniscope_frame_rate_plan.md.".format(tail, measured, expected,
+                                                        MINISCOPE_FPS_TOLERANCE))
+    return measured
+
+
 class BehaviourSession:
     _cache_pruned_fields = {
         'A',
@@ -560,6 +593,7 @@ class BehaviourSession:
 
         fnum_miniscope = df.iloc[:,frame_col]
         tstamp_miniscope = df.iloc[:,tstamp_col]
+        self.miniscope_fps_measured = check_miniscope_frame_rate(dpath, tstamp_miniscope)
 
         # Get timestampes for BehavCam
         if self.saver_timestamps.check_exists('BehavCam_df'):

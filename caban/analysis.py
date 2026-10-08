@@ -3020,10 +3020,6 @@ def process_PSTH_shuffle(PLOTS_DIR, mice_per_group, crossreg_mice, session, mapp
             if stim == 'shock':
                 #onsets = s.shock_onsets
                 #offsets = s.shock_offsets
-                onsets = []
-                for i in range(len(s.shock_onsets)):
-                    # Iterate through defined shock onsets but use def values (e.g. G09 only has 4 shocks)
-                    onsets.append(s.shock_onsets_def[i]*MINISCOPE_FPS)
                 onsets = s.shock_onsets
 
             if mapping_type == 'full':
@@ -3476,10 +3472,6 @@ def process_PSTH_shuffle1(PLOTS_DIR, mice_per_group, crossreg_mice, session, map
             if stim == 'shock':
                 #onsets = s.shock_onsets
                 #offsets = s.shock_offsets
-                onsets = []
-                for i in range(len(s.shock_onsets)):
-                    # Iterate through defined shock onsets but use def values (e.g. G09 only has 4 shocks)
-                    onsets.append(s.shock_onsets_def[i]*MINISCOPE_FPS)
                 onsets = s.shock_onsets
 
             if mapping_type == 'full':
@@ -3900,9 +3892,6 @@ def process_PSTH_shuffle_sep(PLOTS_DIR, mice_per_group, crossreg_mice, session, 
             if stim == 'shock':
                 #onsets = s.shock_onsets
                 #offsets = s.shock_offsets
-                onsets = s.shock_onsets_def.copy()
-                for i in range(len(onsets)):
-                    onsets[i] *= MINISCOPE_FPS
                 onsets = s.shock_onsets
 
             if mapping_type == 'full':
@@ -4189,9 +4178,6 @@ def process_PSTH_shuffle_sep_S(PLOTS_DIR, mice_per_group, crossreg_mice, session
             if stim == 'shock':
                 #onsets = s.shock_onsets
                 #offsets = s.shock_offsets
-                onsets = s.shock_onsets_def.copy()
-                for i in range(len(onsets)):
-                    onsets[i] *= MINISCOPE_FPS
                 onsets = s.shock_onsets
 
             if mapping_type == 'full':
@@ -10069,7 +10055,7 @@ def plot_pop_vectors(PLOTS_DIR, session, mouse_groups, session_str, bin_width=2,
         group = mouse_groups[mouse]
 
         S = sess.S
-        bin_frames = bin_width * MINISCOPE_FPS
+        bin_frames = int(round(bin_width * MINISCOPE_FPS))
         curr_frame = 0
 
         upper=1
@@ -10138,7 +10124,7 @@ def process_mice_for_R(mouse, TFC_cond, Test_B, Test_B_1wk, mapping, \
     print('*** Test_B_1wk {} tone_onsets {}'.format(mouse, sess_Test_B_1wk.tone_onsets))
     print('*** Test_B_1wk {} tone_offsets {}'.format(mouse, sess_Test_B_1wk.tone_offsets))
 
-    bin_frames = bin_width * MINISCOPE_FPS
+    bin_frames = int(round(bin_width * MINISCOPE_FPS))
     upper=1
     lower=0
     print('*** Using bin_width {} s = bin_frames {}'.format(bin_width, bin_frames))
@@ -10327,7 +10313,7 @@ def cluster_pop_vectors_helper(PLOTS_DIR, session, session_str, mouse, group, tr
     transpose_str = ''
     if transpose_wanted:
         transpose_str = 'transpose_'
-        bin_frames = bin_width * MINISCOPE_FPS
+        bin_frames = int(round(bin_width * MINISCOPE_FPS))
         look_ahead = int(20 / bin_width) # should be 20 seconds.
         look_ahead_trunc = int(15 / bin_width) # just for TFC_cond 1st period
 
@@ -11337,7 +11323,7 @@ def pop_vectors_dist_helper(PLOTS_DIR, session, session_str, mouse, group, \
 
     max_C = np.max(C)
     transpose_str = ''
-    bin_frames = bin_width * MINISCOPE_FPS
+    bin_frames = int(round(bin_width * MINISCOPE_FPS))
     look_ahead = int(20 / bin_width) # should be 20 seconds.
     look_ahead_trunc = int(15 / bin_width) # just for TFC_cond 1st period
 
@@ -12626,7 +12612,7 @@ def calc_binned_PV(session, crossreg, mouse, group, mapping='TFC_cond+Test_B+Tes
                 C_B=s_B.S
                 C_B_1wk=s_B_1wk.S
 
-    bin_frames = bin_width * MINISCOPE_FPS
+    bin_frames = int(round(bin_width * MINISCOPE_FPS))
     look_ahead = int(20 / bin_width) # should be 20 seconds.
     look_ahead_trunc = int(15 / bin_width) # just for TFC_cond 1st period
 

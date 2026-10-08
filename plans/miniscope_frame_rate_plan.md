@@ -66,4 +66,25 @@ From every `Miniscope/timeStamps.csv` on MINISCOPE, G05–G21, sessions ≥ 2,00
 
 ## 4. Status
 
-- 2026-10-07: decisions recorded; nothing changed in code yet.
+- 2026-10-07: decisions recorded.
+- **2026-10-08, step 1 done:**
+  - `MINISCOPE_FPS = 19.76` and `MINISCOPE_FPS_TOLERANCE = 0.001` (`caban/utilities.py`).
+  - `session_queue.MINISCOPE_FPS_EXCEPTIONS` lists G05 Test_A at 24.64.
+  - `caban.sessions.check_miniscope_frame_rate` runs in `get_timestamps` for every session and stores
+    `miniscope_fps_measured`.
+  - Run over every session on MINISCOPE (G05–G21, ≥ 2,000 frames): 653 pass and 4 fail, none of them
+    built by the loader: G05 `TFC_test_B/15_20_05-iso` (stub), G11 `TFC_test_A/17_11_20-HC2`
+    (17 gaps, 19.687), G15 `TFC_cond/18_39_20-HC4` (24.64, deliberately unlisted) and G18
+    `CNO2-borked` (27.0).
+  - Fallout of the constant becoming a float, fixed:
+    - 5 population-vector `bin_frames` and 2 spatial shuffle ranges now round to whole frames
+      (`int(round(...))`); they would have crashed on fractional slices.
+    - 4 dead blocks in `caban/analysis.py`'s PSTH functions deleted: they computed shock-onset frames
+      as seconds × rate, then overwrote them with the timestamp-derived `s.shock_onsets`.
+  - Unchanged, and fine: isomap's down-sampling factor is still exactly 2 (19.76 / 9.88).
+  - Changes results, to see in the before/after comparison (step 6):
+    - `filter_abnormal_cells`' plateau limit `int(15 s × fps)` goes 300 → 296 frames, so the
+      abnormal-cell filter, and hence the cell sets, can move slightly;
+    - every `int(s × fps)` site now truncates (e.g. 10 s → 197 frames).
+  - **G05 Test_A still runs on the constant (now 19.76 instead of 20)** until step 2 lands: its rates
+    are still about 20 % low.

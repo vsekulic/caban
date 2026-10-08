@@ -13,7 +13,12 @@ import time
 from sklearn.covariance import LedoitWolf
 import random
 
-MINISCOPE_FPS = 20
+# The Miniscope's real frame rate at its 20 fps setting, measured from timeStamps.csv over all 655
+# such sessions (median 19.760; 1-99 % 19.754-19.763; constant along each recording; the behaviour
+# camera on the same PC clock reads 15.0). plans/miniscope_frame_rate_plan.md. Every session's own
+# rate is checked against it at load (caban.sessions.check_miniscope_frame_rate).
+MINISCOPE_FPS = 19.76
+MINISCOPE_FPS_TOLERANCE = 0.001  # relative: a session's measured rate must lie within 0.1 %
 BEHAVCAM_FPS = 15
 VELOCITY_THRESHOLD = 2.0 # cm/s
 SMOOTH_SIGMA = 4 # for Gaussian smoothing of velocities in caban.sessions.py

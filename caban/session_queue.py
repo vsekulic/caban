@@ -85,6 +85,17 @@ TIMESTAMPS_WITHOUT_VIDEO_FROM = {
 }
 
 
+# Sessions recorded at another frame-rate setting than 20 fps, with their measured rate
+# (plans/miniscope_frame_rate_plan.md, decision 3). Every other session must run within
+# utilities.MINISCOPE_FPS_TOLERANCE of utilities.MINISCOPE_FPS, or loading fails.
+# Not listed, though also at 25 (24.64 measured): G15 2022_01_11-TFC_cond/18_39_20-HC4 -- in no
+# analysis; add it here when it is used (its ewl/gain/led settings differ too: check the plane).
+MINISCOPE_FPS_EXCEPTIONS = {
+    # metaData.json frameRate 25; measured 24.64 fps (2026-10-07).
+    "G05-ST637_hM3D/2021_09_03-TFC_test_A/16_34_42-TFC_test_A": 24.64,
+}
+
+
 def session_tail(session_dir: str) -> str:
     """``<mouse>/<day>/<session>`` of a session path, ``Miniscope`` stripped.
 

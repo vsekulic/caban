@@ -449,7 +449,7 @@ class FluorescenceMap:
             shuffled_matrix = np.zeros((num_shifts, self.fluorescence_map_occup.shape[0], \
                 self.fluorescence_map_occup.shape[1], self.num_cells), dtype=np.float32)
             for i in range(num_shifts):
-                shift_range = np.arange(5*MINISCOPE_FPS, (5*60)*MINISCOPE_FPS)
+                shift_range = np.arange(int(round(5*MINISCOPE_FPS)), int(round((5*60)*MINISCOPE_FPS)))
                 print(".", end='')
                 shift = rng.choice(shift_range) 
                 S_shifted = np.roll(self.S, shift, axis=0)
@@ -463,7 +463,7 @@ class FluorescenceMap:
     def get_shuffled_responses_old(self, num_shifts=500):
         rng = default_rng()
         # Shifted range will be selected from a minimum of 5 seconds worth of frames up to 5 minutes worth of frames.
-        shift_range = np.arange(5*MINISCOPE_FPS, (5*60)*MINISCOPE_FPS)
+        shift_range = np.arange(int(round(5*MINISCOPE_FPS)), int(round((5*60)*MINISCOPE_FPS)))
 
         # Shift entire spike array by random amount, up to num_shifts number of times.
         # Only need to shuffle once (num_shifts number of times, of course) to compare all place fields.
