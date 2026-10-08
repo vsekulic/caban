@@ -87,9 +87,8 @@ Top-level parameters (defaults)
 * `SS_ROTATE = 5` (degrees)
 * `ISOMAP_DIMS = 2`
 * `POST_SHOCK_SEC = 20`
-* `DOWNSAMPLE_HZ = MINISCOPE_FPS` (no downsampling). Set to `10` to
-  reproduce the paper's 30 Hz → 10 Hz step (block-mean by factor
-  `MINISCOPE_FPS // DOWNSAMPLE_HZ`). Must evenly divide
+* `DOWNSAMPLE_HZ = MINISCOPE_FPS / 2` (9.88 Hz at `MINISCOPE_FPS = 19.76`): activity is
+  block-meaned by factor `MINISCOPE_FPS // DOWNSAMPLE_HZ` = 2 frames. Must evenly divide
   `MINISCOPE_FPS`. When downsampling, event indices and PERIOD_FRAMES
   windows are scaled accordingly so all phases (1, 2, 3) consume the
   same temporal grid.

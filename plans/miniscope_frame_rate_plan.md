@@ -84,6 +84,15 @@ From every `Miniscope/timeStamps.csv` on MINISCOPE, G05–G21, sessions ≥ 2,00
       abnormal-cell filter, and hence the cell sets, can move slightly;
     - every `int(s × fps)` site now truncates (e.g. 10 s → 197 frames).
   - G05 Test_A still ran on the constant until step 2 (below).
+- **2026-10-09, step 3 (in progress):** the trial-average windows (`population.PERIOD_FRAMES`) were
+  20/20/20/2/20 *frames* (~1 s) since the first commit, but are meant as **seconds** (VS): now
+  `PERIOD_SECONDS` → frames at the constant (395 / 40); isomap gets 197 / 20 after its factor-2
+  downsampling. The `pca_avg` / `crossreg_avg` cache keys carry the windows (`win…`). The Methods texts
+  (`population_pca_methods.txt`, `isomap_methods.txt`, whose downsampling line was also wrong) are
+  corrected. TFC_cond trial 1 (tone at 185 s, shock at 220 s) has a 15 s trace, so its 20 s post-tone
+  window contains the shock. Changes the trial-averaged PCA and isomap trajectories substantially:
+  before/after in step 6. The other 25 frame windows: proposal to VS (keep in frames, comment the
+  time; they round to the same counts), pending.
 - **2026-10-08, step 2 done:** G05 Test_A is re-timed at load (§5). Tested on its real data (§5.3).
   Event counts: keep the re-timed ones (VS, 2026-10-09; §5.4).
 
