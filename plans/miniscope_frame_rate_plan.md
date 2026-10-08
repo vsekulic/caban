@@ -41,11 +41,8 @@ From every `Miniscope/timeStamps.csv` on MINISCOPE, G05–G21, sessions ≥ 2,00
    (`caban/sessions.py:547`), with the exception table next to `session_queue`'s other per-session
    tables (`UNUSED_VIDEOS`, `TIMESTAMPS_WITHOUT_VIDEO_FROM`). The rate is measured as frames over
    time, after dropping the pre-start frame 0, as in the 2026-10-07 scan.
-2. **G05 Test_A's own rate (decision 3).** The one part that is more than one line. First trace
-   which of the inventory's sites the Test_A analyses pass through for this session: tone windows
-   are found by timestamp and need nothing; rates (spikes / (frames / fps)) and any
-   seconds-to-frames window do. Then pass the session's rate to exactly those, and make every other
-   use of `MINISCOPE_FPS` on this session fail loudly. Design after the trace; bring it to VS.
+2. **G05 Test_A: re-timed at load onto the 19.76 fps grid** (VS, 2026-10-08; replaces "pass its own
+   rate to the sites it uses", which would have touched about a dozen Test_A analysis paths). See §5.
 3. **Review the 26 frame-defined windows** (inventory category W-f). A window written directly in
    frames does not change with the constant (400 frames stays 400 = 20.24 s). For each one, decide:
    meant in frames (leave it), or meant in seconds (rewrite as seconds × `MINISCOPE_FPS`).
@@ -86,5 +83,80 @@ From every `Miniscope/timeStamps.csv` on MINISCOPE, G05–G21, sessions ≥ 2,00
     - `filter_abnormal_cells`' plateau limit `int(15 s × fps)` goes 300 → 296 frames, so the
       abnormal-cell filter, and hence the cell sets, can move slightly;
     - every `int(s × fps)` site now truncates (e.g. 10 s → 197 frames).
-  - **G05 Test_A still runs on the constant (now 19.76 instead of 20)** until step 2 lands: its rates
-    are still about 20 % low.
+  - G05 Test_A still ran on the constant until step 2 (below).
+- **2026-10-08, step 2 done:** G05 Test_A is re-timed at load (§5). Tested on its real data (§5.3).
+  Open: the event-count question (§5.4), VS.
+
+## 5. Re-timing G05 Test_A (step 2)
+
+### 5.1 Why
+
+Test_A has no tones: the whole session is one "context" period in frames, and its frames feed about a
+dozen analyses (binned rates and activity, proportional activities / event rates / amplitudes, cell
+activity distributions, event-locked responsiveness, freezing-tuned cells, population coupling,
+place-field and fluorescence maps, the per-cell lanes). Every one converts frames to time with the one
+constant. Rather than pass G05's rate through all of them, the session is moved **once, at load**, onto
+the standard grid, so the constant is right for it too. A window written in frames then also means the
+same time in G05 as in every other mouse.
+
+### 5.2 What the code does (`caban/sessions.py`, `caban/session_queue.py`)
+
+- `session_queue.MINISCOPE_FPS_EXCEPTIONS` lists the session with its recording rate (24.64 fps).
+  `check_miniscope_frame_rate` checks it against that rate (±0.1 %).
+- `find_exp_boundaries`, step 0b: the recorded timestamps are replaced by an evenly spaced grid at
+  `MINISCOPE_FPS` from the first to the last recorded stamp (`miniscope_retiming_grid`). This happens
+  before the experiment boundaries are looked up, so the boundaries, the bounded timestamps and the
+  velocity/location matching all come out on the new grid by themselves. Kept on the session:
+  `miniscope_retimed`, `n_frames_recorded`, `tstamp_miniscope_recorded`, `tstamp_miniscope_retimed`.
+- `get_CS_matrices`: after checking that `C` has one frame per recorded stamp, the **full** recordings
+  are re-timed:
+  - `S` is **summed** into the new frames (each recorded frame to the nearest new frame in time;
+    `retime_sum`), so spike totals and rates are kept exactly;
+  - `C` and `YrA` are linearly interpolated at the new frame times (`retime_interp`).
+  The existing check that `C` has one frame per imaged row then holds on the new grid.
+- The on-disk caches stay as recorded; re-timing runs in memory on every load, including the lazy
+  reloads of `S_full` / `C_full` / `YrA_full` in `__getattr__`.
+- A pickled session from before the change (no `miniscope_retimed`) refuses to load and asks for a
+  `ds_cache.pkl` rebuild.
+- Not supported, and raising: re-timing a session that also has timestamp rows without imaging.
+
+### 5.3 Tests (2026-10-08, real data)
+
+- **Grid:** 7,615 recorded frames → 6,107 at exactly 19.760000 fps over the same 309.0 s.
+- **`S` totals:** kept for every one of the 318 cells (max abs difference 7e-12 against totals up to
+  50,915).
+- **`C`:** round-trip correlation (re-timed, interpolated back to the recorded times, against the
+  original) ≥ 0.9994, median 0.99993; range kept.
+- **Experiment boundaries** (via `find_exp_boundaries` on the real timestamps): frames [96, 6002].
+  Duration by frames / 19.76 = 298.887 s, equal to the duration from the timestamps, and matching the
+  behaviour camera's 298.864 s. Before, frames / constant gave about 375 s for this session. The
+  grid spacing is exactly 50.607 ms.
+- **A normal session is untouched:** G06 Test_A is not re-timed; its duration by frames / 19.76 is
+  298.836 s against 298.865 s by timestamps (0.01 %).
+- Not yet run end to end: `get_CS_matrices` on the real session, which happens in the cache rebuild
+  (step 5), where its checks (`C` vs recorded stamps, `C` vs grid) apply.
+
+### 5.4 Open: event counts change (VS)
+
+Events (`find_spikes_ca_S`, `thres = 2`) are local peaks of `S` above a fixed amplitude. Summing
+24.64 fps frames into 19.76 fps ones raises per-frame values, so G05 Test_A's event count goes from
+22,995 to 30,281 (+32 %; all 318 cells change). Neither version is out of line with the other 15
+mice's Test_A sessions:
+
+| | event rate (/cell/s) | `S` per cell per second |
+|---|---|---|
+| G05 as recorded (24.64 fps) | 0.234 | 18.9 |
+| G05 re-timed (19.76 fps) | 0.308 | 18.9 (kept exactly) |
+| other mice: median (IQR) | 0.224 (0.182–0.246) | 17.8 |
+| other mice: range | 0.113–0.314 | |
+
+The re-timed count is what this recording would give if its frames were 19.76 fps long, like every
+other mouse's, so it is arguably the more comparable one. But the threshold was never calibrated for
+the frame rate, and the data cannot say which is right.
+
+### 5.5 Methods text (for item E4)
+
+"One session (mouse G05, context test A) was recorded at 24.6 frames/s instead of 19.76; at load its
+deconvolved activity was summed, and its calcium and residual traces linearly interpolated, onto a
+19.76 frames/s time base spanning the same recording, so that all time-based measures are computed
+identically to the other sessions."

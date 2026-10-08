@@ -86,7 +86,10 @@ TIMESTAMPS_WITHOUT_VIDEO_FROM = {
 
 
 # Sessions recorded at another frame-rate setting than 20 fps, with their measured rate
-# (plans/miniscope_frame_rate_plan.md, decision 3). Every other session must run within
+# (plans/miniscope_frame_rate_plan.md, decision 3 and step 2). Each is checked against its listed
+# rate, then RE-TIMED at load onto an evenly spaced MINISCOPE_FPS grid (caban.sessions:
+# miniscope_retiming_grid, retime_sum for S, retime_interp for C/YrA), so every downstream
+# conversion with the one constant holds for it too. Every other session must run within
 # utilities.MINISCOPE_FPS_TOLERANCE of utilities.MINISCOPE_FPS, or loading fails.
 # Not listed, though also at 25 (24.64 measured): G15 2022_01_11-TFC_cond/18_39_20-HC4 -- in no
 # analysis; add it here when it is used (its ewl/gain/led settings differ too: check the plane).

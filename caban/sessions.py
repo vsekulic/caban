@@ -358,10 +358,11 @@ def measured_miniscope_frame_rate(tstamp_ms) -> float:
 
 
 def check_miniscope_frame_rate(session_dir, tstamp_ms) -> float:
-    """Raise unless the session's measured rate matches the rate the analysis assumes for it.
+    """Raise unless the session's measured rate matches the rate it is expected to have.
 
-    The assumed rate is ``MINISCOPE_FPS`` or, for the sessions in
-    ``session_queue.MINISCOPE_FPS_EXCEPTIONS``, their own listed rate; both must hold to within
+    The expected rate is ``MINISCOPE_FPS`` or, for the sessions in
+    ``session_queue.MINISCOPE_FPS_EXCEPTIONS``, their own listed recording rate (those are then
+    re-timed to ``MINISCOPE_FPS`` in ``find_exp_boundaries``); both must hold to within
     ``MINISCOPE_FPS_TOLERANCE`` (relative). Returns the measured rate.
     plans/miniscope_frame_rate_plan.md.
     """
@@ -376,6 +377,52 @@ def check_miniscope_frame_rate(session_dir, tstamp_ms) -> float:
             "plans/miniscope_frame_rate_plan.md.".format(tail, measured, expected,
                                                         MINISCOPE_FPS_TOLERANCE))
     return measured
+
+
+# --- Re-timing a session recorded at another frame rate (plans/miniscope_frame_rate_plan.md, step 2) ---
+#
+# A session in session_queue.MINISCOPE_FPS_EXCEPTIONS (G05 Test_A, recorded at 24.64 fps) is moved
+# once, at load, onto an evenly spaced MINISCOPE_FPS grid spanning the same time, so that every
+# frames<->seconds conversion downstream (all of which use the one constant) is right for it too, and
+# a window written in frames means the same time as in every other session. S is SUMMED into the new
+# frames (spike totals, hence rates, are kept exactly); C and YrA are linearly interpolated at the new
+# frame times. The on-disk caches stay as recorded; this runs in memory on every load.
+
+def miniscope_retiming_grid(tstamp_recorded_ms) -> np.ndarray:
+    """Evenly spaced frame times (ms) at MINISCOPE_FPS from the first to the last recorded stamp."""
+    t = np.asarray(tstamp_recorded_ms, dtype=float)
+    dt = 1000.0 / MINISCOPE_FPS
+    n_new = int(np.floor((t[-1] - t[0]) / dt)) + 1
+    return t[0] + dt * np.arange(n_new)
+
+
+def retime_sum(X, tstamp_recorded_ms, tstamp_new_ms) -> np.ndarray:
+    """Sum the columns (frames) of X into the new frames nearest in time; totals are kept exactly."""
+    X = np.asarray(X)
+    t_rec = np.asarray(tstamp_recorded_ms, dtype=float)
+    t_new = np.asarray(tstamp_new_ms, dtype=float)
+    if X.shape[1] != t_rec.size:
+        raise ValueError('retime_sum: {} frames but {} recorded timestamps'.format(X.shape[1], t_rec.size))
+    dt = t_new[1] - t_new[0]
+    target = np.clip(np.rint((t_rec - t_new[0]) / dt).astype(np.int64), 0, t_new.size - 1)
+    out = np.zeros((X.shape[0], t_new.size), dtype=np.result_type(X.dtype, np.float64))
+    np.add.at(out.T, target, X.T)
+    return out
+
+
+def retime_interp(X, tstamp_recorded_ms, tstamp_new_ms) -> np.ndarray:
+    """Linear interpolation of the columns (frames) of X at the new frame times."""
+    X = np.asarray(X, dtype=float)
+    t_rec = np.asarray(tstamp_recorded_ms, dtype=float)
+    t_new = np.asarray(tstamp_new_ms, dtype=float)
+    if X.shape[1] != t_rec.size:
+        raise ValueError('retime_interp: {} frames but {} recorded timestamps'.format(X.shape[1], t_rec.size))
+    if t_new[0] < t_rec[0] or t_new[-1] > t_rec[-1]:
+        raise ValueError('retime_interp: new frame times lie outside the recorded ones')
+    hi = np.clip(np.searchsorted(t_rec, t_new, side='right'), 1, t_rec.size - 1)
+    lo = hi - 1
+    w = (t_new - t_rec[lo]) / (t_rec[hi] - t_rec[lo])
+    return X[:, lo] * (1.0 - w) + X[:, hi] * w
 
 
 class BehaviourSession:
@@ -465,6 +512,11 @@ class BehaviourSession:
                 'find_exp_boundaries (plans/yra_recompute_plan.md §15.1): its experiment '
                 'boundaries and tone windows may be off. Rebuild ds_cache.pkl '
                 '(caban.loader.load_all_mice(use_cache=False)).'.format(state.get('mouse'), state.get('session_type')))
+        if 'miniscope_retimed' not in state:
+            raise ValueError(
+                'this pickled {} {} predates the frame-rate re-timing (plans/miniscope_frame_rate_plan.md): '
+                'rebuild ds_cache.pkl (caban.loader.load_all_mice(use_cache=False)).'.format(
+                    state.get('mouse'), state.get('session_type')))
         self.__dict__.update(state)
         # A ds_cache.pkl written before YrA alignment existed carries an unaligned, session-
         # bounded self.YrA and the raw self.YrA_idx (YrA_full is pruned by __getstate__ and
@@ -478,9 +530,22 @@ class BehaviourSession:
         elif self.__dict__.get('YrA_has_trace') is None:
             self._clear_YrA_alignment_state()
 
+    def _retime_full(self, name, X):
+        '''A full-recording array of a re-timed session, moved onto its MINISCOPE_FPS grid
+        (S summed, C and YrA interpolated). The input must be as recorded.'''
+        if X.shape[1] != self.n_frames_recorded:
+            raise ValueError('{} {}: {} has {} frames, not the {} recorded ones; it cannot be '
+                             're-timed'.format(self.mouse, self.session_type, name, X.shape[1],
+                                               self.n_frames_recorded))
+        if name == 'S_full':
+            return retime_sum(X, self.tstamp_miniscope_recorded, self.tstamp_miniscope_retimed)
+        return retime_interp(X, self.tstamp_miniscope_recorded, self.tstamp_miniscope_retimed)
+
     def _load_cached_array(self, saver_name, cache_name):
         saver = getattr(self, saver_name)
         value = saver.load(cache_name)
+        if self.miniscope_retimed:
+            value = self._retime_full(cache_name, value)
         setattr(self, cache_name, value)
         return value
 
@@ -511,6 +576,8 @@ class BehaviourSession:
             # A released-then-reloaded YrA_full goes through the same aligner get_CS_matrices
             # used (a no-op on the recomputed YrA, whose unit order is S's).
             value = self._align_YrA_to_S_units(saver.load(YRA_CACHE_FULL), saver.load(YRA_CACHE_IDX))
+            if self.miniscope_retimed:
+                value = self._retime_full('YrA_full', value)
             setattr(self, name, value)
             self.YrA_idx = np.asarray(self.S_idx).copy()
             return value
@@ -620,6 +687,25 @@ class BehaviourSession:
         # experiment boundaries, the tone lookups of the subclasses and the velocity mapping
         # all index C through these rows. For almost every session nothing is dropped.
         imaged = imaged_timestamp_rows(self.dpath, len(tstamp_miniscope))
+
+        # Step 0b. A session recorded at another frame rate (session_queue.MINISCOPE_FPS_EXCEPTIONS)
+        # moves onto an evenly spaced MINISCOPE_FPS grid over the same time, here, before anything
+        # is looked up in its timestamps; get_CS_matrices moves S/C/YrA onto the same grid.
+        self.miniscope_retimed = session_tail(self.dpath) in MINISCOPE_FPS_EXCEPTIONS
+        if self.miniscope_retimed:
+            if not imaged.all():
+                raise ValueError('{} {}: re-timing a session with timestamp rows without imaging is not '
+                                 'implemented'.format(self.mouse, self.session_type))
+            self.n_frames_recorded = int(len(tstamp_miniscope))
+            self.tstamp_miniscope_recorded = tstamp_miniscope.to_numpy(dtype=float)
+            self.tstamp_miniscope_retimed = miniscope_retiming_grid(self.tstamp_miniscope_recorded)
+            tstamp_miniscope = pd.Series(self.tstamp_miniscope_retimed)
+            fnum_miniscope = pd.Series(np.arange(self.tstamp_miniscope_retimed.size))
+            imaged = np.ones(self.tstamp_miniscope_retimed.size, dtype=bool)
+            print('  [FPS] {} {}: recorded at {:.2f} fps; re-timed to {} fps ({} -> {} frames)'.format(
+                self.mouse, self.session_type, self.miniscope_fps_measured, MINISCOPE_FPS,
+                self.n_frames_recorded, self.tstamp_miniscope_retimed.size))
+
         self.n_timestamp_rows_imaged = int(imaged.sum())
         self.n_timestamp_rows_unimaged = int((~imaged).sum())
         if self.n_timestamp_rows_unimaged:
@@ -884,6 +970,15 @@ class BehaviourSession:
                     self.YrA_only_unit_ids.tolist()))
         else:
             self._clear_YrA_alignment_state()
+
+        if self.miniscope_retimed:
+            if self.C_full.shape[1] != self.n_frames_recorded:
+                raise ValueError('{} {}: C has {} frames but {} Miniscope timestamps were recorded'.format(
+                    self.mouse, self.session_type, self.C_full.shape[1], self.n_frames_recorded))
+            self.S_full = self._retime_full('S_full', self.S_full)
+            self.C_full = self._retime_full('C_full', self.C_full)
+            if self.YrA_full is not None:
+                self.YrA_full = self._retime_full('YrA_full', self.YrA_full)
 
         # find_exp_boundaries() made timestamp row i frame i of C; that holds only if C has exactly
         # one frame per imaged timestamp row. A mismatch is an unlisted gap or overhang
