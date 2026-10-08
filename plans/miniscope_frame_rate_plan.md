@@ -85,7 +85,7 @@ From every `Miniscope/timeStamps.csv` on MINISCOPE, G05–G21, sessions ≥ 2,00
     - every `int(s × fps)` site now truncates (e.g. 10 s → 197 frames).
   - G05 Test_A still ran on the constant until step 2 (below).
 - **2026-10-08, step 2 done:** G05 Test_A is re-timed at load (§5). Tested on its real data (§5.3).
-  Open: the event-count question (§5.4), VS.
+  Event counts: keep the re-timed ones (VS, 2026-10-09; §5.4).
 
 ## 5. Re-timing G05 Test_A (step 2)
 
@@ -136,7 +136,7 @@ same time in G05 as in every other mouse.
 - Not yet run end to end: `get_CS_matrices` on the real session, which happens in the cache rebuild
   (step 5), where its checks (`C` vs recorded stamps, `C` vs grid) apply.
 
-### 5.4 Open: event counts change (VS)
+### 5.4 Event counts change — decided: keep the re-timed counts (VS, 2026-10-09)
 
 Events (`find_spikes_ca_S`, `thres = 2`) are local peaks of `S` above a fixed amplitude. Summing
 24.64 fps frames into 19.76 fps ones raises per-frame values, so G05 Test_A's event count goes from
@@ -152,7 +152,9 @@ mice's Test_A sessions:
 
 The re-timed count is what this recording would give if its frames were 19.76 fps long, like every
 other mouse's, so it is arguably the more comparable one. But the threshold was never calibrated for
-the frame rate, and the data cannot say which is right.
+the frame rate, and the data cannot say which is right. **Decided (VS, 2026-10-09): keep the re-timed
+counts**, i.e. events are detected on the re-timed `S`, as the code does. Note it in the Methods text
+(§5.5) and the before/after comparison (step 6).
 
 ### 5.5 Methods text (for item E4)
 
