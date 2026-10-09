@@ -1,6 +1,6 @@
 # Plan: the Miniscope frame rate is 19.76 fps, not 20
 
-Outstanding item B1 ([outstanding_items_plan.md](outstanding_items_plan.md)); old open item 13
+Outstanding item B1 ([figure2_per_cell_completion_plan.md](figure2_per_cell_completion_plan.md) §6.B); old open item 13
 ([minian_open_items.md](minian_open_items.md)). Inventory of every place the rate is used:
 [fps_inventory_scratch.md](fps_inventory_scratch.md).
 
