@@ -178,7 +178,7 @@ templates (`analysis_methods_templates/epoch_modulation*_methods.md`) stating th
     (new §6 notes 10–11) and [../docs/paper/paper_figure2_supplement.md](../docs/paper/paper_figure2_supplement.md).
   - METHODS: `epoch_modulation_methods.md` (recomputed YrA) and `sp_rates_lmm_paper_methods.md`
     (G09 window).
-- **Open:**
+- **Open on 2026-10-02:**
   - (a) Fit the cell-level `sp_rates_lmm` lane with `method=['bfgs','cg','powell']`, as the
     hierarchical lanes do, so the branch cannot flip on numerical noise. **Refit check done
     2026-10-02 (VS):** lbfgs/bfgs/cg/powell all give F 4.08, P 0.037, identical coefficients, so
@@ -190,30 +190,18 @@ templates (`analysis_methods_templates/epoch_modulation*_methods.md`) stating th
     2026-10-02 16:44 (VS's re-run):** no fallback in any `sp_rates_lmm` stats file; trace omnibus
     F 4.08, P 0.0369, Holm 0.111; deltas P 0.988 / 0.947; thresholds 0.416 / 0.420 / 0.408; Test B
     post-tone q 0.445; Fig. 2i and the NB model identical. Every number in the paper text stands.
-  - (b) The event-proximal omnibus at ≥ 20,000 draws, before its P is quoted.
-  - (c) G09 trial-dropped sensitivity.
-  - (d) Loader guard: assert `YrA_idx == S_idx` (0 rows moved) before aligning.
-  - (e) Fig. 2c re-run.
-  - (f) The frame-rate decision (§2.7.4), which now also covers window lengths:
-    seconds × 20 fps windows last 20.24 s at 19.76 fps, while timestamp-derived epochs last ~20.0 s.
+  - (b)–(f): **Moved 2026-10-09 to [outstanding_items_plan.md](outstanding_items_plan.md) (C1, C2, B2, C3, B1; B1, the frame rate, has its own plan, [miniscope_frame_rate_plan.md](miniscope_frame_rate_plan.md)), the one to-do list.** Results that move Figure 2's numbers are still recorded in this plan.
 
 ### 2.7 Decisions for VS in this phase
 
 1. ~~Which per-cell panels go into Figure 2~~ — **decided (VS, 2026-09-29): compute every per-cell
    analysis and plot it as before; which panels enter the figure is decided at the end, from the
    results.**
-2. **O.8**: sort panel K on held-out trials (honest by construction) — a change to a paper-facing
-   panel.
-3. **O.2**: report the split-half stability (Q2), or not.
-4. **Frame rate** (§2.1): fix the 20 fps constant or document it.
+2.–4. O.8, O.2 and the frame rate: **Moved 2026-10-09 to [outstanding_items_plan.md](outstanding_items_plan.md) (C4, C5, B1), the one to-do list.** Results that move Figure 2's numbers are still recorded in this plan.
 
 ## 3. When the batch finishes (~1 week)
 
-1. Final sync to MINISCOPE; the status report shows every batch session `done` or explained.
-2. Decide the failed and excluded sessions (open items 10): the two unreadable recordings (G07
-   TFC_test_B, G14 TFC_test_B_1wk-borked — salvage the readable files as for G21, or leave out), the
-   34 stubs, G09 HC3's partial output.
-3. The two G05 NaN-motion recall sessions (open item 2, `d2b74ce`), if recall YrA is wanted.
+Done or moved: the final sync and the batch finished 2026-10-06/07 (484 of 492; every done session on MINISCOPE); the G05 NaN-motion sessions were recovered on 2026-09-30 (`76013ae`). The failed and excluded sessions: **Moved 2026-10-09 to [outstanding_items_plan.md](outstanding_items_plan.md) (A1–A6), the one to-do list.** Results that move Figure 2's numbers are still recorded in this plan.
 
 ## 4. What the new sessions make possible — and what it takes
 
@@ -222,20 +210,8 @@ cell identities are its own**: nothing longitudinal can use them until they are 
 (local plan §7, risk 4). So every new per-cell question below runs through the cross-registration
 work:
 
-1. **Which groupings (VS; open item 4, crossreg plan §6).** Candidates: the whole TFC_cond day (HC1,
-   LT1, CNO1, CNO2, LT2, HC2, TFC_cond, HC3) for **per-cell before/after CNO** — a within-cell
-   manipulation check richer than Fig. 2d's LT1 → LT2 pair; LT1 across track days (place-cell
-   stability); HC with the same day's session. Recommended: leave groupings 1–7 exactly as published.
-2. **The groupings registry** (item 5) — can be built **now**, from folder names.
-3. **The cross-registration runner** (crossreg plan §5) and its gate (re-derive one existing grouping,
-   compare with production) — can be built and gated **now**, on production sessions.
-4. **The loader reads the registry** (crossreg plan §4), since new output is `minian/`, not
-   `minian_crossreg*`.
-5. Then the new analyses, each with its METHODS template, and a decision on which figure they belong
-   in.
+**Moved 2026-10-09 to [outstanding_items_plan.md](outstanding_items_plan.md) (D1–D3), the one to-do list.** Results that move Figure 2's numbers are still recorded in this plan.
 
 ## 5. Suggested order
 
-While the batch runs: **2.1 → 2.2 → 2.3 → 2.4 → 2.5 → 2.6** (Figure 2's per-cell block, ~2–4 days
-of work with reviews), and in the gaps 4.2–4.3 (registry, crossreg runner). After the batch: §3,
-then 4.1 (VS) → 4.4 → 4.5.
+Superseded: the order is now in [outstanding_items_plan.md](outstanding_items_plan.md) ("Suggested order").

@@ -5,7 +5,7 @@ synced to MINISCOPE ([../reports/minian_batch_status.md](../reports/minian_batch
 what is still open from [minian_open_items.md](minian_open_items.md) ("item N" below),
 [figure2_per_cell_completion_plan.md](figure2_per_cell_completion_plan.md) ("Fig. 2 plan") and
 [handover_razer_batch_and_review.md](handover_razer_batch_and_review.md) (the 2026-10-02 update at its
-top). Those files keep the detail; this one is the working list. Close items here as they are done,
+top). Those files keep the detail; this one is the working list — **the only to-do list**: on 2026-10-09 the Figure 2 plan's open items (§2.6 (b)–(f), §2.7, §3, §4) were moved here, and that plan is now the record of how Figure 2's numbers were produced, where results that move them are still written up. Close items here as they are done,
 with the commit.
 
 **Already done, though [minian_open_items.md](minian_open_items.md) still lists them** (E6 updates it):
