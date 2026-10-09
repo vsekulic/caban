@@ -92,16 +92,11 @@ Trial averaging (AVG pipelines)
 -------------------------------
 For each cross-registered cell and each of N trials in a session, activity is
 extracted in five fixed-length windows around tone/shock events:
-    pre_tone     : 20 s before tone onset
-    tone         : 20 s from tone onset (the whole tone)
-    post_tone    : 20 s from tone offset (the trace period)
-    shock        : 2 s from shock onset (TFC_cond only; the whole shock)
-    post_shock   : 20 s from shock offset (TFC_cond only)
-Widths are set in seconds (population.PERIOD_SECONDS) and converted to frames at
-MINISCOPE_FPS = 19.76 (395 frames per 20 s, 40 per 2 s). On TFC_cond trial 1 the
-tone starts at 185 s rather than 180 s, so its trace is 15 s and its 20 s post_tone
-window contains that trial's shock (the other trials' 20 s trace ends at the shock).
-(Before 2026-10-09 these widths were applied as frames, ~1 s each, by mistake.)
+    pre_tone     : 20 frames before tone onset
+    tone         : 20 frames from tone onset
+    post_tone    : 20 frames after tone offset
+    shock        : 2 frames from shock onset (TFC_cond only)
+    post_shock   : 20 frames after shock offset (TFC_cond only)
 The five windows are averaged across trials and concatenated to form a per-cell
 trial-averaged trace of length 82 (TFC_cond) or 60 (Test_B / Test_B_1wk).
 

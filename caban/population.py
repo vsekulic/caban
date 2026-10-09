@@ -44,20 +44,13 @@ from caban.pca_state_metrics import run_pca_state_metrics_pipeline
 # Module constants
 # ---------------------------------------------------------------------------
 
-# Trial-average period widths, in SECONDS (VS, 2026-10-09): the protocol's 20 s tone, the 20 s
-# after tone offset (trace), the 2 s shock, and 20 s before the tone and after the shock. From the
-# first version until 2026-10-09 these numbers were used as FRAMES (~1 s each) by mistake.
-# plans/miniscope_frame_rate_plan.md, step 3.
-PERIOD_SECONDS = {
+PERIOD_FRAMES = {
     "pre_tone": 20,
     "tone": 20,
     "post_tone": 20,
     "shock": 2,
     "post_shock": 20,
 }
-PERIOD_FRAMES = {name: int(round(sec * MINISCOPE_FPS)) for name, sec in PERIOD_SECONDS.items()}
-# Part of every trial-averaged cache key, so a result cached with other windows is never reused.
-_PERIOD_FRAMES_KEY = "win" + "_".join(str(PERIOD_FRAMES[k]) for k in sorted(PERIOD_FRAMES))
 
 # Period order and total length per session type
 _AVG_PERIODS_TFC = ("pre_tone", "tone", "post_tone", "shock", "post_shock")
@@ -483,7 +476,7 @@ class TrialAveragedPCA(PopulationPCA):
 
     def compute(self, n_components=3, saver=None):
         cache_key = (
-            f"pca_avg-{_PERIOD_FRAMES_KEY}-n{n_components}"
+            f"pca_avg-n{n_components}"
             f"-norm{int(self.normalize)}-bin{int(self.binarize)}"
             f"-{self.mouse}"
         )
@@ -770,7 +763,7 @@ class CrossregAvgPCA(CrossregPCA):
             save_dir_base, plots_dir, want_svg, auto_close, saver=None,
             engram_full_idx_in_ref=None, which_engram="encoding"):
         cache_key = (
-            f"crossreg_avg-{_PERIOD_FRAMES_KEY}-engram{want_engram}"
+            f"crossreg_avg-engram{want_engram}"
             f"-which{which_engram}"
             f"-eng_n{0 if engram_full_idx_in_ref is None else len(engram_full_idx_in_ref)}"
             f"-norm{int(self.normalize)}-bin{int(self.binarize)}"

@@ -84,14 +84,10 @@ From every `Miniscope/timeStamps.csv` on MINISCOPE, G05–G21, sessions ≥ 2,00
       abnormal-cell filter, and hence the cell sets, can move slightly;
     - every `int(s × fps)` site now truncates (e.g. 10 s → 197 frames).
   - G05 Test_A still ran on the constant until step 2 (below).
-- **2026-10-09, step 3 (in progress):** the trial-average windows (`population.PERIOD_FRAMES`) were
-  20/20/20/2/20 *frames* (~1 s) since the first commit, but are meant as **seconds** (VS): now
-  `PERIOD_SECONDS` → frames at the constant (395 / 40); isomap gets 197 / 20 after its factor-2
-  downsampling. The `pca_avg` / `crossreg_avg` cache keys carry the windows (`win…`). The Methods texts
-  (`population_pca_methods.txt`, `isomap_methods.txt`, whose downsampling line was also wrong) are
-  corrected. TFC_cond trial 1 (tone at 185 s, shock at 220 s) has a 15 s trace, so its 20 s post-tone
-  window contains the shock. Changes the trial-averaged PCA and isomap trajectories substantially:
-  before/after in step 6.
+- **2026-10-09, step 3 done.**
+  - The trial-average windows (`population.PERIOD_FRAMES`, 20/20/20/2/20 frames) stay in frames:
+    changing them to seconds is out of the frame-rate scope (VS). A change to 20 s / 2 s was made
+    (`6451414`) and reverted the same day. VS meant them as seconds, so this is open, separately.
   - The other frame-defined windows stay in frames (VS: their counts would not change), with a
     comment giving the time: spatial `min_occupancy_frames=4` (0.20 s), the selectivity heatmap
     display bin (5 frames, 0.25 s; label now 2 decimals), the sample trace (1,200 frames, 60.7 s), the
