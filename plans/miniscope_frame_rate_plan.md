@@ -57,7 +57,8 @@ From every `Miniscope/timeStamps.csv` on MINISCOPE, G05–G21, sessions ≥ 2,00
 5. **Rebuild all caches** (`ds_cache.pkl` and the derived per-analysis caches).
 6. **Before/after comparison of the paper numbers**, as for Figure 2
    ([figure2_per_cell_completion_plan.md](figure2_per_cell_completion_plan.md) §2.5). Expected: rates
-   up 1.2 % for every group alike, comparisons unchanged; seconds-defined windows 1.2 % shorter;
+   **down** 1.2 % for every group alike (corrected 2026-10-09: the old rates divided by too few seconds),
+   comparisons unchanged; seconds-defined windows 1.2 % shorter;
    G05 Test_A's rates up 23 % (they are 19 % low now: 20 / 24.64 = 0.81), the one mouse-level change.
    `scientific-code-reviewer` and `statistics-checker` before anything is written up.
 
@@ -84,6 +85,16 @@ From every `Miniscope/timeStamps.csv` on MINISCOPE, G05–G21, sessions ≥ 2,00
       abnormal-cell filter, and hence the cell sets, can move slightly;
     - every `int(s × fps)` site now truncates (e.g. 10 s → 197 frames).
   - G05 Test_A still ran on the constant until step 2 (below).
+- **2026-10-09, steps 5–6 done.**
+  - The cache rebuild first died at ~119 GB (the Mac killed the kernel). Fix `07bb506`: sessions
+    release what they rebuild on demand once a mouse is done. Then it finished (`ds_cache.pkl`
+    11.5 GB, 13:30).
+  - The before/after comparison and both reviews are recorded in
+    [figure2_per_cell_completion_plan.md](figure2_per_cell_completion_plan.md) §2.8. Headline: the Fig. 2i
+    post-shock amplitude went from Holm 0.0497 to 0.0557. Everything else moved by ≤ 3 %, and rates
+    went down 1.2 %, as they should.
+  - Code-review fix: `config.bin_width_frames` now rounds (198 frames for 10 s); it truncated to 197.
+    The current cache keeps 197 for the binned rates (not Figure 2) until the next rebuild.
 - **2026-10-09, step 4 done.**
   - **G09's accepted short window** (`epoch_analysis.SHORT_POST_SHOCK_WINDOWS`) stays at 387 frames,
     because that number is set by where imaging stops. The full window went 400 → 395 frames, so it

@@ -199,6 +199,76 @@ templates (`analysis_methods_templates/epoch_modulation*_methods.md`) stating th
    results.**
 2.–4. O.8, O.2 and the frame rate: **Moved 2026-10-09 to §6 (C4, C5, B1).**
 
+### 2.8 The frame-rate correction (20 → 19.76 fps): before/after and reviews (2026-10-09)
+
+Item B1 (§6.B); mechanics in [miniscope_frame_rate_plan.md](miniscope_frame_rate_plan.md). Caches rebuilt
+2026-10-09 (`ds_cache.pkl`, 11.5 GB, after the loader memory fix `07bb506`); VS re-ran Sample traces,
+`sp_rates_lmm`, Event-locked responsiveness, Epoch modulation, the sequence test and Per-cell activity
+distributions. Reference: `plots/CURRENT-20261001-20fps` (the 10-01 run, recomputed YrA at 20 fps).
+
+**Before → after:**
+
+| | before (20 fps) | after (19.76 fps) |
+|---|---|---|
+| **Fig. 2i post-shock amplitude, hM3D vs mCherry** | **1.475× [1.057, 2.057], raw P 0.0248, Holm 0.0497** | **1.458× [1.048, 2.030], raw P 0.0279, Holm 0.0557** |
+| Fig. 2i trace amplitude, hM3D vs mCherry | 1.552×, Holm 0.0256 | 1.552×, Holm 0.0247 |
+| amplitude group × epoch interaction | F 0.368, P 0.828 | F 0.392, P 0.811 |
+| hM4D post-shock event rate | 0.653×, Holm 0.0968 | 0.652×, Holm 0.0968 |
+| rate interaction | F 1.533, P 0.240 | F 1.536, P 0.239 |
+| cell-level trace omnibus | F 4.08, P 0.0369, Holm 0.111 | identical |
+| Epoch modulation (YrA), group × epoch | F 0.421, P 0.854 | F 0.422, P 0.854 |
+| its Inh-vs-Ctl shock contrast | −0.079, Holm 0.362 | −0.080, Holm 0.359 |
+| C lane, shock Inh | −0.095, Holm 0.098 | −0.096, Holm 0.096 |
+| hierarchical lane (YrA) | F 0.916, P 0.561 | F 0.921, P 0.562 |
+| event-proximal, hierarchical companion (YrA) | F 2.064, P 0.095 | F 2.039, P 0.101 |
+| event-proximal, mouse-level (YrA) | F 1.801, P 0.162 | F 1.768, P 0.170 |
+| sequence test | mean ρ +0.040, P 0.27 | **mean ρ +0.020, P 0.56** |
+
+- **Rates went down by about 1.2 %, which is the correct direction.** A rate is events ÷ (frames ÷ fps): the
+  same frames span more seconds at 19.76, so the old rates were 1.2 % too high. (The plan first expected
+  "up"; that was wrong.) For example, pre-tone mCherry 0.0822 → 0.0809 events/s/cell. All groups shift alike.
+- **Cell counts** in `sp_rates_lmm` are down 0.2–0.6 % (e.g. post-shock 7,609 → 7,585), from the
+  abnormal-cell filter's plateau limit (300 → 296 frames) and windows 400 → 395 frames. Mouse counts
+  are unchanged.
+- **Everything else** moved by 0.1–3 %, with P shifts under 0.02. Event-locked responsiveness G05
+  (TFC_cond) post-shock responsive cells 3 → 7 (window change).
+- 61 of 210 statistics files are byte-identical (e.g. every amplitude stat in
+  `cell_activity_distributions`); only the copied METHODS templates were not rewritten.
+
+**Code review (`scientific-code-reviewer`, 2026-10-09):**
+- One bug, fixed: `config.bin_width_frames` truncated (10 s → 197 frames); now rounds (198). The
+  current `ds_cache.pkl` still has 197-frame binned rates (`process_binned_sp_rates_mapping`; not
+  Figure 2) until the next rebuild.
+- Checked and fine: the G05 Test_A re-timing (totals exact, grid inside the recorded span, every
+  frame-axis array on the new grid, lazy reloads re-timed, old pickles refused); the frame-rate
+  check; the memory release (every dropped field is rebuilt on demand, nothing reads it silently
+  as `None`); the isomap factor (exactly 2). No stale `S_spikes`/`S_mov` files exist on disk that
+  could bypass the re-timing.
+- Noted: re-timed `S` has 1 or 2 recorded frames per new frame (about 25 % get 2), so per-frame
+  amplitudes in G05 Test_A alternate; events and peak values there are affected, totals and rates
+  are not. Accepted with the re-timed event counts (VS, 2026-10-09; frame-rate plan §5.4).
+
+**Statistics check (`statistics-checker`, 2026-10-09):**
+- **Fig. 2i post-shock:** the model and unit are right (mouse-level values, mouse random intercept).
+  But significance depends on the Holm family: two comparisons (Exc, Inh) per epoch. Across all six
+  epoch × group comparisons, both post-shock and trace fail. The effect is not post-shock-specific:
+  hM3D/mCherry is 1.38× [0.99, 1.92] pre-tone, 1.55× trace and 1.46× post-shock, with an interaction
+  P of 0.81. Amplitude is averaged over active cells only, which conditions on activity (a design
+  caveat). **Recommendation:** report the effect with its CI, not significant/non-significant:
+  "1.46× [1.05, 2.03], Holm P = 0.056 (raw 0.028), similar to the trace and pre-tone epochs;
+  interaction P = 0.81". Don't call it post-shock-specific. Preferably add a pooled hM3D-vs-mCherry
+  contrast across epochs, and a sensitivity table (window 15/20/25 s, plateau limit, minimum events
+  per cell).
+- **Sequence test:** valid in construction (disjoint halves, mouse as unit), but underpowered and
+  unstable. Each half's peak rests on 2–3 trials; argmax latencies flip with small window shifts;
+  cells within a mouse are not independent. Mean ρ 95 % CI about [−0.05, +0.09]; effects below about
+  0.1 are undetectable. **Recommendation:** report "+0.02 [−0.05, +0.09]; no evidence of a
+  reproducible sequence; effects above ~0.1 not excluded", with its sensitivity to the window change.
+  Average over many random balanced trial splits (`epoch_sequence.split_trials` uses one fixed
+  odd/even split); add a positive control; try a responsive-cell subset.
+- **Paper text not yet changed:** [../docs/paper/paper_figure2.md](../docs/paper/paper_figure2.md)
+  ~line 126 and note 9 (~line 519) still report post-shock as significant at P = 0.050 (§6.C, C7).
+
 ## 3. When the batch finishes (~1 week)
 
 Done or moved: the final sync and the batch finished 2026-10-06/07 (484 of 492; every done session on MINISCOPE); the G05 NaN-motion sessions were recovered on 2026-09-30 (`76013ae`). The failed and excluded sessions: **Moved 2026-10-09 to §6 (A1–A6).**
@@ -248,7 +318,7 @@ recomputed YrA (`24fe3a9`); item 12's index part (`0e6657b`); item 14, Tailscale
 
 | # | item | where | recommendation |
 |---|---|---|---|
-| B1 | **Frame rate: 19.76 fps measured, 20 assumed; G05 `2021_09_03-TFC_test_A/16_34_42-TFC_test_A` recorded at 25** | item 13; §2.6 (f), §2.7 item 4 | **Fix it rather than just document it**: use each session's rate from its timestamps. G05 Test_A's rates are about 19 % low, a real error in one hM3D mouse. The 1.2 % offset elsewhere is harmless for group comparisons, but windows built as seconds × 20 run 20.24 s while the timestamp-derived epochs run 20.0 s. Decide before more write-up, then do a before/after comparison as in the §2.5. |
+| B1 | **Frame rate: 19.76 fps measured, 20 assumed; G05 `2021_09_03-TFC_test_A/16_34_42-TFC_test_A` recorded at 25** | item 13; §2.6 (f), §2.7 item 4 | **Fix it rather than just document it**: use each session's rate from its timestamps. G05 Test_A's rates are about 19 % low, a real error in one hM3D mouse. The 1.2 % offset elsewhere is harmless for group comparisons, but windows built as seconds × 20 run 20.24 s while the timestamp-derived epochs run 20.0 s. Decide before more write-up, then do a before/after comparison as in the §2.5. **Done 2026-10-09** (code, rebuild, re-run, reviews): §2.8. |
 | | **B1 decided (VS, 2026-10-07): one constant, `MINISCOPE_FPS = 19.76`, with a loud ±0.1 % check per session and G05 Test_A as the one listed exception — plan: [miniscope_frame_rate_plan.md](miniscope_frame_rate_plan.md).** (Earlier the same day: fix everything that assumes 20 fps.) Evidence, checked the same day over every `Miniscope/timeStamps.csv` on MINISCOPE (G05–G21, sessions ≥ 2,000 frames): **655 sessions set to 20 fps run at 19.760 fps** (median; 1–99 % 19.754–19.763). **The rate is constant along each recording**: the rate in every 1,000-frame block lies within 19.720–19.767 (1–99 %; the median session's SD over blocks is 0.001 fps), and first vs second half differ by −0.013 to +0.006 fps. Single frame intervals jitter 48–53 ms (ms-quantised PC stamps) around 50.61 ms. Dropped frames are rare: 539 of 655 sessions have none; most of the rest have 1–2 (a 100–150 ms interval), and G09 `TFC_cond` has 19. **Not the PC clock**: the behaviour camera, stamped by the same PC, reads 15.00–15.03 fps (nominal 15) over 140 TFC_cond-day sessions, so the 1.2 % shortfall belongs to the Miniscope sensor. Two sessions are set to 25 fps (24.64 measured): G05 Test_A (known) and G15 `2022_01_11-TFC_cond/18_39_20-HC4` (new). Odd: G18 `14_57_23-CNO2-borked` (304 gaps, rate 27; ties in with A4), G11 `2021_11_27-TFC_test_A/17_11_20-HC2` (17 gaps). Scope: `MINISCOPE_FPS = 20` (`caban/utilities.py:16`) is used 145 times in ~20 modules, plus any literal 20 or frame windows sized at 20 fps (e.g. G09's 400-frame windows). |
 | B2 | **Loader guard**: assert `YrA_idx == S_idx` (0 rows moved) before aligning | §2.6 (d) | Do it: about 10 lines, and it turns a quiet misalignment into a loud failure. |
 | B3 | **The parked collaborator notice** (`9015c23` on `review/timing-and-yra-fixes`) | handover, 10-02 update | Don't send it yet. Its numbers predate the YrA promotion and the `sp_rates_lmm` model change, so check them and regenerate `behaviour_params` first, after B1. |
@@ -264,6 +334,9 @@ recomputed YrA (`24fe3a9`); item 12's index part (`0e6657b`); item 14, Tailscale
 | C4 | O.8: sort panel K on held-out trials | Yes. It's honest by construction, and panel O already does it for its own analysis ([../docs/epoch_modulation.md](../docs/epoch_modulation.md) §O.8). |
 | C5 | O.2: split-half stability (Q2) | Report it as supplementary. It's the only remaining answer to the per-neuron question. |
 | C6 | Delete the old cache `ds_cache-20260512-exported-YrA.pkl` | After the Figure 2 write-up is final. |
+| C7 | **How to report Fig. 2i post-shock amplitude** (Holm 0.0497 → 0.0557 after the frame-rate fix; §2.8) | VS to decide, after discussion. Statistics check: report the effect with its CI ("1.46× [1.05, 2.03], Holm P = 0.056"), not as significant; not post-shock-specific (interaction P 0.81); add a pooled contrast across epochs. Then update [../docs/paper/paper_figure2.md](../docs/paper/paper_figure2.md) ~line 126 and note 9. |
+| C8 | **Sensitivity table for the Fig. 2i amplitude results** (window 15/20/25 s, plateau limit, minimum events per cell) | Recommended by the statistics check (§2.8): the result sits on the threshold, and a 400 → 395-frame change moved it across. |
+| C9 | **Sequence test: report as underpowered; optionally make it more stable** | Report "+0.02 [−0.05, +0.09]; effects above ~0.1 not excluded". Optional: many random trial splits instead of one odd/even split; a positive control; a responsive-cell subset (§2.8). |
 
 ### 6.D New sessions and cross-registration ([crossreg_batch_runner_plan.md](crossreg_batch_runner_plan.md); §4)
 

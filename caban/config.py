@@ -295,7 +295,7 @@ class PipelineConfig:
             self.PLOTS_DIR = os.path.join("plots", ts)
         # Resolve bin_width_frames if not set explicitly.
         if self.bin_width_frames is None:
-            self.bin_width_frames = int(MINISCOPE_FPS * self.bin_width_seconds)
+            self.bin_width_frames = int(round(MINISCOPE_FPS * self.bin_width_seconds))
 
         # Validate enumerated string fields up front so typos fail fast.
         _validate_choice("BEHAVIOUR_TYPE", self.BEHAVIOUR_TYPE,
