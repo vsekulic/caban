@@ -1311,6 +1311,12 @@ def _build_dataset(
                                          traceback.format_exc()))
                     print(f"  [cell_filter] {mouse}: {_cf_e}")
 
+            # This mouse is done: drop the arrays its sessions rebuild on demand, so memory does not
+            # grow with every mouse (the 2026-10-09 rebuild was killed at ~119 GB on the 32 GB Mac).
+            for _sessions in (TFC_cond, TFC_cond_LT1, TFC_cond_LT2, Test_A, Test_A_1wk, Test_B, Test_B_1wk):
+                if mouse in _sessions:
+                    _sessions[mouse].release_reconstructible_arrays()
+
             msg_end()  # noqa: F405
 
         except Exception as _e:

@@ -530,6 +530,19 @@ class BehaviourSession:
         elif self.__dict__.get('YrA_has_trace') is None:
             self._clear_YrA_alignment_state()
 
+    def release_reconstructible_arrays(self):
+        '''Drop the arrays that __getattr__ rebuilds on demand (_cache_pruned_fields: the full
+        recordings, the velocity-masked and filtered copies, A, the raw zarr dicts), so the session
+        holds what a ds_cache.pkl round trip holds. S/C/YrA are views into the full recordings, which
+        would keep those alive, so they get their own memory first. Called by the loader once a
+        mouse is done; a later access reloads or recomputes the dropped arrays as after a cache load.'''
+        for name in ('S', 'C', 'YrA'):
+            value = self.__dict__.get(name)
+            if isinstance(value, np.ndarray) and value.base is not None:
+                self.__dict__[name] = value.copy()
+        for field_name in self._cache_pruned_fields:
+            self.__dict__.pop(field_name, None)
+
     def _retime_full(self, name, X):
         '''A full-recording array of a re-timed session, moved onto its MINISCOPE_FPS grid
         (S summed, C and YrA interpolated). The input must be as recorded.'''
