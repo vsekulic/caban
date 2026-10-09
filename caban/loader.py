@@ -408,6 +408,7 @@ def load_all_mice(
 
     if cache_path is None:
         cache_path = os.path.join(NPY_SAVE_PATH, 'ds_cache.pkl')  # noqa: F405
+    require_cache_volume(cache_path)  # noqa: F405
 
     print(f'cache path : {cache_path}')
     print(f'  exists   : {os.path.exists(cache_path)}')

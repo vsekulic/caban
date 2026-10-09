@@ -39,11 +39,26 @@ FONT_SANS_SERIF = ['Helvetica', 'TeX Gyre Heros', 'Arial', 'Liberation Sans', 'D
 # comes first so any machine holding the mirrored data root is picked up automatically;
 # the hostname test stays as a fallback for cbp-db with the volume not yet mounted.
 POSIX_DATA_ROOT = '/Users/vsekulic/data/vsekulic/OF_test'
+CACHE_VOLUME = '/Volumes/FUTROLA'
+
+
+def require_cache_volume(path):
+    """Raise unless a cache path under CACHE_VOLUME has that volume actually mounted -- otherwise
+    os.makedirs would silently create a plain folder of that name on the Mac's internal drive."""
+    if os.path.abspath(path).startswith(CACHE_VOLUME + os.sep) and not os.path.ismount(CACHE_VOLUME):
+        raise FileNotFoundError(
+            '{} is not mounted, and the analysis cache ({}) lives there. Plug in FUTROLA.'.format(
+                CACHE_VOLUME, path))
+
+
 if (os.path.isdir(POSIX_DATA_ROOT)
         or socket.getfqdn().startswith('cbp-db')
         or socket.gethostname().startswith('cbp-db')):
     MAIN_DRIVE = ''
-    NPY_SAVE_PATH = os.path.join(POSIX_DATA_ROOT, 'npy_files')
+    # The analysis cache lives on the FUTROLA SSD, not on the Mac's nearly full internal drive and
+    # not on MINISCOPE, which stays a mostly read-only data snapshot (VS, 2026-10-09; Figure 2 plan
+    # §6, E7). Moved from <POSIX_DATA_ROOT>/npy_files on 2026-10-10.
+    NPY_SAVE_PATH = os.path.join(CACHE_VOLUME, 'caban_cache', 'npy_files')
 else:
     MAIN_DRIVE = 'D:'
     NPY_SAVE_PATH = MAIN_DRIVE + '\\data\\vsekulic\\OF_test\\npy_files'
@@ -77,6 +92,7 @@ class Saver:
         for p in subdirs:
             save_path = os.path.join(save_path, p)
         self.save_path = save_path
+        require_cache_volume(self.save_path)
         os.makedirs(self.save_path, exist_ok=True)
 
     def save(self, X, name):
