@@ -1,6 +1,6 @@
 # Plan: run Minian locally to generate C/S/YrA for every session
 
-Status: **planning**, written 2026-09-22. Nothing executed.
+Status: written 2026-09-22 as a plan; **executed** through [minian_batch_runner_plan.md](minian_batch_runner_plan.md) and [razer_runner_plan.md](razer_runner_plan.md): the batch finished 2026-10-06 on the Razer (484 of 492 done, all on MINISCOPE). Cross-registration (§7) is the open next step, in [crossreg_batch_runner_plan.md](crossreg_batch_runner_plan.md). Minian runs on the Mac: **parked** (VS, 2026-10-09) while the Razer is available.
 Depends on: `plans/yra_recompute_plan.md` (§11 implemented; the work queue in §13 is the
 piece this reuses) and `plans/cbp_server_migration_plan.md` §4, which this **un-defers** —
 a full CNMF-E run needs a real Minian environment, which the YrA recompute did not.
@@ -351,7 +351,12 @@ Sequencing: this lands **after** the copy and **before** the pipeline work, and 
 testable the moment the drive is mounted. It is also what finally closes
 `yra_recompute_plan.md` §8's "loader.py is Windows-only" item.
 
-### 5.1d Requirement: analyses must run with `MINISCOPE` unplugged
+### 5.1d Requirement: analyses must run with `MINISCOPE` unplugged — **reversed by VS, 2026-10-09**
+
+**VS, 2026-10-09:** MINISCOPE is always carried, so data may live on it; the aim is now the
+opposite — **minimise cached data on the Mac's internal drive**, which is perpetually close to
+full. The text below is the superseded 2026-09-22 requirement, kept as the record.
+
 
 VS, 2026-09-22: once `YrA`/`C`/`S` are regenerated, every `.npy` needed for analysis must
 live under `~` so the existing workflow runs with the external drive detached. This is a
