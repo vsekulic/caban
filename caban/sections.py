@@ -6530,10 +6530,9 @@ def run_population_pca(ds, cfg):
     )
 
     # Top-level PCA temporal-binning default (frames per bin) — applied to
-    # CrossregFullPCA only (trial-averaged variants run at frame resolution).
-    # 1 s bins (VS, 2026-10-09): round(19.76) = 20 frames = 1.01 s. Was 1 frame
-    # (no binning) since 2026-05-12 although this comment said 1 s.
-    PCA_FRAMES_PER_BIN = int(round(MINISCOPE_FPS))
+    # CrossregFullPCA only (trial-averaged variants always run at frame
+    # resolution). Default 1 s/bin at MINISCOPE_FPS=20 Hz.
+    PCA_FRAMES_PER_BIN = 1 # MINISCOPE_FPS * 1
 
     want_engram_pop_pca = True
 

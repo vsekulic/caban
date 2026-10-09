@@ -44,9 +44,8 @@ values used by *this* run are recorded in the co-located RUN_CONFIG.txt.
 Time binning (CrossregFullPCA only)
 -----------------------------------
 The continuous-trace cross-registered PCA accepts a frames_per_bin parameter
-(PCA_FRAMES_PER_BIN = round(MINISCOPE_FPS) = 20 frames = 1.01 s/bin at
-19.76 frames/s, set in caban.sections.run_population_pca; 1 frame, i.e. no
-binning, from 2026-05-12 to 2026-10-09). Binning is applied AFTER the
+(default PCA_FRAMES_PER_BIN = MINISCOPE_FPS × 1 = 20 frames = 1 s/bin at
+20 Hz, set at the top of caban.main.py). Binning is applied AFTER the
 binarize/normalize transform but BEFORE z-score and smoothing:
 
   1. Build per-cell row matrix (raw / binarize / normalize) at frame grid.
