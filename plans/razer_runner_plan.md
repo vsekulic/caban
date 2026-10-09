@@ -1,5 +1,7 @@
 # Plan: run the Minian batch on the Razer Blade 16, driven from the Mac
 
+> **ALL DONE (2026-10-09).** All phases complete: the batch finished 2026-10-06 (484 of 492) and every done session is synced to MINISCOPE (last round 2026-10-07). The §4 open points were settled during the run. The 8 failed sessions are tracked in [figure2_per_cell_completion_plan.md](figure2_per_cell_completion_plan.md) §6.A.
+
 Status: **Phases 0–2 done; Phase 3 production check passed** (2026-09-28); next: one short
 session and the 1–3-stream memory test, the sync script, then the batch. Every command on the
 Razer is logged in `~/minian.log` there (`~/razer_setup.log` until 2026-09-28) (`ssh minastirith tail -f minian.log`).

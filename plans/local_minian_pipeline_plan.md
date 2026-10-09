@@ -1,5 +1,7 @@
 # Plan: run Minian locally to generate C/S/YrA for every session
 
+> **ALL DONE (2026-10-09).** The batch ran on the Razer and finished 2026-10-06 (484 of 492; every done session synced to MINISCOPE). Minian on the Mac is parked. Leftovers are tracked in [figure2_per_cell_completion_plan.md](figure2_per_cell_completion_plan.md) §6: the 8 failed sessions (A1–A4), cross-registration (D1–D3; [crossreg_batch_runner_plan.md](crossreg_batch_runner_plan.md)) and the local-cache move to FUTROLA (E7).
+
 Status: written 2026-09-22 as a plan; **executed** through [minian_batch_runner_plan.md](minian_batch_runner_plan.md) and [razer_runner_plan.md](razer_runner_plan.md): the batch finished 2026-10-06 on the Razer (484 of 492 done, all on MINISCOPE). Cross-registration (§7) is the open next step, in [crossreg_batch_runner_plan.md](crossreg_batch_runner_plan.md). Minian runs on the Mac: **parked** (VS, 2026-10-09) while the Razer is available.
 Depends on: `plans/yra_recompute_plan.md` (§11 implemented; the work queue in §13 is the
 piece this reuses) and `plans/cbp_server_migration_plan.md` §4, which this **un-defers** —
@@ -353,9 +355,9 @@ testable the moment the drive is mounted. It is also what finally closes
 
 ### 5.1d Requirement: analyses must run with `MINISCOPE` unplugged — **reversed by VS, 2026-10-09**
 
-**VS, 2026-10-09:** MINISCOPE is always carried, so data may live on it; the aim is now the
-opposite — **minimise cached data on the Mac's internal drive**, which is perpetually close to
-full. The text below is the superseded 2026-09-22 requirement, kept as the record.
+**VS, 2026-10-09:** the aim is now to **minimise cached data on the Mac's internal drive**, which is
+perpetually close to full. MINISCOPE (always carried) stays a **mostly read-only snapshot of the
+data**; the analysis cache goes on **FUTROLA** (Figure 2 plan §6, E7). The text below is the superseded 2026-09-22 requirement, kept as the record.
 
 
 VS, 2026-09-22: once `YrA`/`C`/`S` are regenerated, every `.npy` needed for analysis must

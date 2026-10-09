@@ -1,5 +1,7 @@
 # Plan: a top-level runner that executes the Minian pipeline notebook over many sessions
 
+> **ALL DONE (2026-10-09).** The runner ran the whole batch on the Razer (484 of 492). Not built, and tracked in [figure2_per_cell_completion_plan.md](figure2_per_cell_completion_plan.md) §6: the pre-check for partly unfinished `.avi` files (A5), the Methods text (E4) and the two optional runner-made review videos (E8).
+
 Status: **§11 steps 1–4 done** (2026-09-26): the gate **passed** against production G10
 `TFC_cond` — the re-run reproduces its 799 units to solver precision; see §13. Next: step 5,
 the batch.

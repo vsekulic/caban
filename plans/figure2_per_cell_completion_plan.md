@@ -356,6 +356,8 @@ recomputed YrA (`24fe3a9`); item 12's index part (`0e6657b`); item 14, Tailscale
 | E4 | Item 9: Methods text for the Minian procedure (`analysis_methods_templates/`) | Write it now: about 1 h, unblocked. |
 | E5 | Item 12: saved output in `notebooks/recompute_yra.ipynb` | Clear it; every report is also in each session's `YrA_recompute.json`. |
 | E6 | Bring [minian_open_items.md](minian_open_items.md) up to date | Mark the done items with their commits, point to this plan, and add A4 and A5. |
+| E7 | **Move the local analysis cache off the Mac, to FUTROLA** (VS, 2026-10-09: MINISCOPE stays a mostly read-only snapshot of the data; caches go on FUTROLA). `npy_files` is 105 GB (incl. `ds_cache.pkl` 11.5 GB); the Mac has 89 GB free. `NPY_SAVE_PATH` derives from `utilities.POSIX_DATA_ROOT` (`caban/utilities.py:41-46`). | Copy to FUTROLA, verify file for file, point `NPY_SAVE_PATH` there, load `ds` once from it; delete the Mac copy only after VS confirms. Supersedes [local_minian_pipeline_plan.md](local_minian_pipeline_plan.md) §5.1c–5.1d. If FUTROLA is unplugged, loading fails loudly. |
+| E8 | The two optional runner-made review videos (`minian_raw_traces.mp4`, `minian_preprocessing.mp4`; [minian_batch_runner_plan.md](minian_batch_runner_plan.md) §7) | Not built. Optional: the notebook's own videos exist. Park unless wanted. |
 
 ### 6.F Suggested order
 

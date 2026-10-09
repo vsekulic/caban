@@ -1,5 +1,7 @@
 # The copier: every Minian run works on a local copy of its session
 
+> **ALL DONE (2026-10-09).** Built 2026-09-28 and used for the whole batch.
+
 Status: **implemented 2026-09-28** (`caban/session_staging.py`; wiring in `caban/minian_runner.py`:
 `stage_inputs`, `run_session(stage_root=…)`, `stage_out_session`, `finish_stage_out`,
 `run_all_staged`; `scripts/run_minian_batch.py --stage-root`). Unit-tested on the Mac; the
