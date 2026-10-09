@@ -921,6 +921,7 @@ def _z_score_dir_tag(use_z_score: str) -> str:
 
 def build_2D_rate_maps(S, x, y, mask, n_bins, smooth_sigma=1.0, min_occupancy_frames=4):
     """
+    (min_occupancy_frames=4 is 0.20 s at MINISCOPE_FPS = 19.76; kept in frames, a sample count.)
     Build occupancy-corrected, smoothed 2D rate maps for all neurons.
 
     Parameters

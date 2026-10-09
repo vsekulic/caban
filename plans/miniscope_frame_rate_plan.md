@@ -91,8 +91,16 @@ From every `Miniscope/timeStamps.csv` on MINISCOPE, G05–G21, sessions ≥ 2,00
   (`population_pca_methods.txt`, `isomap_methods.txt`, whose downsampling line was also wrong) are
   corrected. TFC_cond trial 1 (tone at 185 s, shock at 220 s) has a 15 s trace, so its 20 s post-tone
   window contains the shock. Changes the trial-averaged PCA and isomap trajectories substantially:
-  before/after in step 6. The other 25 frame windows: proposal to VS (keep in frames, comment the
-  time; they round to the same counts), pending.
+  before/after in step 6.
+  - The other frame-defined windows stay in frames (VS: their counts would not change), with a
+    comment giving the time: spatial `min_occupancy_frames=4` (0.20 s), the selectivity heatmap
+    display bin (5 frames, 0.25 s; label now 2 decimals), the sample trace (1,200 frames, 60.7 s), the
+    decoder time bins (15 frames, 0.76 s). The PSTH defaults in `caban/analysis.py`
+    (`frames_lookaround` / `frames_save`) are left as they are, uncommented.
+  - **The continuous PCA bins at 1 s** (VS, 2026-10-09): `PCA_FRAMES_PER_BIN = round(MINISCOPE_FPS)`
+    = 20 frames (1.01 s). It was 1 frame, i.e. no binning, since 2026-05-12, though its comment and
+    the Methods text said 1 s. With bins > 1 frame the σ = 1.5-frame smoothing switches off by design.
+    Its cache key already carries `fpb`.
 - **2026-10-08, step 2 done:** G05 Test_A is re-timed at load (§5). Tested on its real data (§5.3).
   Event counts: keep the re-timed ones (VS, 2026-10-09; §5.4).
 

@@ -1845,7 +1845,7 @@ def run_LT_firing_rate_changes(ds, cfg):
 # Section: want sample traces for paper
 # ---------------------------------------------------------------------------
 def run_want_sample_traces_paper(ds, cfg, selection_mode=False, len_trace=1200):
-    """Analysis section: want sample traces for paper."""
+    """Analysis section: want sample traces for paper. (len_trace=1200 frames is 60.7 s at 19.76 fps.)"""
     if not (cfg.want_sample_traces_paper and not cfg.DEVEL_SWITCH):
         return
     if cfg.want_sample_traces_paper and not cfg.DEVEL_SWITCH:
@@ -2535,6 +2535,7 @@ def run_LT_decoding(ds, cfg):
         use_PCT_error = True
         pct_threshold = 15.0  # cm; only used when use_PCT_error=True
 
+        # 15 frames = 0.76 s at MINISCOPE_FPS = 19.76 (kept in frames: the decoders work in frames).
         time_bin_frames_orig = 15
         time_bin_frames_true_2D = 15
         time_bin_frames_pvt = 15
@@ -3337,7 +3338,7 @@ def run_zone_crossreg(ds, cfg, *, lt_cont_pvt=None, use_PCT_error=None):
         # ---- Decoder / mode settings (must match plot_LT_decoding) ----
         _zcra_positional_decoder = "PF (2D)"
         _zcra_pct_threshold = 15.0
-        _zcra_time_bin_frames = 15
+        _zcra_time_bin_frames = 15  # 0.76 s at MINISCOPE_FPS = 19.76
 
         _zcra_pvt_mode_key = _PVT_MODE_LABEL_TO_KEY.get(
             _zcra_positional_decoder, _zcra_positional_decoder)
@@ -3507,7 +3508,7 @@ def run_continuity_and_paramsets(ds, cfg):
     place_cells_only = True         # True = PF decoder uses only place cells; False = all cells
     encoder_period = "pre-tone"    # 'pre-tone' = first 180s (before tones); 'post-shock' = ITI after shocks; 'post-tone' = ITI after tones (Test_B only)
     use_z_score = "per-session"          # 'none' | 'per-session' | 'across-sessions' | 'optimize' (perform optimization for the first three possibilities)
-    TIME_BIN_FRAMES = 15          # Shared decode chunk size for all 2D paradigms
+    TIME_BIN_FRAMES = 15          # Shared decode chunk size for all 2D paradigms (0.76 s at 19.76 fps)
     N_SPATIAL_BINS  = 20          # Spatial resolution (n_x_bins = n_y_bins) for all 2D paradigms
     use_posterior_mean = True    # True: posterior mean decode; False: hard MAP decode (argmax)
     decoder_type = 'bayesian'    # 'bayesian' | 'ridge-regression' for paradigms A-F
@@ -6529,9 +6530,10 @@ def run_population_pca(ds, cfg):
     )
 
     # Top-level PCA temporal-binning default (frames per bin) — applied to
-    # CrossregFullPCA only (trial-averaged variants always run at frame
-    # resolution). Default 1 s/bin at MINISCOPE_FPS=20 Hz.
-    PCA_FRAMES_PER_BIN = 1 # MINISCOPE_FPS * 1
+    # CrossregFullPCA only (trial-averaged variants run at frame resolution).
+    # 1 s bins (VS, 2026-10-09): round(19.76) = 20 frames = 1.01 s. Was 1 frame
+    # (no binning) since 2026-05-12 although this comment said 1 s.
+    PCA_FRAMES_PER_BIN = int(round(MINISCOPE_FPS))
 
     want_engram_pop_pca = True
 

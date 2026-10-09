@@ -3161,7 +3161,7 @@ SELECTIVITY_HEATMAP_POST_S = 60.0
 SELECTIVITY_HEATMAP_MIN_POST_S = 45.0
 # DISPLAY ONLY: held-out rows are averaged in 0.25 s bins (5 frames at 20 Hz) so ~38,000
 # cell x trial rows fit in memory and on the page. No statistic is computed from the binned rows.
-SELECTIVITY_HEATMAP_BIN_FRAMES = 5
+SELECTIVITY_HEATMAP_BIN_FRAMES = 5  # 0.25 s at MINISCOPE_FPS = 19.76 (display only)
 SELECTIVITY_HEATMAP_VMAX = 1.0
 
 # The cohort-level test enumerates every sign vector; 2**17 = 131,072 on this cohort.
@@ -3526,7 +3526,7 @@ def plot_heldout_selectivity_heatmaps(heat, time_axis, block_order, out_path,
              'other retained trials and ordered by the training-trial strength of that preference.'
              '\nStandardized once per cell over the session; minus the cell\'s pre-tone mean on '
              'that trial; minus the mean over the mouse\'s cells at each time point. '
-             f'Display binned to {SELECTIVITY_HEATMAP_BIN_FRAMES / MINISCOPE_FPS:g} s.'
+             f'Display binned to {SELECTIVITY_HEATMAP_BIN_FRAMES / MINISCOPE_FPS:.2f} s.'
              + (f'\nWindow ends at +{time_axis[-1]:.0f} s: the widest common to every retained '
                 f'trial, limited by mouse {limiting[0]} trial {limiting[1]}.' if limiting else ''),
              ha='center', size='xx-small')
