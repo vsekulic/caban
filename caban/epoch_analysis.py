@@ -80,10 +80,12 @@ TRACE_MATCHED_WINDOW_S = 20.0
 # raises, so a change in the session's timing cannot slip through.
 #   G09 TFC_cond, trial index 3 (its last retained trial): imaging stopped 1.1 s before the end
 #   of the experiment (timestamps after the last video frame, caban.session_queue
-#   TIMESTAMPS_WITHOUT_VIDEO_FROM), leaving 387 of the window's 400 frames (19.6 s at the
-#   camera's 19.76 fps). Accepted as is (VS, 2026-10-01): the window's endpoints are means and
-#   exposure-normalised rates, so 3 % less exposure costs precision for one trial of one mouse,
-#   not bias. Before the 2026-09-30 timing fix this window silently ran 13 frames past C.
+#   TIMESTAMPS_WITHOUT_VIDEO_FROM), leaving 387 of the window's frames (19.6 s). Accepted as is
+#   (VS, 2026-10-01): the window's endpoints are means and exposure-normalised rates, so 2 % less
+#   exposure costs precision for one trial of one mouse, not bias. Before the 2026-09-30 timing fix
+#   this window silently ran 13 frames past C. The 387 is set by where imaging stops, so it did
+#   not change when MINISCOPE_FPS went 20 -> 19.76 (2026-10-08); the full window went 400 -> 395
+#   frames (int(round(20 s x 19.76))), so it is now 8 frames short, not 13.
 SHORT_POST_SHOCK_WINDOWS = {
     ('G09', 'TFC_cond', 3): 387,
 }

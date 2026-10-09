@@ -609,18 +609,12 @@ def attach_lap_segmentations(
 
 def _infer_dt_sec(LT) -> float:
     """
-    Infer dt (seconds) from LT.tstamp_miniscope. In your code it is in ms.
-    Falls back to 1/30 if something weird happens.
+    Frame duration (s): 1 / MINISCOPE_FPS. Every session's own rate is checked against the
+    constant at load (caban.sessions.check_miniscope_frame_rate; plans/miniscope_frame_rate_plan.md).
+    Until 2026-10-08 this was the median of the ms-rounded timestamp differences (51 ms, i.e.
+    19.61 fps, against the true mean of 50.6 ms), with a silent 1/30 s fallback.
     """
-    if hasattr(LT, "tstamp_miniscope") and LT.tstamp_miniscope is not None and len(LT.tstamp_miniscope) > 10:
-        ts = np.asarray(LT.tstamp_miniscope, dtype=float)
-        d = np.diff(ts)
-        d = d[np.isfinite(d) & (d > 0)]
-        if d.size:
-            dt_ms = np.median(d)
-            # Your pipeline uses ms timestamps
-            return float(dt_ms) / 1000.0
-    return 1.0 / 30.0
+    return 1.0 / MINISCOPE_FPS
 
 def _get_speed_mask(LT, min_speed: float = 2.0) -> np.ndarray:
     """
@@ -2651,7 +2645,6 @@ def decode_within_LT_by_direction(
     use_speed=True,
     min_speed=2.0,
     rng_seed=0,
-    default_fps=20.0,
     S_override=None,          # NEW
 ):
     """
@@ -2660,16 +2653,8 @@ def decode_within_LT_by_direction(
     Returns schema compatible with run_decoding_all_mice_pipeline pooling logic.
     """
 
-    # ---- dt_sec (per miniscope frame) ----
-    t_ms = getattr(LT, "tstamp_miniscope", None)
-    if t_ms is not None:
-        t_ms = np.asarray(t_ms, float)
-        if t_ms.size >= 3:
-            dt_sec = float(np.nanmedian(np.diff(t_ms)) / 1000.0)
-        else:
-            dt_sec = 1.0 / float(default_fps)
-    else:
-        dt_sec = 1.0 / float(default_fps)
+    # ---- dt_sec (per miniscope frame): the one constant, checked per session at load ----
+    dt_sec = _infer_dt_sec(LT)
 
     # ---- data ----
     x = np.asarray(LT.miniscope_loc_1d_px, float)
@@ -27944,7 +27929,6 @@ def plot_position_vs_time_original_decoder(
     session_str="",
     auto_close=True,
     groups=("mCherry", "hM3D", "hM4D"),
-    default_fps=20.0,
 ):
     """Position-vs-time panels for the original direction-split 1D decoder.
 
@@ -28031,7 +28015,7 @@ def plot_position_vs_time_original_decoder(
                 continue
 
             within = res[within_key]
-            dt_sec = within.get("dt_sec", 1.0 / default_fps)
+            dt_sec = within["dt_sec"]
 
             for dir_label, dblk in within.items():
                 if not isinstance(dblk, dict) or not dblk.get("ok", False):
@@ -28056,7 +28040,7 @@ def plot_position_vs_time_original_decoder(
         if xblk.get("ok", False):
             out = xblk.get("out")
             if isinstance(out, dict):
-                dt_sec = xblk.get("dt_test", xblk.get("dt_sec", 1.0 / default_fps))
+                dt_sec = xblk["dt_test"] if "dt_test" in xblk else xblk["dt_sec"]
                 _plot_one(mouse, g, "LT1_to_LT2",
                           out.get("true_pos", []),
                           out.get("decoded_pos", []),

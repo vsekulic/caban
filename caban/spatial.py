@@ -755,13 +755,8 @@ class FluorescenceMap:
 
 
 def _infer_dt_sec_spatial(sess):
-    """Infer frame duration in seconds from session timestamps (ms)."""
-    if hasattr(sess, "tstamp_miniscope") and sess.tstamp_miniscope is not None and len(sess.tstamp_miniscope) > 10:
-        ts = np.asarray(sess.tstamp_miniscope, dtype=float)
-        d = np.diff(ts)
-        d = d[np.isfinite(d) & (d > 0)]
-        if d.size:
-            return float(np.median(d)) / 1000.0
+    """Frame duration (s): 1 / MINISCOPE_FPS, checked per session at load (plans/miniscope_frame_rate_plan.md).
+    Until 2026-10-08: the median of the ms-rounded timestamp differences (51 ms), with a constant fallback."""
     return 1.0 / MINISCOPE_FPS
 
 

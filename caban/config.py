@@ -19,6 +19,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field, asdict
 from typing import Tuple, Optional, Any
 
+from caban.utilities import MINISCOPE_FPS
+
 
 @dataclass
 class PipelineConfig:
@@ -293,9 +295,6 @@ class PipelineConfig:
             self.PLOTS_DIR = os.path.join("plots", ts)
         # Resolve bin_width_frames if not set explicitly.
         if self.bin_width_frames is None:
-            # Lazy import so importing caban.config doesn't drag in the
-            # whole pipeline. caban.utilities defines MINISCOPE_FPS.
-            from caban.utilities import MINISCOPE_FPS
             self.bin_width_frames = int(MINISCOPE_FPS * self.bin_width_seconds)
 
         # Validate enumerated string fields up front so typos fail fast.

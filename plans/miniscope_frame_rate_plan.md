@@ -84,6 +84,26 @@ From every `Miniscope/timeStamps.csv` on MINISCOPE, G05–G21, sessions ≥ 2,00
       abnormal-cell filter, and hence the cell sets, can move slightly;
     - every `int(s × fps)` site now truncates (e.g. 10 s → 197 frames).
   - G05 Test_A still ran on the constant until step 2 (below).
+- **2026-10-09, step 4 done.**
+  - **G09's accepted short window** (`epoch_analysis.SHORT_POST_SHOCK_WINDOWS`) stays at 387 frames,
+    because that number is set by where imaging stops. The full window went 400 → 395 frames, so it
+    is now 8 frames short instead of 13; comment updated. `sp_rates_lmm.restrict_to_exposure_matched_trials`
+    (tolerance 0.5 s): full windows now read 19.990 s (395 / 19.76), and timestamp-defined trace
+    windows about 20.0 s (they read 19.76 s at the old constant); G09's 19.585 s would now even pass
+    the tolerance by itself.
+  - **isomap:** its cache keys include `MINISCOPE_FPS`, so old caches are not reused; its downsample
+    factor is still exactly 2.
+  - **`caban/config.py`:** the inline import of `MINISCOPE_FPS` moved to the top of the module (no
+    cycle: `caban.utilities` imports nothing from caban). `bin_width_frames` = int(10 s × 19.76) = 197.
+  - **Constant fallbacks removed:**
+    - `decoder._infer_dt_sec` (about 30 callers) and `spatial._infer_dt_sec_spatial` return
+      1 / `MINISCOPE_FPS`. They used the *median* of the ms-rounded timestamp differences (51 ms, i.e.
+      19.61 fps, about 0.8 % off the true 50.6 ms), with silent 1/30 s and 1/20 s fallbacks.
+    - The LT 1D decoder's `default_fps=20` fallback is gone. The plotting function now reads `dt_sec`
+      from the results, or fails, instead of assuming 20 fps; nothing passed `default_fps`.
+  - **The 8 "unsure" sites:** none involves the frame rate. `look_ahead = int(20 / bin_width)` is
+    seconds over bins; `seg_window` counts track segments; Minian's `noise_freq` / `wnd` are relative;
+    `PERIOD_FRAMES` is outstanding item B4, out of this scope.
 - **2026-10-09, step 3 done.**
   - The trial-average windows (`population.PERIOD_FRAMES`, 20/20/20/2/20 frames) stay in frames:
     changing them to seconds is out of the frame-rate scope (VS). A change to 20 s / 2 s was made
