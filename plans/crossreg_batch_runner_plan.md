@@ -1,6 +1,6 @@
 # Plan: cross-registration by registry, and every output folder named `minian`
 
-Status: **planning**, written 2026-09-26. Nothing built. **Blocked on VS for §6 (which groupings).**
+Status: written 2026-09-26; **groupings decided 2026-10-10 (§6)**. Nothing built yet. Next: the registry (§3), then the runner and its gate (§5, §7), on the Razer.
 Depends on: `plans/minian_batch_runner_plan.md` (the runner pattern: protected template, papermill,
 parameters from the kernel, gate against production), `plans/local_minian_pipeline_plan.md` §3.4
 (cross-registration never modifies `A`/`C`/`S`) and §7 (cross-registration is out of the CNMF-E pass).
@@ -57,7 +57,19 @@ question, and per mouse the list of session labels `<mouse>/<day>/<session>`.
 - **Seeded from today's folder names**, mechanically: for every `minian_crossreg*` folder, each
   `crossreg<N>` in its name puts that session in grouping *N*. A script writes it and a check
   proves the registry reproduces the folder-name grouping exactly, for all 17 mice and 7 groupings.
+- **Format: YAML** (VS, 2026-10-10): a master list, readable and editable by hand.
 - New groupings (§6) are added to the registry by hand, reviewed, committed.
+- **Grouping 1's mapping files (resolved 2026-10-10).** They exist for all 17 mice, in each mouse's
+  **conditioning-day** folder, not the mouse folder (grouping 1 is within that day), so the 09-26 survey
+  of mouse folders missed them. Names: `mappings_crossreg1.{csv,pkl}` (no underscore) in 16 mice,
+  `mappings_crossreg_1.*` in G15; G06 and G07 have the `.csv` only. G05 also holds stray copies
+  (`mappings_crossreg1 - Copy.csv`, `old_mappings/`, and a set in the mouse folder). The analysis
+  loader reads a cached copy (`CrossRegMapping`'s saver on FUTROLA), made once from a file it calls
+  `mappings_crossreg_1.csv`. The registry records the real file per mouse, and its check proves the
+  cached copy equals that file, so it is known which file the published results came from.
+- **G17 (VS: "don't bork this up").** Its conditioning folder is misnamed, and the notebook carries a
+  hard-coded fix (cell 16; [yra_recompute_plan.md](yra_recompute_plan.md) §6.5). The registry records
+  it explicitly, and the runner's gate must reproduce G17's published mappings with it.
 - `caban` code that needs membership reads the registry — never a folder name.
 
 ## 4. Renaming every output folder to `minian`
@@ -75,8 +87,13 @@ name:
 
 And one conflict: **G16 `2022_01_26-TFC_test_B/14_23_45-LT1` has two output folders**
 (`minian_crossreg2_crossreg3`, `minian_crossreg3`); only the second fits the session's own videos
-(`yra_recompute_plan.md` §13.3). Both cannot become `minian`; VS decides what the other becomes
-(set aside as `minian-ORIG`-style, or archived).
+(`yra_recompute_plan.md` §13.3). Both cannot become `minian`. **Resolved 2026-10-10:** `minian_crossreg2_crossreg3` is a
+byte-identical copy of G16's TFC_test_B output (`14_47_09-TFC_test_B/…/minian_crossreg2_crossreg3_crossreg4_crossreg6`;
+only `.DS_Store` and the YrA sidecar differ), and every other mouse's Test_B-day LT1 uses
+`minian_crossreg3`. G16's published grouping 3 used the right folder: all 787 LT1 unit ids in
+`mappings_crossreg_3` are in `minian_crossreg3`. **Decision (VS): set the copy aside** (recorded, not
+deleted), before the rename and before seeding the registry, which would otherwise put it in groupings
+2 and 3.
 
 Order: registry (§3) → loader and discovery read it, with a test that every session resolves to
 the same folder as before → rename, recorded per session like `set_aside_minian_output` records
@@ -106,18 +123,30 @@ Same shape as `caban/minian_runner.py`:
 - **Checks**: `A`/`C`/`S` hashes unchanged before/after (parent §3.4, "worth re-verifying");
   every registry session appears in the mapping; the mapping's session names are the ones expected.
 
-## 6. Which groupings (VS)
+## 6. Which groupings (VS) — decided 2026-10-10
 
-Scientific, not mechanical — the registry records the answer. Candidates, as raised in the parent
-plan:
+**Purpose: compute every grouping ahead of time, once**, so later work needs only the small mapping
+files and the local caches on FUTROLA, not MINISCOPE. **No analysis is run with them automatically**;
+each is used deliberately, when a question needs it (VS).
 
-- **Whole TFC_cond day** — HC1, LT1, CNO1, CNO2, LT2, HC2, TFC_cond, HC3 — for the per-cell
-  before/after-CNO question.
-- **LT across track days** — LT1 of track_day1–3 (and beyond) — place-cell stability.
-- **HC sessions** with the LT/TFC session of the same day, if HC activity is to be compared per cell.
-- Whether any existing grouping should be **extended** with new sessions, or left exactly as
-  published (recommended: leave 1–7 untouched; new questions get new numbers).
+**Keep in mind (VS):** the more sessions a grouping holds, and the longer it spans, the fewer cells
+are matched across all of them (drift). A large grouping may have very few, or no, cells common to
+every session. That is why the groupings are targeted, and why some overlap.
 
+Groupings 1–7 stay exactly as published. New ones (numbers to confirm when the registry is written):
+
+| grouping | sessions (per mouse) | question | from VS's list |
+|---|---|---|---|
+| 8 | conditioning day, all but HC4: HC1, LT1, CNO1, CNO2, LT2, HC2, TFC_cond, HC3 | per-cell trajectory across the drug onset, the whole day | A (G18's HC4 left out, as for the other mice) |
+| 9 | conditioning day without homecage: LT1, CNO1, CNO2, LT2, TFC_cond | as 8, without HC (HC activity varies greatly) | H |
+| 10 | CNO1, CNO2 | cells before vs after CNO; both are homecage sessions with the injection in between | G — **key** |
+| 11 | every LT session: LT1 of each track day, and LT1/LT2 of every other day | place-cell stability over days and weeks | B |
+| 12 – 16 | within one track day: HC1, LT1, HC2 (one grouping per track day 1–5; days 4–5 for G08 only) | homecage vs track per cell; reactivation in HC after LT | C |
+| 17 | every HC session, **not** the HC0s | homecage baseline over the experiment | E |
+| 18 | G05 only: `2021_09_01-TFC_test_B` HC1 + iso | the per-cell part of the isoflurane analysis ([isoflurane_recording_analysis_plan.md](isoflurane_recording_analysis_plan.md)) | F |
+
+Dropped: **D** (within each test day; VS: "HC is not a behavior"). The HC0s and the other misc
+sessions are in no grouping.
 ## 7. Order of work
 
 1. Seed the registry from folder names; prove it reproduces them (§3).
