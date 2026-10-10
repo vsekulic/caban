@@ -91,3 +91,9 @@ sync to MINISCOPE (manifest on the Razer, copy from the Mac), the status report,
 ## 6. Status
 
 - 2026-10-10: planned.
+- **2026-10-10 09:59, running on the Razer** (`screen left_out`, `~/bin/run_left_out_sessions.sh`, logged
+  in `~/minian.log`). Code `9086ea0`: `SESSION_LABELS`, `SESSIONS_NOT_RUN`, stubs only when unlabelled,
+  `UNUSED_VIDEOS` skipped at staging. The four failed runs (G05/G06 LT1, G11 HC2, G18 HC1) were cleared
+  back to pending, their failed runs kept as `minian_run-failed-20261010T0958*`. Dry run: **38 pending**,
+  the four by-decision sessions listed as never run. Order: G18 HC1 alone as the check (stops unless `C`
+  has 4,000 frames), then the 38 by day, then G09 HC3 by path.
