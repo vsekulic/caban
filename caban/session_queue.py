@@ -74,6 +74,15 @@ UNUSED_VIDEOS = {
     # the recording: no imaging from 553.9 s to 705.9 s of the experiment, and C frame
     # 11,000 is timestamp row 14,000 (§15.1).
     "G21-ST762-hM4D/2022_03_24-TFC_test_B/14_35_02-TFC_test_B": ["11.avi", "12.avi", "13.avi"],
+    # The recording stopped partway through a file (header never finalised) and resumed later
+    # (plans/unlabelled_and_salvage_sessions_plan.md §2). Each left-out file accounts for exactly
+    # 1,000 timestamp rows (checked 2026-10-10: 12,242 and 12,315 rows), so the gap maps cleanly.
+    "G05-ST637_hM3D/2021_09_09-TFC_test_A_1wk/16_11_07-LT1": ["10.avi", "11.avi"],
+    "G06-ST688_hM4D/2021_10_22-TFC_test_A/12_18_46-LT1": ["7.avi", "8.avi", "9.avi", "10.avi"],
+    # Homecage sessions salvaged on their finalised files (VS, 2026-10-10): the recording stopped
+    # early, the rest is a partial file and header-only or empty ones, all at the end.
+    "G11-ST705_hM3D/2021_12_02-TFC_test_A_1wk/15_32_02-HC2": ["3.avi", "4.avi", "5.avi"],
+    "G18-ST734-hM3D/2022_02_07-TFC_cond/14_03_44-HC1": ["4.avi", "5.avi", "6.avi", "7.avi"],
 }
 
 # Sessions whose timestamps run on past the last video frame, from this row on: every
@@ -83,6 +92,67 @@ TIMESTAMPS_WITHOUT_VIDEO_FROM = {
     # row 19,022, 1.1 s after the last imaged frame (found 2026-09-27).
     "G09-ST702_mCherry/2021_11_08-TFC_cond/18_54_05-TFC_cond": 19000,
 }
+
+
+# Session types for sessions whose folder name carries none, or the wrong kind of one
+# (plans/unlabelled_and_salvage_sessions_plan.md). Keyed like UNUSED_VIDEOS; takes precedence over
+# the type in the folder name. Folders on MINISCOPE are not renamed.
+#   - Track days named by time only: each day is a triplet in time order, HC1 -> LT1 -> HC2, the
+#     middle one the longest (checked 2026-10-10; VS: track days are homecage plus linear track).
+#   - "misc": checks and one-off recordings, kept apart so no analysis takes them for ordinary
+#     sessions (VS, 2026-10-10).
+SESSION_LABELS = {
+    "G07-ST689_hM4D/2021_10_11-track_day1/13_29_38": "HC1",  # 5.8 min
+    "G07-ST689_hM4D/2021_10_11-track_day1/13_46_01": "LT1",  # 11.7 min
+    "G07-ST689_hM4D/2021_10_11-track_day1/14_09_38": "HC2",  # 5.1 min
+    "G07-ST689_hM4D/2021_10_13-track_day2/13_02_40": "HC1",  # 5.1 min
+    "G07-ST689_hM4D/2021_10_13-track_day2/13_19_46": "LT1",  # 14.2 min
+    "G07-ST689_hM4D/2021_10_13-track_day2/13_44_59": "HC2",  # 5.4 min
+    "G07-ST689_hM4D/2021_10_15-track_day3/16_26_00": "HC1",  # 10.0 min
+    "G07-ST689_hM4D/2021_10_15-track_day3/16_52_58": "LT1",  # 20.4 min
+    "G07-ST689_hM4D/2021_10_15-track_day3/17_43_54": "HC2",  # 8.0 min
+    "G08-ST701_mCherry/2021_10_26-track_day1/12_14_54": "HC1",  # 6.4 min
+    "G08-ST701_mCherry/2021_10_26-track_day1/12_33_46": "LT1",  # 13.8 min
+    "G08-ST701_mCherry/2021_10_26-track_day1/12_59_02": "HC2",  # 5.6 min
+    "G08-ST701_mCherry/2021_10_28-track_day2/10_54_33": "HC1",  # 5.5 min
+    "G08-ST701_mCherry/2021_10_28-track_day2/11_17_27": "LT1",  # 11.0 min
+    "G08-ST701_mCherry/2021_10_28-track_day2/11_42_43": "HC2",  # 5.1 min
+    "G08-ST701_mCherry/2021_11_01-track_day3/11_41_06": "HC1",  # 5.7 min
+    "G08-ST701_mCherry/2021_11_01-track_day3/12_18_19": "LT1",  # 10.9 min
+    "G08-ST701_mCherry/2021_11_01-track_day3/12_40_16": "HC2",  # 5.0 min
+    "G08-ST701_mCherry/2021_11_03-track_day4/13_52_36": "HC1",  # 5.2 min
+    "G08-ST701_mCherry/2021_11_03-track_day4/14_16_11": "LT1",  # 10.6 min
+    "G08-ST701_mCherry/2021_11_03-track_day4/14_41_06": "HC2",  # 5.1 min
+    "G08-ST701_mCherry/2021_11_05-track_day5/12_52_19": "HC1",  # 5.4 min
+    "G08-ST701_mCherry/2021_11_05-track_day5/13_13_59": "LT1",  # 12.2 min
+    "G08-ST701_mCherry/2021_11_05-track_day5/13_43_26": "HC2",  # 5.6 min
+    "G18-ST734-hM3D/2022_02_01-track_day1/13_36_06": "HC1",  # 5.8 min
+    "G18-ST734-hM3D/2022_02_01-track_day1/13_41_59": "LT1",  # 11.5 min
+    "G18-ST734-hM3D/2022_02_01-track_day1/13_54_06": "HC2",  # 5.6 min
+    # misc
+    "G12-ST709-mCherry/2021_12_13/14_43_31": "misc",  # HC0: homecage before any track day, GCaMP check
+    "G13-ST710-mCherry/2021_12_13/15_53_03": "misc",  # HC0: homecage before any track day, GCaMP check
+    "G06-ST688_hM4D/2021_10_07-check1/15_00_46": "misc",  # 3 min check recording
+    "G05-ST637_hM3D/2021_09_01-TFC_test_B/15_20_05-iso": "misc",  # under isoflurane, then waking
+    "G05-ST637_hM3D/2021_08_23-track_day1-tests/13_59_41-HC1a": "misc",  # short repeat of HC1
+    "G05-ST637_hM3D/2021_08_23-track_day1-tests/14_23_55-LT1a": "misc",  # short repeat of LT1
+    "G13-ST710-mCherry/2022_01_10-TFC_test_B_1wk/16_38_56-HC2b": "misc",  # short repeat of HC2
+}
+
+
+# Sessions with video that are never run, by decision (plans/unlabelled_and_salvage_sessions_plan.md
+# §2). Explicit, so a session can only drop out of the queue for a stated reason.
+SESSIONS_NOT_RUN = {
+    "G07-ST689_hM4D/2021_10_20-TFC_test_B/15_49_59-TFC_test_B": "disk filled during recording; unusable (VS, 2026-10-10)",
+    "G07-ST689_hM4D/2021_10_20-TFC_test_B/16_25_43-HC3": "no finalised .avi (disk full that day)",
+    "G14-ST719-hM4D/2022_01_18-TFC_test_B_1wk/14_52_35-TFC_test_B_1wk-borked": "re-recorded as 15_10_50-TFC_test_B_1wk (VS, 2026-10-10)",
+    "G18-ST734-hM3D/2022_02_07-TFC_cond/14_57_23-CNO2-borked": "disk filled; re-recorded as 15_03_49-CNO2 (VS, 2026-10-10)",
+}
+
+
+def session_label(session_dir: str):
+    """The type :data:`SESSION_LABELS` assigns this session, or None."""
+    return SESSION_LABELS.get(session_tail(session_dir))
 
 
 # Sessions recorded at another frame-rate setting than 20 fps, with their measured rate

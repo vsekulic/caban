@@ -49,7 +49,11 @@ def category(item) -> str:
     if c.complete_minian_dirs:
         return "production"
     if mr.needs_minian(item):
-        return "stub (excluded)" if mr.is_stub(item) else mr.run_status(item)
+        if mr.is_stub(item):
+            return "stub (excluded)"
+        if mr.not_run_reason(item) is not None:
+            return "not run (decision)"
+        return mr.run_status(item)
     if c.set_aside_dirs:
         return "set aside by hand (excluded)"
     return "partial output (excluded)"
@@ -103,7 +107,7 @@ def row(item) -> dict:
         note = "stage-out failed: " + record["stage_out_error"][:90]
     return {
         "mouse": item.mouse, "day": item.day, "session": item.session,
-        "type": mr.session_type(item.session), "videos": item.n_avi,
+        "type": mr.session_kind(item), "videos": item.n_avi,
         "group": mr.day_group(item.label), "status": cat,
         "finished": (record.get("staged_out") or record.get("finished") or "")[:16].replace("T", " "),
         "wall_h": "{:.2f}".format(record["timings"]["total_s"] / 3600) if "total_s" in record.get("timings", {}) else "",

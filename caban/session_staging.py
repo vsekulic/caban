@@ -26,6 +26,8 @@ from typing import Dict, List, Sequence
 
 from natsort import natsorted
 
+from caban import session_queue as sq
+
 # Suffix of a copy that is not yet verified: a folder or file on either side that carries
 # it is never taken for the real thing, and is the copier's own to delete.
 PARTIAL_SUFFIX = ".stage-partial"
@@ -46,9 +48,17 @@ def work_dir_for(session_dir: str, stage_root: str) -> str:
 
 def input_files(session_dir: str, pattern: str) -> List[str]:
     """The files a run reads: those in ``session_dir`` whose name matches ``pattern`` (searched,
-    as Minian's ``load_videos`` does), natsorted. Hard-fails on none."""
+    as Minian's ``load_videos`` does), natsorted, minus the session's listed unfinished videos
+    (``session_queue.UNUSED_VIDEOS``), so Minian only sees finalised files. Hard-fails on none,
+    and on a listed file that is not there."""
     names = natsorted(n for n in os.listdir(session_dir)
                       if re.search(pattern, n) and os.path.isfile(os.path.join(session_dir, n)))
+    unused = sq.unused_videos(session_dir)
+    missing = [n for n in unused if n not in names]
+    if missing:
+        raise FileNotFoundError("UNUSED_VIDEOS lists {} for {}, but they are not there".format(
+            missing, session_dir))
+    names = [n for n in names if n not in unused]
     if not names:
         raise FileNotFoundError("no file matching {!r} in {}".format(pattern, session_dir))
     return names

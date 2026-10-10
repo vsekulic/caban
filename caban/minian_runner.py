@@ -94,10 +94,10 @@ KERNEL_PACKAGES = (
     "numba", "SimpleITK", "holoviews", "bokeh",
 )
 
-# Scope (parent plan §2): G05-G21. Stubs -- bare-timestamp session names and these
-# types -- are recording mistakes to eyeball before queueing, never queued by default.
+# Scope (parent plan §2): G05-G21. A session with no type -- neither in its folder name nor in
+# session_queue.SESSION_LABELS -- is a stub, never queued. Until 2026-10-10 every time-only name was
+# a stub, which left 28 real sessions out of the batch (plans/unlabelled_and_salvage_sessions_plan.md).
 MOUSE_RANGE = ("G05", "G21")
-STUB_SESSION_TYPES = ("iso", "HC1a", "HC2b", "LT1a")
 # The batch's order (VS, 2026-09-28): whole experiment days first -- every session of the day,
 # HC, LT, CNO and the TFC/test session -- then the track days, then the rest. Each group is a list
 # of regexes searched in <mouse>/<day>/<session> (select_sessions' `labels`); the trailing "/" ends
@@ -406,9 +406,19 @@ def session_type(session: str) -> str:
     return session.split("-", 1)[1] if "-" in session else ""
 
 
+def session_kind(item: sq.SessionWork) -> str:
+    """The session's type: :data:`session_queue.SESSION_LABELS` if listed, else its folder name's."""
+    label = sq.session_label(item.session_dir)
+    return label if label is not None else session_type(item.session)
+
+
 def is_stub(item: sq.SessionWork) -> bool:
-    kind = session_type(item.session)
-    return kind == "" or kind in STUB_SESSION_TYPES
+    return session_kind(item) == ""
+
+
+def not_run_reason(item: sq.SessionWork):
+    """Why this session is never run (:data:`session_queue.SESSIONS_NOT_RUN`), or None."""
+    return sq.SESSIONS_NOT_RUN.get(sq.session_tail(item.session_dir))
 
 
 def needs_minian(item: sq.SessionWork) -> bool:
@@ -494,7 +504,7 @@ def select_sessions(
         matching = [i for i in matching if i.mouse in mice]
     if session_types:
         matching = [i for i in matching
-                    if any(re.match(p, session_type(i.session)) for p in session_types)]
+                    if any(re.match(p, session_kind(i)) for p in session_types)]
     fresh = [i for i in matching if needs_minian(i)]
     if labels or mice or session_types:
         have_output = [i for i in matching if not needs_minian(i)]
@@ -507,7 +517,12 @@ def select_sessions(
         len(fresh), len(stubs), ":" if stubs else "."))
     for stub in stubs:
         print("  " + stub.label)
-    return [i for i in fresh if not is_stub(i)]
+    not_run = [i for i in fresh if not is_stub(i) and not_run_reason(i) is not None]
+    print("{} of them are never run, by decision (session_queue.SESSIONS_NOT_RUN){}".format(
+        len(not_run), ":" if not_run else "."))
+    for item in not_run:
+        print("  {}: {}".format(item.label, not_run_reason(item)))
+    return [i for i in fresh if not is_stub(i) and not_run_reason(i) is None]
 
 
 # --- status: run.json is the sidecar ------------------------------------------
@@ -555,7 +570,7 @@ def unit_counts(minian_dir: str) -> str:
 def _status_columns(item: sq.SessionWork, record: dict) -> dict:
     done = record.get("status") == "done"
     return {
-        "type": session_type(item.session),
+        "type": session_kind(item),
         "status": STATUS_LABELS.get(record.get("status", "pending"), record.get("status")),
         "wall_h": round(record["timings"]["total_s"] / 3600, 2) if "total_s" in record.get("timings", {}) else None,
         "peak_mem_gb": record.get("memory", {}).get("peak_rss_gb"),
