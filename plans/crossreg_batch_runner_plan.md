@@ -1,6 +1,6 @@
 # Plan: cross-registration by registry, and every output folder named `minian`
 
-Status: written 2026-09-26; **groupings decided 2026-10-10 (§6)**. Nothing built yet. Next: the registry (§3), then the runner and its gate (§5, §7), on the Razer.
+Status: written 2026-09-26; groupings decided 2026-10-10 (§6); **registry for 1–7 seeded and checked 2026-10-10 (§3.1)**. Next: groupings 8–18 into the registry (after VS's answers in §6), then the runner and its gate (§5, §7), on the Razer.
 Depends on: `plans/minian_batch_runner_plan.md` (the runner pattern: protected template, papermill,
 parameters from the kernel, gate against production), `plans/local_minian_pipeline_plan.md` §3.4
 (cross-registration never modifies `A`/`C`/`S`) and §7 (cross-registration is out of the CNMF-E pass).
@@ -71,6 +71,40 @@ question, and per mouse the list of session labels `<mouse>/<day>/<session>`.
   hard-coded fix (cell 16; [yra_recompute_plan.md](yra_recompute_plan.md) §6.5). The registry records
   it explicitly, and the runner's gate must reproduce G17's published mappings with it.
 - `caban` code that needs membership reads the registry — never a folder name.
+
+### 3.1 Seeded 2026-10-10 — what the check found
+
+`scripts/seed_crossreg_registry.py` → `caban/crossreg_groupings.yaml` (groupings 1–7). Membership comes
+from each **mapping file's own session columns**, not from folder names, and each member is matched to
+the output folder whose cells the mapping refers to. All checks pass:
+
+- **Every mapped unit id exists in its member's output**, for all 7 groupings, 16–17 mice each.
+- **The loader's cached mappings** (`<cache>/TFC_cond/crossreg/`, the only copies the loader reads; it
+  builds every `CrossRegMapping` with that savepath) **equal the files on disk by value**. The 2023
+  cache stores object columns where today's pandas reads strings, so the comparison is by value.
+- **18 members have no crossreg-tagged folder**: grouping 5's Test_B_1wk LT1 in all 16 mice, and
+  grouping 3's Test_B LT1 in G10/G11. Their current `minian` (the batch's re-run) carries **exactly the
+  mapping's unit ids**, as does the set-aside `minian-ORIG` where one exists. So the re-runs reproduced
+  those sessions' cell ids, and the published mappings stay valid with the current output.
+- **One stale published mapping: G15 grouping 2.** Its TFC_cond column refers to an earlier run, kept in
+  `prev/minian` (451 units; all mapping ids there). The current output (417 units) has its groupings 1, 4,
+  6 and 7 recomputed in 2026, but grouping 2 is from 2022. The registry records the member as
+  `output: prev/minian` with a `stale:` note. Grouping 2 is not used by the loader.
+- **One stale orphan cache copy: G15 grouping 4** under `<cache>/Test_B/crossreg/` (2023-11-07), referring
+  to that earlier run. It is not read by the loader (which reads the up-to-date `TFC_cond/crossreg/` copy).
+  The other 16 orphans in `Test_B/crossreg/` equal their files.
+- **G12: two sessions started at 14:03:29** (the Test_B-day LT1 and TFC_test_A_1wk). Mappings name sessions
+  by start time only; the seed resolves each by the grouping's folder tag.
+- **G05's `old_mappings/`** holds earlier, *different* versions of groupings 1–4 and 6. The published files
+  are the ones in the mouse folder (2–7) and the conditioning-day folder (1).
+- **G17:** the published mappings name its conditioning session `18_26_30` (MINISCOPE's folder name). The
+  notebook's hard-coded fix *sets* it to `918_26_30`, the server's misnamed folder. Applied to MINISCOPE it
+  would mismatch the published name, so the runner's gate must reproduce G17 exactly (§5).
+
+**Re-run all groupings (VS, 2026-10-10).** The runner re-derives 1–7 for every mouse as well as computing
+8–18, which makes its gate a full reproducibility test of every published mapping. The published files are
+set aside (`-ORIG`), never overwritten, and analyses keep using them unless VS decides otherwise. G15's
+stale grouping 2 is the one expected difference.
 
 ## 4. Renaming every output folder to `minian`
 
