@@ -410,6 +410,10 @@ def apply_transform(varr: xr.DataArray, trans: xr.DataArray, fill=0) -> xr.DataA
     return varr_sh
 
 
+def _dense_block(block):
+    return block.todense() if isinstance(block, sparse.SparseArray) else block
+
+
 def compute_trace(
     Y: xr.DataArray, A: xr.DataArray, b: xr.DataArray, C: xr.DataArray, f: xr.DataArray
 ) -> xr.DataArray:
@@ -418,7 +422,11 @@ def compute_trace(
     Vendored from ``minian/cnmf.py::compute_trace``.  Deviation: the trailing
     ``custom_arr_optimize`` / ``da.optimize`` block is dropped -- it renames and
     inlines dask graph keys and has no effect on values.  The arithmetic, its
-    order and its sparsity are unchanged.
+    order and its sparsity are unchanged.  Addition: every frame chunk of the
+    result is made dense before dask joins them.  With ``sparse`` 0.17 some
+    chunks come back sparse and others dense, and the join refuses the mix
+    ("All arrays must be instances of SparseArray"; G05 iso and G18 CNO2-borked,
+    2026-10-11).  Densifying does not change any value.
 
     ``YrA_i = max(0, C_i + (<Ybs, A_i> - sum_j C_j <A_i, A_j>) / <A_i, A_i>)``.
     Note that the ``j == i`` term of the sum cancels ``C_i`` exactly, so ``YrA``
@@ -451,6 +459,7 @@ def compute_trace(
     CtA = darr.dot(C, AtA)
     CtA = darr.dot(CtA, A_norm)
     YrA = (YtA - CtA + C).clip(0)
+    YrA = YrA.map_blocks(_dense_block, dtype=YrA.dtype)
     YrA = xr.DataArray(
         YrA,
         dims=["frame", "unit_id"],

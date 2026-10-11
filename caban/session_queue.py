@@ -149,6 +149,7 @@ SESSIONS_NOT_RUN = {
     "G07-ST689_hM4D/2021_10_20-TFC_test_B/16_25_43-HC3": "no finalised .avi (disk full that day)",
     "G14-ST719-hM4D/2022_01_18-TFC_test_B_1wk/14_52_35-TFC_test_B_1wk-borked": "re-recorded as 15_10_50-TFC_test_B_1wk (VS, 2026-10-10)",
     "G18-ST734-hM3D/2022_02_07-TFC_cond/14_57_23-CNO2-borked": "disk filled; re-recorded as 15_03_49-CNO2 (VS, 2026-10-10)",
+    "G13-ST710-mCherry/2022_01_10-TFC_test_B_1wk/16_38_56-HC2b": "broken recording: only 0.avi finalised, 1.avi unfinalised, 2-6 fragments or empty; a misc short repeat in no grouping (VS, 2026-10-11)",
 }
 
 
@@ -482,11 +483,82 @@ def set_aside_name(name: str) -> str:
 def original_output_path(path: str) -> str:
     """The original of an output that a re-run may have replaced.
 
-    Returns the ``-ORIG`` sibling when one exists, else ``path`` itself -- so a reader
-    routed through here keeps reading the original after a re-run writes beside it.
+    Returns the ``-ORIG`` sibling when one exists, else the copy moved into the mouse's
+    ``crossreg_legacy/`` (:func:`move_to_crossreg_legacy`) when one exists, else ``path``
+    itself -- so a reader routed through here keeps reading the original after a re-run
+    writes in its place.
     """
     orig = os.path.join(os.path.dirname(path), set_aside_name(os.path.basename(path)))
-    return orig if os.path.exists(orig) else path
+    if os.path.exists(orig):
+        return orig
+    legacy = crossreg_legacy_path(path)
+    return legacy if legacy is not None and os.path.exists(legacy) else path
+
+
+# --- supplanted cross-registration output: <mouse>/crossreg_legacy/ -----------------
+# A cross-registration re-run (caban.crossreg_runner) moves the published files it
+# supplants into the mouse's crossreg_legacy/, keeping each file's path relative to the
+# mouse folder, and lists every move in crossreg_legacy/moved.json (VS, 2026-10-11).
+
+CROSSREG_LEGACY_DIR = "crossreg_legacy"
+CROSSREG_LEGACY_RECORD = "moved.json"
+
+
+def mouse_dir_of(path: str) -> Optional[str]:
+    """The ``G<nn>-...`` folder that ``path`` lies in, or ``None`` if it lies in none."""
+    parts = os.path.abspath(path).split(os.sep)
+    hits = [i for i, p in enumerate(parts) if re.match(MOUSE_DIR_PATTERN + "-", p)]
+    if not hits:
+        return None
+    return os.sep.join(parts[:hits[-1] + 1])
+
+
+def crossreg_legacy_path(path: str) -> Optional[str]:
+    """Where :func:`move_to_crossreg_legacy` puts ``path``; ``None`` outside a mouse folder."""
+    mouse_dir = mouse_dir_of(path)
+    if mouse_dir is None:
+        return None
+    rel = os.path.relpath(os.path.abspath(path), mouse_dir)
+    if rel.split(os.sep)[0] == CROSSREG_LEGACY_DIR:
+        return None
+    return os.path.join(mouse_dir, CROSSREG_LEGACY_DIR, rel)
+
+
+def move_to_crossreg_legacy(paths, reason: str) -> List[dict]:
+    """Move the files ``paths`` (all in one mouse folder) into its ``crossreg_legacy/``.
+
+    Refuses, moving nothing, if any file is missing or any target already exists (a
+    second move would put a re-run's output where the original is kept). Appends one
+    entry per file to ``crossreg_legacy/moved.json``; returns those entries.
+    """
+    paths = [os.path.abspath(p) for p in paths]
+    mouse_dirs = {mouse_dir_of(p) for p in paths}
+    if len(mouse_dirs) != 1 or None in mouse_dirs:
+        raise ValueError("expected files of one mouse folder, got {}".format(paths))
+    mouse_dir = mouse_dirs.pop()
+    missing = [p for p in paths if not os.path.isfile(p)]
+    if missing:
+        raise FileNotFoundError("nothing to move: {} not found".format(missing))
+    targets = [crossreg_legacy_path(p) for p in paths]
+    taken = [t for t in targets if os.path.lexists(t)]
+    if taken:
+        raise FileExistsError("{} already in {}: an original is kept there; resolve by hand".format(
+            taken, CROSSREG_LEGACY_DIR))
+    when = pd.Timestamp.now().isoformat(timespec="seconds")
+    entries = []
+    for src, dst in zip(paths, targets):
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        os.rename(src, dst)
+        entries.append({"from": os.path.relpath(src, mouse_dir), "to": os.path.relpath(dst, mouse_dir),
+                        "bytes": os.path.getsize(dst), "reason": reason, "when": when})
+    record_path = os.path.join(mouse_dir, CROSSREG_LEGACY_DIR, CROSSREG_LEGACY_RECORD)
+    record = []
+    if os.path.exists(record_path):
+        with open(record_path) as fh:
+            record = json.load(fh)
+    with open(record_path, "w") as fh:
+        json.dump(record + entries, fh, indent=2)
+    return entries
 
 
 def _set_aside_dirs(session_dir: str) -> List[str]:

@@ -180,17 +180,20 @@ def template_source_md5(nb) -> str:
     return hashlib.md5("".join(c.source for c in nb.cells).encode()).hexdigest()
 
 
-def load_template(path: str = TEMPLATE_PATH):
-    """Read the protected template, refusing if it is writable or its code has changed."""
+def load_template(path: str = TEMPLATE_PATH, expected_md5: str = TEMPLATE_SOURCE_MD5):
+    """Read a protected template, refusing if it is writable or its code has changed.
+
+    Defaults to the Minian pipeline's; `caban.crossreg_runner` passes its own.
+    """
     if os.access(path, os.W_OK):
         raise PermissionError(
             "{} is writable; the template must stay read-only (chmod a-w)".format(path))
     nb = nbformat.read(path, as_version=4)
     md5 = template_source_md5(nb)
-    if md5 != TEMPLATE_SOURCE_MD5:
+    if md5 != expected_md5:
         raise ValueError(
             "{} cell sources have md5 {}, expected {}: the template was edited. Inspect "
-            "`git diff` before trusting any run from it.".format(path, md5, TEMPLATE_SOURCE_MD5))
+            "`git diff` before trusting any run from it.".format(path, md5, expected_md5))
     kernel = nb.metadata.get("kernelspec", {}).get("name")
     if kernel != KERNEL_NAME:
         raise ValueError("{} has kernel {!r}, expected {!r}".format(path, kernel, KERNEL_NAME))
@@ -342,15 +345,16 @@ def _import_statements(source: str) -> List[str]:
     return [ast.unparse(n) for n in tree.body if isinstance(n, (ast.Import, ast.ImportFrom))]
 
 
-def preflight_source(template) -> str:
+def preflight_source(template, appended_source: Optional[str] = None) -> str:
     """Code that makes every import the run will make, and nothing else.
 
     Taken from the template itself plus the appended parameters cell, so it follows any
     change to either. Also reads the version of every recorded package (the appended cell
     does, at the very end) and refuses a ``minian`` not imported from the fork.
+    ``appended_source`` is the appended cell; the Minian pipeline's by default.
     """
     cells = [c.source for c in template.cells if c.cell_type == "code"]
-    cells.append(parameters_cell_source(os.devnull))
+    cells.append(parameters_cell_source(os.devnull) if appended_source is None else appended_source)
     cells.append("import os as _os\nfrom importlib import metadata as _metadata\n"
                  "import minian as _minian")
     statements = []
@@ -364,7 +368,7 @@ def preflight_source(template) -> str:
     ])
 
 
-def preflight_kernel(template) -> dict:
+def preflight_kernel(template, appended_source: Optional[str] = None) -> dict:
     """Make every import of the run in a fresh ``minian-native`` kernel, in seconds.
 
     The template's import cells run under ``%%capture``, which hides an ImportError until
@@ -372,7 +376,7 @@ def preflight_kernel(template) -> dict:
     cell 87, ten minutes in (`plans/razer_runner_plan.md` §5, Phase 3.2). The kernel starts
     in the fork folder, as papermill's does.
     """
-    code = preflight_source(template)
+    code = preflight_source(template, appended_source)
     started = time.time()
     km, kc = start_new_kernel(kernel_name=KERNEL_NAME, cwd=MINIAN_FORK_DIR, startup_timeout=120)
     try:
