@@ -525,7 +525,20 @@ def _require_finite_motion(motion: xr.DataArray, minian_dir: str, store: str = "
 def replay_frame_set(session_dir: str, C: xr.DataArray) -> tuple:
     """``(excluded videos, frames in the videos read, del_frames)`` for replaying a session's
     movie against ``C``: the one definition both the recompute and its re-check use."""
-    excluded = sq.unused_videos(session_dir)
+    listed = sq.unused_videos(session_dir)
+    present = [v for v in listed if os.path.exists(os.path.join(session_dir, v))]
+    if present and len(present) != len(listed):
+        raise FileNotFoundError("{}: only {} of the unused videos {} are present".format(
+            session_dir, present, listed))
+    if listed and not present:
+        # A staged copy (caban.session_staging.input_files leaves the unused videos out): prove the
+        # listed names are real -- present in the session's original folder -- so a stale list still fails.
+        originals = [os.path.join(root, sq.session_tail(session_dir), "Miniscope")
+                     for root in sq.default_data_roots()]
+        if not any(all(os.path.isfile(os.path.join(o, v)) for v in listed) for o in originals if os.path.isdir(o)):
+            raise FileNotFoundError("{}: unused videos {} are neither here nor in the original session "
+                                    "folder ({})".format(session_dir, listed, originals))
+    excluded = present
     n_video_frames = count_video_frames(session_dir, PARAM_LOAD_VIDEOS["pattern"], excluded)
     return excluded, n_video_frames, derive_deleted_frames(n_video_frames, C.frame.values)
 
