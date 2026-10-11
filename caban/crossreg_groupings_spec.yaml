@@ -57,14 +57,14 @@ groupings:
         about: "right after vs ~20 min after injection; the 11 mice with both (key)"}
   10b: {name: preinjection_CNO_late, roles: [HC_preinjection, CNO_late], require_all: true,
         about: "homecage before injection vs ~20 min after; the 10 mice of G12–G21"}
-  11: {name: all_LT, sessions: "every LT1 of track days 1–5, and every LT1/LT2 of every other day (conditioning: LT_pre, LT_post)",
+  11: {name: all_LT, sessions: "every LT1 of track days 1–3, and every LT1/LT2 of every other day (conditioning: LT_pre, LT_post); track days 4–5 (G08, G09 only) left out as extra",
        about: "place-cell stability over days and weeks"}
   12: {name: track_day1, sessions: "HC1, LT1, HC2 of track day 1", about: "homecage vs track; reactivation in HC after LT"}
   13: {name: track_day2, sessions: "HC1, LT1, HC2 of track day 2", about: "as 12"}
   14: {name: track_day3, sessions: "HC1, LT1, HC2 of track day 3", about: "as 12"}
   15: {name: track_day4, sessions: "HC1, LT1, HC2 of track day 4 (G08, G09)", about: "as 12"}
   16: {name: track_day5, sessions: "HC1, LT1, HC2 of track day 5 (G08, G09)", about: "as 12"}
-  17: {name: all_HC, sessions: "every HC session (track days, test days, conditioning-day HC roles); not HC0 or misc",
+  17: {name: all_HC, sessions: "every HC session (track days 1–3, test days, conditioning-day HC roles); not HC0, misc, or track days 4–5 (extra)",
        about: "homecage baseline over the experiment"}
   18: {name: iso_pair, mice: [G05], sessions: ["2021_09_01-TFC_test_B/15_11_43-HC1", "2021_09_01-TFC_test_B/15_20_05-iso"],
        about: "awake homecage vs isoflurane (plans/isoflurane_recording_analysis_plan.md)"}

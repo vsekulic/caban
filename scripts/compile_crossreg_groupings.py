@@ -217,7 +217,8 @@ def rule_members(gid, g, spec, sessions):
                 take = any(row[k] == r["time"] for k in want)
         elif gid == 11:
             if TRACK_DAY.search(day):
-                take = kind == "LT1" and TRACK_DAY.search(day).group(1) != "0"
+                # Track days 4-5 exist for G08 and G09 only: extra sessions, so not here (grouping 15/16 only).
+                take = kind == "LT1" and TRACK_DAY.search(day).group(1) in "123"
             elif day.endswith("-TFC_cond"):
                 row = dict(zip(roles, spec["conditioning_day"][mouse]))
                 take = r["time"] in (row["LT_pre"], row["LT_post"])
@@ -228,7 +229,7 @@ def rule_members(gid, g, spec, sessions):
             take = mt is not None and int(mt.group(1)) == gid - 11 and kind in ("HC1", "LT1", "HC2")
         elif gid == 17:
             if TRACK_DAY.search(day):
-                take = TRACK_DAY.search(day).group(1) != "0" and kind in ("HC1", "HC2")
+                take = TRACK_DAY.search(day).group(1) in "123" and kind in ("HC1", "HC2")
             elif day.endswith("-TFC_cond"):
                 row = dict(zip(roles, spec["conditioning_day"][mouse]))
                 take = r["time"] in (row["HC_start"], row["HC_preinjection"], row["HC_preTFC"], row["HC_postTFC"])

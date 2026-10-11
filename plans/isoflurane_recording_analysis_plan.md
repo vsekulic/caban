@@ -59,4 +59,8 @@ on its own timestamps outside the loader.
 ## 5. Open for VS
 
 - Which comparisons matter most, and whether it goes in the supplement of this paper or elsewhere.
-- Whether any other mouse has a recording under isoflurane (only this one was found).
+- **A second recording, found 2026-10-11 (session notes):** G21 `2022_03_09-monitor2/15_24_21-HC1` is
+  noted "right after plugged in, recovering from iso", and `16_22_52-HC2` "after 30m rest". So G21 has an
+  isoflurane-*recovery* recording with an awake follow-up 30 min later. Its timing relative to the
+  anaesthesia differs from G05's (recovery, not during). Both monitor-day sessions are processed (batch)
+  and kept out of the cross-registration groupings for now (spec NOTE). Whether to add them here: VS.

@@ -3467,14 +3467,6 @@
        "output": "pending"
       },
       {
-       "session": "G08-ST701_mCherry/2021_11_03-track_day4/14_16_11",
-       "output": "pending"
-      },
-      {
-       "session": "G08-ST701_mCherry/2021_11_05-track_day5/13_13_59",
-       "output": "pending"
-      },
-      {
        "session": "G08-ST701_mCherry/2021_11_08-TFC_cond/13_22_42-LT1",
        "output": "minian_crossreg1"
       },
@@ -3512,14 +3504,6 @@
       },
       {
        "session": "G09-ST702_mCherry/2021_11_01-track_day3/13_49_47-LT1",
-       "output": "minian"
-      },
-      {
-       "session": "G09-ST702_mCherry/2021_11_03-track_day4/15_37_14-LT1",
-       "output": "minian"
-      },
-      {
-       "session": "G09-ST702_mCherry/2021_11_05-track_day5/14_28_11-LT1",
        "output": "minian"
       },
       {
@@ -5229,22 +5213,6 @@
        "output": "pending"
       },
       {
-       "session": "G08-ST701_mCherry/2021_11_03-track_day4/13_52_36",
-       "output": "pending"
-      },
-      {
-       "session": "G08-ST701_mCherry/2021_11_03-track_day4/14_41_06",
-       "output": "pending"
-      },
-      {
-       "session": "G08-ST701_mCherry/2021_11_05-track_day5/12_52_19",
-       "output": "pending"
-      },
-      {
-       "session": "G08-ST701_mCherry/2021_11_05-track_day5/13_43_26",
-       "output": "pending"
-      },
-      {
        "session": "G08-ST701_mCherry/2021_11_08-TFC_cond/13_05_47-HC1",
        "output": "minian"
       },
@@ -5326,22 +5294,6 @@
       },
       {
        "session": "G09-ST702_mCherry/2021_11_01-track_day3/14_14_12-HC2",
-       "output": "minian"
-      },
-      {
-       "session": "G09-ST702_mCherry/2021_11_03-track_day4/15_18_23-HC1",
-       "output": "minian"
-      },
-      {
-       "session": "G09-ST702_mCherry/2021_11_03-track_day4/16_05_26-HC2",
-       "output": "minian"
-      },
-      {
-       "session": "G09-ST702_mCherry/2021_11_05-track_day5/14_11_23-HC1",
-       "output": "minian"
-      },
-      {
-       "session": "G09-ST702_mCherry/2021_11_05-track_day5/14_50_19-HC2",
        "output": "minian"
       },
       {
