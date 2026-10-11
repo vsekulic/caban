@@ -1,6 +1,8 @@
 # Plan: cross-registration by registry, and every output folder named `minian`
 
 Status: written 2026-09-26; groupings decided 2026-10-10 (§6); **registry for 1–7 seeded and checked 2026-10-10 (§3.1)**. Next: groupings 8–18 into the registry (after VS's answers in §6), then the runner and its gate (§5, §7), on the Razer.
+
+**One-stop summary of everything decided and checked: [reports/crossreg_groupings_report.md](../reports/crossreg_groupings_report.md).**
 Depends on: `plans/minian_batch_runner_plan.md` (the runner pattern: protected template, papermill,
 parameters from the kernel, gate against production), `plans/local_minian_pipeline_plan.md` §3.4
 (cross-registration never modifies `A`/`C`/`S`) and §7 (cross-registration is out of the CNMF-E pass).
