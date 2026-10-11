@@ -1,0 +1,102 @@
+# Cross-registration groupings — the high-level definition (plans/crossreg_batch_runner_plan.md §3, §6).
+#
+# This short file is the one to read. scripts/compile_crossreg_groupings.py compiles it, with the
+# session folders on MINISCOPE and the published mapping files, into caban/crossreg_groupings.json
+# (every session of every grouping, per mouse), which the code reads. Do not edit the JSON by hand.
+#
+# Every session of G05–G21 with video must be in a grouping or in `not_used` below; the compiler fails
+# otherwise, so nothing is left out silently.
+
+# --- The conditioning day, by ROLE (VS, 2026-10-10) ------------------------------------------------
+# The two cohorts recorded the day differently (folder names differ, roles do not):
+#   G05–G11: HC1, LT1, CNO1, CNO2, LT2, HC2, TFC_cond, HC3
+#   G12–G21: HC1, LT1, HC2, CNO1, [CNO2], LT2, HC3, TFC_cond, HC4
+# CNO1 = right after injection; CNO2 = ~20 min after, just before LT2 (G26's notes; session timing).
+# Where a mouse has a single CNO recording ~20 min after HC2, running straight into LT2, it is CNO_late.
+# In G12–G21, HC2 is recorded right after LT1, before the injection: HC_preinjection.
+roles: [HC_start, LT_pre, HC_preinjection, CNO_early, CNO_late, LT_post, HC_preTFC, TFC_cond, HC_postTFC]
+conditioning_day:   # session start times (the folder's time prefix); "-" = none
+  #      HC_start  LT_pre    HC_preinj CNO_early CNO_late  LT_post   HC_preTFC TFC_cond  HC_postTFC
+  G05: ["16_29_01", "16_47_02", "-",        "17_12_02", "17_30_19", "17_44_51", "18_07_14", "18_22_57", "18_59_38"]
+  G06: ["09_52_24", "10_14_41", "-",        "10_34_09", "10_49_52", "11_05_51", "11_26_52", "11_42_00", "12_17_29"]
+  G07: ["12_53_17", "13_25_42", "-",        "14_03_02", "14_19_09", "14_35_40", "-",        "15_14_32", "16_06_52"]  # LT_pre = LT1b, as published
+  G08: ["13_05_47", "13_22_42", "-",        "14_07_31", "14_23_22", "14_43_03", "-",        "15_13_23", "15_50_16"]
+  G09: ["16_33_10", "16_53_07", "-",        "17_24_22", "17_49_48", "18_08_37", "18_29_51", "18_54_05", "19_28_33"]
+  G10: ["14_34_39", "14_51_37", "-",        "15_22_29", "15_38_21", "15_53_29", "16_18_55", "16_32_14", "17_07_00"]
+  G11: ["17_33_23", "17_51_25", "-",        "18_25_41", "18_41_08", "18_55_26", "19_15_48", "19_24_52", "19_59_33"]
+  G12: ["13_59_56", "14_11_51", "14_23_02", "14_32_19", "-",        "14_52_29", "15_03_39", "15_12_38", "15_37_11"]  # CNO2 not recorded (notes)
+  G13: ["16_05_10", "16_10_53", "16_21_45", "16_28_35", "16_48_37", "16_53_52", "17_04_37", "17_13_06", "17_37_35"]
+  G14: ["14_47_56", "14_53_32", "15_05_21", "-",        "15_33_45", "15_39_23", "15_51_35", "16_00_53", "16_28_19"]  # single CNO = late
+  G15: ["16_57_42", "17_05_25", "17_16_49", "-",        "17_45_31", "17_51_17", "18_02_26", "18_10_56", "18_39_20"]  # single CNO = late
+  G16: ["14_53_32", "14_59_15", "15_12_16", "-",        "15_41_33", "15_47_20", "15_58_23", "16_06_44", "16_33_17"]  # single CNO = late
+  G17: ["17_31_07", "17_38_16", "17_49_36", "17_57_20", "18_18_19", "19_02_10", "-",        "18_26_30", "18_52_59"]  # LT2 recorded AFTER TFC (notes)
+  G18: ["14_03_44", "14_19_24", "14_30_50", "14_38_13", "15_03_49", "15_10_08", "15_21_43", "15_29_25", "15_55_09"]
+  G19: ["16_19_13", "16_25_38", "16_40_40", "16_57_49", "17_07_15", "17_14_57", "17_26_10", "17_35_25", "17_59_59"]  # CNO1 starts 12 min after HC2
+  G20: ["13_25_47", "13_31_20", "13_43_11", "-",        "14_11_51", "14_16_55", "14_28_23", "14_37_19", "15_02_37"]  # single CNO = late
+  G21: ["16_26_15", "16_32_01", "16_43_06", "-",        "17_11_11", "17_19_40", "17_31_06", "17_39_30", "18_04_08"]  # single CNO = late
+
+# --- Groupings ---------------------------------------------------------------------------------------
+# 1–7: published. Membership comes from each mapping file's own session columns (the ground truth),
+# not from this file. They are re-derived by the runner as a reproducibility check; the published
+# files are kept (-ORIG) and stay what analyses use unless VS decides otherwise.
+# 8+: computed ahead of time; NO analysis uses them automatically (VS, 2026-10-10).
+# Fewer cells are matched the more sessions a grouping has and the longer it spans (drift).
+groupings:
+  1: {name: conditioning_day, published: true, about: "LT1, LT2, TFC_cond of the conditioning day (Fig. 2)"}
+  2: {name: cond_to_testB, published: true, about: "TFC_cond -> Test_B"}
+  3: {name: testB_day, published: true, about: "LT1 and TFC_test_B of the Test_B day"}
+  4: {name: cond_testB_testB1wk, published: true, about: "TFC_cond -> Test_B -> Test_B_1wk"}
+  5: {name: testB1wk_day, published: true, about: "LT1 and TFC_test_B_1wk of the Test_B_1wk day"}
+  6: {name: cond_all_tests, published: true, about: "TFC_cond + all four tests"}
+  7: {name: cond_testA_testA1wk, published: true, about: "TFC_cond -> Test_A -> Test_A_1wk"}
+  8: {name: conditioning_day_all, roles: all,
+      about: "every role of the conditioning day: per-cell trajectory across drug onset and conditioning"}
+  9: {name: conditioning_day_no_HC, roles: [LT_pre, CNO_early, CNO_late, LT_post, TFC_cond],
+      about: "as 8 without homecage (HC activity varies greatly)"}
+  10a: {name: CNO_early_late, roles: [CNO_early, CNO_late], require_all: true,
+        about: "right after vs ~20 min after injection; the 11 mice with both (key)"}
+  10b: {name: preinjection_CNO_late, roles: [HC_preinjection, CNO_late], require_all: true,
+        about: "homecage before injection vs ~20 min after; the 10 mice of G12–G21"}
+  11: {name: all_LT, sessions: "every LT1 of track days 1–5, and every LT1/LT2 of every other day (conditioning: LT_pre, LT_post)",
+       about: "place-cell stability over days and weeks"}
+  12: {name: track_day1, sessions: "HC1, LT1, HC2 of track day 1", about: "homecage vs track; reactivation in HC after LT"}
+  13: {name: track_day2, sessions: "HC1, LT1, HC2 of track day 2", about: "as 12"}
+  14: {name: track_day3, sessions: "HC1, LT1, HC2 of track day 3", about: "as 12"}
+  15: {name: track_day4, sessions: "HC1, LT1, HC2 of track day 4 (G08, G09)", about: "as 12"}
+  16: {name: track_day5, sessions: "HC1, LT1, HC2 of track day 5 (G08, G09)", about: "as 12"}
+  17: {name: all_HC, sessions: "every HC session (track days, test days, conditioning-day HC roles); not HC0 or misc",
+       about: "homecage baseline over the experiment"}
+  18: {name: iso_pair, mice: [G05], sessions: ["2021_09_01-TFC_test_B/15_11_43-HC1", "2021_09_01-TFC_test_B/15_20_05-iso"],
+       about: "awake homecage vs isoflurane (plans/isoflurane_recording_analysis_plan.md)"}
+
+# --- Sessions in no grouping, and why (kept to revisit later; VS, 2026-10-10) ---------------------------
+not_used:
+  - {session: "G05/2021_08_20-track_day0/*", why: "track day 0: left out for now"}
+  - {session: "G07/2021_10_18-TFC_cond/13_13_24-LT1", why: "LT1b (13_25_42) is the conditioning-day LT1 used, as published"}
+  - {session: "G17/2022_01_24-TFC_cond/19_13_33-HC4", why: "homecage after G17's late LT2; no counterpart in other mice"}
+  - {session: "G05/2021_09_07-TFC_test_B_1wk-redux/*", why: "test re-recorded when the bedding was changed; not for analysis by default (VS, 2026-09-28)"}
+  - {session: "G05/2021_08_23-track_day1-tests/13_59_41-HC1a", why: "misc: short repeat of HC1"}
+  - {session: "G05/2021_08_23-track_day1-tests/14_23_55-LT1a", why: "misc: short repeat of LT1"}
+  - {session: "G13/2022_01_10-TFC_test_B_1wk/16_38_56-HC2b", why: "misc: short repeat of HC2"}
+  - {session: "G06/2021_10_07-check1/15_00_46", why: "misc: check recording"}
+  - {session: "G12/2021_12_13/14_43_31", why: "misc: HC0, GCaMP expression check before any track day"}
+  - {session: "G13/2021_12_13/15_53_03", why: "misc: HC0, GCaMP expression check before any track day"}
+  # Extra sessions are left out of every grouping: one included in some mice only would cut those mice's
+  # cross-registered cell counts compared with the others (VS, 2026-10-11).
+  - {session: "G12/2021_12_27-track_day1/13_43_30-HC3", why: "extra: second post-track homecage, right after HC2"}
+  - {session: "G12/2021_12_29-track_day2/14_33_15-HC3", why: "extra: second post-track homecage, right after HC2"}
+  - {session: "G12/2021_12_31-track_day3/15_34_36-HC3", why: "extra: second post-track homecage, right after HC2"}
+  - {session: "G13/2021_12_27-track_day1/14_50_49-HC3", why: "extra: second post-track homecage, right after HC2"}
+  - {session: "G13/2021_12_29-track_day2/15_29_54-HC3", why: "extra: second post-track homecage, right after HC2"}
+  - {session: "G13/2021_12_31-track_day3/16_55_33-HC3", why: "extra: second post-track homecage, right after HC2"}
+  - {session: "G14/2022_01_06-track_day2/16_05_37-HC3", why: "extra: second post-track homecage, right after HC2"}
+  - {session: "G10/2021_11_20-track_day3/14_05_55-HC1_high_led", why: "extra: 5 min test at higher LED power, right after HC1"}
+  # NOTE (VS, 2026-10-11): kept out for now; revisit later.
+  - {session: "G20/2022_03_01-monitor1/*", why: "NOTE: monitoring-day homecage, G20 and G21 only; kept out for now like the HC0s (VS, 2026-10-11)"}
+  - {session: "G20/2022_03_09-monitor2/*", why: "NOTE: monitoring-day homecage, G20 and G21 only; kept out for now like the HC0s (VS, 2026-10-11)"}
+  - {session: "G21/2022_03_01-monitor1/*", why: "NOTE: monitoring-day homecage, G20 and G21 only; kept out for now like the HC0s (VS, 2026-10-11)"}
+  - {session: "G21/2022_03_09-monitor2/*", why: "NOTE: monitoring-day homecage, G20 and G21 only; kept out for now like the HC0s (VS, 2026-10-11)"}
+  - {session: "G07/2021_10_20-TFC_test_B/15_49_59-TFC_test_B", why: "never run: disk filled during recording"}
+  - {session: "G07/2021_10_20-TFC_test_B/16_25_43-HC3", why: "never run: no finalised video (disk full that day)"}
+  - {session: "G14/2022_01_18-TFC_test_B_1wk/14_52_35-TFC_test_B_1wk-borked", why: "never run: re-recorded as 15_10_50"}
+  - {session: "G18/2022_02_07-TFC_cond/14_57_23-CNO2-borked", why: "never run: re-recorded as 15_03_49-CNO2"}

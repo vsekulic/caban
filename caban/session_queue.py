@@ -129,6 +129,8 @@ SESSION_LABELS = {
     "G18-ST734-hM3D/2022_02_01-track_day1/13_36_06": "HC1",  # 5.8 min
     "G18-ST734-hM3D/2022_02_01-track_day1/13_41_59": "LT1",  # 11.5 min
     "G18-ST734-hM3D/2022_02_01-track_day1/13_54_06": "HC2",  # 5.6 min
+    # Named HC3, but it is the day's post-track homecage (HC1, LT1, HC3 -- no HC2): its HC2 (VS, 2026-10-11).
+    "G19-ST735-hM3D/2022_02_05-track_day3/16_04_02-HC3": "HC2",
     # misc
     "G12-ST709-mCherry/2021_12_13/14_43_31": "misc",  # HC0: homecage before any track day, GCaMP check
     "G13-ST710-mCherry/2021_12_13/15_53_03": "misc",  # HC0: homecage before any track day, GCaMP check
