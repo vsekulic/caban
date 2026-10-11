@@ -1,5 +1,7 @@
 # Handover: the Minian batch on the Razer, the YrA recompute, and the parked review branch
 
+> **Superseded after 2026-10-06 by [handover_after_batch_crossreg_figure2.md](handover_after_batch_crossreg_figure2.md) — start there.**
+
 > ## ▶ UPDATE 2026-10-02 — start here (supersedes §3/§6/§8 where they differ)
 >
 > **Running, autonomous (Razer `minastirith`, `screen minian_batch`):** the Minian batch by experiment day
