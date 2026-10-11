@@ -40,6 +40,9 @@ logged in `~/minian.log` under "left-out sessions run, attempt 2"). Plan:
 About 15–20 h in all. **Attempt 1 failed** (2026-10-10 10:14) at the check: the YrA replay demanded the unused videos be
 present in the *staged* copy, where staging had left them out on purpose. Fixed in `2d2b72d`
 (`yra_recompute.replay_frame_set` verifies them in the original session folder instead); tested on a mock staged folder.
+**Attempt 2: the check passed (11:10)** — G18 HC1 done, 620 units × 4,000 frames; the batch of 38 started at 11:10
+(first: G05 iso). Its report line "YrA unit order matches C: False" is normal: it describes Minian's own exported
+`YrA.zarr` (sorted by unit id — the original shear); 232 earlier sessions show it too. The recomputed YrA is aligned.
 
 **Monitor:** `ssh minastirith tail -f minian.log`, or only progress lines:
 `ssh minastirith 'tail -f minian.log | grep --line-buffered -E "^=====|^\[[0-9]+/[0-9]+\]|: done|FAILED|check|status [0-9]"'`.
