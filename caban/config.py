@@ -133,6 +133,11 @@ class PipelineConfig:
     # scored on the data that selected it. Same cells, trials and 3 s windows as the
     # event-proximal lane, whose table it reuses.
     epoch_modulation_cell_selectivity: bool = True
+    # The SPLIT-HALF STABILITY companion (plan item C5, epoch_modulation §O.2), written into
+    # <signal>/split_half_stability/. Is a cell's index, relative to its mouse's average cell,
+    # reproducible across disjoint halves of the retained trials? Spearman r across cells per mouse
+    # and epoch, averaged over every balanced split. Supplementary; same table as panel L.
+    epoch_modulation_split_half_stability: bool = True
     plot_epoch_sequence: bool = True
     plot_freezing_tuned_cells: bool = True
     plot_population_coupling: bool = True

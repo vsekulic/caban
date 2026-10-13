@@ -79,6 +79,7 @@ mouse's SEM across cells alongside the between-mouse spread so that claim is dem
 on this dataset rather than asserted.
 """
 import datetime
+import itertools
 import os
 import shutil
 import time
@@ -892,6 +893,23 @@ def plot_epoch_modulation_superplot(df_cell, df_mouse, contrasts, omnibus, out_p
         plt.close(fig)
 
 
+def split_trials(trials):
+    """Two disjoint trial halves, (A, B) = (even-position, odd-position) of ``trials``.
+
+    With the usual 4 retained conditioning trials [1,2,3,4] this is A=[1,3], B=[2,4]. A mouse
+    retaining only 3 gives A=[1,3], B=[2] -- thinner, but still disjoint, which is the property
+    every held-out use rests on (panel K's sort, ``epoch_sequence``). Raises if either half is
+    empty, since a one-sided split cannot support a cross-validated statistic.
+    """
+    trials = list(trials)
+    half_a, half_b = trials[0::2], trials[1::2]
+    if not half_a or not half_b:
+        raise RuntimeError(
+            f'epoch_modulation: cannot split {trials} into two non-empty halves; a '
+            f'cross-validated statistic needs at least one trial on each side.')
+    return half_a, half_b
+
+
 def _tone_aligned_trials(z, session, trials, pre_s, post_s):
     """({trial: cells x window frames, or None where the window does not fit}, time axis).
 
@@ -963,12 +981,17 @@ def _draw_tone_aligned_frame(ax, time_axis):
 
 
 def plot_modulation_heatmaps(group_mats, group_sort_values, time_axis, out_path,
-                             signal=PRIMARY_SIGNAL, vmax=1.0, auto_close=True):
+                             signal=PRIMARY_SIGNAL, vmax=1.0, auto_close=True,
+                             ylabel='Cell (sorted by trace modulation)', title=None):
     """Panel K: one tone-onset-aligned heatmap per group, cells sorted by trace modulation.
 
     Cells are sorted by their TRACE index rather than by mean post-onset activity, so the
     ordering is the same quantity the statistics are built on. Groups share one colour
     scale. Display order is mCherry, hM3D, hM4D.
+
+    The caller decides which trials the sort values and the matrix come from: the held-out
+    panel K sorts on one half of the trials and shows the other (§O.8), the in-sample version
+    uses every retained trial for both. ``ylabel`` and ``title`` say which on the figure.
     """
     fig, axs = plt.subplots(1, len(DREADD_DISPLAY_ORDER),
                             figsize=(4.1 * len(DREADD_DISPLAY_ORDER), 4.4))
@@ -986,9 +1009,9 @@ def plot_modulation_heatmaps(group_mats, group_sort_values, time_axis, out_path,
         # inferring it from the x-axis.
         _draw_tone_aligned_frame(ax, time_axis)
         ax.set_title(f'{GROUP_LABELS[group]} (n = {mat.shape[0]} cells)', size='medium')
-    axs.flat[0].set_ylabel('Cell (sorted by trace modulation)')
-    fig.suptitle(f'Tone-aligned per-cell activity ({signal}; standardized once per cell '
-                 f'over the session)', size='medium')
+    axs.flat[0].set_ylabel(ylabel)
+    fig.suptitle(title or (f'Tone-aligned per-cell activity ({signal}; standardized once per '
+                           f'cell over the session)'), size='medium')
     fig.subplots_adjust(left=0.06, right=0.98, bottom=0.13, top=0.86, wspace=0.15)
     save_fig(fig, out_path)
     if auto_close:
@@ -3327,7 +3350,7 @@ def exact_sign_flip_test(values):
     return observed, float(np.mean(np.abs(null) >= abs(observed))), int(2 ** v.size)
 
 
-def selectivity_group_contrasts(df_mouse_sel, mice_per_group):
+def selectivity_group_contrasts(df_mouse_sel, mice_per_group, facets=SELECTIVITY_FACETS):
     """Between-group comparisons of the per-mouse selectivity, per facet.
 
     Estimate: difference in group means of the per-mouse values (each mouse weighted equally).
@@ -3336,10 +3359,10 @@ def selectivity_group_contrasts(df_mouse_sel, mice_per_group):
     hierarchical lane. Interval: Welch 95% CI on the same per-mouse values, descriptive.
     Holm across the two treatment-versus-control comparisons within each facet; Exc-vs-Inh is
     computed and tabulated but is in no family and carries no bracket -- the rule used by every
-    other lane in this module (§A.8.1).
+    other lane in this module (§A.8.1). The split-half stability lane passes its own ``facets``.
     """
     rows = []
-    for facet in SELECTIVITY_FACETS:
+    for facet in facets:
         sub = df_mouse_sel[df_mouse_sel['epoch'] == facet]
         for group_a, group_b in HIERARCHICAL_PAIRS:
             stat_fn = make_contrast_stat(sub, 'value', group_a, group_b, weight='mouse')
@@ -3356,7 +3379,7 @@ def selectivity_group_contrasts(df_mouse_sel, mice_per_group):
                          'in_family': (group_a, group_b) in HIERARCHICAL_FAMILY_PAIRS})
     out = pd.DataFrame(rows)
     out['p_holm'] = np.nan
-    for facet in SELECTIVITY_FACETS:
+    for facet in facets:
         mask = (out['epoch'] == facet) & out['in_family']
         _, adjusted = holm_correct(out.loc[mask, 'p_exact'].to_numpy())
         out.loc[mask, 'p_holm'] = adjusted
@@ -3681,7 +3704,8 @@ _SYNTH_SEL_MAX_FPR = 0.09     # at alpha 0.05; ~2.6 binomial SDs above 0.05 for 
 
 def _synthetic_selectivity_trials(rng, selective_frac_by_group=None, selective_amp=0.0,
                                   population_shift=None, one_mouse_amp=0.0,
-                                  n_cells=_SYNTH_N_CELLS, n_trials=_SYNTH_SEL_N_TRIALS):
+                                  n_cells=_SYNTH_N_CELLS, n_trials=_SYNTH_SEL_N_TRIALS,
+                                  intercept_sd=0.15):
     """A trial-level table in ``build_modulation_table``'s shape, with known ground truth.
 
     index = population shift (per event, shared by every cell) + mouse effect (per event, shared
@@ -3691,6 +3715,8 @@ def _synthetic_selectivity_trials(rng, selective_frac_by_group=None, selective_a
 
     A selective cell gets one randomly drawn event and sign, of size ``selective_amp``.
     ``one_mouse_amp`` makes EVERY cell of the first hM3D mouse selective at that size.
+    ``intercept_sd`` sets the cell intercepts' spread; the split-half stability check sets it to 0
+    for its null designs, because a cell intercept IS a stable cell-specific difference there.
     Returns (table, {(mouse, cell): (event, sign)} for the planted cells).
     """
     selective_frac_by_group = selective_frac_by_group or {}
@@ -3705,7 +3731,7 @@ def _synthetic_selectivity_trials(rng, selective_frac_by_group=None, selective_a
             amp = one_mouse_amp if whole_mouse else selective_amp
             frac = 1.0 if whole_mouse else selective_frac_by_group.get(group, 0.0)
             mouse_effect = rng.normal(0.0, _SYNTH_EPOCH_SD, size=len(RESPONSE_EPOCHS))
-            intercept = rng.normal(0.0, 0.15, size=(n_cells, 1, 1))
+            intercept = rng.normal(0.0, intercept_sd, size=(n_cells, 1, 1))
             pref = np.zeros((n_cells, 1, len(RESPONSE_EPOCHS)))
             for c in np.flatnonzero(rng.random(n_cells) < frac):
                 e, s = int(rng.integers(len(RESPONSE_EPOCHS))), int(rng.choice([-1, 1]))
@@ -3832,6 +3858,366 @@ def verify_cell_selectivity_synthetic(seed=0, n_calibration=200, verbose=True):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Split-half stability of relative per-cell response profiles (§O.2; plan item C5)
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Is a cell's index -- relative to the other cells of its mouse -- reproducible across trials? Per
+# mouse and epoch: average each cell over one half of the retained trials and over the other, and
+# take the Spearman correlation across cells between the two halves. The halves share no trials,
+# so with no stable cell-specific differences the correlation has expectation zero. No centring is
+# needed: a response every cell shares shifts every cell's half-average by the same constant, which
+# a correlation across cells ignores (center_within_mouse would be a no-op here; statistics review
+# 2026-10-11).
+#
+# Every balanced split is used, not one: with 4 trials there are exactly 3 splits into 2 + 2 (with
+# 3 trials, 3 splits into 2 + 1), and the per-mouse value is their mean on the Fisher-z scale. This
+# is the usual all-splits form of split-half reliability; it removes the arbitrariness of one
+# odd/even split. No Spearman-Brown step-up: the value describes half-trial averages as they are.
+#
+# It measures the stability of RELATIVE response profiles, NOT a "stable cell-identity code" (§O.2).
+# The pooled endpoint ('all') is the mean of the four per-epoch Fisher z values, so no one epoch's
+# spread dominates it. A cell that responds more in EVERY epoch (a gain trait) counts as stable in
+# every epoch, so 'all' mostly measures general responsiveness. The 'profile' endpoint separates
+# epoch-specific tuning from it: each cell's mean over the four epochs is removed within each half
+# before correlating, and the four epochs' z values are averaged.
+
+SPLIT_HALF_DIRNAME = 'split_half_stability'
+SPLIT_HALF_METHODS_FILENAME = 'epoch_modulation_split_half_stability_methods.md'
+SPLIT_HALF_ALL = 'all'
+SPLIT_HALF_PROFILE = 'profile'
+SPLIT_HALF_FACETS = (SPLIT_HALF_ALL, SPLIT_HALF_PROFILE) + RESPONSE_EPOCHS
+_FISHER_CLIP = 0.999999
+
+
+def balanced_splits(trials):
+    """Every split of ``trials`` into two halves as equal as possible, each unordered split once.
+
+    4 trials: the 3 splits into 2 + 2. 3 trials: the 3 splits into 1 + 2.
+    """
+    trials = sorted(int(t) for t in trials)
+    if len(trials) < 2:
+        raise RuntimeError(f'epoch_modulation: {trials} cannot be split into two non-empty halves.')
+    out = []
+    for half_a in itertools.combinations(trials, len(trials) // 2):
+        # With an even count each split would appear twice (A, B) and (B, A): keep the one whose
+        # first half holds the first trial.
+        if len(trials) % 2 == 0 and trials[0] not in half_a:
+            continue
+        out.append((list(half_a), [t for t in trials if t not in half_a]))
+    return out
+
+
+def _fisher_z(r):
+    return float(np.arctanh(np.clip(r, -_FISHER_CLIP, _FISHER_CLIP)))
+
+
+def _split_half_r(a, b, mouse, half_a, half_b, what):
+    r = stats.spearmanr(a, b).statistic
+    if not np.isfinite(r):
+        raise RuntimeError(f'epoch_modulation: mouse {mouse!r} split {half_a}|{half_b} {what}: the '
+                           f'split-half correlation is undefined (constant half).')
+    return float(r)
+
+
+def split_half_stability(df_trial):
+    """Per (mouse, split, epoch): the Spearman correlation across cells of the two halves' means.
+
+    ``epoch`` holds the four response epochs, and ``profile:<epoch>`` the same correlation after each
+    cell's mean over the four epochs is removed within each half (epoch-specific tuning only).
+    ``df_trial`` is the full-epoch trial-level table. A correlation that is undefined (a half with
+    every cell equal) is an error, never skipped.
+    """
+    rows = []
+    for (mouse, group), sub in df_trial.groupby(['mouse', 'group'], observed=True, sort=False):
+        cells, trials, arr = _mouse_index_array(sub)
+        for k, (half_a, half_b) in enumerate(balanced_splits(trials)):
+            a = arr[:, [trials.index(t) for t in half_a], :].mean(axis=1)
+            b = arr[:, [trials.index(t) for t in half_b], :].mean(axis=1)
+            a_prof = a - a.mean(axis=1, keepdims=True)
+            b_prof = b - b.mean(axis=1, keepdims=True)
+            for j, epoch in enumerate(RESPONSE_EPOCHS):
+                for name, x, y in ((epoch, a, b), (f'{SPLIT_HALF_PROFILE}:{epoch}', a_prof, b_prof)):
+                    r = _split_half_r(x[:, j], y[:, j], mouse, half_a, half_b, name)
+                    rows.append({'mouse': mouse, 'group': group, 'split': k,
+                                 'n_trials': len(trials),
+                                 'half_a': ','.join(map(str, half_a)),
+                                 'half_b': ','.join(map(str, half_b)), 'epoch': name,
+                                 'rho': r, 'fisher_z': _fisher_z(r), 'n_cells': len(cells)})
+    if not rows:
+        raise RuntimeError('epoch_modulation: the split-half stability input table is empty.')
+    return pd.DataFrame(rows)
+
+
+def summarize_split_half(df_split):
+    """(per-mouse endpoints, display cloud).
+
+    Per mouse and facet, ``value`` is the mean Fisher z over the splits -- what the tests use -- and
+    ``rho`` its back-transform, what the panel shows. Facet ``all`` is the mean of the four epochs'
+    values, facet ``profile`` the mean of the four ``profile:<epoch>`` values. The cloud holds each
+    split's own correlation (3 points per mouse and facet).
+    """
+    keys = ['mouse', 'group', 'n_trials']
+    per_epoch = (df_split.groupby(keys + ['epoch'], observed=True, sort=False)
+                 .agg(value=('fisher_z', 'mean'), n_splits=('split', 'nunique'),
+                      n_cells=('n_cells', 'first')).reset_index())
+    split_level = df_split.assign(
+        facet=np.where(df_split['epoch'].str.startswith(SPLIT_HALF_PROFILE + ':'),
+                       SPLIT_HALF_PROFILE, SPLIT_HALF_ALL))
+    pooled_cloud = (split_level.groupby(keys + ['facet', 'split'], observed=True, sort=False)
+                    ['fisher_z'].mean().reset_index())
+    pooled = (pooled_cloud.groupby(keys + ['facet'], observed=True, sort=False)
+              .agg(value=('fisher_z', 'mean'), n_splits=('split', 'nunique')).reset_index()
+              .rename(columns={'facet': 'epoch'}))
+    pooled['n_cells'] = pooled['mouse'].map(per_epoch.groupby('mouse')['n_cells'].first())
+    df_mouse = pd.concat([pooled, per_epoch], ignore_index=True)
+    df_mouse['rho'] = np.tanh(df_mouse['value'])
+
+    pooled_cloud = pooled_cloud.assign(index=np.tanh(pooled_cloud['fisher_z'])).rename(
+        columns={'facet': 'epoch'})
+    columns = ['mouse', 'group', 'cell', 'epoch', 'index']
+    df_cloud = pd.concat([pooled_cloud.rename(columns={'split': 'cell'})[columns],
+                          df_split.rename(columns={'split': 'cell', 'rho': 'index'})[columns]],
+                         ignore_index=True)
+    return df_mouse, df_cloud
+
+
+def split_half_cohort_tests(df_mouse):
+    """Exact sign-flip test of the per-mouse Fisher z against 0, per facet. The pooled facets
+    (``all``, ``profile``) stand alone; Holm across the four epochs.
+
+    The test pools all three groups, so it says whether relative per-cell responses are stable in
+    this cohort, not under baseline conditions; the control group's value is in the report.
+    For one split the null distribution is exactly symmetric about 0; for the mean over splits,
+    which reuse the same trials, near-symmetry is checked by simulation
+    (``verify_split_half_stability_synthetic``)."""
+    rows = []
+    for facet in SPLIT_HALF_FACETS:
+        z = df_mouse.loc[df_mouse['epoch'] == facet, 'value'].to_numpy()
+        mean_z, p, n_vectors = exact_sign_flip_test(z)
+        rows.append({'epoch': facet, 'n_mice': len(z), 'mean_fisher_z': mean_z,
+                     'rho_of_mean_z': float(np.tanh(mean_z)), 'p_exact': p,
+                     'n_sign_vectors': n_vectors})
+    out = pd.DataFrame(rows)
+    out['p_holm_over_epochs'] = np.nan
+    mask = out['epoch'].isin(RESPONSE_EPOCHS)
+    out.loc[mask, 'p_holm_over_epochs'] = holm_correct(out.loc[mask, 'p_exact'].to_numpy())[1]
+    return out
+
+
+def format_split_half_report(signal, df_mouse, cohort, contrasts, sensitivity=None):
+    lines = [f'Split-half stability of relative per-cell response profiles ({signal})', '',
+             'Per mouse and epoch: Spearman r across cells between the two trial halves\' means of '
+             'the index, averaged',
+             'over every balanced split on the Fisher-z scale. Expectation 0 with no stable '
+             'cell-specific differences.',
+             '"all": mean of the four epochs -- any stable relative response, mostly general '
+             'responsiveness (a cell',
+             'responding more in every epoch counts in each). "profile": the same after removing '
+             'each cell\'s mean over',
+             'the four epochs -- stable epoch-specific tuning only. Unit of inference: the mouse. '
+             'Not a test of a',
+             '"stable cell-identity code" (§O.2). The cohort test pools all groups: stability in '
+             'this cohort, not',
+             'under baseline (the control group\'s value is listed per group below).', '',
+             'Cohort: exact sign-flip test of the per-mouse mean z against 0']
+    for _, r in cohort.iterrows():
+        holm = '' if np.isnan(r['p_holm_over_epochs']) else f', Holm over epochs {r["p_holm_over_epochs"]:.3g}'
+        lines.append(f'  {r["epoch"]:>10}: r = {r["rho_of_mean_z"]:+.3f} (mean z {r["mean_fisher_z"]:+.3f}), '
+                     f'n = {r["n_mice"]} mice, exact P = {r["p_exact"]:.3g}{holm}')
+    lines += ['', 'Per group (r of the group\'s mean z; mice):']
+    for facet in SPLIT_HALF_FACETS:
+        sub = df_mouse[df_mouse['epoch'] == facet]
+        parts = [f'{GROUP_LABELS[g]} {np.tanh(sub.loc[sub["group"] == g, "value"].mean()):+.3f} '
+                 f'(n={int((sub["group"] == g).sum())})' for g in DREADD_DISPLAY_ORDER]
+        lines.append(f'  {facet:>10}: ' + ', '.join(parts))
+    lines += ['', 'Group comparisons (difference of mean z; exact mouse-label randomization; Holm '
+              'over the two vs-control comparisons within a facet; Welch CI descriptive):']
+    for _, r in contrasts.iterrows():
+        holm = f', Holm {r["p_holm"]:.3g}' if r['in_family'] else ' (not in a family)'
+        lines.append(f'  {r["epoch"]:>10} {r["comparison"]:<16}: {r["estimate"]:+.3f} '
+                     f'[{r["ci_low_welch"]:+.3f}, {r["ci_high_welch"]:+.3f}], exact P = '
+                     f'{r["p_exact"]:.3g}{holm} ({r["n_relabelings"]} relabelings)')
+    if sensitivity is not None:
+        dropped, sens_cohort, sens_contrasts = sensitivity
+        lines += ['', f'Sensitivity: without {", ".join(dropped)} (odd number of retained trials, '
+                      f'so 1 + 2 splits):']
+        for facet in (SPLIT_HALF_ALL, SPLIT_HALF_PROFILE):
+            c = sens_cohort.set_index('epoch').loc[facet]
+            k = sens_contrasts[(sens_contrasts['epoch'] == facet) & sens_contrasts['in_family']]
+            lines.append(f'  {facet:>10}: r = {c["rho_of_mean_z"]:+.3f}, exact P = {c["p_exact"]:.3g}; '
+                         + '; '.join(f'{r["comparison"]} {r["estimate"]:+.3f}, Holm {r["p_holm"]:.3g}'
+                                     for _, r in k.iterrows()))
+    n_cells = df_mouse[df_mouse['epoch'] == SPLIT_HALF_ALL].set_index('mouse')['n_cells']
+    lines += ['', f'Cells per mouse: median {int(n_cells.median())}, range {int(n_cells.min())}-'
+                  f'{int(n_cells.max())}; splits per mouse: '
+                  f'{sorted(df_mouse["n_splits"].unique().tolist())}']
+    return '\n'.join(lines) + '\n'
+
+
+def run_split_half_stability_lane(sig_dir, signal, df_trial, auto_close=True, verbose=True):
+    """The split-half stability lane for one signal, into ``<sig_dir>/split_half_stability/``.
+
+    ``df_trial`` is the full-epoch trial-level table ``run_epoch_modulation`` just built for this
+    signal, so the lane describes the same cells and trials as panel L.
+    """
+    out_dir = os.path.join(sig_dir, SPLIT_HALF_DIRNAME)
+    tables_dir = os.path.join(out_dir, 'tables')
+    stats_dir = os.path.join(out_dir, 'stats')
+    ensure_dirs(out_dir, tables_dir, stats_dir)
+
+    df_split = split_half_stability(df_trial)
+    df_mouse, df_cloud = summarize_split_half(df_split)
+
+    def infer(table):
+        analysed = {g: sorted(table.loc[table['group'] == g, 'mouse'].unique())
+                    for g in GROUP_ORDER if (table['group'] == g).any()}
+        return (split_half_cohort_tests(table),
+                selectivity_group_contrasts(table, analysed, facets=SPLIT_HALF_FACETS))
+
+    cohort, contrasts = infer(df_mouse)
+    # Mice with an odd trial count (G09: 3) get 1 + 2 splits, noisier than 2 + 2; re-run without
+    # them (statistics review, 2026-10-11).
+    odd = sorted(df_mouse.loc[df_mouse['n_trials'] % 2 == 1, 'mouse'].unique())
+    sensitivity = None
+    if odd:
+        sens_cohort, sens_contrasts = infer(df_mouse[~df_mouse['mouse'].isin(odd)])
+        sensitivity = (odd, sens_cohort, sens_contrasts)
+        sens_contrasts.to_csv(os.path.join(tables_dir, 'group_contrasts_without_odd_trial_mice.csv'),
+                              index=False)
+
+    df_split.to_csv(os.path.join(tables_dir, 'per_split_correlations.csv'), index=False)
+    df_mouse.to_csv(os.path.join(tables_dir, 'per_mouse_stability.csv'), index=False)
+    cohort.to_csv(os.path.join(tables_dir, 'cohort_tests.csv'), index=False)
+    contrasts.to_csv(os.path.join(tables_dir, 'group_contrasts.csv'), index=False)
+    write_text(os.path.join(stats_dir, 'split_half_report.txt'),
+               format_split_half_report(signal, df_mouse, cohort, contrasts, sensitivity))
+
+    pooled = cohort.set_index('epoch').loc[SPLIT_HALF_ALL]
+    n_mice = df_mouse['mouse'].nunique()
+    plot_epoch_modulation_superplot(
+        df_cloud, df_mouse.assign(value=df_mouse['rho']), _selectivity_panel_contrasts(contrasts),
+        None, os.path.join(out_dir, 'panel_split_half_stability.png'), signal=signal,
+        auto_close=auto_close, title_prefix='Split-half stability of per-cell responses',
+        title_note=(f'all epochs: r = {pooled["rho_of_mean_z"]:+.3f}, exact sign-flip P = '
+                    f'{pooled["p_exact"]:.3g}; brackets: exact mouse-label randomization on '
+                    f'Fisher z, Holm within facet'),
+        footer=(f'n = {n_mice} mice — the unit of inference. Per mouse: Spearman r across cells '
+                f'between two disjoint trial halves of the index, averaged over every balanced split '
+                f'(Fisher z).\n"all": mean over epochs (includes general responsiveness); '
+                f'"epoch profile": each cell\'s mean over epochs removed. Cloud: each split\'s r. '
+                f'Expectation 0 without stable cell-specific differences.'),
+        epoch_titles={SPLIT_HALF_ALL: 'all epochs', SPLIT_HALF_PROFILE: 'epoch profile\n(cell mean removed)'},
+        ylabel='Split-half correlation\nacross cells (Spearman r)', facets=SPLIT_HALF_FACETS)
+
+    if verbose:
+        print(f'[split-half/{signal}] {n_mice} mice; all epochs r = {pooled["rho_of_mean_z"]:+.4f}, '
+              f'exact sign-flip P = {pooled["p_exact"]:.4g} -> {out_dir}', flush=True)
+    return {'df_split': df_split, 'df_mouse': df_mouse, 'cohort': cohort, 'contrasts': contrasts}
+
+
+# ── Synthetic verification (hand-run development tool; never called by a real run) ──
+
+_SYNTH_SPLIT_STABLE_AMP = 0.3
+
+
+def _synthetic_split_half_pooled(df_trial):
+    """(per-mouse pooled table, cohort table) for a synthetic trial table."""
+    df_mouse, _ = summarize_split_half(split_half_stability(df_trial))
+    return df_mouse, split_half_cohort_tests(df_mouse)
+
+
+def verify_split_half_stability_synthetic(seed=0, n_calibration=200, verbose=True):
+    """Hand-run check of the properties the split-half lane rests on, on data with a known answer.
+    Returns the report text and raises AssertionError if any check fails. Writes nothing.
+
+    1. No stable cell-specific differences (cell intercepts 0, nothing planted), with a
+       population-wide response: the pooled sign-flip tests ('all', 'profile') hold their size and
+       r centres on 0; again with right-skewed indices (1b), since real indices are skewed.
+    2. Stable per-cell preferences planted in every group: detected by 'all' and 'profile'.
+       2b. A pure gain trait: detected by 'all', not by 'profile'.
+    3. Stable fraction 40% in hM3D, 10% in mCherry and hM4D: Exc vs Ctl detected, Inh vs Ctl not.
+    4. Every cell of ONE hM3D mouse stable at 3 SD, the rest null: no group difference
+       (pseudoreplication guard).
+    """
+    rng = np.random.default_rng(seed)
+    lines, failures = [], []
+    null = dict(intercept_sd=0.0, population_shift={'trace': -0.5, 'shock': 0.4})
+
+    def check(ok, text):
+        lines.append(f'  [{"PASS" if ok else "FAIL"}] {text}')
+        if not ok:
+            failures.append(text)
+
+    for label, skew in (('Design 1 — no stable cell differences, population-wide response', False),
+                        ('Design 1b — as 1, indices made right-skewed (exp transform)', True)):
+        ps, means = {f: [] for f in (SPLIT_HALF_ALL, SPLIT_HALF_PROFILE)}, []
+        for _ in range(n_calibration):
+            df, _ = _synthetic_selectivity_trials(rng, **null)
+            if skew:
+                df['index'] = np.expm1(df['index'])
+            df_mouse, cohort = _synthetic_split_half_pooled(df)
+            for f in ps:
+                ps[f].append(cohort.set_index('epoch').loc[f, 'p_exact'])
+            means.append(df_mouse.loc[df_mouse['epoch'] == SPLIT_HALF_ALL, 'value'].mean())
+        means = np.array(means)
+        se = means.std(ddof=1) / np.sqrt(len(means))
+        lines.append(f'{label}: {n_calibration} replicates')
+        for f, p in ps.items():
+            fpr = float(np.mean(np.array(p) < 0.05))
+            check(fpr <= _SYNTH_SEL_MAX_FPR,
+                  f'{f}: false-positive rate at 0.05 = {fpr:.3f} (limit {_SYNTH_SEL_MAX_FPR})')
+        check(abs(means.mean()) < 3 * se, f'mean pooled z {means.mean():+.5f}, within 3 SE ({3 * se:.5f}) of 0')
+
+    groups = {g: sorted(f'{g}_{m}' for m in range(n)) for g, n in _SYNTH_GROUP_SIZES}
+
+    lines.append(f'Design 2 — stable preferences in 30% of cells in every group, {_SYNTH_SPLIT_STABLE_AMP} SD')
+    df, _ = _synthetic_selectivity_trials(rng, selective_frac_by_group={g: 0.3 for g, _ in _SYNTH_GROUP_SIZES},
+                                          selective_amp=_SYNTH_SPLIT_STABLE_AMP, intercept_sd=0.0)
+    df_mouse, cohort = _synthetic_split_half_pooled(df)
+    for f in (SPLIT_HALF_ALL, SPLIT_HALF_PROFILE):
+        c = cohort.set_index('epoch').loc[f]
+        check(c['rho_of_mean_z'] > 0 and c['p_exact'] < 0.001,
+              f'{f}: r = {c["rho_of_mean_z"]:+.3f}, exact P = {c["p_exact"]:.2g}')
+
+    lines.append('Design 2b — a pure gain trait: stable cell intercepts (SD 0.3, same in every epoch), '
+                 'nothing epoch-specific')
+    df, _ = _synthetic_selectivity_trials(rng, intercept_sd=0.3)
+    df_mouse, cohort = _synthetic_split_half_pooled(df)
+    c_all, c_prof = (cohort.set_index('epoch').loc[f] for f in (SPLIT_HALF_ALL, SPLIT_HALF_PROFILE))
+    check(c_all['p_exact'] < 0.001, f'all: r = {c_all["rho_of_mean_z"]:+.3f}, exact P = '
+                                    f'{c_all["p_exact"]:.2g} (a gain trait counts as stable here)')
+    check(abs(c_prof['rho_of_mean_z']) < 0.05, f'profile: r = {c_prof["rho_of_mean_z"]:+.3f} '
+                                               f'(near 0: the profile endpoint ignores gain)')
+
+    lines.append('Design 3 — stable fraction 40% in hM3D, 10% in mCherry and hM4D')
+    df, _ = _synthetic_selectivity_trials(rng, selective_frac_by_group={'hM3D': 0.4, 'mCherry': 0.1, 'hM4D': 0.1},
+                                          selective_amp=_SYNTH_SEL_AMP, intercept_sd=0.0)
+    df_mouse, _ = _synthetic_split_half_pooled(df)
+    con = selectivity_group_contrasts(df_mouse, groups, facets=SPLIT_HALF_FACETS).set_index(
+        ['epoch', 'group_a', 'group_b'])
+    p_exc = con.loc[(SPLIT_HALF_ALL, 'hM3D', 'mCherry'), 'p_exact']
+    p_inh = con.loc[(SPLIT_HALF_ALL, 'hM4D', 'mCherry'), 'p_exact']
+    check(p_exc < 0.05, f'Exc vs Ctl detected: exact P = {p_exc:.4g}')
+    check(p_inh > 0.05, f'Inh vs Ctl (no planted difference) not significant: exact P = {p_inh:.4g}')
+
+    lines.append(f'Design 4 — every cell of ONE hM3D mouse stable at {_SYNTH_SEL_ONE_MOUSE_AMP} SD')
+    df, _ = _synthetic_selectivity_trials(rng, one_mouse_amp=_SYNTH_SEL_ONE_MOUSE_AMP, intercept_sd=0.0)
+    df_mouse, _ = _synthetic_split_half_pooled(df)
+    con = selectivity_group_contrasts(df_mouse, groups, facets=SPLIT_HALF_FACETS).set_index(
+        ['epoch', 'group_a', 'group_b'])
+    p_one = con.loc[(SPLIT_HALF_ALL, 'hM3D', 'mCherry'), 'p_exact']
+    check(p_one > 0.05, f'Exc vs Ctl NOT significant with the effect in one animal: exact P = {p_one:.4g}')
+
+    report = (f'verify_split_half_stability_synthetic (seed {seed})\n' + '\n'.join(lines) + '\n'
+              + (f'\n{len(failures)} CHECK(S) FAILED\n' if failures else '\nALL CHECKS PASSED\n'))
+    if verbose:
+        print(report, flush=True)
+    if failures:
+        raise AssertionError(report)
+    return report
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Entry point
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -3839,7 +4225,8 @@ def run_epoch_modulation(PLOTS_DIR, mice_per_group, TFC_cond, mapping='full',
                          crossreg_to_use=None, auto_close=True,
                          run_hierarchical_cells=True,
                          hierarchical_cross_check_full_fit=HIERARCHICAL_CROSS_CHECK_FULL_FIT,
-                         run_event_proximal=True, run_cell_selectivity=True):
+                         run_event_proximal=True, run_cell_selectivity=True,
+                         run_split_half_stability=True):
     """Run the per-cell epoch modulation analysis (Figure 2 single-cell block, panels K-L).
 
     PLOTS_DIR       : output root
@@ -3873,13 +4260,20 @@ def run_epoch_modulation(PLOTS_DIR, mice_per_group, TFC_cond, mapping='full',
                     event-proximal lane's trial-level table when that lane runs, and rebuilds it
                     otherwise; it changes nothing above it.
 
+    run_split_half_stability : run the split-half stability lane per signal
+                    (run_split_half_stability_lane), into ``<signal>/split_half_stability/``. True
+                    by default; supplementary (plan item C5, §O.2). It asks whether a cell's index
+                    relative to its mouse's average cell is reproducible across disjoint trial
+                    halves, on the same trial-level table as panel L; it changes nothing above it.
+
     hierarchical_cross_check_full_fit : also refit the whole model through statsmodels on every
                     cell row and compare it against the reported collapsed fit. False by default
                     because it costs 4-14 min per signal and is a corroboration rather than the
                     guarantee -- see HIERARCHICAL_CROSS_CHECK_FULL_FIT.
 
     Produces, under ``<PLOTS_DIR>/epoch_modulation/``:
-      <signal>/panel_K_tone_aligned_heatmaps.png/.svg   (both signals)
+      <signal>/panel_K_tone_aligned_heatmaps.png/.svg   (both signals; held-out sort, §O.8)
+      <signal>/panel_K_insample_tone_aligned_heatmaps.png/.svg   (in-sample sort, for comparison)
       <signal>/panel_L_epoch_modulation.png/.svg        (both signals)
       <signal>/tables/{per_cell,per_mouse,coverage,contrasts}.csv
       <signal>/stats/{model_summary,contrasts}.txt
@@ -3898,13 +4292,15 @@ def run_epoch_modulation(PLOTS_DIR, mice_per_group, TFC_cond, mapping='full',
     _copy_analysis_methods_template(METHODS_FILENAME, out_dir)
 
     contrasts_by_signal, omnibus_by_signal, hier_by_signal = {}, {}, {}
-    event_prox_by_signal, selectivity_by_signal = {}, {}
+    event_prox_by_signal, selectivity_by_signal, split_half_by_signal = {}, {}, {}
     if run_hierarchical_cells:
         _copy_analysis_methods_template(HIERARCHICAL_METHODS_FILENAME, out_dir)
     if run_event_proximal:
         _copy_analysis_methods_template(EVENT_PROXIMAL_METHODS_FILENAME, out_dir)
     if run_cell_selectivity:
         _copy_analysis_methods_template(SELECTIVITY_METHODS_FILENAME, out_dir)
+    if run_split_half_stability:
+        _copy_analysis_methods_template(SPLIT_HALF_METHODS_FILENAME, out_dir)
 
     for signal in SIGNALS:
         sig_dir = os.path.join(out_dir, signal)
@@ -3946,6 +4342,8 @@ def run_epoch_modulation(PLOTS_DIR, mice_per_group, TFC_cond, mapping='full',
         # supplementary two-signal figure to a disagreement trigger; that made the two
         # directories asymmetric and left the trigger unwired.
         group_mats, group_sort = {g: [] for g in DREADD_DISPLAY_ORDER}, {g: [] for g in DREADD_DISPLAY_ORDER}
+        heldout_mats = {g: [] for g in DREADD_DISPLAY_ORDER}
+        heldout_sort = {g: [] for g in DREADD_DISPLAY_ORDER}
         time_axis = None
         for group in DREADD_DISPLAY_ORDER:
             for mouse in mice_per_group.get(group, []):
@@ -3983,12 +4381,52 @@ def run_epoch_modulation(PLOTS_DIR, mice_per_group, TFC_cond, mapping='full',
                 group_sort[group].append(sub.loc[list(cell_ids), 'index'].to_numpy())
                 time_axis = axis
 
+                # Held-out panel K (§O.8): sorted by the trace index of trial half A, showing
+                # the average of half B, so the order never touches the data displayed and the
+                # sorted-noise diagonal of §R.9 cannot arise. Median over the half's trials, as
+                # df_cell's index is the median over all of them.
+                sort_half, shown_half = split_trials(trials)
+                # Every shown trial must fit the window: _tone_aligned_matrix would silently
+                # average fewer trials than the title states.
+                per_trial, _ = _tone_aligned_trials(z, session, shown_half, HEATMAP_PRE_S, HEATMAP_POST_S)
+                not_fitting = [t for t, m in per_trial.items() if m is None]
+                if not_fitting:
+                    raise RuntimeError(
+                        f'epoch_modulation: mouse {mouse!r}: held-out panel K trials {not_fitting} '
+                        f'do not fit the -{HEATMAP_PRE_S:.0f}/+{HEATMAP_POST_S:.0f} s window.')
+                mat_shown, _ = _tone_aligned_matrix(z, session, shown_half)
+                sort_a = (df[(df['mouse'] == mouse) & (df['epoch'] == 'trace')
+                             & df['trial'].isin(sort_half)]
+                          .groupby('cell')['index'].median())
+                missing = [c for c in cell_ids if c not in sort_a.index]
+                if missing or len(sort_a) != mat_shown.shape[0]:
+                    raise RuntimeError(
+                        f'epoch_modulation: mouse {mouse!r}: half-A trace indices for '
+                        f'{len(sort_a)} cells, {mat_shown.shape[0]} heatmap rows, missing '
+                        f'{missing[:10]} -- cannot align the held-out panel K sort.')
+                heldout_mats[group].append(mat_shown)
+                heldout_sort[group].append(sort_a.loc[list(cell_ids)].to_numpy())
+
         group_mats = {g: np.concatenate(v, axis=0) for g, v in group_mats.items() if v}
         group_sort = {g: np.concatenate(v, axis=0) for g, v in group_sort.items() if v}
 
-        plot_modulation_heatmaps(group_mats, group_sort, time_axis,
-                                 os.path.join(sig_dir, 'panel_K_tone_aligned_heatmaps.png'),
-                                 signal=signal, auto_close=auto_close)
+        heldout_mats = {g: np.concatenate(v, axis=0) for g, v in heldout_mats.items() if v}
+        heldout_sort = {g: np.concatenate(v, axis=0) for g, v in heldout_sort.items() if v}
+        plot_modulation_heatmaps(
+            heldout_mats, heldout_sort, time_axis,
+            os.path.join(sig_dir, 'panel_K_tone_aligned_heatmaps.png'),
+            signal=signal, auto_close=auto_close,
+            ylabel='Cell (sorted by trace modulation\non the other trials)',
+            title=(f'Tone-aligned per-cell activity on held-out trials ({signal}): rows sorted by '
+                   f'the trace index of trials 1, 3;\nshown: the mean of trials 2, 4 (G09, 3 '
+                   f'trials: 2). Standardized once per cell over the session.'))
+        plot_modulation_heatmaps(
+            group_mats, group_sort, time_axis,
+            os.path.join(sig_dir, 'panel_K_insample_tone_aligned_heatmaps.png'),
+            signal=signal, auto_close=auto_close,
+            title=(f'Tone-aligned per-cell activity ({signal}), IN-SAMPLE sort: rows sorted and '
+                   f'shown on the same trials,\nso part of any diagonal is the sort itself '
+                   f'(§R.9). Standardized once per cell over the session.'))
         plot_epoch_modulation_superplot(df_cell, df_mouse, contrasts, omnibus,
                                         os.path.join(sig_dir, 'panel_L_epoch_modulation.png'),
                                         signal=signal, auto_close=auto_close)
@@ -4022,6 +4460,11 @@ def run_epoch_modulation(PLOTS_DIR, mice_per_group, TFC_cond, mapping='full',
                 sig_dir, signal, mice_per_group, TFC_cond,
                 df_trial=(event_prox_by_signal[signal]['df_trial'] if run_event_proximal else None),
                 mapping=mapping, crossreg_to_use=crossreg_to_use, auto_close=auto_close)
+
+        # ── Split-half stability, on the full-epoch table panel L was built from ──
+        if run_split_half_stability:
+            split_half_by_signal[signal] = run_split_half_stability_lane(
+                sig_dir, signal, df, auto_close=auto_close)
 
     merged, comparison_text = compare_signals(contrasts_by_signal, omnibus_by_signal)
     merged.to_csv(os.path.join(out_dir, 'signal_comparison.csv'), index=False)
@@ -4067,4 +4510,12 @@ def run_epoch_modulation(PLOTS_DIR, mice_per_group, TFC_cond, mapping='full',
                   ignore_index=True).to_csv(
             os.path.join(sel_dir, 'group_contrasts_by_signal.csv'), index=False)
         out['cell_selectivity'] = selectivity_by_signal
+
+    if run_split_half_stability:
+        sh_dir = os.path.join(out_dir, SPLIT_HALF_DIRNAME)
+        ensure_dirs(sh_dir)
+        pd.concat([r['contrasts'].assign(signal=s) for s, r in split_half_by_signal.items()],
+                  ignore_index=True).to_csv(
+            os.path.join(sh_dir, 'group_contrasts_by_signal.csv'), index=False)
+        out['split_half_stability'] = split_half_by_signal
     return out

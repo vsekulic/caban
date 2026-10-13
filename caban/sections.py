@@ -1743,6 +1743,10 @@ def run_epoch_modulation(ds, cfg):
     individual cell reproducibly prefer one event beyond its mouse's average cell, and do the
     groups differ in that? The preference is chosen on all retained trials but one and measured
     on the held-out trial. Also additive, and cheap -- it reuses the event-proximal table.
+
+    ``cfg.epoch_modulation_split_half_stability`` (True by default) additionally runs the
+    SPLIT-HALF STABILITY companion per signal, into ``<signal>/split_half_stability/``
+    (supplementary; epoch_modulation §O.2).
     """
     if not (cfg.plot_epoch_modulation and not cfg.DEVEL_SWITCH):
         return
@@ -1751,7 +1755,8 @@ def run_epoch_modulation(ds, cfg):
         cfg.PLOTS_DIR, ds.mice_per_group, ds.TFC_cond,
         run_hierarchical_cells=cfg.epoch_modulation_hierarchical_cells,
         run_event_proximal=cfg.epoch_modulation_event_proximal,
-        run_cell_selectivity=cfg.epoch_modulation_cell_selectivity)
+        run_cell_selectivity=cfg.epoch_modulation_cell_selectivity,
+        run_split_half_stability=cfg.epoch_modulation_split_half_stability)
     msg_end()
 
 

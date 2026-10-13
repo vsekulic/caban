@@ -77,7 +77,7 @@ from caban.single_unit_common import (
     ensure_dirs, write_text, save_fig,
 )
 from caban.epoch_modulation import (
-    resolve_shared_cells, _standardized_trace, retained_trials, _tone_aligned_matrix,
+    resolve_shared_cells, _standardized_trace, retained_trials, _tone_aligned_matrix, split_trials,
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -102,23 +102,6 @@ SIGNAL = 'C'
 # ─────────────────────────────────────────────────────────────────────────────
 # Peak latencies
 # ─────────────────────────────────────────────────────────────────────────────
-
-def split_trials(trials):
-    """Two disjoint trial halves, (A, B) = (even-position, odd-position) of ``trials``.
-
-    With the usual 4 retained conditioning trials [1,2,3,4] this is A=[1,3], B=[2,4]. A mouse
-    retaining only 3 gives A=[1,3], B=[2] -- thinner, but still disjoint, which is the property
-    the whole analysis rests on. Raises if either half is empty, since a one-sided split cannot
-    support a cross-validated statistic.
-    """
-    trials = list(trials)
-    half_a, half_b = trials[0::2], trials[1::2]
-    if not half_a or not half_b:
-        raise RuntimeError(
-            f'epoch_sequence: cannot split {trials} into two non-empty halves; a '
-            f'cross-validated peak latency needs at least one trial on each side.')
-    return half_a, half_b
-
 
 def _window_slice(time_axis):
     """Boolean mask selecting the analysis window from a tone-aligned time axis."""
