@@ -34,7 +34,7 @@ held-out trial *k*:
 
    evaluated on trial *k* alone, in units of the cell's own session-wide SD.
 
-Each cell contributed one value per retained trial (4 trials for 16 of 17 mice, 3 for one). When
+Each cell contributed one value per retained trial (5 trials for 16 of 17 mice, 4 for one). When
 cells hold no reproducible preference beyond their animal's average cell, the held-out value has
 expectation zero, because the held-out trial took no part in the choice. **No cell was ever scored
 on the data that selected it**, and no responsive/non-responsive threshold was applied at any

@@ -225,7 +225,9 @@ time, never jointly.
   exposure, trace pools to ~95 s against `pre_tone_matched`'s ~100 s, and that 5% mismatch lands
   directly on exactly those two components. The cross-epoch decomposition and the joint epoch
   test therefore use `restrict_to_exposure_matched_trials`, which keeps only the
-  `(mouse, trial)` pairs where every requested window is present at its full 20 s. The
+  `(mouse, trial)` pairs where every requested window is present at its full 20 s -- except the
+  trace window, which counts at its protocol length, so the first trial is kept (VS, 2026-10-13:
+  do not throw away data) and the 95 s vs 100 s pooled difference above applies. The
   restriction is derived from the MEASURED `exposure_seconds`, never from a trial index —
   hard-coding "trials 2-5" would encode nominal protocol timing, which is data-dependent (trial
   counts vary per mouse and recordings can stop as little as 20.5 s after the last shock). Per-mouse

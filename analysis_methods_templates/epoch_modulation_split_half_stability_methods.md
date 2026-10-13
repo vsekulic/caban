@@ -26,9 +26,9 @@ between the two halves' averages was computed for each epoch. Because the halves
 the correlation has expectation zero when cells hold no reproducible differences relative to the
 other cells of their animal.
 
-**Every balanced split was used rather than one.** With four retained trials there are exactly
-three ways to divide them into two pairs, and with three trials (one animal) three ways to divide
-them into one and two; the animal's value for an epoch is the mean of its split correlations on
+**Every balanced split was used rather than one.** With five trials there are ten ways to divide
+them into two and three, and with four trials (one animal) three ways to divide them into two
+pairs; the animal's value for an epoch is the mean of its split correlations on
 the Fisher-z scale. This all-splits form of split-half reliability removes the dependence on one
 arbitrary split. The correlations describe half-trial averages as they are; no Spearman–Brown
 step-up to the full trial count was applied.
@@ -61,9 +61,6 @@ The animal is the unit of inference throughout.
   treatment groups is reported but is in no family. Welch 95% intervals are descriptive.
 
 Values are displayed as correlations (the back-transform of the mean Fisher z).
-
-**Sensitivity.** The animal with three retained trials has noisier one-trial halves; every result
-was repeated without it.
 
 ## Validation
 

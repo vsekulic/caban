@@ -652,6 +652,24 @@ def get_engram_crossreg(mouse, TFC_cond, Test_B, Test_B_1wk, crossreg, mapping, 
 
     return [S_i_engram_TFC_cond, S_i_engram_Test_B, S_i_engram_Test_B_1wk]
 
+def mapping_for_available_sessions(crossreg, mapping):
+    """``mapping`` ('A+B+C') restricted to the sessions this mouse's cross-registration has.
+
+    G07 has no Test_B (not recorded) and G15 no *_1wk sessions; instead of leaving such a mouse
+    out of an analysis, its cells are taken from the sessions it does have (VS, 2026-10-14: do not
+    throw away data). Prints when the mapping is narrowed; raises if none of the sessions exist.
+    """
+    labels = mapping.split('+')
+    present = [lab for lab in labels if lab in crossreg.mappings_labels]
+    if not present:
+        raise KeyError(f'{crossreg.mouse}: none of the sessions in mapping {mapping!r} are in its '
+                       f'cross-registration ({sorted(crossreg.mappings_labels)})')
+    if len(present) < len(labels):
+        print(f'  {crossreg.mouse}: mapping {mapping!r} narrowed to {"+".join(present)!r} '
+              f'(no {sorted(set(labels) - set(present))} session)')
+    return '+'.join(present)
+
+
 def get_S_indeces_crossreg(session, crossreg, mapping, want_peakval=True):
     [S, S_spikes, S_peakval, S_idx] = session.get_S_mapping(mapping, want_peakval=want_peakval, with_crossreg=crossreg)
     indeces_into_S = session.get_S_indeces(S_idx)

@@ -751,6 +751,8 @@ def _iter_event_windows(mice_per_group, sessions, epoch_names, get_frames_fn, ma
     for group in GROUP_ORDER:
         for mouse in mice_per_group.get(group, []):
             if mouse not in sessions:
+                # Only a session that was never recorded for this mouse (G07: Test_B; G15: *_1wk).
+                print(f'_iter_event_windows: {mouse} has no session in this table; left out of it')
                 continue
             session = sessions[mouse]
             cell_thres = session.thres if thres is None else thres
@@ -990,7 +992,11 @@ def restrict_to_exposure_matched_trials(df_fine, epochs, window_seconds=TRACE_MA
                                         tol_seconds=0.5):
     """
     Restrict a fine event table to the (mouse, trial) cells where EVERY epoch in `epochs` is
-    present AND its window is `window_seconds` long.
+    present AND its window is `window_seconds` long -- except the TRACE window, which counts at
+    whatever length the protocol gave it (VS, 2026-10-13: do not throw away data). The first
+    trial's trace is 15 s, and that trial is kept; the text below describes the earlier rule,
+    which dropped it, and why the duration-sensitive components then compare ~95 s of pooled
+    trace against ~100 s of pre-tone.
 
     TFC_MATCHED_EPOCHS are called "exposure-matched" because each is defined as
     TRACE_MATCHED_WINDOW_S long -- but the TRACE window on TRIAL 1 is only 15 s, not 20 s
@@ -1009,9 +1015,8 @@ def restrict_to_exposure_matched_trials(df_fine, epochs, window_seconds=TRACE_MA
     ** The restriction is derived from the MEASURED exposure_seconds, never from a trial index. **
     Hard-coding "trials 2-5" would encode the nominal protocol timing, which docs section 8
     forbids for exactly the reason correction #14 records: session timing is data-dependent and
-    trial count varies per mouse. Testing the measured window instead drops trial 1 BECAUSE its
-    trace window is short, and drops a truncated final trial BECAUSE its window is missing, under
-    one rule that stays correct if either assumption changes.
+    trial count varies per mouse. Testing the measured window drops a truncated final trial
+    BECAUSE its window is missing, under one rule that stays correct if the timing changes.
 
     Returns (restricted_df, coverage) in the same shape as restrict_to_shared_trials -- the
     restricted frame carries only `epochs`' rows, and coverage is a per-mouse DataFrame the
@@ -1026,7 +1031,9 @@ def restrict_to_exposure_matched_trials(df_fine, epochs, window_seconds=TRACE_MA
     # within tol of the nominal length. Checked on the per-(mouse, trial, epoch) window duration,
     # which every cell in that window shares, so max() is that window's own length.
     per_window = sub.groupby(['mouse', 'trial', 'epoch'], as_index=False)['exposure_seconds'].max()
-    per_window['matched'] = (per_window['exposure_seconds'] - window_seconds).abs() <= tol_seconds
+    per_window['matched'] = (((per_window['exposure_seconds'] - window_seconds).abs() <= tol_seconds)
+                             | ((per_window['epoch'] == TFC_TRACE_EPOCH)
+                                & (per_window['exposure_seconds'] > 0)))
     # A listed short post-shock window (epoch_analysis.SHORT_POST_SHOCK_WINDOWS: G09's last
     # trial, imaging ended 13 frames early) counts as matched at exactly its listed length.
     for i, w in per_window.iterrows():
@@ -4840,12 +4847,9 @@ def plot_conditioning_phase_amplitude(df_fine, save_dir, epochs=(TFC_REFERENCE_E
     second test of it, and no significance stars are drawn (annotate='none') precisely because
     comparing stars between the two columns would be the difference-of-significance fallacy.
 
-    ** Amplitude only, and that is not an oversight. ** The rate analog of this figure cannot be
-    drawn honestly at this split. Event rate and fraction active are duration-sensitive, so they
-    need exposure-matched trials -- and restrict_to_exposure_matched_trials drops trial 1, whose
-    trace window is 15 s rather than 20 s. That would reduce the 'early' column to trial 2 alone,
-    gutting exactly the half of the figure the question rests on. Amplitude is a per-event
-    quantity, needs no exposure matching, and therefore keeps every trial.
+    ** Amplitude only. ** Amplitude is a per-event quantity and keeps every trial. (This used to say
+    the rate analog could not be drawn because restrict_to_exposure_matched_trials dropped trial 1;
+    since 2026-10-13 it keeps every trial, so that reason no longer applies.)
 
     ** Read the CONTRAST, not the level. ** Absolute amplitude declines across trials in every
     group (~31% by trial 5, consistent with photobleaching). That is a main effect of trial: it

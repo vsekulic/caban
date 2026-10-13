@@ -117,24 +117,18 @@ separate from the shock period rather than merged with it.
 
 ## Trials
 
-A trial was retained only when every analysis window was completely present: the 20 s pre-tone
-baseline, the tone, a **full 20 s** trace interval, the shock, and a complete 20 s post-shock window.
-This retains three to four of the five conditioning trials per animal.
+Every conditioning trial was used: five per animal, and four for the one animal whose imaging ended
+before the fifth trial. A trial is used when all of its windows are present — the 20 s pre-tone
+baseline, the tone, the trace interval, the shock and a complete 20 s post-shock window.
 
-Trace-interval length was taken from the protocol's declared trial times — shock onset minus tone
-offset — which are exact: 15 s on the first trial and 20 s on the remainder. Each declared time is
+The trace interval is 15 s on the first trial and 20 s on the others (the protocol's declared trial
+times); the first trial's trace index is its mean over those 15 s. Each declared time is
 converted to a frame index by matching it to the nearest imaging timestamp, so a declared 20 s
 interval may span a frame or two more or fewer than 20 s of frames. That quantization is immaterial
 here, because the endpoint is a window mean rather than a count or a rate and is therefore not
 exposure-scaled. Whether the post-shock window was fully observed does depend on the recording, since
 the final trial ends with the recording rather than with a subsequent tone, and was determined from
 the frames actually available after shock offset.
-
-The first conditioning trial is excluded as a consequence of that rule, its trace interval being 15 s
-rather than 20 s. It is deliberately not recovered by truncating every trace to a common 15 s: the
-first trial is an acquisition trial preceding the first unconditioned stimulus, and the final 5 s of
-the later trace intervals, immediately preceding shock onset, is where an anticipatory signal would
-be expected.
 
 The index is computed per trial and the trial dimension is preserved until summarization. Each cell's
 value is the **median across its retained trials**, so that a single anomalous conditioning trial

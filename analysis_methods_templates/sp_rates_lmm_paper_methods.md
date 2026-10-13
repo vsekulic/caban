@@ -38,9 +38,10 @@ offset). The 2 s shock itself is excluded from all models: at the observed event
 expected count in a 2 s window is small enough that per-cell rate estimates there are dominated
 by counting noise.
 
-Because the trace interval on the first trial is 15 s rather than 20 s, analyses were restricted
-for each animal to trials in which all three windows were present at the full 20 s duration,
-determined from the measured exposure of each window rather than from a trial index. One window
+All conditioning trials were used. The trace interval on the first trial is 15 s rather than 20 s;
+each window's exposure is its measured duration, so the pooled trace window is 95 s against 100 s
+for the pre-tone and post-shock windows. A trial was left out only where one of its windows was not
+recorded (4–5 of 5 trials per animal). One window
 was accepted short: one control animal's last post-shock window, whose recording stopped 13 frames
 (0.65 s) before its end, was kept at 387 of 400 frames with its exposure counted as imaged. **Both
 outcomes were computed from that same set of animal × trial windows**, so the two are directly

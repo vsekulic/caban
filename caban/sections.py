@@ -31,7 +31,6 @@ from caban.analysis import *   # noqa: F401,F403
 from caban.decoder import *    # noqa: F401,F403
 from caban.decoder import _PVT_MODE_LABEL_TO_KEY, _copy_analysis_methods_template  # noqa: F401
 from caban.engram import ENGRAM_REFERENCE
-from caban.population import EXCLUDE_MICE_CROSSREG as _PCA_EXCLUDE
 from caban.population import run_population_pca_pipeline, run_pca_state_metrics_from_results
 from caban.isomap import run_isomap_pipeline
 from caban.epoch_analysis import (
@@ -1837,12 +1836,12 @@ def run_LT_firing_rate_changes(ds, cfg):
         msg_end()
 
         msg_start('*** Generating TFC_cond, Test_B, Test_B_1wk firing rate changes plots')
-        plot_firing_rate_changes(PLOTS_DIR, mice_per_group_Test_B_B_1wk, TFC_B_B_1wk_crossreg, TFC_cond, Test_B, mapping_TFC_cond_Test_B_Test_B_1wk)
-        plot_firing_rate_changes(PLOTS_DIR, mice_per_group_Test_B_B_1wk, TFC_B_B_1wk_crossreg, TFC_cond, Test_B, mapping_TFC_cond_Test_B_Test_B_1wk, use_peakval=True)
-        plot_firing_rate_changes(PLOTS_DIR, mice_per_group_Test_B_B_1wk, TFC_B_B_1wk_crossreg, TFC_cond, Test_B_1wk, mapping_TFC_cond_Test_B_Test_B_1wk)
-        plot_firing_rate_changes(PLOTS_DIR, mice_per_group_Test_B_B_1wk, TFC_B_B_1wk_crossreg, TFC_cond, Test_B_1wk, mapping_TFC_cond_Test_B_Test_B_1wk, use_peakval=True)
-        plot_firing_rate_changes(PLOTS_DIR, mice_per_group_Test_B_B_1wk, TFC_B_B_1wk_crossreg, Test_B, Test_B_1wk, mapping_TFC_cond_Test_B_Test_B_1wk)
-        plot_firing_rate_changes(PLOTS_DIR, mice_per_group_Test_B_B_1wk, TFC_B_B_1wk_crossreg, Test_B, Test_B_1wk, mapping_TFC_cond_Test_B_Test_B_1wk, use_peakval=True)
+        plot_firing_rate_changes(PLOTS_DIR, mice_per_group, TFC_B_B_1wk_crossreg, TFC_cond, Test_B, mapping_TFC_cond_Test_B_Test_B_1wk)
+        plot_firing_rate_changes(PLOTS_DIR, mice_per_group, TFC_B_B_1wk_crossreg, TFC_cond, Test_B, mapping_TFC_cond_Test_B_Test_B_1wk, use_peakval=True)
+        plot_firing_rate_changes(PLOTS_DIR, mice_per_group, TFC_B_B_1wk_crossreg, TFC_cond, Test_B_1wk, mapping_TFC_cond_Test_B_Test_B_1wk)
+        plot_firing_rate_changes(PLOTS_DIR, mice_per_group, TFC_B_B_1wk_crossreg, TFC_cond, Test_B_1wk, mapping_TFC_cond_Test_B_Test_B_1wk, use_peakval=True)
+        plot_firing_rate_changes(PLOTS_DIR, mice_per_group, TFC_B_B_1wk_crossreg, Test_B, Test_B_1wk, mapping_TFC_cond_Test_B_Test_B_1wk)
+        plot_firing_rate_changes(PLOTS_DIR, mice_per_group, TFC_B_B_1wk_crossreg, Test_B, Test_B_1wk, mapping_TFC_cond_Test_B_Test_B_1wk, use_peakval=True)
         msg_end()
 
 
@@ -2019,9 +2018,9 @@ def run_pf_and_loc(ds, cfg):
                 plot_pf_analyses_within_group(PLOTS_DIR, TFC_cond, Test_B, Test_B_1wk, mouse_groups, crossreg=None, mapping=None)
                 plot_pf_analyses_within_group(PLOTS_DIR, TFC_cond, Test_B, Test_B_1wk, mouse_groups, crossreg=TFC_B_B_1wk_crossreg, mapping=mapping_TFC_cond_Test_B_Test_B_1wk)
                 plot_pf_analyses_within_group(PLOTS_DIR, TFC_cond, Test_A, Test_A_1wk, mouse_groups, crossreg=None, mapping=None,
-                    sess_names=['TFC_cond', 'Test_A', 'Test_A_1wk'], skip_mice=['G15'])
+                    sess_names=['TFC_cond', 'Test_A', 'Test_A_1wk'])
                 plot_pf_analyses_within_group(PLOTS_DIR, TFC_cond, Test_A, Test_A_1wk, mouse_groups, crossreg=TFC_A_A_1wk_crossreg, mapping=mapping_TFC_cond_Test_A_Test_A_1wk,
-                    sess_names=['TFC_cond', 'Test_A', 'Test_A_1wk'], skip_mice=['G15'])
+                    sess_names=['TFC_cond', 'Test_A', 'Test_A_1wk'])
 
     # Ensure merged PF attributes exist (back-fills from cached .npz without re-fitting)
     for _label, _sess_dict in [('TFC_cond', TFC_cond), ('Test_B', Test_B),
@@ -2291,16 +2290,9 @@ def run_LT_pfs(ds, cfg):
         #pv_corr_TFC_cond_LT1_LT2 = plot_lt_spatial_responses(PLOTS_DIR, TFC_cond_LT1, TFC_cond_LT2, mouse_groups, 'TFC_cond_LT', mapping='TFC_cond+LT1+LT2', want_C=True, normalize_per_mouse=True, \
         #    normalize_pairwise_per_cell=True, pairwise_cell_mode='pctl', pairwise_cell_pctl=95.0)
 
-        # ---- Outlier exclusion for PV correlation analyses ----
-        INCLUDE_OUTLIERS = False
-        LT_PV_OUTLIER_MICE = ['G07']  # incomplete track coverage (bottom arm truncated)
-
-        if INCLUDE_OUTLIERS:
-            mouse_groups_pv = mouse_groups
-        else:
-            mouse_groups_pv = {m: g for m, g in mouse_groups.items() if m not in LT_PV_OUTLIER_MICE}
-            print(f"[INFO] LT PV correlation: excluding outlier mice {LT_PV_OUTLIER_MICE}. "
-                  f"Remaining: {list(mouse_groups_pv.keys())}")
+        # Every mouse, G07 included (VS, 2026-10-14: do not throw away data). G07's track
+        # coverage is incomplete (bottom arm truncated); it was excluded as an "outlier" until then.
+        mouse_groups_pv = mouse_groups
 
         pv_corr_LT1_LT2_S_global = plot_lt_spatial_responses(
             PLOTS_DIR, TFC_cond_LT1, TFC_cond_LT2, mouse_groups_pv, "TFC_cond_LT_global",
@@ -6531,7 +6523,6 @@ def run_population_pca(ds, cfg):
     from caban.population import (
         run_population_pca_pipeline,
         run_pca_state_metrics_from_results,
-        EXCLUDE_MICE_CROSSREG as _PCA_EXCLUDE,
     )
 
     # Top-level PCA temporal-binning default (frames per bin) — applied to
@@ -6570,8 +6561,6 @@ def run_population_pca(ds, cfg):
     def _engram_idx_by_mouse(mode):
         out = {}
         for _m in mouse_groups:
-            if _m in _PCA_EXCLUDE:
-                continue
             if _m not in engram_id or which_engram not in engram_id[_m]:
                 continue
             out[_m] = np.where(engram_id[_m][which_engram][mode])[0]
@@ -6704,10 +6693,9 @@ def run_isomap(ds, cfg):
     msg_start('*** Isomap Manifold Analysis')
     from caban.isomap import run_isomap_pipeline
     ISOMAP_PLOTS_DIR = os.path.join(PLOTS_DIR, "TFC_Isomap")
-    # G07 and G15 lack the full B-test set (TFC_cond + Test_B + Test_B_1wk),
-    # so exclude them from the Isomap pipeline.
-    _isomap_mouse_groups = {m: g for m, g in mouse_groups.items()
-                            if m not in ("G07", "G15")}
+    # Every mouse: run_isomap_pipeline handles a missing session per mouse itself (G07: no
+    # Test_B; G15: no Test_B_1wk). Until 2026-10-14 both mice were left out entirely.
+    _isomap_mouse_groups = mouse_groups
     isomap_results = run_isomap_pipeline(
         TFC_cond=TFC_cond,
         Test_B=Test_B,
@@ -6750,7 +6738,8 @@ def run_population_vectors(ds, cfg):
     if plot_population_vectors: #and not DEVEL_SWITCH:
         #plot_pop_vectors(PLOTS_DIR, TFC_cond, mouse_groups, 'TFC_cond')
         if process_for_R:
-            for mouse in [m for m in mouse_groups if m not in ['G07', 'G15']]:
+            # The R export is three-session (TFC_cond, Test_B, Test_B_1wk); a mouse missing one is out.
+            for mouse in [m for m in mouse_groups if m in Test_B and m in Test_B_1wk]:
                 process_mice_for_R(mouse, TFC_cond, Test_B, Test_B_1wk, mapping_TFC_cond_Test_B_Test_B_1wk, \
                             binarize=False, normalize=False, normalize_full=False, spk_cutoff=2)
                 process_mice_for_R(mouse, TFC_cond, Test_B, Test_B_1wk, mapping_TFC_cond_Test_B_Test_B_1wk, \
@@ -6860,7 +6849,9 @@ def run_umap(ds, cfg):
     # --- 2. Cross-registered UMAP (separate fit per session) ---
     print("*** UMAP (2) Cross-registered UMAP (separate fit per session)\n")
     for m in mouse_groups:
-        if m in ['G07', 'G15']:
+        if m not in Test_B or m not in Test_B_1wk:
+            # A three-session analysis; G07 has no Test_B, G15 no Test_B_1wk.
+            print(f" {m}: no {'Test_B' if m not in Test_B else 'Test_B_1wk'} session, left out of this three-session UMAP")
             continue
         print(f" {m}...", end='', flush=True)
         S_i_TFC_cond = get_S_indeces_crossreg(TFC_cond[m], TFC_B_B_1wk_crossreg[m], mapping_TFC_cond_Test_B_Test_B_1wk)
@@ -6910,7 +6901,9 @@ def run_umap(ds, cfg):
     # --- 3. Cross-registered UMAP (fit on TFC_cond, transform recall) ---
     print("*** UMAP (3) Cross-registered UMAP (fit on TFC_cond, transform recall)\n")
     for m in mouse_groups:
-        if m in ['G07', 'G15']:
+        if m not in Test_B or m not in Test_B_1wk:
+            # A three-session analysis; G07 has no Test_B, G15 no Test_B_1wk.
+            print(f" {m}: no {'Test_B' if m not in Test_B else 'Test_B_1wk'} session, left out of this three-session UMAP")
             continue
         print(f" {m}...", end='', flush=True)
         S_i_TFC_cond = get_S_indeces_crossreg(TFC_cond[m], TFC_B_B_1wk_crossreg[m], mapping_TFC_cond_Test_B_Test_B_1wk)
@@ -6958,7 +6951,9 @@ def run_umap(ds, cfg):
     # --- 4. Concatenated-session UMAP block ---
     print("*** UMAP (4) Concatenated-session UMAP\n")
     for m in mouse_groups:
-        if m in ['G07', 'G15']:
+        if m not in Test_B or m not in Test_B_1wk:
+            # A three-session analysis; G07 has no Test_B, G15 no Test_B_1wk.
+            print(f" {m}: no {'Test_B' if m not in Test_B else 'Test_B_1wk'} session, left out of this three-session UMAP")
             continue
         print(f" {m}...", end='', flush=True)
         S_i_TFC_cond = get_S_indeces_crossreg(TFC_cond[m], TFC_B_B_1wk_crossreg[m], mapping_TFC_cond_Test_B_Test_B_1wk)
@@ -7011,7 +7006,7 @@ def run_crossreg_pca_umap(
     random_state=None,          # None allows parallel UMAP; fixed seed may force serial behavior
     umap_n_jobs=-1,             # -1 = all cores
     set_parallel_threads=True,
-    skip_mice=("G07", "G15"),
+    skip_mice=(),
     session_order=("TFC_cond", "Test_B", "Test_B_1wk"),
     save_embeddings=True,
     auto_close=True,

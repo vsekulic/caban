@@ -205,9 +205,8 @@ calcium traces (*C*) and their deconvolved activity traces (*S*) were extracted 
 CNMF-E implementation (⟨version and parameter set⟩; Fig. 2b). Cells were registered across
 sessions using Minian's cross-registration output, and cross-session correspondence was taken from
 the registration table directly by row position; no analysis matched cells across sessions by
-within-session identifier. An automated quality-control pass, applied at load, excluded ROIs
-failing right-skewness, hyperactivity/sparsity, plateau-artifact or minimum-event-count criteria
-(thresholds: skewness ≥ 1.5, plateau ≤ 15 s, ≥ 3 detected peaks).
+within-session identifier. Every ROI identified by Minian was analysed; no cell-quality filter was
+applied.
 
 ### Calcium event detection and measurement
 
@@ -242,10 +241,10 @@ beginning at shock offset. The 2 s shock itself was excluded from all models: at
 event rates, expected counts in a 2 s window are dominated by counting noise (P(zero events per
 cell) 67–91% at 0.05–0.2 Hz).
 
-Because the trace interval on the first trial was 15 s rather than 20 s, analyses were restricted
-for each animal to trials in which all three windows were present at the full 20 s duration,
-determined from each window's measured exposure rather than from a trial index (3–4 of 5 trials
-per animal). One window was accepted short: one control animal's last post-shock window, whose
+All conditioning trials were used. The trace interval on the first trial is 15 s rather than 20 s;
+each window's exposure is its measured duration, so the pooled trace window is 95 s against 100 s
+for the pre-tone and post-shock windows. A trial was left out only where one of its windows was not
+recorded (4–5 of 5 trials per animal). One window was accepted short: one control animal's last post-shock window, whose
 recording stopped 13 frames (0.65 s) before its end, was kept at 387 of 400 frames, its exposure
 counted as imaged. **Both outcomes were computed from that same set of animal × trial windows**, so the
 amplitude and rate rows of Fig. 2i provably describe the same animals, epochs and trials.

@@ -122,27 +122,6 @@ RESPONSE_EPOCHS = ('tone', 'trace', 'shock', 'post_shock')
 REFERENCE_EPOCH = 'tone'
 REFERENCE_GROUP = 'mCherry'
 
-def nominal_trace_seconds(session, trial_idx):
-    """The trial's trace-interval length in seconds, from the session's DEFINED protocol times.
-
-        shock_onsets_def[t] - (tone_onsets_def[t] + tone_duration)
-
-    ** Exact, and deliberately not measured from frame numbers. ** The protocol times are
-    declared outright in TraceFearCondSession.__init__ (``tone_onsets_def``, ``tone_duration``,
-    ``shock_onsets_def``, ``shock_duration``); ``find_exp_boundaries`` then converts each one to
-    a frame by snapping it to the nearest miniscope timestamp. That snapping is what makes a
-    declared 20 s interval span 396 frames (19.8 s) rather than 400 -- it is quantization in the
-    lookup, not a property of the trial.
-
-    Asking the FRAMES how long the trace is therefore poses a question the definitions already
-    answer exactly, and forces a tolerance to absorb the resulting jitter. Asking the
-    DEFINITIONS gives 15 s on the acquisition trial and 20 s on the rest, as integers, so the
-    retention rule needs no tolerance at all. This still reads the session's own timing rather
-    than hard-coding a trial index, so it stays correct if the protocol changes.
-    """
-    return float(session.shock_onsets_def[trial_idx]
-                 - (session.tone_onsets_def[trial_idx] + session.tone_duration))
-
 # Signals, with the division of labour described in the module docstring. This is not an
 # open-ended bake-off: the primary signal produces the panels, the confirmatory one
 # produces a side-by-side contrast table.
@@ -377,17 +356,14 @@ def _index_window(session, epoch, trial_idx, window_seconds, n_frames):
 def retained_trials(session):
     """(retained trial indices, per-trial rejection reasons) for one conditioning session.
 
-    A trial is retained only when EVERY window this analysis needs is completely present:
-    the 20 s pre-tone baseline, the tone, the FULL 20 s trace interval, the shock, and a
-    complete 20 s post-shock window. This is the exposure-matched trial set the population
-    conditioning analysis uses, and it drops trial 1 as a CONSEQUENCE of the rule rather
-    than as a special case -- trial 1's trace interval is 15 s, not 20 s (its tone onset
-    was set to 185 s rather than 180 s; see epoch_analysis.TRACE_MATCHED_WINDOW_S).
+    A trial is retained when every window this analysis needs is present: the 20 s pre-tone
+    baseline, the tone, the trace interval, the shock, and a complete 20 s post-shock window.
+    Only a recording that ends before a trial's windows does lose that trial.
 
-    Trial 1 is deliberately NOT recovered by truncating every trace to a common 15 s. It is
-    biologically an ACQUISITION trial preceding the first US, and the final 5 s of the
-    later trace intervals -- immediately before shock onset -- is exactly where an
-    anticipatory signal would live.
+    ** Every trial is used, the first one included (VS, 2026-10-13: do not throw away data). **
+    The first trial's trace interval is 15 s rather than 20 s (its tone onset was set to 185 s
+    rather than 180 s); the index is a window MEAN, so its trace is simply averaged over its own
+    15 s. It is not treated differently anywhere.
 
     ** The post-shock fit is queried through the 'iti' window, not by calling for
     'post_shock' and catching its exception. ** ``get_epoch_frames`` RAISES for
@@ -403,13 +379,6 @@ def retained_trials(session):
     for trial_idx in session.periods:
         why = []
 
-        # The one epoch whose declared length varies across trials. Exact, from the protocol
-        # definitions -- see nominal_trace_seconds for why this is not measured from frames.
-        trace_s = nominal_trace_seconds(session, trial_idx)
-        if trace_s < TRACE_MATCHED_WINDOW_S:
-            why.append(f'declared trace interval is {trace_s:.0f} s, short of the '
-                       f'{TRACE_MATCHED_WINDOW_S:.0f} s exposure-matched window')
-
         # The remaining windows are checked for PRESENCE only, never for length. 'tone' and
         # 'shock' have fixed declared durations (tone_duration, shock_duration) so their length
         # is not in question, and 'pre_tone_matched' returns None precisely when it does not fit.
@@ -417,7 +386,7 @@ def retained_trials(session):
         # timestamp snapping, which is immaterial here: the endpoint is a window MEAN, not a
         # count or a rate, so it is not exposure-scaled. Realised spans are still written to the
         # coverage table, so a genuinely degenerate window stays visible.
-        for epoch in (BASELINE_EPOCH, 'tone', 'shock'):
+        for epoch in (BASELINE_EPOCH, 'tone', 'trace', 'shock'):
             if get_epoch_frames(session, epoch, trial_idx) is None:
                 why.append(f'{epoch} window is absent, empty or inverted')
 
@@ -896,9 +865,9 @@ def plot_epoch_modulation_superplot(df_cell, df_mouse, contrasts, omnibus, out_p
 def split_trials(trials):
     """Two disjoint trial halves, (A, B) = (even-position, odd-position) of ``trials``.
 
-    With the usual 4 retained conditioning trials [1,2,3,4] this is A=[1,3], B=[2,4]. A mouse
-    retaining only 3 gives A=[1,3], B=[2] -- thinner, but still disjoint, which is the property
-    every held-out use rests on (panel K's sort, ``epoch_sequence``). Raises if either half is
+    With the 5 conditioning trials [0,1,2,3,4] this is A=[0,2,4], B=[1,3]; G09's 4 give A=[0,2],
+    B=[1,3]. Disjoint halves are the property every held-out use rests on (panel K's sort,
+    ``epoch_sequence``). Raises if either half is
     empty, since a one-sided split cannot support a cross-validated statistic.
     """
     trials = list(trials)
@@ -1012,7 +981,8 @@ def plot_modulation_heatmaps(group_mats, group_sort_values, time_axis, out_path,
     axs.flat[0].set_ylabel(ylabel)
     fig.suptitle(title or (f'Tone-aligned per-cell activity ({signal}; standardized once per '
                            f'cell over the session)'), size='medium')
-    fig.subplots_adjust(left=0.06, right=0.98, bottom=0.13, top=0.86, wspace=0.15)
+    fig.subplots_adjust(left=0.06, right=0.98, bottom=0.13,
+                        top=0.80 if title and '\n' in title else 0.86, wspace=0.15)
     save_fig(fig, out_path)
     if auto_close:
         plt.close(fig)
@@ -3869,8 +3839,8 @@ def verify_cell_selectivity_synthetic(seed=0, n_calibration=200, verbose=True):
 # a correlation across cells ignores (center_within_mouse would be a no-op here; statistics review
 # 2026-10-11).
 #
-# Every balanced split is used, not one: with 4 trials there are exactly 3 splits into 2 + 2 (with
-# 3 trials, 3 splits into 2 + 1), and the per-mouse value is their mean on the Fisher-z scale. This
+# Every balanced split is used, not one: with 5 trials there are 10 splits into 2 + 3 (G09's 4
+# trials: 3 splits into 2 + 2), and the per-mouse value is their mean on the Fisher-z scale. This
 # is the usual all-splits form of split-half reliability; it removes the arbitrariness of one
 # odd/even split. No Spearman-Brown step-up: the value describes half-trial averages as they are.
 #
@@ -3892,7 +3862,7 @@ _FISHER_CLIP = 0.999999
 def balanced_splits(trials):
     """Every split of ``trials`` into two halves as equal as possible, each unordered split once.
 
-    4 trials: the 3 splits into 2 + 2. 3 trials: the 3 splits into 1 + 2.
+    5 trials: the 10 splits into 2 + 3. 4 trials: the 3 splits into 2 + 2.
     """
     trials = sorted(int(t) for t in trials)
     if len(trials) < 2:
@@ -4004,7 +3974,7 @@ def split_half_cohort_tests(df_mouse):
     return out
 
 
-def format_split_half_report(signal, df_mouse, cohort, contrasts, sensitivity=None):
+def format_split_half_report(signal, df_mouse, cohort, contrasts):
     lines = [f'Split-half stability of relative per-cell response profiles ({signal})', '',
              'Per mouse and epoch: Spearman r across cells between the two trial halves\' means of '
              'the index, averaged',
@@ -4037,20 +4007,66 @@ def format_split_half_report(signal, df_mouse, cohort, contrasts, sensitivity=No
         lines.append(f'  {r["epoch"]:>10} {r["comparison"]:<16}: {r["estimate"]:+.3f} '
                      f'[{r["ci_low_welch"]:+.3f}, {r["ci_high_welch"]:+.3f}], exact P = '
                      f'{r["p_exact"]:.3g}{holm} ({r["n_relabelings"]} relabelings)')
-    if sensitivity is not None:
-        dropped, sens_cohort, sens_contrasts = sensitivity
-        lines += ['', f'Sensitivity: without {", ".join(dropped)} (odd number of retained trials, '
-                      f'so 1 + 2 splits):']
-        for facet in (SPLIT_HALF_ALL, SPLIT_HALF_PROFILE):
-            c = sens_cohort.set_index('epoch').loc[facet]
-            k = sens_contrasts[(sens_contrasts['epoch'] == facet) & sens_contrasts['in_family']]
-            lines.append(f'  {facet:>10}: r = {c["rho_of_mean_z"]:+.3f}, exact P = {c["p_exact"]:.3g}; '
-                         + '; '.join(f'{r["comparison"]} {r["estimate"]:+.3f}, Holm {r["p_holm"]:.3g}'
-                                     for _, r in k.iterrows()))
     n_cells = df_mouse[df_mouse['epoch'] == SPLIT_HALF_ALL].set_index('mouse')['n_cells']
     lines += ['', f'Cells per mouse: median {int(n_cells.median())}, range {int(n_cells.min())}-'
                   f'{int(n_cells.max())}; splits per mouse: '
                   f'{sorted(df_mouse["n_splits"].unique().tolist())}']
+    return '\n'.join(lines) + '\n'
+
+
+def population_index_by_trial(df_trial):
+    """Per (mouse, group, trial, epoch): the mean and median index over the mouse's cells.
+
+    A diagnostic for the split-half lane (2026-10-13): a trial whose POPULATION response differs
+    in sign from the others makes cells that follow the population strongly swap places between the
+    halves, which drives the split-half correlation negative in every split containing it.
+    ``protocol_trial`` is the 1-based trial of the protocol (analysis trial 0 is protocol trial 1,
+    is the first trial).
+    """
+    out = (df_trial.groupby(['mouse', 'group', 'trial', 'epoch'], observed=True, sort=False)['index']
+           .agg(mean='mean', median='median').reset_index())
+    out.insert(3, 'protocol_trial', out['trial'] + 1)
+    return out
+
+
+def stability_leaving_one_trial_out(df_trial):
+    """Per-mouse split-half stability recomputed without each retained trial in turn.
+
+    Returns the ``summarize_split_half`` per-mouse table with ``left_out`` (analysis trial) and
+    ``left_out_protocol_trial`` columns. With 5 trials, 4 remain (3 splits of 2 + 2); G09's 4 leave
+    3 (3 splits of 1 + 2). If one trial drives a pattern, the rows that leave it out lose it.
+    """
+    frames = []
+    for k in sorted(int(t) for t in df_trial['trial'].unique()):
+        rest = df_trial[df_trial['trial'] != k]
+        df_mouse, _ = summarize_split_half(split_half_stability(rest))
+        frames.append(df_mouse.assign(left_out=k, left_out_protocol_trial=k + 1))
+    return pd.concat(frames, ignore_index=True)
+
+
+def format_trial_diagnostics(population, loo):
+    """Report section: the population index per trial, and stability leaving each trial out."""
+    lines = ['', 'Diagnostics (2026-10-13): which trial drives the per-epoch values?',
+             'Trials are numbered as in the protocol (1-5).', '',
+             'Population index per trial (mean over cells, then over the group\'s mice):']
+    for epoch in ('tone', 'trace'):
+        tab = (population[population['epoch'] == epoch]
+               .groupby(['group', 'protocol_trial'], observed=True)['mean'].mean().unstack())
+        lines.append(f'  {epoch}:')
+        for g in DREADD_DISPLAY_ORDER:
+            if g in tab.index:
+                lines.append(f'    {GROUP_LABELS[g]:>4}: ' + '  '.join(
+                    f'T{int(t)} {v:+.3f}' for t, v in tab.loc[g].dropna().items()))
+    lines += ['', 'Split-half r leaving one trial out (r of the group\'s mean z):']
+    for facet in (SPLIT_HALF_ALL, SPLIT_HALF_PROFILE, 'tone', 'trace'):
+        sub = loo[loo['epoch'] == facet]
+        tab = (sub.groupby(['group', 'left_out_protocol_trial'], observed=True)['value'].mean()
+               .unstack())
+        lines.append(f'  {facet}:')
+        for g in DREADD_DISPLAY_ORDER:
+            if g in tab.index:
+                lines.append(f'    {GROUP_LABELS[g]:>4}: ' + '  '.join(
+                    f'without T{int(t)} {np.tanh(v):+.3f}' for t, v in tab.loc[g].dropna().items()))
     return '\n'.join(lines) + '\n'
 
 
@@ -4068,29 +4084,22 @@ def run_split_half_stability_lane(sig_dir, signal, df_trial, auto_close=True, ve
     df_split = split_half_stability(df_trial)
     df_mouse, df_cloud = summarize_split_half(df_split)
 
-    def infer(table):
-        analysed = {g: sorted(table.loc[table['group'] == g, 'mouse'].unique())
-                    for g in GROUP_ORDER if (table['group'] == g).any()}
-        return (split_half_cohort_tests(table),
-                selectivity_group_contrasts(table, analysed, facets=SPLIT_HALF_FACETS))
-
-    cohort, contrasts = infer(df_mouse)
-    # Mice with an odd trial count (G09: 3) get 1 + 2 splits, noisier than 2 + 2; re-run without
-    # them (statistics review, 2026-10-11).
-    odd = sorted(df_mouse.loc[df_mouse['n_trials'] % 2 == 1, 'mouse'].unique())
-    sensitivity = None
-    if odd:
-        sens_cohort, sens_contrasts = infer(df_mouse[~df_mouse['mouse'].isin(odd)])
-        sensitivity = (odd, sens_cohort, sens_contrasts)
-        sens_contrasts.to_csv(os.path.join(tables_dir, 'group_contrasts_without_odd_trial_mice.csv'),
-                              index=False)
+    analysed = {g: sorted(df_mouse.loc[df_mouse['group'] == g, 'mouse'].unique())
+                for g in GROUP_ORDER if (df_mouse['group'] == g).any()}
+    cohort = split_half_cohort_tests(df_mouse)
+    contrasts = selectivity_group_contrasts(df_mouse, analysed, facets=SPLIT_HALF_FACETS)
 
     df_split.to_csv(os.path.join(tables_dir, 'per_split_correlations.csv'), index=False)
     df_mouse.to_csv(os.path.join(tables_dir, 'per_mouse_stability.csv'), index=False)
     cohort.to_csv(os.path.join(tables_dir, 'cohort_tests.csv'), index=False)
     contrasts.to_csv(os.path.join(tables_dir, 'group_contrasts.csv'), index=False)
+    population = population_index_by_trial(df_trial)
+    loo = stability_leaving_one_trial_out(df_trial)
+    population.to_csv(os.path.join(tables_dir, 'population_index_by_trial.csv'), index=False)
+    loo.to_csv(os.path.join(tables_dir, 'stability_leaving_one_trial_out.csv'), index=False)
     write_text(os.path.join(stats_dir, 'split_half_report.txt'),
-               format_split_half_report(signal, df_mouse, cohort, contrasts, sensitivity))
+               format_split_half_report(signal, df_mouse, cohort, contrasts)
+               + format_trial_diagnostics(population, loo))
 
     pooled = cohort.set_index('epoch').loc[SPLIT_HALF_ALL]
     n_mice = df_mouse['mouse'].nunique()
@@ -4418,8 +4427,8 @@ def run_epoch_modulation(PLOTS_DIR, mice_per_group, TFC_cond, mapping='full',
             signal=signal, auto_close=auto_close,
             ylabel='Cell (sorted by trace modulation\non the other trials)',
             title=(f'Tone-aligned per-cell activity on held-out trials ({signal}): rows sorted by '
-                   f'the trace index of trials 1, 3;\nshown: the mean of trials 2, 4 (G09, 3 '
-                   f'trials: 2). Standardized once per cell over the session.'))
+                   f'the trace index of trials 1, 3, 5 (G09: 1, 3);\nshown: the mean of trials 2, '
+                   f'4. Standardized once per cell over the session.'))
         plot_modulation_heatmaps(
             group_mats, group_sort, time_axis,
             os.path.join(sig_dir, 'panel_K_insample_tone_aligned_heatmaps.png'),

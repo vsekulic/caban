@@ -1336,6 +1336,12 @@ def _build_dataset(
             for tb_line in etb.strip().split('\n'):
                 print(f"    {tb_line}")
         print("=" * 80 + "\n")
+        # A mouse that failed to load would be missing from every analysis; stop instead
+        # (VS, 2026-10-14). Diagnostic-montage errors do not touch the data.
+        data_errors = [m for (m, etype, _, _) in _load_errors if etype != 'cell_filter_montage']
+        if data_errors:
+            raise RuntimeError(f'load_all_mice: {sorted(set(data_errors))} failed to load (see the '
+                               f'summary above); no analysis may run without them.')
     else:
         print("\n  All mice loaded successfully.\n")
 

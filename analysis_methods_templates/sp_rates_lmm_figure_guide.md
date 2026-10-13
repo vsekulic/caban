@@ -318,10 +318,9 @@ exists: `group_x_trial_interaction`, a member of the secondary BH-FDR family
 between the two columns would be the difference-of-significance fallacy, so there are none to
 compare.
 
-**Amplitude only, and that is not an omission.** The rate analog cannot be drawn honestly at this
-split: rate and fraction active are duration-sensitive and so need exposure-matched trials, which
-drops trial 1 (its trace window is 15 s, not 20 s) — reducing the early column to a single trial.
-Amplitude is a per-event quantity, needs no matching, and keeps every trial.
+**Amplitude only.** Amplitude is a per-event quantity and keeps every trial. (Earlier text said the
+rate analog was not drawn because the exposure-matched trials dropped trial 1; since 2026-10-13
+every trial is kept, so that reason no longer applies.)
 
 Per-mouse trial counts behind the split are in `stats/conditioning_phase_trial_coverage.csv`;
 recordings are ragged, so report them with the estimate.

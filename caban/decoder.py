@@ -5860,6 +5860,14 @@ def build_pretone_mask_TFC(sess, first_n_sec: float = 180.0, use_speed: bool = T
 
     Parameters
     ----------
+    first_n_sec : float
+        For a session with no tones (e.g. Test_A), the period is its first ``first_n_sec`` seconds
+        (180 s by default, the length of the pre-tone period of the tone sessions, whose first tone
+        comes at 180-185 s); frames after it are not used here.
+    use_speed, min_speed :
+        With ``use_speed``, frames slower than ``min_speed`` (cm/s) are removed from the period --
+        the usual restriction of place decoding to running. The fraction removed is printed once
+        per session (VS, 2026-10-14: every exclusion reported).
     encoder_period : str
         ``'pre-tone'`` — frames 0 .. first tone onset (default, original behaviour).
         ``'post-shock'`` — ITI frames after each shock offset and before the
@@ -5930,9 +5938,21 @@ def build_pretone_mask_TFC(sess, first_n_sec: float = 180.0, use_speed: bool = T
         mask[:min(last_pretone_frame, T)] = True
 
     if use_speed:
+        n_period = int(mask.sum())
         mask &= _get_speed_mask(sess, min_speed=min_speed)[:T]
+        key = (getattr(sess, 'mouse', None), getattr(sess, 'session_type', None), encoder_period,
+               float(min_speed))
+        if key not in _SPEED_MASK_REPORTED:
+            _SPEED_MASK_REPORTED.add(key)
+            removed = n_period - int(mask.sum())
+            print(f'  [speed mask] {key[0]} {key[1]} {encoder_period}: {removed} of {n_period} frames '
+                  f'({100 * removed / max(n_period, 1):.1f}%) below {min_speed} cm/s removed')
 
     return mask
+
+
+# (mouse, session type, period, min_speed) whose speed-mask fraction has been printed.
+_SPEED_MASK_REPORTED = set()
 
 
 def _shuffle_is_enabled(enable_shuffle_control: bool, n_shuffles: int, shuffle_type: str) -> bool:

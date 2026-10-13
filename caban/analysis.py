@@ -2180,6 +2180,10 @@ def plot_firing_rate_changes(PLOTS_DIR, mice_per_group, crossreg_mice, session1,
 
         for m in range(len(mice)):
             mouse = mice[m]
+            if mouse not in session1 or mouse not in session2:
+                # G07 has no Test_B, G15 no Test_B_1wk: this pair of sessions does not exist for it.
+                print(f'  {mouse}: no {"session1" if mouse not in session1 else "session2"} for this pair')
+                continue
             s1 = session1[mouse]
             s2 = session2[mouse]
             crossreg = crossreg_mice[mouse]
@@ -2189,7 +2193,8 @@ def plot_firing_rate_changes(PLOTS_DIR, mice_per_group, crossreg_mice, session1,
             period_s1_length = (period_s1[1] - period_s1[0]) / MINISCOPE_FPS
             period_s2_length = (period_s2[1] - period_s2[0]) / MINISCOPE_FPS
 
-            df_mapping = crossreg.get_mappings_cells(mapping_type=mapping_type)
+            df_mapping = crossreg.get_mappings_cells(
+                mapping_type=mapping_for_available_sessions(crossreg, mapping_type))
             s1_df_col = s1.get_df_col()
             s2_df_col = s2.get_df_col()
             #s1_unit_column = df_mapping[s1.get_df_col()]
@@ -2200,16 +2205,13 @@ def plot_firing_rate_changes(PLOTS_DIR, mice_per_group, crossreg_mice, session1,
             for i in range(len(df_mapping)):
                 cell_s1 = int(float(df_mapping[s1_df_col].iloc[i]))
                 cell_s2 = int(float(df_mapping[s2_df_col].iloc[i]))
-                try:
-                    #s1_idx = np.where(s1.S_zarr['unit_id']==cell_s1)[0][0]
-                    #s2_idx = np.where(s2.S_zarr['unit_id']==cell_s2)[0][0]
-                    s1_idx = np.where(s1.S_idx==cell_s1)[0][0]
-                    s2_idx = np.where(s2.S_idx==cell_s2)[0][0]
-                except IndexError as error:
-                    # sometimes the minian-saved zarr files don't contain the cells from the crossreg mapping;
-                    # so just skip this row
-                    print('***WARNING: could not find {} ({}) or {} ({})'.format(cell_s1, s1.session_type, cell_s2, s2.session_type))
-                    continue
+                # Every mapped unit id exists in its session's output (checked for every published
+                # mapping, scripts/compile_crossreg_groupings.py), so a missing one is an error.
+                hit1, hit2 = np.where(s1.S_idx == cell_s1)[0], np.where(s2.S_idx == cell_s2)[0]
+                if not len(hit1) or not len(hit2):
+                    raise KeyError(f'{mouse}: mapped cell {cell_s1} ({s1.session_type}) or {cell_s2} '
+                                   f'({s2.session_type}) not among the session\'s S units')
+                s1_idx, s2_idx = hit1[0], hit2[0]
                 spikes_in_s1 = s1.S_spikes[s1_idx]
                 spikes_in_s2 = s2.S_spikes[s2_idx]
 
@@ -2711,8 +2713,6 @@ def process_PSTH_hist(PLOTS_DIR, mice_per_group, crossreg_mice, session, mapping
         print('\nin {} {}'.format(group, mice))
         for m in range(len(mice)):
             mouse = mice[m]
-            if mouse in ['G15']:
-                continue
             #if mouse in ['G07', 'G14', 'G15', 'G20', 'G12']:
             #    continue
             print('{} {}'.format(mouse, group))
@@ -2967,7 +2967,7 @@ def process_PSTH_shuffle(PLOTS_DIR, mice_per_group, crossreg_mice, session, mapp
     # PSTH_2 no averaging
     #snippet_len = frames_lookaround + frames_save # frames_lookaround * 2
     #
-    # NB: G15 disabled due to s.C and s.YrA shape mismatch!! Fix then re-instate.
+    # G15 re-instated 2026-10-14: the C/YrA shape mismatch was fixed 2026-09-21 (YrA aligned to S/C at load).
     #
     print('***PSTH_shuffle AVERAGED')
     snippet_len = frames_lookaround * 2
@@ -3003,8 +3003,6 @@ def process_PSTH_shuffle(PLOTS_DIR, mice_per_group, crossreg_mice, session, mapp
         print('\nin {} {}'.format(group, mice))
         for m in range(len(mice)):
             mouse = mice[m]
-            if mouse in ['G15']:
-                continue
             #if mouse in ['G07', 'G14', 'G15', 'G20', 'G12']:
             #    continue
             print('{} {}'.format(mouse, group))
@@ -3369,8 +3367,7 @@ def process_PSTH_shuffle(PLOTS_DIR, mice_per_group, crossreg_mice, session, mapp
     fig, axs = plt.subplots(1, 3, figsize=(12,6), sharey=True, sharex=True)
     for group, ax in zip(mice_per_group.keys(), axs.flat):
         for mouse in mice_per_group[group]:
-            if mouse not in ['G15']:
-                ax.hist(group_percentiles[group][mouse], bins=30, color='skyblue', edgecolor='black')
+            ax.hist(group_percentiles[group][mouse], bins=30, color='skyblue', edgecolor='black')
         ax.set_title('{}'.format(group), size='medium')
     if auto_close:
         plt.close()
@@ -3379,8 +3376,6 @@ def process_PSTH_shuffle(PLOTS_DIR, mice_per_group, crossreg_mice, session, mapp
         plt.figure()
         plt.title('{} velocity-transients'.format(group))
         for m in mice_per_group[group]:
-            if m in ['G15']:
-                continue
             print('{}..'.format(m),end='')
             s=session[m]
             if mapping_type=='full':
@@ -3877,8 +3872,6 @@ def process_PSTH_shuffle_sep(PLOTS_DIR, mice_per_group, crossreg_mice, session, 
         print('\nin {} {}'.format(group, mice))
         for m in range(len(mice)):
             mouse = mice[m]
-            if mouse in ['G15']:
-                continue
             print('{} {}'.format(mouse, group))
             s = session[mouse]
             crossreg = crossreg_mice[mouse]
@@ -4163,8 +4156,6 @@ def process_PSTH_shuffle_sep_S(PLOTS_DIR, mice_per_group, crossreg_mice, session
         print('\nin {} {}'.format(group, mice))
         for m in range(len(mice)):
             mouse = mice[m]
-            if mouse in ['G15']:
-                continue
             print('{} {}'.format(mouse, group))
             s = session[mouse]
             crossreg = crossreg_mice[mouse]
@@ -5311,8 +5302,6 @@ def plot_pf_analyses(PLOTS_DIR, session, mouse_groups, session_str, crossreg=Non
 
     for mouse, sess in session.items():
         group = mouse_groups[mouse]
-        if mouse in ['G07', 'G15']:
-            continue
         if group not in processed_groups:
             processed_groups[group] = True
             
@@ -5323,7 +5312,8 @@ def plot_pf_analyses(PLOTS_DIR, session, mouse_groups, session_str, crossreg=Non
         
         pf_keys = list(sess.fm.pf.pf_size.keys()) # pf keys should be the same for all pf-related dicts, so just use this one
         if crossreg:
-            S_i = get_S_indeces_crossreg(sess, crossreg[mouse], mapping)
+            S_i = get_S_indeces_crossreg(sess, crossreg[mouse],
+                                         mapping_for_available_sessions(crossreg[mouse], mapping))
             pf_keys = np.intersect1d(S_i, pf_keys)
 
         # Get length of pf_size as num_pfs
@@ -5516,7 +5506,7 @@ def plot_pf_analyses_within_group(PLOTS_DIR, session_1, session_2, session_3, mo
     if sess_names is None:
         sess_names = ['TFC_cond', 'Test_B', 'Test_B_1wk']
     if skip_mice is None:
-        skip_mice = ['G07', 'G15']
+        skip_mice = []
 
     _default_colours = ['k', 'gray', 'gainsboro']
     sess_colours = {name: _default_colours[i] for i, name in enumerate(sess_names)}
@@ -5538,6 +5528,10 @@ def plot_pf_analyses_within_group(PLOTS_DIR, session_1, session_2, session_3, mo
             meas_spatial_selectivity[group] = {}
             
         for session, sess_name in zip([session_1, session_2, session_3], sess_names):
+            if mouse not in session:
+                # A session this mouse does not have (G07: Test_B not recorded; G15: no *_1wk).
+                print(f'  {mouse} has no {sess_name} session; its other sessions are kept')
+                continue
             sess = session[mouse]
             if sess_name not in meas_num_pfs[group].keys():
                 meas_num_pfs[group][sess_name] = np.array([])
@@ -5547,7 +5541,8 @@ def plot_pf_analyses_within_group(PLOTS_DIR, session_1, session_2, session_3, mo
             
             pf_keys = list(sess.fm.pf.pf_size.keys()) # pf keys should be the same for all pf-related dicts, so just use this one
             if crossreg:
-                S_i = get_S_indeces_crossreg(sess, crossreg[mouse], mapping)
+                S_i = get_S_indeces_crossreg(sess, crossreg[mouse],
+                                             mapping_for_available_sessions(crossreg[mouse], mapping))
                 pf_keys = np.intersect1d(S_i, pf_keys)
 
             # Get length of pf_size as num_pfs

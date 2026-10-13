@@ -84,7 +84,6 @@ MOUSE_ELEV_AZIM = {
     "G21": {"Time": (3, 25),   "Location": (3, 25)},
 }
 
-EXCLUDE_MICE_CROSSREG = ("G07", "G15")
 LOC_TRUNCATE_MICE = ("G09", "G21")  # Miniscope chunk 19.avi missing
 
 MARKER_SIZE = 2
@@ -575,8 +574,6 @@ class CrossregPCA:
 
     def __init__(self, sessions, mouse, mouse_group, crossreg, mapping,
                  normalize=False, binarize=False):
-        if mouse in EXCLUDE_MICE_CROSSREG:
-            raise ValueError(f"Mouse {mouse} is excluded from crossreg analyses.")
         for name in _SESS_NAMES:
             if name not in sessions:
                 raise KeyError(f"sessions missing required key {name!r}")
@@ -1352,8 +1349,9 @@ def run_population_pca_pipeline(
       4. ``CrossregFullPCA(event_window='posttoneshock')`` (method 2) →
          ``PCA_crossreg_full_posttoneshock[_engram]/``
 
-    Mice in ``EXCLUDE_MICE_CROSSREG`` (G07, G15) are skipped for crossreg
-    analyses but are still included in pipeline (1).
+    Pipelines (2-4) are defined on all three sessions (TFC_cond, Test_B, Test_B_1wk); a mouse
+    missing one of them (G07: no Test_B; G15: no Test_B_1wk) is left out of those, with a printed
+    note, and is still in pipeline (1). Until 2026-10-14 this was a hard-coded list of the two mice.
     """
     os.makedirs(PLOTS_DIR, exist_ok=True)
     saver_avg = _make_saver(NPY_SAVE_PATH, _CACHE_SUBDIR_AVG)
@@ -1386,12 +1384,12 @@ def run_population_pca_pipeline(
 
     # --- (2-4) crossreg pipelines -----------------------------------------
     for m, group in mouse_groups.items():
-        if m in EXCLUDE_MICE_CROSSREG:
+        missing = [name for src, name in ((TFC_cond, "TFC_cond"), (Test_B, "Test_B"),
+                                          (Test_B_1wk, "Test_B_1wk")) if m not in src]
+        if missing:
+            print(f"*** PCA crossreg: {m} has no {missing} session, so no three-session "
+                  f"cross-registered PCA for it", flush=True)
             continue
-        for src, name in ((TFC_cond, "TFC_cond"), (Test_B, "Test_B"),
-                          (Test_B_1wk, "Test_B_1wk")):
-            if m not in src:
-                raise KeyError(f"{name} is missing mouse {m!r}")
         sessions = {
             "TFC_cond": TFC_cond[m],
             "Test_B": Test_B[m],

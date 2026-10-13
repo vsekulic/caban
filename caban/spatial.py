@@ -764,7 +764,8 @@ def _build_pretone_mask(sess, first_n_sec=180.0):
     """
     Build a boolean mask for the pre-tone period (first *first_n_sec* seconds).
     For TFC_cond: uses tone_onsets[0] if available.
-    For Test_A/Test_A_1wk: no tones, uses first_n_sec directly.
+    For Test_A/Test_A_1wk: no tones, uses first_n_sec directly (180 s: the length of the
+    pre-tone period of the tone sessions, whose first tone comes at 180-185 s).
     For Test_B/Test_B_1wk: uses tone_onsets[0] if available.
     No speed filtering — occupancy itself handles spatial sampling.
     """

@@ -58,7 +58,6 @@ from caban.decoder import (
 from caban.population import (
     run_population_pca_pipeline,
     run_pca_state_metrics_from_results,
-    EXCLUDE_MICE_CROSSREG as _PCA_EXCLUDE,
 )
 from caban.isomap import run_isomap_pipeline
 from caban.epoch_analysis import (
@@ -177,13 +176,11 @@ def engram_idx_by_mouse(ds: SimpleNamespace, cfg: PipelineConfig,
                         mode: str) -> dict:
     """Build ``{mouse: ndarray of engram row indices}`` for a given mode.
 
-    Mirrors the inline helper in main.py L5749. Honors the population-PCA
-    exclude list from ``caban.population.EXCLUDE_MICE_CROSSREG``.
+    Mirrors the inline helper in main.py L5749. Every mouse; the PCA pipeline itself leaves a
+    mouse out of the three-session analyses when it lacks one of the sessions.
     """
     out = {}
     for m in ds.mouse_groups:
-        if m in _PCA_EXCLUDE:
-            continue
         if m not in ds.engram_id or cfg.which_engram not in ds.engram_id[m]:
             continue
         out[m] = np.where(ds.engram_id[m][cfg.which_engram][mode])[0]

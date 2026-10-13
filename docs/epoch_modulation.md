@@ -119,43 +119,17 @@ is therefore not exposure-scaled.
 > `get_epoch_frames`, `retained_trials` here and `sp_rates_lmm.restrict_to_exposure_matched_trials`, so
 > G09 keeps that trial everywhere, as in the published run.
 
-### Trial retention uses the DECLARED protocol times, and needs no tolerance
+### Every trial is used (VS, 2026-10-13: do not throw away data)
 
-`TraceFearCondSession.__init__` declares the timing outright — `tone_onsets_def = [185, 420, 660,
-900, 1140]`, `tone_duration = 20`, `shock_onsets_def = [220, 460, 700, 940, 1180]`,
-`shock_duration = 2`. So the trace interval is exactly
+All five conditioning trials are used (four for G09, whose imaging ended before the fifth). The
+first trial's trace interval is 15 s rather than 20 s (`tone_onsets_def[0] = 185` instead of 180);
+the index is a window **mean**, so its trace is averaged over its own 15 s, and it is not treated
+differently anywhere. A trial is lost only when the recording lacks one of its windows (presence
+checks in `retained_trials`; the post-shock window through the `iti` window, since
+`get_epoch_frames` raises for a truncated `post_shock`).
 
-```
-nominal_trace_seconds = shock_onsets_def[t] − (tone_onsets_def[t] + tone_duration)
-```
-
-= **15 s on trial 1** and **20 s on trials 2–5**, as integers.
-
-`find_exp_boundaries` then converts each declared time to a frame by snapping it to the nearest
-miniscope timestamp. **That snapping is why a declared 20 s interval spans 396 frames (19.8 s), not
-400.** Asking the *frames* how long the trace is therefore poses a question the definitions already
-answer exactly, and forces a tolerance to absorb the resulting jitter. Asking the *definitions* needs
-none. This still reads the session's own timing rather than hard-coding a trial index, so it stays
-correct if the protocol changes.
-
-> **Do not reintroduce a duration tolerance here.** An earlier version required a measured 20.0 s and
-> rejected every trial of every mouse; the fix after that copied `sp_rates_lmm`'s `tol_seconds=0.5`,
-> which worked but was absorbing jitter of its own making. That function works from measured
-> `exposure_seconds` in an event table and has no choice. Here the declarations are available
-> directly.
-
-Everything else is a **presence** check, never a length check: `tone` and `shock` have fixed declared
-durations, `pre_tone_matched` returns `None` exactly when it does not fit, and `post_shock` is
-checked through the **`iti`** window. That indirection is load-bearing — `get_epoch_frames` *raises*
-for `post_shock` when the window runs past the end of a trial (by design; the population analysis
-requires every trial to supply it), so querying it directly aborts the run on a truncated final trial
-before that trial can be dropped. Since `post_shock_onsets[i] == shock_offsets[i]`
-(`sessions.py:1337,1340`), "the 20 s post-shock window fits" is precisely "the ITI is ≥ 20 s".
-
-Trial 1 is excluded as a consequence of the rule, not as a special case. It is deliberately **not**
-recovered by truncating every trace to a common 15 s: it is an acquisition trial preceding the first
-US, and the final 5 s of the later trace intervals — immediately before shock onset — is where an
-anticipatory signal would live.
+> Until 2026-10-13 a trace-length rule dropped the first trial from every lane (and from
+> `sp_rates_lmm`'s exposure-matched set). Every result in Parts Y and R was computed without it.
 
 The index is computed per trial and the trial dimension is preserved until summarization; each cell's
 value is the **median across its retained trials**, so one anomalous trial cannot define a neuron.
