@@ -2528,8 +2528,8 @@ def fit_and_report_epoch_interaction(df_fine, stats_dir, mice_per_group, coverag
         'SECONDARY: joint group x epoch specificity tests (mouse-label permutation).',
         '',
         f'Epochs: {reference_epoch} (reference) vs {", ".join(response_epochs)}. Every window is '
-        f'{TRACE_MATCHED_WINDOW_S:g} s and every contributing trial carries all of them at that '
-        f'length (restrict_to_exposure_matched_trials).',
+        f'{TRACE_MATCHED_WINDOW_S:g} s except the first trial\'s trace (15 s, by protocol timing), '
+        f'and every trial carries all of them (restrict_to_exposure_matched_trials).',
         f'Trial coverage per mouse: {coverage["n_trials_matched"].min()}-'
         f'{coverage["n_trials_matched"].max()} of {coverage["n_trials_total"].max()}.',
         '',
@@ -9866,8 +9866,9 @@ def run_sp_rates_lmm(PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond
     plot_amplitude_p90(df_trace_amp, out_dir)
 
     # ---- Decomposition (fraction active, rate|active, overall rate, amplitude, total S/s) ------
-    # One figure per exposure-matched epoch. The three windows are all TRACE_MATCHED_WINDOW_S
-    # long, which is what makes their panels comparable at all: fraction-active and event rate
+    # One figure per exposure-matched epoch. The three windows are TRACE_MATCHED_WINDOW_S long
+    # (the first trial's trace excepted: 15 s, kept since 2026-10-13), which is what makes their
+    # panels comparable at all: fraction-active and event rate
     # both scale with window length at a fixed underlying rate, so a 35 s baseline next to a
     # 20 s response window would have shown an epoch difference that was pure exposure. The
     # unsuffixed 'decomposition' filename stays on the trace epoch so existing references to it
