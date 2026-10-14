@@ -465,7 +465,8 @@ def load_all_mice(
 def _reroot_savers(ds, npy_root):
     """Point every cache Saver held by the loaded ``ds`` at ``npy_root``.
 
-    Sessions and cross-registration mappings keep a Saver with an ABSOLUTE folder, pickled into
+    Sessions and cross-registration mappings keep Savers, and plain path strings such as a
+    session's ``savepath``, with an ABSOLUTE folder, pickled into
     ds_cache.pkl when the cache was built. The caches moved from the Mac's drive to FUTROLA
     (2026-10), so arrays rebuilt on demand (S_full, C_full, YrA, A) were looked for in the old
     place. Each folder keeps its path below ``npy_files``.
@@ -473,27 +474,42 @@ def _reroot_savers(ds, npy_root):
     marker = os.sep + 'npy_files' + os.sep
     seen, changed = set(), 0
 
+    def rerooted(old):
+        """``old`` moved under npy_root, or None when it is not a path into an npy_files tree."""
+        if not isinstance(old, str) or old.startswith(npy_root):
+            return None
+        norm = old.replace('\\', os.sep)
+        if marker not in norm + os.sep:
+            return None
+        rel = (norm + os.sep).split(marker, 1)[1].rstrip(os.sep)
+        return os.path.join(npy_root, rel) if rel else npy_root
+
     def fix(saver):
         nonlocal changed
         for attr in ('parent_path', 'save_path'):
-            old = getattr(saver, attr)
-            if old.startswith(npy_root):
-                continue
-            norm = old.replace('\\', os.sep)
-            if marker not in norm + os.sep:
-                raise RuntimeError(f'_reroot_savers: cannot place cache folder {old!r} under {npy_root}')
-            rel = (norm + os.sep).split(marker, 1)[1].rstrip(os.sep)
-            setattr(saver, attr, os.path.join(npy_root, rel) if rel else npy_root)
-            changed += 1
+            new = rerooted(getattr(saver, attr))
+            if new is None and not getattr(saver, attr).startswith(npy_root):
+                raise RuntimeError(f'_reroot_savers: cannot place cache folder '
+                                   f'{getattr(saver, attr)!r} under {npy_root}')
+            if new is not None:
+                setattr(saver, attr, new)
+                changed += 1
         os.makedirs(saver.save_path, exist_ok=True)  # as Saver.__init__ does
 
     def visit(obj):
+        nonlocal changed
         if id(obj) in seen or not hasattr(obj, '__dict__'):
             return
         seen.add(id(obj))
-        for value in vars(obj).values():
+        for name, value in list(vars(obj).items()):
             if isinstance(value, Saver):  # noqa: F405
                 fix(value)
+            else:
+                # Plain path strings into the cache, e.g. a session's ``savepath`` (place fields).
+                new = rerooted(value)
+                if new is not None:
+                    setattr(obj, name, new)
+                    changed += 1
 
     for value in vars(ds).values():
         if isinstance(value, dict):
