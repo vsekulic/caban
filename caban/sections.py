@@ -30,6 +30,7 @@ from caban.sessions import *   # noqa: F401,F403
 from caban.analysis import *   # noqa: F401,F403
 from caban.decoder import *    # noqa: F401,F403
 from caban.decoder import _PVT_MODE_LABEL_TO_KEY, _copy_analysis_methods_template  # noqa: F401
+from caban.figure2_composite import build_figure2_composite
 from caban.engram import ENGRAM_REFERENCE
 from caban.population import run_population_pca_pipeline, run_pca_state_metrics_from_results
 from caban.isomap import run_isomap_pipeline
@@ -1760,6 +1761,13 @@ def run_epoch_modulation(ds, cfg):
 
 
 # ---------------------------------------------------------------------------
+def run_figure2_composite(ds, cfg):
+    """Figure 2 assembled from the panels the sections above wrote (caban.figure2_composite):
+    ``<PAPER_DIR>/fig2/fig2.png`` (600 dpi) and ``fig2.svg``. Run after the Figure 2 sections."""
+    out_dir = os.path.join(cfg.PAPER_DIR, 'fig2')
+    return build_figure2_composite(cfg.PLOTS_DIR, out_dir)
+
+
 def run_epoch_sequence(ds, cfg):
     """Cross-validated test of sequential (time-cell-like) activity during conditioning.
 
