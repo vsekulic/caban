@@ -1,3 +1,5 @@
+> **Superseded 2026-10-15 by [handover_figure2_nature_and_next_steps.md](handover_figure2_nature_and_next_steps.md)** (its §0 rules still apply).
+
 # Handover (2026-10-11): after the Minian batch — the left-out sessions run, cross-registration, Figure 2
 
 For the next chat. **Read this whole file first**, then the documents in §2 as needed. It supersedes
