@@ -425,8 +425,8 @@ def load_all_mice(
         print(f'*** PLOTS_DIR: {cfg.PLOTS_DIR}')
         print(f'*** PAPER_DIR: {cfg.PAPER_DIR}')
         ds.cache_format_version = CACHE_FORMAT_VERSION
-        if not hasattr(ds, 'NPY_SAVE_PATH'):
-            ds.NPY_SAVE_PATH = NPY_SAVE_PATH  # noqa: F405
+        ds.NPY_SAVE_PATH = NPY_SAVE_PATH  # noqa: F405
+        _reroot_savers(ds, NPY_SAVE_PATH)  # noqa: F405
         if not is_versioned:
             print('rewriting legacy cache into compact format...')
             _dump_cache_payload(cache_path, ds)
@@ -462,6 +462,49 @@ def load_all_mice(
 
 
 # ===========================================================================
+def _reroot_savers(ds, npy_root):
+    """Point every cache Saver held by the loaded ``ds`` at ``npy_root``.
+
+    Sessions and cross-registration mappings keep a Saver with an ABSOLUTE folder, pickled into
+    ds_cache.pkl when the cache was built. The caches moved from the Mac's drive to FUTROLA
+    (2026-10), so arrays rebuilt on demand (S_full, C_full, YrA, A) were looked for in the old
+    place. Each folder keeps its path below ``npy_files``.
+    """
+    marker = os.sep + 'npy_files' + os.sep
+    seen, changed = set(), 0
+
+    def fix(saver):
+        nonlocal changed
+        for attr in ('parent_path', 'save_path'):
+            old = getattr(saver, attr)
+            if old.startswith(npy_root):
+                continue
+            norm = old.replace('\\', os.sep)
+            if marker not in norm + os.sep:
+                raise RuntimeError(f'_reroot_savers: cannot place cache folder {old!r} under {npy_root}')
+            rel = (norm + os.sep).split(marker, 1)[1].rstrip(os.sep)
+            setattr(saver, attr, os.path.join(npy_root, rel) if rel else npy_root)
+            changed += 1
+        os.makedirs(saver.save_path, exist_ok=True)  # as Saver.__init__ does
+
+    def visit(obj):
+        if id(obj) in seen or not hasattr(obj, '__dict__'):
+            return
+        seen.add(id(obj))
+        for value in vars(obj).values():
+            if isinstance(value, Saver):  # noqa: F405
+                fix(value)
+
+    for value in vars(ds).values():
+        if isinstance(value, dict):
+            for item in value.values():
+                visit(item)
+        else:
+            visit(value)
+    if changed:
+        print(f'  re-pointed {changed} cache paths at {npy_root}')
+
+
 def _build_dataset(
     cfg: PipelineConfig,
     *,
