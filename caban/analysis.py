@@ -2532,131 +2532,140 @@ def plot_sample_traces2(PLOTS_DIR, mice_to_use, session, paper_dir=None, selecti
         for group, sel in selections.items():
             _require_YrA_traces(session[mice_to_use[group]], sel, group)
 
-    width=8
-    height=3
-    fig = plt.figure(frameon=False)
-    fig.set_size_inches(width,height)
-    ax = plt.Axes(fig, [0., 0., 1., 1.])
-    ax.set_axis_off()
-    fig.add_axes(ax)
+    with nature_style():
+        # Figure 2c, drawn at its size in the composite (Nature style). Groups stacked Ctl, Exc, Inh
+        # from the top (CLAUDE.md display order), named at the right; a 5-s time bar.
+        fig = plt.figure(figsize=panel_figsize('c'))
+        ax = fig.add_axes([0.0, 0.08, 0.9, 0.92])
+        ax.set_axis_off()
 
-    if use_global_max_val:
-        trace_max_by_group = {}
-        cell_peak_by_selection = {}
+        if use_global_max_val:
+            trace_max_by_group = {}
+            cell_peak_by_selection = {}
 
-        for group, sel in selections.items():
-            m = mice_to_use[group]
-            sess = session[m]
+            for group, sel in selections.items():
+                m = mice_to_use[group]
+                sess = session[m]
 
-            per_selection_maxima = [
-                (
-                    cell_random,
-                    t_idx_random,
-                    np.nanmax(sess.C[cell_random, t_idx_random:t_idx_random+len_trace]),
-                    np.nanmax(sess.S[cell_random, t_idx_random:t_idx_random+len_trace]),
-                    np.nanmax(np.abs((sess.YrA[cell_random, t_idx_random:t_idx_random+len_trace] - np.nanmedian(sess.YrA[cell_random, :])) / np.nanmedian(sess.YrA[cell_random, :]))),
+                per_selection_maxima = [
+                    (
+                        cell_random,
+                        t_idx_random,
+                        np.nanmax(sess.C[cell_random, t_idx_random:t_idx_random+len_trace]),
+                        np.nanmax(sess.S[cell_random, t_idx_random:t_idx_random+len_trace]),
+                        np.nanmax(np.abs((sess.YrA[cell_random, t_idx_random:t_idx_random+len_trace] - np.nanmedian(sess.YrA[cell_random, :])) / np.nanmedian(sess.YrA[cell_random, :]))),
+                    )
+                    for (cell_random, t_idx_random) in sel
+                ]
+
+                if len(per_selection_maxima) == 0:
+                    raise ValueError(f'No selections available for group {group}')
+
+                max_C_group = np.nanmax([vals[2] for vals in per_selection_maxima])
+                max_S_group = np.nanmax([vals[3] for vals in per_selection_maxima])
+                max_YrA_group = np.nanmax([vals[4] for vals in per_selection_maxima])
+
+                if (not np.isfinite(max_C_group)) or (max_C_group <= 0):
+                    raise ValueError(f'Invalid group C max for normalization ({group}): {max_C_group}')
+                if (not np.isfinite(max_S_group)) or (max_S_group <= 0):
+                    raise ValueError(f'Invalid group S max for normalization ({group}): {max_S_group}')
+                if (not np.isfinite(max_YrA_group)) or (max_YrA_group <= 0):
+                    raise ValueError(f'Invalid group YrA max for normalization ({group}): {max_YrA_group}')
+
+                trace_max_by_group[group] = {
+                    'max_C': max_C_group,
+                    'max_S': max_S_group,
+                    'max_YrA': max_YrA_group,
+                }
+
+                for (cell_random, t_idx_random, max_val_C, max_val_S, max_val_YrA) in per_selection_maxima:
+                    cell_peak_by_selection[(group, cell_random, t_idx_random)] = np.nanmax([max_val_C, max_val_S, max_val_YrA])
+
+                print(
+                    f"*** {group} group maxima -> C: {max_C_group}, S: {max_S_group}, YrA: {max_YrA_group}"
                 )
-                for (cell_random, t_idx_random) in sel
-            ]
 
-            if len(per_selection_maxima) == 0:
-                raise ValueError(f'No selections available for group {group}')
+            global_cell_peak_max = np.nanmax(list(cell_peak_by_selection.values()))
+            if (not np.isfinite(global_cell_peak_max)) or (global_cell_peak_max <= 0):
+                raise ValueError(f'Invalid global cell peak max for normalization: {global_cell_peak_max}')
 
-            max_C_group = np.nanmax([vals[2] for vals in per_selection_maxima])
-            max_S_group = np.nanmax([vals[3] for vals in per_selection_maxima])
-            max_YrA_group = np.nanmax([vals[4] for vals in per_selection_maxima])
-
-            if (not np.isfinite(max_C_group)) or (max_C_group <= 0):
-                raise ValueError(f'Invalid group C max for normalization ({group}): {max_C_group}')
-            if (not np.isfinite(max_S_group)) or (max_S_group <= 0):
-                raise ValueError(f'Invalid group S max for normalization ({group}): {max_S_group}')
-            if (not np.isfinite(max_YrA_group)) or (max_YrA_group <= 0):
-                raise ValueError(f'Invalid group YrA max for normalization ({group}): {max_YrA_group}')
-
-            trace_max_by_group[group] = {
-                'max_C': max_C_group,
-                'max_S': max_S_group,
-                'max_YrA': max_YrA_group,
+            cell_scale_by_selection = {
+                key: val / global_cell_peak_max
+                for key, val in cell_peak_by_selection.items()
             }
 
-            for (cell_random, t_idx_random, max_val_C, max_val_S, max_val_YrA) in per_selection_maxima:
-                cell_peak_by_selection[(group, cell_random, t_idx_random)] = np.nanmax([max_val_C, max_val_S, max_val_YrA])
+            print(f'*** global_cell_peak_max: {global_cell_peak_max}')
 
-            print(
-                f"*** {group} group maxima -> C: {max_C_group}, S: {max_S_group}, YrA: {max_YrA_group}"
-            )
+        y_offset = 0
+        height_scale = 2
+        my_lw = 0.5
+        marker_size = 4
+        group_colours = {'hM3D': my_colours['my_r'], 'hM4D': my_colours['my_b'], 'mCherry': my_colours['my_k']}
+        group_spans = {}
+        for group in reversed(_SU_DISPLAY_ORDER):     # bottom first, so Ctl ends on top
+            sel = selections[group]
+            group_start = y_offset
+            print('*** group {}'.format(group))
+            m = mice_to_use[group]
+            sess = session[m]
+            C = sess.C
+            S_spikes = sess.S_spikes
+            S_peakval = sess.S_peakval
 
-        global_cell_peak_max = np.nanmax(list(cell_peak_by_selection.values()))
-        if (not np.isfinite(global_cell_peak_max)) or (global_cell_peak_max <= 0):
-            raise ValueError(f'Invalid global cell peak max for normalization: {global_cell_peak_max}')
+            c_group = group_colours[group]
+            for (cell_random, t_idx_random) in sel:
+                print('   cell {}, t_idx_random {} '.format(cell_random, t_idx_random), end='')
+                max_val = np.nanmax(C[cell_random,t_idx_random:t_idx_random+len_trace])
+                cell_scale_factor = 1.0
+                if use_global_max_val:
+                    max_val = trace_max_by_group[group]['max_C']
+                    cell_scale_factor = cell_scale_by_selection[(group, cell_random, t_idx_random)]
+                print('[C..', end='')
+                ax.plot(y_offset + cell_scale_factor * (C[cell_random, t_idx_random:t_idx_random+len_trace]/(height_scale*max_val)), c='grey', lw=my_lw, alpha=0.5)
+                print('] ', end='')
+                #ax.scatter(spk_times-t_idx_random, sess.S[cell_random][spk_times], s=80, facecolor='none', edgecolors='k')
+                spk_indeces = np.logical_and(sess.S_spikes[cell_random] >= t_idx_random, sess.S_spikes[cell_random] < t_idx_random+len_trace)
+                spk_times = S_spikes[cell_random][spk_indeces]
+                max_val = np.nanmax(sess.S[cell_random,t_idx_random:t_idx_random+len_trace])
+                if use_global_max_val:
+                    max_val = trace_max_by_group[group]['max_S']
+                spike_vals = np.minimum(S_peakval[cell_random][spk_indeces], max_val)
+                print('[scatter..', end='')
+                ax.scatter(spk_times-t_idx_random, y_offset + cell_scale_factor * (spike_vals/(height_scale*max_val)), s=marker_size, facecolor='none', edgecolors='k', linewidths=0.3)
+                print('] [S..', end='')
+                ax.plot(y_offset + cell_scale_factor * (sess.S[cell_random, t_idx_random:t_idx_random+len_trace]/(height_scale*max_val)), c=c_group, lw=my_lw, alpha=1.0)
+                print('] [YrA..', end='')
+                YrA_sel = sess.YrA[cell_random, t_idx_random:t_idx_random+len_trace]
+                F0 = np.nanmedian(sess.YrA[cell_random,:])
+                delta_YrA = (YrA_sel - F0) / F0
+                max_val = np.nanmax(np.abs(delta_YrA))
+                if use_global_max_val:
+                    max_val = trace_max_by_group[group]['max_YrA']
+                ax.plot(y_offset + cell_scale_factor * (delta_YrA/(height_scale*max_val)), c=c_group, lw=my_lw, alpha=0.5)
+                print(']')
 
-        cell_scale_by_selection = {
-            key: val / global_cell_peak_max
-            for key, val in cell_peak_by_selection.items()
-        }
+                y_offset += 1/height_scale
+            group_spans[group] = (group_start, y_offset)
 
-        print(f'*** global_cell_peak_max: {global_cell_peak_max}')
+        for group, (lo, hi) in group_spans.items():
+            ax.text(len_trace * 1.01, (lo + hi) / 2, _SU_GROUP_LABELS[group], color=group_colours[group],
+                    ha='left', va='center')
+        bar = 5 * MINISCOPE_FPS                         # 5-s time bar under the traces
+        ax.plot([len_trace - bar, len_trace], [-0.12, -0.12], color='k', lw=0.75, clip_on=False)
+        ax.text(len_trace - bar / 2, -0.16, '5 s', ha='center', va='top')
+        ax.set_xlim(0, len_trace)
 
-    y_offset = 0
-    height_scale = 2
-    my_lw = 1.0
-    marker_size=40
-    group_colours = {'hM3D': my_colours['my_r'], 'hM4D': my_colours['my_b'], 'mCherry': my_colours['my_k']}
-    for group, sel in selections.items():
-        print('*** group {}'.format(group))
-        m = mice_to_use[group]
-        sess = session[m]
-        C = sess.C
-        YrA = sess.YrA
-        S_spikes = sess.S_spikes
-        S_peakval = sess.S_peakval
-
-        c_group = group_colours[group]
-        for (cell_random, t_idx_random) in sel:
-            print('   cell {}, t_idx_random {} '.format(cell_random, t_idx_random), end='')
-            max_val = np.nanmax(C[cell_random,t_idx_random:t_idx_random+len_trace])
-            cell_scale_factor = 1.0
-            if use_global_max_val:
-                max_val = trace_max_by_group[group]['max_C']
-                cell_scale_factor = cell_scale_by_selection[(group, cell_random, t_idx_random)]
-            print('[C..', end='')
-            ax.plot(y_offset + cell_scale_factor * (C[cell_random, t_idx_random:t_idx_random+len_trace]/(height_scale*max_val)), c='grey', lw=my_lw, alpha=0.5)
-            print('] ', end='')
-            #ax.scatter(spk_times-t_idx_random, sess.S[cell_random][spk_times], s=80, facecolor='none', edgecolors='k')
-            spk_indeces = np.logical_and(sess.S_spikes[cell_random] >= t_idx_random, sess.S_spikes[cell_random] < t_idx_random+len_trace)
-            spk_times = S_spikes[cell_random][spk_indeces]
-            max_val = np.nanmax(sess.S[cell_random,t_idx_random:t_idx_random+len_trace])
-            if use_global_max_val:
-                max_val = trace_max_by_group[group]['max_S']
-            spike_vals = np.minimum(S_peakval[cell_random][spk_indeces], max_val)
-            print('[scatter..', end='')
-            ax.scatter(spk_times-t_idx_random, y_offset + cell_scale_factor * (spike_vals/(height_scale*max_val)), s=marker_size, facecolor='none', edgecolors='k')
-            print('] [S..', end='')
-            ax.plot(y_offset + cell_scale_factor * (sess.S[cell_random, t_idx_random:t_idx_random+len_trace]/(height_scale*max_val)), c=c_group, lw=my_lw, alpha=1.0)
-            print('] [YrA..', end='')
-            YrA_sel = sess.YrA[cell_random, t_idx_random:t_idx_random+len_trace]
-            F0 = np.nanmedian(sess.YrA[cell_random,:])
-            delta_YrA = (YrA_sel - F0) / F0
-            max_val = np.nanmax(np.abs(delta_YrA))
-            if use_global_max_val:
-                max_val = trace_max_by_group[group]['max_YrA']
-            ax.plot(y_offset + cell_scale_factor * (delta_YrA/(height_scale*max_val)), c=c_group, lw=my_lw, alpha=0.5)
-            print(']')
-
-            y_offset += 1/height_scale
-
-    if use_global_max_val:
-        filename = 'plot_sample_traces_global_max_val'
-    else:
-        filename = 'plot_sample_traces'
-    plots_path_name = os.path.join(PLOTS_DIR, 'plot_sample_traces')
-    os.makedirs(plots_path_name, exist_ok=True)
-    plt.savefig(os.path.join(plots_path_name, filename + '.png'), format='png', dpi=300)
-    if paper_dir:
-        paper_path_name = os.path.join(paper_dir, filename)
-        print('*** Plotting paper_dir {}'.format(paper_path_name))
-        plt.savefig(paper_path_name + '.png', format='png', dpi=300)
-        plt.savefig(paper_path_name + '.svg', format='svg')
+        if use_global_max_val:
+            filename = 'plot_sample_traces_global_max_val'
+        else:
+            filename = 'plot_sample_traces'
+        plots_path_name = os.path.join(PLOTS_DIR, 'plot_sample_traces')
+        os.makedirs(plots_path_name, exist_ok=True)
+        save_paper_panel(fig, os.path.join(plots_path_name, filename))   # SVG + 600-dpi PNG
+        if paper_dir:
+            paper_path_name = os.path.join(paper_dir, filename)
+            print('*** Plotting paper_dir {}'.format(paper_path_name))
+            save_paper_panel(fig, paper_path_name)
     plt.close()
 
     # Save selections as a Python-readable literal
