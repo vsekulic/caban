@@ -100,7 +100,7 @@ NATURE_RC = {
     'axes.labelsize': FONT_PT,
     'axes.titlesize': FONT_PT,
     'axes.titleweight': 'normal',
-    'axes.titlepad': 3,
+    'axes.titlepad': 5,
     'axes.labelpad': 2,
     'xtick.labelsize': FONT_PT,
     'ytick.labelsize': FONT_PT,

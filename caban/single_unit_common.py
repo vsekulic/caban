@@ -15,6 +15,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.colors import to_rgb
+from matplotlib.ticker import FuncFormatter
 import statsmodels.formula.api as smf
 from statsmodels.stats.multitest import multipletests
 from scipy.stats import norm, t as t_dist, f as f_dist
@@ -757,6 +758,13 @@ def draw_superplot_triplet(ax, cell_values_per_group, mouse_means_per_group, gro
 
     if scale_name != 'linear':
         ax.set_yscale(scale_name, **scale_kwargs)
+    if scale_name == 'symlog':
+        # The linear band sits at the smallest positive value, so the first decade label lands on
+        # top of the '0' label; blank decade labels below ten times the threshold (ticks stay).
+        decade_fmt = ax.yaxis.get_major_formatter()
+        linthresh = scale_kwargs['linthresh']
+        ax.yaxis.set_major_formatter(FuncFormatter(
+            lambda v, pos: '' if 0 < abs(v) < 10 * linthresh else decade_fmt(v, pos)))
 
     if annotate == 'none':
         return panel_top, None

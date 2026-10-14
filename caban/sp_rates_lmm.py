@@ -4438,6 +4438,8 @@ def plot_decomposition_grid(df_fine, save_dir, epochs=TFC_MATCHED_EPOCHS,
 # Paper figures: a marker per group as a second cue besides colour (Nature), and epoch names as
 # tick labels.
 _GROUP_MARKERS = {'mCherry': 'o', 'hM3D': '^', 'hM4D': 's'}
+# Figure 2j's y-labels: short enough for a 35-mm panel (the caption says post-tone minus pre-tone).
+_RECALL_DELTA_YLABEL = {'amplitude': 'Δ log amplitude', 'population_rate': 'Δ log rate'}
 _EPOCH_TICK_LABELS = {'pre_tone': 'Pre-tone', 'pre_tone_matched': 'Pre-tone', 'tone': 'Tone',
                       'trace': 'Trace', 'shock': 'Shock', 'post_shock': 'Post-shock',
                       'post_shock_late': 'Late post-shock'}
@@ -6326,7 +6328,7 @@ def plot_recall_modulation(modulation_df, pairwise_df, interactions_table, save_
                         for a, b in RECALL_MODULATION_PAIRS}
             _draw_mouse_violin_panel(
                 ax, values_per_group,
-                ylabel=f'Change in log {outcome.label.lower()}',
+                ylabel=_RECALL_DELTA_YLABEL[outcome.key],
                 title=outcome.label,
                 annotate='stats', bracket_mode='axes',
                 ns_label_pairs=RECALL_MODULATION_NS_LABEL_PAIRS[outcome.key],
