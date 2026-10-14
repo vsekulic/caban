@@ -93,6 +93,8 @@ from scipy import stats
 from scipy.optimize import approx_fprime, minimize
 
 from caban.utilities import MINISCOPE_FPS
+from caban.nature_comm_style import nature_style, save_paper_panel, AXIS_PT
+from caban.figure2_composite import panel_figsize
 from caban.epoch_analysis import get_epoch_frames, post_shock_frames_needed, TRACE_MATCHED_WINDOW_S
 from caban.decoder import _copy_analysis_methods_template
 from caban.single_unit_common import (
@@ -933,27 +935,26 @@ def _draw_tone_aligned_frame(ax, time_axis):
     t0, t1 = float(time_axis[0]), float(time_axis[-1])
     for boundary in (0.0, 20.0, 40.0, 42.0, 62.0):
         if t0 <= boundary <= t1:
-            ax.axvline(boundary, color='k', lw=0.8, ls='-' if boundary == 0.0 else ':')
+            ax.axvline(boundary, color='k', lw=AXIS_PT, ls='-' if boundary == 0.0 else ':')
     ax.axvspan(40.0, 42.0, color='k', alpha=0.12, lw=0)
     ax.set_xlim(t0, t1)
     ax.set_xlabel('Time from tone onset (s)')
     ax.set_xticks([t for t in (0, 20, 40, 62) if t0 <= t <= t1])
     post_shock_at = (42.0 + min(62.0, t1)) / 2.0
-    labels = [(10.0, 'tone'), (30.0, 'trace'), (41.0, 'US'), (post_shock_at, 'post-shock')]
-    # On a narrow window the post-shock label sits almost on top of the US one. The US is still
-    # marked by the shaded band and the 40 s tick, so its word is what gives way.
-    if post_shock_at - 41.0 < 7.0:
-        labels = [(x, s) for x, s in labels if s != 'US']
+    # The US has no word: at paper size it collides with 'Post-shock'; the shaded band and the 40 s
+    # tick mark it, and the caption names it.
+    labels = [(10.0, 'Tone'), (30.0, 'Trace'), (post_shock_at, 'Post-shock')]
     labels = [(x, s) for x, s in labels if t0 <= x <= t1]
     sec = ax.secondary_xaxis('top')
     sec.set_xticks([x for x, _ in labels])
-    sec.set_xticklabels([s for _, s in labels], size='small')
-    sec.tick_params(length=0)
+    sec.set_xticklabels([s for _, s in labels])
+    sec.tick_params(length=0, pad=1)
+    sec.spines['top'].set_visible(False)
 
 
 def plot_modulation_heatmaps(group_mats, group_sort_values, time_axis, out_path,
                              signal=PRIMARY_SIGNAL, vmax=1.0, auto_close=True,
-                             ylabel='Cell (sorted by trace modulation)', title=None):
+                             ylabel='Cell (sorted by trace modulation)', title=None, figsize=None):
     """Panel K: one tone-onset-aligned heatmap per group, cells sorted by trace modulation.
 
     Cells are sorted by their TRACE index rather than by mean post-onset activity, so the
@@ -963,9 +964,20 @@ def plot_modulation_heatmaps(group_mats, group_sort_values, time_axis, out_path,
     The caller decides which trials the sort values and the matrix come from: the held-out
     panel K sorts on one half of the trials and shows the other (§O.8), the in-sample version
     uses every retained trial for both. ``ylabel`` and ``title`` say which on the figure.
+
+    Nature style. ``figsize`` is the paper size (Figure 2k): then no figure title is drawn, the
+    caption says what the panel is. Cell counts per group are in the caption too.
     """
-    fig, axs = plt.subplots(1, len(DREADD_DISPLAY_ORDER),
-                            figsize=(4.1 * len(DREADD_DISPLAY_ORDER), 4.4))
+    with nature_style():
+        _plot_modulation_heatmaps(group_mats, group_sort_values, time_axis, out_path, vmax,
+                                  auto_close, ylabel, title, figsize)
+
+
+def _plot_modulation_heatmaps(group_mats, group_sort_values, time_axis, out_path, vmax,
+                              auto_close, ylabel, title, figsize):
+    paper = figsize is not None
+    fig, axs = plt.subplots(1, len(DREADD_DISPLAY_ORDER), layout='constrained',
+                            figsize=figsize if paper else (3.2 * len(DREADD_DISPLAY_ORDER), 3.2))
     axs = np.atleast_1d(axs)
 
     for ax, group in zip(axs.flat, DREADD_DISPLAY_ORDER):
@@ -974,18 +986,25 @@ def plot_modulation_heatmaps(group_mats, group_sort_values, time_axis, out_path,
             raise RuntimeError(f'epoch_modulation: no heatmap rows for group {group!r}; every '
                                f'group must contribute cells to panel K.')
         order = np.argsort(-np.asarray(group_sort_values[group], dtype=float))
-        ax.imshow(mat[order], aspect='auto', cmap='RdBu_r', vmin=-vmax, vmax=vmax,
-                  extent=[time_axis[0], time_axis[-1], mat.shape[0], 0])
+        image = ax.imshow(mat[order], aspect='auto', cmap='RdBu_r', vmin=-vmax, vmax=vmax,
+                          extent=[time_axis[0], time_axis[-1], mat.shape[0], 0],
+                          interpolation='none', rasterized=True)
         # Epoch boundaries, so the reader can see which band is which epoch rather than
         # inferring it from the x-axis.
         _draw_tone_aligned_frame(ax, time_axis)
-        ax.set_title(f'{GROUP_LABELS[group]} (n = {mat.shape[0]} cells)', size='medium')
+        ax.set_title(GROUP_LABELS[group], pad=10)
     axs.flat[0].set_ylabel(ylabel)
-    fig.suptitle(title or (f'Tone-aligned per-cell activity ({signal}; standardized once per '
-                           f'cell over the session)'), size='medium')
-    fig.subplots_adjust(left=0.06, right=0.98, bottom=0.13,
-                        top=0.80 if title and '\n' in title else 0.86, wspace=0.15)
-    save_fig(fig, out_path)
+    for i, ax in enumerate(axs.flat):   # one x-label, on the middle panel
+        if i != len(axs.flat) // 2:
+            ax.set_xlabel('')
+    fig.colorbar(image, ax=list(axs.flat), shrink=0.5, aspect=12, pad=0.01,
+                 label='Activity (s.d.)')
+    if title and not paper:
+        fig.suptitle(title)
+    if paper:
+        save_paper_panel(fig, os.path.splitext(out_path)[0])
+    else:
+        save_fig(fig, out_path)
     if auto_close:
         plt.close(fig)
 
@@ -4418,8 +4437,8 @@ def run_epoch_modulation(PLOTS_DIR, mice_per_group, TFC_cond, mapping='full',
         plot_modulation_heatmaps(
             heldout_mats, heldout_sort, time_axis,
             os.path.join(sig_dir, 'panel_K_tone_aligned_heatmaps.png'),
-            signal=signal, auto_close=auto_close,
-            ylabel='Cell (sorted by trace modulation\non the other trials)',
+            signal=signal, auto_close=auto_close, figsize=panel_figsize('k'),   # Figure 2k
+            ylabel='Cell (sorted on other trials)',
             title=(f'Tone-aligned per-cell activity on held-out trials ({signal}): rows sorted by '
                    f'the trace index of trials 1, 3, 5 (G09: 1, 3);\nshown: the mean of trials 2, '
                    f'4. Standardized once per cell over the session.'))

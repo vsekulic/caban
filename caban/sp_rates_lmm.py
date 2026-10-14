@@ -324,6 +324,9 @@ from caban.single_unit_common import (
     mouse_contrast_ci, annotate_contrast_ci, format_contrast_ci_lines,
     annotate_pairwise_brackets, reserve_top_fraction,
 )
+from caban.nature_comm_style import (nature_style, figsize_mm, box_strip, save_paper_panel,
+                                     FONT_PT, LEGEND_PT, LINE_PT, AXIS_PT)
+from caban.figure2_composite import panel_figsize
 from caban.decoder import _ANALYSIS_METHODS_TEMPLATES_DIR, _copy_analysis_methods_template
 from caban.analysis import _draw_violin_triplet, do_pairwise_holm_plot
 from caban.epoch_analysis import (get_epoch_frames, get_testb_epoch_frames,
@@ -3460,7 +3463,7 @@ _YLABEL_LOG_AMPLITUDE = 'log(mean per-event amplitude)'
 def _save_panel(fig, save_dir, filename_root):
     ensure_dirs(save_dir)
     _copy_analysis_methods_template(METHODS_FILENAME, save_dir)
-    save_fig(fig, os.path.join(save_dir, filename_root + '.png'))
+    save_paper_panel(fig, os.path.join(save_dir, filename_root))  # SVG + 600-dpi PNG, exact size
     plt.close(fig)
 
 
@@ -3669,7 +3672,7 @@ def write_decomposition_contrasts_markdown(contrasts_by_panel, save_dir, filenam
 
 
 def _draw_mouse_violin_panel(ax, values_per_group, ylabel, title=None,
-                             group_order=DREADD_DISPLAY_ORDER, label_size='small',
+                             group_order=DREADD_DISPLAY_ORDER, label_size=None,
                              annotate='stats', ci_scale='linear', ci_unit='',
                              bracket_mode='data', stat_fn=None, ns_label_pairs=()):
     """Draw one mouse-level violin+scatter panel -- the established DREADD comparison style
@@ -3698,26 +3701,26 @@ def _draw_mouse_violin_panel(ax, values_per_group, ylabel, title=None,
                pairs named here are bracketed with their p-value even when it is >= 0.05. Empty
                by default, so every other panel is unchanged. See that function's docstring.
     """
-    ax.spines[['right', 'top']].set_visible(False)
+    # Pastel box-and-strip, one point per animal (CLAUDE.md's categorical style; violins until
+    # 2026-10-14). Brackets are always drawn in axes fractions (annotate_pairwise_brackets), so
+    # ``bracket_mode`` no longer changes the look; it is kept for the callers' signatures.
     panel_stat_fn = _panel_stat_fn() if stat_fn is None else stat_fn
-    draw_brackets_here = annotate == 'stats' and bracket_mode == 'data'
-    _draw_violin_triplet(ax, values_per_group, 0, group_order, GROUP_COLOURS,
-                         stat_fn=(panel_stat_fn if draw_brackets_here else no_stat_annotation),
-                         ylabel=ylabel)
-    if annotate == 'stats' and bracket_mode == 'axes':
-        annotate_pairwise_brackets(ax, {g: v.ravel() for g, v in values_per_group.items()},
-                                   group_order, panel_stat_fn, ns_label_pairs=ns_label_pairs)
+    flat = {g: np.ravel(np.asarray(values_per_group[g], dtype=float)) for g in group_order}
+    box_strip(ax, flat, group_order, GROUP_COLOURS, labels=GROUP_LABELS)
+    if ylabel:
+        ax.set_ylabel(ylabel)
+    if annotate == 'stats':
+        annotate_pairwise_brackets(ax, flat, group_order, panel_stat_fn, ns_label_pairs=ns_label_pairs)
     elif annotate == 'ci':
-        annotate_contrast_ci(ax, {g: v.ravel() for g, v in values_per_group.items()},
-                             scale=ci_scale, unit=ci_unit)
-    ax.set_xticks(range(len(group_order)))
-    ax.set_xticklabels([GROUP_LABELS[g] for g in group_order], size=label_size)
+        annotate_contrast_ci(ax, flat, scale=ci_scale, unit=ci_unit)
+    if label_size is not None:
+        ax.tick_params(axis='x', labelsize=label_size)
     if title is not None:
-        ax.set_title(title, size='small')
+        ax.set_title(title)
 
 
 def _draw_cell_superplot_panel(ax, df, value_col, ylabel, panel_name, title=None,
-                               group_order=DREADD_DISPLAY_ORDER, label_size='small',
+                               group_order=DREADD_DISPLAY_ORDER, label_size=None,
                                yscale='auto', y_quantum=None, annotate='stats',
                                ci_scale=None, ci_unit='', bracket_mode='axes',
                                jitter_width=0.34, stat_fn=None, mouse_means_override=None):
@@ -3800,8 +3803,11 @@ def _draw_cell_superplot_panel(ax, df, value_col, ylabel, panel_name, title=None
                            y_quantum=y_quantum, annotate=annotate, ci_scale=ci_scale,
                            ci_unit=ci_unit, jitter_width=jitter_width)
     ax.set_xticks(range(len(group_order)))
-    ax.set_xticklabels([GROUP_LABELS[g] for g in group_order], size=label_size)
-    ax.set_title(ylabel if title is None else title, size='small')
+    ax.set_xticklabels([GROUP_LABELS[g] for g in group_order])
+    if label_size is not None:
+        ax.tick_params(axis='x', labelsize=label_size)
+    if title is not None:  # no default title: the y-label names the quantity (Nature style)
+        ax.set_title(title)
 
 
 def plot_primary_trace_amplitude(df_trace_pooled, save_dir, filename_root='primary_trace_amplitude',
@@ -3838,35 +3844,37 @@ def plot_epoch_profile(df_fine_amp, save_dir, filename_root='epoch_profile',
     stats .txt (fit_epoch_delta_model's summary_text), not extracted into this panel, to avoid
     the added complexity of a margeff pipeline for a first pass -- see sp_rates_lmm_methods.md.
     """
-    fig, ax = plt.subplots(figsize=(6, 3.5))
-    ax.spines[['right', 'top']].set_visible(False)
-    x = np.arange(len(epoch_order))
+    # Figure 2i, drawn at its size in the composite. Group means carry a marker as well as a
+    # colour (Nature: a second cue); legend in CLAUDE.md's display order.
+    with nature_style():
+        fig, ax = plt.subplots(figsize=panel_figsize('i'), layout='constrained')
+        x = np.arange(len(epoch_order))
 
-    for group in GROUP_ORDER:
-        per_mouse_means = []
-        for mouse in sorted(df_fine_amp.loc[df_fine_amp['group'] == group, 'mouse'].unique()):
-            mouse_epoch_means = []
-            for epoch in epoch_order:
-                sub = df_fine_amp[(df_fine_amp['mouse'] == mouse) & (df_fine_amp['epoch'] == epoch)]
-                mouse_epoch_means.append(sub['log_amplitude'].mean() if len(sub) else np.nan)
-            per_mouse_means.append(mouse_epoch_means)
-            ax.plot(x, mouse_epoch_means, color=GROUP_COLOURS[group], alpha=0.25, linewidth=0.8)
-        arr = np.asarray(per_mouse_means, dtype=float)
-        group_mean = np.nanmean(arr, axis=0)
-        n_mice = np.sum(~np.isnan(arr), axis=0)
-        group_sem = np.nanstd(arr, axis=0, ddof=1) / np.sqrt(np.maximum(n_mice, 1))
-        ax.plot(x, group_mean, color=GROUP_COLOURS[group], linewidth=2.5,
-               label=GROUP_LABELS[group])
-        ax.fill_between(x, group_mean - group_sem, group_mean + group_sem,
-                        color=GROUP_COLOURS[group], alpha=0.2)
+        for group in DREADD_DISPLAY_ORDER:
+            per_mouse_means = []
+            for mouse in sorted(df_fine_amp.loc[df_fine_amp['group'] == group, 'mouse'].unique()):
+                mouse_epoch_means = []
+                for epoch in epoch_order:
+                    sub = df_fine_amp[(df_fine_amp['mouse'] == mouse) & (df_fine_amp['epoch'] == epoch)]
+                    mouse_epoch_means.append(sub['log_amplitude'].mean() if len(sub) else np.nan)
+                per_mouse_means.append(mouse_epoch_means)
+                ax.plot(x, mouse_epoch_means, color=GROUP_COLOURS[group], alpha=0.3, linewidth=0.35)
+            arr = np.asarray(per_mouse_means, dtype=float)
+            group_mean = np.nanmean(arr, axis=0)
+            n_mice = np.sum(~np.isnan(arr), axis=0)
+            group_sem = np.nanstd(arr, axis=0, ddof=1) / np.sqrt(np.maximum(n_mice, 1))
+            ax.plot(x, group_mean, color=GROUP_COLOURS[group], linewidth=1.0,
+                    marker=_GROUP_MARKERS[group], markersize=2.5, label=GROUP_LABELS[group])
+            ax.fill_between(x, group_mean - group_sem, group_mean + group_sem,
+                            color=GROUP_COLOURS[group], alpha=0.2)
 
-    ax.set_xticks(x)
-    ax.set_xticklabels(epoch_order, rotation=30, ha='right')
-    ax.set_ylabel(_YLABEL_LOG_AMPLITUDE)
-    ax.set_title('Epoch profile (descriptive; per-mouse pooled means)', size='small')
-    ax.legend(fontsize=7, frameon=False)
-    plt.tight_layout(pad=0.5)
-    _save_panel(fig, save_dir, filename_root)
+        ax.set_xticks(x)
+        ax.set_xticklabels([_EPOCH_TICK_LABELS.get(e, e) for e in epoch_order], rotation=35, ha='right')
+        ax.set_ylabel('Log amplitude')
+        # Above the axes, never on the data (Nature).
+        ax.legend(loc='lower left', bbox_to_anchor=(0, 1.0), ncol=3, handlelength=1.0,
+                  columnspacing=0.8, borderaxespad=0.1)
+        _save_panel(fig, save_dir, filename_root)
 
 
 def plot_epoch_delta_forest(delta_summary, save_dir, filename_root='epoch_delta_forest',
@@ -3933,12 +3941,14 @@ def plot_amplitude_ecdf(df_trace_pooled, save_dir, filename_root='amplitude_ecdf
             for m, sub in df_trace_pooled[df_trace_pooled['group'] == g].groupby('mouse')}
         for g in GROUP_ORDER
     }
-    fig, ax = plt.subplots(figsize=(4.5, 4))
-    ecdf_panel(ax, per_cell_by_group, per_mouse_by_group=per_mouse_by_group,
-              xlabel=_YLABEL_LOG_AMPLITUDE, title=title,
-              mouse_alpha=0.5, mouse_linewidth=1.1)
-    plt.tight_layout(pad=0.5)
-    _save_panel(fig, save_dir, filename_root)
+    # Figure 2h, drawn at its size in the composite; the title and cell counts are in the caption.
+    with nature_style():
+        fig, ax = plt.subplots(figsize=panel_figsize('h'), layout='constrained')
+        ecdf_panel(ax, per_cell_by_group, per_mouse_by_group=per_mouse_by_group,
+                   xlabel='Log amplitude', group_order=DREADD_DISPLAY_ORDER,
+                   mouse_alpha=0.45, mouse_linewidth=0.35)
+        ax.set_ylabel('Cumulative fraction')
+        _save_panel(fig, save_dir, filename_root)
 
 
 def plot_amplitude_p90(df_trace_pooled, save_dir, filename_root='amplitude_p90'):
@@ -4124,49 +4134,42 @@ def plot_decomposition(df_trace_pooled_raw, save_dir, filename_root='decompositi
     panels = [
         (mouse_frac_active, 'fraction_active', 'Fraction active', False, 'auto',
          None, 'difference_only', '', 1.0),
-        (active_only, 'rate_active', 'Event rate (event/s)', True, 'auto',
+        (active_only, 'rate_active', 'Event rate (per s)', True, 'auto',
          rate_quantum, 'linear', '/s', 1.0),
-        (df, 'overall_rate', 'Event rate (events/s)', True, 'auto',
-         rate_quantum, 'linear', '/s', 1.9),
-        (amp_df, 'log_amplitude', 'Log of mean per-event amplitude', True, 'linear',
+        (df, 'overall_rate', 'Population event rate (per s)', True, 'auto',
+         rate_quantum, 'linear', '/s', 1.0),
+        (amp_df, 'log_amplitude', 'Log amplitude', True, 'linear',
          None, 'log', '', 1.0),
-        (df, 'total_per_s', 'Deconvolved amplitude rate (a.u./s)', True, 'auto', None, 'linear',
+        (df, 'total_per_s', 'Amplitude rate (a.u. per s)', True, 'auto', None, 'linear',
          'S/s', 1.0),
     ]
 
-    # Narrow per-panel footprint (figure width per unit width_ratio) + a tighter cell-cloud
-    # jitter -- a "sexy nature paper" column reads as a slim strip of points, not a wide scatter
-    # block, so both the panel's horizontal real estate and the cloud's own spread are pulled in
-    # together. No figure-level title (see the "Components..." caption removal below): each panel
-    # already carries its own title/y-label stating what it is, and this figure is always
-    # presented with its own caption, so a redundant in-figure title was purely visual clutter.
-    total_width_units = sum(p[-1] for p in panels)
-    fig, axs = plt.subplots(1, len(panels), figsize=(1.9 * total_width_units, 3.0),
-                            gridspec_kw={'width_ratios': [p[-1] for p in panels]})
-    # rate_active's y-axis label is precise (units, "active cells" qualifier) but too long for a
-    # panel title at this narrow width; the title uses the shorter, title-cased phrasing instead.
+    # Figure 2e, drawn at its size in the composite (Nature style). Panel tags are short; the
+    # decomposition identity and what each marker is go in the caption.
     panel_titles = {
-        'rate_active': 'Active cell event rate',
-        'overall_rate': 'All neurons event rate',
-        'log_amplitude': 'Per-event amplitude',
-        'total_per_s': 'Total event amplitude-rate',
+        'fraction_active': 'Active',
+        'rate_active': 'Rate, active',
+        'overall_rate': 'Rate, all',
+        'log_amplitude': 'Amplitude',
+        'total_per_s': 'Amplitude rate',
     }
     contrasts_by_panel = {}
-    for ax, (sub, col, ylabel, cell_level, yscale, quantum, ci_scale, ci_unit, _w) in zip(axs, panels):
-        if cell_level:
-            _draw_cell_superplot_panel(ax, sub, col, ylabel, panel_name='plot_decomposition',
-                                       title=panel_titles.get(col), yscale=yscale,
-                                       y_quantum=quantum, annotate='stats',
-                                       bracket_mode='axes', jitter_width=0.22)
-        else:
-            values_per_group = _mouse_values_per_group(sub, col, panel_name='plot_decomposition')
-            _draw_mouse_violin_panel(ax, values_per_group, ylabel, title=ylabel,
-                                     annotate='stats', bracket_mode='axes')
-        # The estimates/intervals go to the companion markdown rather than onto the panel.
-        contrasts_by_panel[ylabel] = _panel_contrasts(sub, col, ci_scale, ci_unit)
-
-    fig.subplots_adjust(left=0.05, bottom=0.16, right=0.99, top=0.90, wspace=0.55)
-    _save_panel(fig, save_dir, filename_root)
+    with nature_style():
+        fig, axs = plt.subplots(1, len(panels), figsize=panel_figsize('e'), layout='constrained',
+                                gridspec_kw={'width_ratios': [p[-1] for p in panels]})
+        for ax, (sub, col, ylabel, cell_level, yscale, quantum, ci_scale, ci_unit, _w) in zip(axs, panels):
+            if cell_level:
+                _draw_cell_superplot_panel(ax, sub, col, ylabel, panel_name='plot_decomposition',
+                                           title=panel_titles[col], yscale=yscale,
+                                           y_quantum=quantum, annotate='stats',
+                                           bracket_mode='axes', jitter_width=0.22)
+            else:
+                values_per_group = _mouse_values_per_group(sub, col, panel_name='plot_decomposition')
+                _draw_mouse_violin_panel(ax, values_per_group, ylabel, title=panel_titles[col],
+                                         annotate='stats', bracket_mode='axes')
+            # The estimates/intervals go to the companion markdown rather than onto the panel.
+            contrasts_by_panel[ylabel] = _panel_contrasts(sub, col, ci_scale, ci_unit)
+        _save_panel(fig, save_dir, filename_root)
     write_decomposition_contrasts_markdown(contrasts_by_panel, save_dir,
                                            filename_root + '_contrasts.md')
 
@@ -4432,10 +4435,17 @@ def plot_decomposition_grid(df_fine, save_dir, epochs=TFC_MATCHED_EPOCHS,
 # throughout (they are what the stats filenames and the code are keyed on); a figure going into a
 # manuscript needs the window stated in the label, since "pre_tone_matched" means nothing to a
 # reader and the 20 s matching is the reason the three columns are comparable at all.
+# Paper figures: a marker per group as a second cue besides colour (Nature), and epoch names as
+# tick labels.
+_GROUP_MARKERS = {'mCherry': 'o', 'hM3D': '^', 'hM4D': 's'}
+_EPOCH_TICK_LABELS = {'pre_tone': 'Pre-tone', 'pre_tone_matched': 'Pre-tone', 'tone': 'Tone',
+                      'trace': 'Trace', 'shock': 'Shock', 'post_shock': 'Post-shock',
+                      'post_shock_late': 'Late post-shock'}
+
 _PAPER_EPOCH_LABELS = {
-    TFC_MATCHED_REFERENCE_EPOCH: 'Pre-tone\n(20 s baseline)',
+    TFC_MATCHED_REFERENCE_EPOCH: 'Pre-tone',
     TFC_TRACE_EPOCH: 'Trace',
-    TFC_POST_SHOCK_EPOCH: 'Post-shock\n(20 s)',
+    TFC_POST_SHOCK_EPOCH: 'Post-shock',
 }
 
 # Per-row DISPLAY attributes for plot_paper_epoch_distributions -- deliberately NOT on
@@ -4468,7 +4478,7 @@ _PAPER_ROW_DISPLAY = {
     # the density that is the reason for drawing cells at all.
     'population_rate': {'yscale': 'auto', 'quantum': True, 'col': 'overall_rate',
                         'marker_col': 'population_rate',
-                        'ylabel': 'Event rate (events/s/cell)'},
+                        'ylabel': 'Population event rate (per s)'},
 }
 
 
@@ -4489,7 +4499,7 @@ _GridPanel = collections.namedtuple(
 def _draw_superplot_panel_grid(panels, row_ylabels, col_titles, save_dir, filename_root,
                                panel_name, annotate='stats', figure_has_stars=True,
                                no_star_note=None, contrasts_title='Decomposition panel contrasts',
-                               figsize_per_panel=(2.0, 3.0), contrasts_preamble=None):
+                               figsize_per_panel=(2.0, 3.0), contrasts_preamble=None, figsize=None):
     """Draw a rows x columns grid of cell-level SuperPlot panels sharing one y-scale per ROW,
     save it, and write the companion per-panel contrasts file.
 
@@ -4525,56 +4535,58 @@ def _draw_superplot_panel_grid(panels, row_ylabels, col_titles, save_dir, filena
     if missing:
         raise ValueError(f'{panel_name}: no _GridPanel for grid cell(s) {missing}.')
 
-    fig, axs = plt.subplots(n_rows, n_cols, sharey='row',
-                            figsize=(figsize_per_panel[0] * n_cols,
-                                     figsize_per_panel[1] * n_rows))
-    # np.atleast_2d turns a single-COLUMN grid into a (1, n_rows) row vector, which would silently
-    # transpose the figure; reshape to the intended shape explicitly.
-    axs = np.atleast_2d(axs).reshape(n_rows, n_cols)
+    # Nature style (caban.nature_comm_style); ``figsize`` is a paper panel's final size (e.g.
+    # Figure 2g), otherwise the size grows with the grid.
+    with nature_style():
+        fig, axs = plt.subplots(n_rows, n_cols, sharey='row', layout='constrained',
+                                figsize=(figsize if figsize is not None else
+                                         (figsize_per_panel[0] * n_cols, figsize_per_panel[1] * n_rows)))
+        # np.atleast_2d turns a single-COLUMN grid into a (1, n_rows) row vector, which would silently
+        # transpose the figure; reshape to the intended shape explicitly.
+        axs = np.atleast_2d(axs).reshape(n_rows, n_cols)
 
-    contrasts_by_panel = {}
-    row_values = [[] for _ in range(n_rows)]
-    for (r, c), panel in sorted(panels.items()):
-        row_values[r].append(panel.df[panel.col].to_numpy(dtype=float))
-        _draw_cell_superplot_panel(
-            axs[r, c], panel.df, panel.col,
-            ylabel=(row_ylabels[r] if c == 0 else ''),
-            panel_name=f'{panel_name}[{panel.key}]',
-            # Column titles go on the top row only, and are re-set below with a pad: the bracket
-            # stack is drawn above the axes in axes-fraction coordinates and the title sits there
-            # too, so a zero pad puts the topmost asterisks through the column label.
-            title='', yscale=panel.yscale, y_quantum=panel.quantum,
-            annotate=annotate, bracket_mode='axes', jitter_width=0.22,
-            stat_fn=panel.stat_fn, mouse_means_override=panel.mouse_values)
-        if r == 0:
-            axs[r, c].set_title(col_titles[c], size='small', pad=26)
-        contrasts_by_panel[panel.label] = (
-            _panel_contrasts(panel.df, panel.col, panel.ci_scale, panel.ci_unit)
-            if panel.contrast_payload is None else panel.contrast_payload)
+        contrasts_by_panel = {}
+        row_values = [[] for _ in range(n_rows)]
+        for (r, c), panel in sorted(panels.items()):
+            row_values[r].append(panel.df[panel.col].to_numpy(dtype=float))
+            _draw_cell_superplot_panel(
+                axs[r, c], panel.df, panel.col,
+                ylabel=(row_ylabels[r] if c == 0 else ''),
+                panel_name=f'{panel_name}[{panel.key}]',
+                # Column titles go on the top row only, and are re-set below with a pad: the bracket
+                # stack is drawn above the axes in axes-fraction coordinates and the title sits there
+                # too, so a zero pad puts the topmost asterisks through the column label.
+                title='', yscale=panel.yscale, y_quantum=panel.quantum,
+                annotate=annotate, bracket_mode='axes', jitter_width=0.22,
+                stat_fn=panel.stat_fn, mouse_means_override=panel.mouse_values)
+            if r == 0:
+                axs[r, c].set_title(col_titles[c])
+            contrasts_by_panel[panel.label] = (
+                _panel_contrasts(panel.df, panel.col, panel.ci_scale, panel.ci_unit)
+                if panel.contrast_payload is None else panel.contrast_payload)
 
-    for r in range(n_rows):
-        ax0 = axs[r, 0]
-        vals = np.concatenate(row_values[r])
-        vals = vals[np.isfinite(vals)]
-        if ax0.get_yscale() == 'linear':
-            lo, hi = float(vals.min()), float(vals.max())
-            pad = 0.05 * max(hi - lo, 1e-9)
-            ax0.set_ylim(lo - pad, hi + pad)
-        else:
-            # A log axis cannot show the exact zeros that zero-event cells contribute; a symlog
-            # one can, and its bottom must stay at zero so those cells are not silently dropped.
-            positive = vals[vals > 0]
-            bottom = 0.0 if ax0.get_yscale() == 'symlog' else float(positive.min()) / 1.3
-            ax0.set_ylim(bottom, float(positive.max()) * 1.3)
-        # Only reserve bracket headroom when brackets were actually drawn -- annotate='none'
-        # would otherwise leave a fifth of every panel empty for annotations that do not exist.
-        if annotate == 'stats':
-            reserve_top_fraction(ax0)
+        for r in range(n_rows):
+            ax0 = axs[r, 0]
+            vals = np.concatenate(row_values[r])
+            vals = vals[np.isfinite(vals)]
+            if ax0.get_yscale() == 'linear':
+                lo, hi = float(vals.min()), float(vals.max())
+                pad = 0.05 * max(hi - lo, 1e-9)
+                ax0.set_ylim(lo - pad, hi + pad)
+            else:
+                # A log axis cannot show the exact zeros that zero-event cells contribute; a symlog
+                # one can, and its bottom must stay at zero so those cells are not silently dropped.
+                positive = vals[vals > 0]
+                bottom = 0.0 if ax0.get_yscale() == 'symlog' else float(positive.min()) / 1.3
+                ax0.set_ylim(bottom, float(positive.max()) * 1.3)
+            # Only reserve bracket headroom when brackets were actually drawn -- annotate='none'
+            # would otherwise leave a fifth of every panel empty for annotations that do not exist.
+            if annotate == 'stats':
+                reserve_top_fraction(ax0)
 
-    # No suptitle: each row carries its own y-label and each column its own title, and these
-    # figures are always presented with a caption. Same choice plot_decomposition made.
-    fig.subplots_adjust(left=0.16, bottom=0.09, right=0.98, top=0.90, wspace=0.18, hspace=0.30)
-    _save_panel(fig, save_dir, filename_root)
+        # No suptitle: each row carries its own y-label and each column its own title, and these
+        # figures are always presented with a caption. Same choice plot_decomposition made.
+        _save_panel(fig, save_dir, filename_root)
     write_decomposition_contrasts_markdown(contrasts_by_panel, save_dir,
                                            filename_root + '_contrasts.md',
                                            figure_has_stars=figure_has_stars,
@@ -4709,7 +4721,7 @@ def plot_paper_epoch_distributions(df_matched, mouse_epoch, contrasts, save_dir,
                                    filename_root='tfc_amplitude_rate_by_epoch',
                                    epoch_labels=None, contrasts_preamble=None,
                                    contrasts_title='Paper figure contrasts — unified mixed models',
-                                   no_star_note=None):
+                                   no_star_note=None, figsize=None):
     """
     The paper-facing distribution figure: per-event amplitude (top) and population event rate
     (bottom) for each DREADD group, across the three exposure-matched TFC windows.
@@ -4795,7 +4807,7 @@ def plot_paper_epoch_distributions(df_matched, mouse_epoch, contrasts, save_dir,
         panel_name='plot_paper_epoch_distributions', annotate='stats', figure_has_stars=True,
         contrasts_title=contrasts_title,
         contrasts_preamble=contrasts_preamble,
-        no_star_note=no_star_note)
+        no_star_note=no_star_note, figsize=figsize)
 
 
 # Column titles for the conditioning-phase figure's epoch rows. `pre_tone` is deliberately the
@@ -5386,7 +5398,8 @@ def render_paper_tfc_amplitude_rate(PLOTS_DIR, df_matched, primary_contrasts, ho
 
     # ---- Figures, annotated entirely from the tables above ------------------------------------
     print('[sp_rates_lmm] Paper figures: amplitude + rate across the matched TFC windows...')
-    plot_paper_epoch_distributions(df_paper, mouse_epoch, contrasts, paper_dir, epochs=epochs)
+    plot_paper_epoch_distributions(df_paper, mouse_epoch, contrasts, paper_dir, epochs=epochs,
+                                   figsize=panel_figsize('g'))   # Figure 2g
 
     # The same forest drawing code the internal lane uses, given the UNIFIED contrasts instead of
     # its own Welch ones -- so the forest's points and intervals are the same rows of
@@ -6301,40 +6314,33 @@ def plot_recall_modulation(modulation_df, pairwise_df, interactions_table, save_
     multiplicative reading is one exp() away and is tabulated in the companion markdown.
     """
     inter = {row['outcome']: row for _, row in interactions_table.iterrows()}
-    fig, axs = plt.subplots(1, len(UNIFIED_OUTCOMES),
-                            figsize=(3.1 * len(UNIFIED_OUTCOMES), 3.6))
-    axs = np.atleast_1d(axs)
-    for ax, outcome in zip(axs, UNIFIED_OUTCOMES):
-        values_per_group = _modulation_values_per_group(modulation_df, outcome.key)
-        _assert_modulation_markers_match_table(modulation_df, outcome.key, values_per_group)
-        pairwise = {(a, b): recall_modulation_lookup(pairwise_df, outcome.key, a, b)
-                    for a, b in RECALL_MODULATION_PAIRS}
-        _draw_mouse_violin_panel(
-            ax, values_per_group,
-            ylabel=f'Δ log {outcome.label.lower()}\n(post-tone − pre-tone)',
-            title=f'{outcome.label}\n{format_unified_interaction(inter[outcome.key])}',
-            annotate='stats', bracket_mode='axes',
-            ns_label_pairs=RECALL_MODULATION_NS_LABEL_PAIRS[outcome.key],
-            stat_fn=_precomputed_stat_fn(*(
-                float(pairwise[pair]['p_raw']) if pair in RECALL_MODULATION_FIGURE_PAIRS
-                else np.nan
-                for pair in (('hM3D', 'mCherry'), ('hM4D', 'mCherry'), ('hM3D', 'hM4D')))))
-        # No change is zero on this scale, and it is the only reference the eye needs; without it
-        # a panel of small negative deltas reads as "no effect" purely from the axis limits.
-        ax.axhline(0.0, color='k', linewidth=0.8, linestyle='--', zorder=1)
-
-    fig.suptitle(f'{session_label} — per-animal pre-tone → post-tone modulation', size='medium')
-    fig.text(0.5, 0.015,
-             # Three short lines: this figure is ~6.2 in wide, and a caption line much past ~110
-             # characters is clipped at both edges rather than wrapped.
-             'One point per animal. Brackets are UNADJUSTED model-derived contrast P-values from '
-             'the fitted model —\nnot multiplicity-adjusted, not prospectively preregistered; no '
-             'statistic is computed from the plotted\nvalues. Holm-adjusted values are retained '
-             f'in `stats/{stats_prefix}_modulation_contrasts.csv` as a reference.',
-             ha='center', size='xx-small')
-    fig.subplots_adjust(left=0.13, bottom=0.20, right=0.98, top=0.80, wspace=0.42)
-    ensure_dirs(save_dir)
-    save_fig(fig, os.path.join(save_dir, filename_root + '.png'))
+    # Figure 2j (Test_B), drawn at its size in the composite.
+    with nature_style():
+        fig, axs = plt.subplots(1, len(UNIFIED_OUTCOMES), figsize=panel_figsize('j'),
+                                layout='constrained')
+        axs = np.atleast_1d(axs)
+        for ax, outcome in zip(axs, UNIFIED_OUTCOMES):
+            values_per_group = _modulation_values_per_group(modulation_df, outcome.key)
+            _assert_modulation_markers_match_table(modulation_df, outcome.key, values_per_group)
+            pairwise = {(a, b): recall_modulation_lookup(pairwise_df, outcome.key, a, b)
+                        for a, b in RECALL_MODULATION_PAIRS}
+            _draw_mouse_violin_panel(
+                ax, values_per_group,
+                ylabel=f'Change in log {outcome.label.lower()}',
+                title=outcome.label,
+                annotate='stats', bracket_mode='axes',
+                ns_label_pairs=RECALL_MODULATION_NS_LABEL_PAIRS[outcome.key],
+                stat_fn=_precomputed_stat_fn(*(
+                    float(pairwise[pair]['p_raw']) if pair in RECALL_MODULATION_FIGURE_PAIRS
+                    else np.nan
+                    for pair in (('hM3D', 'mCherry'), ('hM4D', 'mCherry'), ('hM3D', 'hM4D')))))
+            # No change is zero on this scale, and it is the only reference the eye needs.
+            ax.axhline(0.0, color='k', linewidth=AXIS_PT, linestyle='--', zorder=1)
+        # The session, the group x epoch omnibus per outcome and the note that these brackets are
+        # UNADJUSTED model contrasts (Holm-adjusted values in stats/{stats_prefix}_modulation_contrasts.csv)
+        # belong in the caption, not on the panel (Nature style, 2026-10-14).
+        ensure_dirs(save_dir)
+        save_paper_panel(fig, os.path.join(save_dir, filename_root))
     plt.close(fig)
 
 
@@ -9390,17 +9396,16 @@ def plot_manipulation_check(df_delta, dropout_df, save_dir, filename_root='manip
     mouse-level violins; the left panel's per-cell deltas are collapsed to per-mouse means by
     _mouse_values_per_group (see its docstring on the reverted SuperPlot variant).
     """
-    fig, axs = plt.subplots(1, 2, figsize=(6.5, 3.5))
-    for ax, (sub, col, ylabel) in zip(axs, [
-        (df_delta, 'delta_log_amplitude', 'LT2 - LT1 Delta log(amplitude)'),
-        (dropout_df, 'dropout_fraction', 'LT1->LT2 dropout fraction'),
-    ]):
-        values_per_group = _mouse_values_per_group(sub, col, panel_name='plot_manipulation_check')
-        _draw_mouse_violin_panel(ax, values_per_group, ylabel, title=ylabel)
-
-    fig.suptitle('Manipulation check (LT1 drug-free -> LT2 CNO)', size='medium')
-    fig.subplots_adjust(left=0.1, bottom=0.14, right=0.98, top=0.84, wspace=0.5)
-    _save_panel(fig, save_dir, filename_root)
+    # Figure 2d, drawn at its size in the composite; what the panels show is in the caption.
+    with nature_style():
+        fig, axs = plt.subplots(1, 2, figsize=panel_figsize('d'), layout='constrained')
+        for ax, (sub, col, ylabel, tag) in zip(axs, [
+            (df_delta, 'delta_log_amplitude', 'Change in log amplitude', 'LT2 vs LT1'),
+            (dropout_df, 'dropout_fraction', 'Fraction not re-registered', 'Dropout'),
+        ]):
+            values_per_group = _mouse_values_per_group(sub, col, panel_name='plot_manipulation_check')
+            _draw_mouse_violin_panel(ax, values_per_group, ylabel, title=tag)
+        _save_panel(fig, save_dir, filename_root)
 
 
 def plot_run_structure(df_runs_trace, save_dir, filename_root='run_structure'):
@@ -9641,58 +9646,60 @@ def plot_width_vs_height_matched_examples(sessions, df_runs_trace, save_dir, map
         raise ValueError(f"plot_width_vs_height_matched_examples: orientation must be "
                          f"'horizontal' or 'vertical', got {orientation!r}.")
     target = np.percentile(df_runs_trace['peak_height'], target_height_percentile)
-    n = len(DREADD_DISPLAY_ORDER)
-    if orientation == 'horizontal':
-        fig, axs = plt.subplots(1, n, figsize=(2.0 * n, 2.3), squeeze=False)
-        axs = axs[0]
-    else:
-        fig, axs = plt.subplots(n, 1, figsize=(2.3, 1.6 * n), squeeze=False)
-        axs = axs[:, 0]
-
-    for ax, group in zip(axs, DREADD_DISPLAY_ORDER):
-        gsub = df_runs_trace[df_runs_trace['group'] == group].sort_values(['mouse', 'cell', 'trial'])
-        if gsub.empty:
-            raise RuntimeError(f'plot_width_vs_height_matched_examples: no runs for group {group!r}.')
-        idx = (gsub['peak_height'] - target).abs().idxmin()
-        sel = gsub.loc[idx]
-        mouse, cell_id = sel['mouse'], sel['cell']
-        session = sessions[mouse]
-        cell_thres = session.thres if thres is None else thres
-        _S, _Ss, _Sp, S_idx = session.get_S_mapping(mapping)
-        cell_row = list(S_idx).index(cell_id)
-        S_row = session.S[cell_row, :]
-
-        frameidx, amplitude, _nlm, width, start = find_event_runs_ca(S_row, cell_thres)
-        match = np.where(frameidx == int(sel['peak_frame']))[0]
-        if len(match) != 1:
-            raise RuntimeError(f'plot_width_vs_height_matched_examples: could not relocate the '
-                               f'selected run (mouse={mouse}, cell={cell_id}, peak_frame='
-                               f'{sel["peak_frame"]}) via find_event_runs_ca -- selection table '
-                               f'and a fresh detection pass disagree.')
-        i = match[0]
-        st, w = int(start[i]), int(width[i])
-        pad = int(round(EXAMPLE_TRACE_PAD_S * MINISCOPE_FPS))
-        win_lo, win_hi = max(0, st - pad), min(S_row.shape[0], st + w + pad)
-        t = (np.arange(win_lo, win_hi) - st) / MINISCOPE_FPS
-        s_win = S_row[win_lo:win_hi]
-
-        ax.plot(t, s_win, color=GROUP_COLOURS[group], linewidth=1.1)
-        ax.axvspan(0, w / MINISCOPE_FPS, color=GROUP_COLOURS[group], alpha=0.18)
-        ax.axhline(cell_thres, color='k', linewidth=0.5, linestyle=':')
-        ax.spines[['right', 'top']].set_visible(False)
-        ax.set_title(GROUP_LABELS[group], size='small')
-        ax.set_xlim(-1, 1)
+    with nature_style():
+        n = len(DREADD_DISPLAY_ORDER)
         if orientation == 'horizontal':
-            ax.set_xlabel('Time from run start (s)', size='small')
-            if ax is axs[0]:
-                ax.set_ylabel('S (raw)', size='small')
+            fig, axs = plt.subplots(1, n, figsize=(2.0 * n, 2.3), squeeze=False, layout='constrained')
+            axs = axs[0]
         else:
-            ax.set_ylabel('S (raw)', size='small')
-            if ax is axs[-1]:
-                ax.set_xlabel('Time from run start (s)', size='small')
+            # Figure 2f, drawn at its size in the composite.
+            fig, axs = plt.subplots(n, 1, figsize=panel_figsize('f'), squeeze=False, sharex=True,
+                                    layout='constrained')
+            axs = axs[:, 0]
 
-    plt.tight_layout(pad=0.6)
-    _save_panel(fig, save_dir, filename_root)
+        for ax, group in zip(axs, DREADD_DISPLAY_ORDER):
+            gsub = df_runs_trace[df_runs_trace['group'] == group].sort_values(['mouse', 'cell', 'trial'])
+            if gsub.empty:
+                raise RuntimeError(f'plot_width_vs_height_matched_examples: no runs for group {group!r}.')
+            idx = (gsub['peak_height'] - target).abs().idxmin()
+            sel = gsub.loc[idx]
+            mouse, cell_id = sel['mouse'], sel['cell']
+            session = sessions[mouse]
+            cell_thres = session.thres if thres is None else thres
+            _S, _Ss, _Sp, S_idx = session.get_S_mapping(mapping)
+            cell_row = list(S_idx).index(cell_id)
+            S_row = session.S[cell_row, :]
+
+            frameidx, amplitude, _nlm, width, start = find_event_runs_ca(S_row, cell_thres)
+            match = np.where(frameidx == int(sel['peak_frame']))[0]
+            if len(match) != 1:
+                raise RuntimeError(f'plot_width_vs_height_matched_examples: could not relocate the '
+                                   f'selected run (mouse={mouse}, cell={cell_id}, peak_frame='
+                                   f'{sel["peak_frame"]}) via find_event_runs_ca -- selection table '
+                                   f'and a fresh detection pass disagree.')
+            i = match[0]
+            st, w = int(start[i]), int(width[i])
+            pad = int(round(EXAMPLE_TRACE_PAD_S * MINISCOPE_FPS))
+            win_lo, win_hi = max(0, st - pad), min(S_row.shape[0], st + w + pad)
+            t = (np.arange(win_lo, win_hi) - st) / MINISCOPE_FPS
+            s_win = S_row[win_lo:win_hi]
+
+            ax.plot(t, s_win, color=GROUP_COLOURS[group], linewidth=LINE_PT)
+            ax.axvspan(0, w / MINISCOPE_FPS, color=GROUP_COLOURS[group], alpha=0.18, linewidth=0)
+            ax.axhline(cell_thres, color='k', linewidth=AXIS_PT, linestyle=':')
+            ax.set_title(GROUP_LABELS[group])
+            ax.set_xlim(-1, 1)
+            if orientation == 'horizontal':
+                ax.set_xlabel('Time (s)')
+                if ax is axs[0]:
+                    ax.set_ylabel('Activity (a.u.)')
+            else:
+                if ax is axs[len(axs) // 2]:
+                    ax.set_ylabel('Activity (a.u.)')
+                if ax is axs[-1]:
+                    ax.set_xlabel('Time (s)')
+
+        _save_panel(fig, save_dir, filename_root)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -289,14 +289,14 @@ def ecdf_panel(ax, per_cell_by_group, per_mouse_by_group=None, xlabel='', title=
         if vals.size == 0:
             continue
         x, y = _ecdf(vals)
-        ax.step(x, y, where='post', color=colour, linewidth=2.0,
-                label=f'{GROUP_LABELS[group]} (n={vals.size})')
+        ax.step(x, y, where='post', color=colour, linewidth=1.0,
+                label=GROUP_LABELS[group])   # cell counts belong in the caption
     ax.set_xlabel(xlabel)
     ax.set_ylabel('Cumulative fraction of cells')
     ax.set_ylim(0, 1)
     if title:
-        ax.set_title(title, size='medium')
-    ax.legend(fontsize=7, loc='lower right', frameon=False)
+        ax.set_title(title)
+    ax.legend(loc='lower right', frameon=False)
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
 
@@ -535,7 +535,7 @@ def reserve_top_fraction(ax, occupancy=0.80):
 
 
 def annotate_pairwise_brackets(ax, mouse_means_per_group, group_order, stat_fn,
-                               base_frac=0.82, step_frac=0.075, barh_frac=0.018, fs=9,
+                               base_frac=0.82, step_frac=0.075, barh_frac=0.018, fs=7,
                                occupancy=0.80, ns_label_pairs=()):
     """Holm-corrected pairwise significance brackets positioned in AXES-FRACTION coordinates, so
     they render identically on linear, log and symlog axes.
@@ -589,6 +589,14 @@ def annotate_pairwise_brackets(ax, mouse_means_per_group, group_order, stat_fn,
         # contrast is not silently rescaled to leave an empty band its neighbours use.
         return corrected
 
+    # Spacing in physical units on small (paper-size) panels: each level gets at least one line of
+    # text, and the headroom grows with the number of brackets, so stacked brackets never reach the
+    # panel's title. On large figures the fractional defaults are already wider and are kept.
+    h_pts = ax.get_position().height * ax.figure.get_figheight() * 72
+    step_frac = max(step_frac, 1.35 * fs / h_pts)
+    barh_frac = max(barh_frac, 1.5 / h_pts)
+    occupancy = min(occupancy, 1 - (len(drawn) * step_frac + barh_frac + 0.02))
+    base_frac = max(base_frac, occupancy + 0.02) if len(drawn) == 1 else occupancy + 0.02
     reserve_top_fraction(ax, occupancy=occupancy)
     blended = ax.get_xaxis_transform()   # x in data coords, y in axes fraction
     pos = {g: i for i, g in enumerate(group_order)}
@@ -597,10 +605,10 @@ def annotate_pairwise_brackets(ax, mouse_means_per_group, group_order, stat_fn,
         stars = get_pval_str(p) or f'P = {p:.3f}'
         y = base_frac + level * step_frac
         lx, rx = pos[g1], pos[g2]
-        ax.plot([lx, rx], [y + barh_frac, y + barh_frac], c='black', lw=1,
+        ax.plot([lx, rx], [y + barh_frac, y + barh_frac], c='black', lw=0.5,
                 transform=blended, clip_on=False)
-        ax.plot([lx, lx], [y, y + barh_frac], c='black', lw=1, transform=blended, clip_on=False)
-        ax.plot([rx, rx], [y, y + barh_frac], c='black', lw=1, transform=blended, clip_on=False)
+        ax.plot([lx, lx], [y, y + barh_frac], c='black', lw=0.5, transform=blended, clip_on=False)
+        ax.plot([rx, rx], [y, y + barh_frac], c='black', lw=0.5, transform=blended, clip_on=False)
         ax.text((lx + rx) / 2, y + barh_frac, stars, ha='center', va='bottom', fontsize=fs,
                 transform=blended, clip_on=False)
         level += 1
@@ -608,8 +616,8 @@ def annotate_pairwise_brackets(ax, mouse_means_per_group, group_order, stat_fn,
 
 
 def draw_superplot_triplet(ax, cell_values_per_group, mouse_means_per_group, group_order,
-                           group_colours, stat_fn=None, ylabel=None, cell_size=1.5, cell_alpha=0.18,
-                           mean_size=90, jitter_width=0.34, yscale='auto', y_quantum=None,
+                           group_colours, stat_fn=None, ylabel=None, cell_size=0.5, cell_alpha=0.25,
+                           mean_size=14, jitter_width=0.34, yscale='auto', y_quantum=None,
                            annotate='stats', reference='mCherry', ci_scale=None, ci_unit=''):
     """Draw a SuperPlot panel (Lord et al. 2020, J Cell Biol 219:e202001064): every cell plotted
     semi-transparent and colour-coded by mouse (a within-group lightness ramp of the group
@@ -739,7 +747,7 @@ def draw_superplot_triplet(ax, cell_values_per_group, mouse_means_per_group, gro
             ax.scatter(x_pos[group] + offset + fine_jitter, drawn_vals, s=cell_size, color=shade,
                       edgecolors='none', alpha=cell_alpha, zorder=2)
             ax.scatter([x_pos[group] + offset], [mouse_means_per_group[group][mouse]],
-                      s=mean_size, color=shade, edgecolors='black', linewidths=1.0, alpha=1.0,
+                      s=mean_size, color=shade, edgecolors='black', linewidths=0.3, alpha=1.0,
                       zorder=5)
             all_vals.append(cell_vals)
             all_vals.append(np.asarray([mouse_means_per_group[group][mouse]], dtype=float))

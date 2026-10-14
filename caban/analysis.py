@@ -33,8 +33,11 @@ from functools import partial
 from pathlib import Path
 from caban.decoder import (_LT_1D_CM_PER_PX, _LT_1D_DISTANCE_UNIT, _copy_analysis_methods_template,
                            assert_pf_bin_width_matches, pf_bin_area_cm2)
+from caban.nature_comm_style import nature_style, save_paper_panel
+from caban.figure2_composite import panel_figsize
 from caban.single_unit_common import (
-    GROUP_ORDER as _SU_GROUP_ORDER,
+    GROUP_ORDER as _SU_GROUP_ORDER, GROUP_LABELS as _SU_GROUP_LABELS,
+    DREADD_DISPLAY_ORDER as _SU_DISPLAY_ORDER,
     ecdf_panel, build_cell_records, fit_group_mixed_model,
     ensure_dirs, write_text, save_fig, grow_ylim_for_bracket_headroom,
 )
@@ -2382,59 +2385,64 @@ def plot_sample_traces(PLOTS_DIR, mice_to_use, session, paper_dir=None, selectio
         for group, sel in selections.items():
             _require_YrA_traces(session[mice_to_use[group]], sel, group)
 
-    width=8
-    height=3
-    fig = plt.figure(frameon=False)
-    fig.set_size_inches(width,height)
-    ax = plt.Axes(fig, [0., 0., 1., 1.])
-    ax.set_axis_off()
-    fig.add_axes(ax)
+    # Figure 2c, drawn at its size in the composite (Nature style). Groups stacked Ctl, Exc, Inh
+    # from the top (CLAUDE.md display order), named at the right; a 5-s time bar. Each trace is
+    # scaled to its own maximum, so there is no amplitude bar (stated in the caption).
+    with nature_style():
+        fig = plt.figure(figsize=panel_figsize('c'))
+        ax = fig.add_axes([0.0, 0.08, 0.9, 0.92])
+        ax.set_axis_off()
 
-    y_offset = 0
-    height_scale = 2
-    my_lw = 1.0
-    marker_size=40
-    group_colours = {'hM3D': my_colours['my_r'], 'hM4D': my_colours['my_b'], 'mCherry': my_colours['my_k']}
-    for group, sel in selections.items():
-        print('*** group {}'.format(group))
-        m = mice_to_use[group]
-        sess = session[m]
-        C = sess.C
-        YrA = sess.YrA
-        S_spikes = sess.S_spikes
-        S_peakval = sess.S_peakval
+        y_offset = 0
+        height_scale = 2
+        my_lw = 0.5
+        marker_size = 4
+        group_colours = {'hM3D': my_colours['my_r'], 'hM4D': my_colours['my_b'], 'mCherry': my_colours['my_k']}
+        group_spans = {}
+        for group in reversed(_SU_DISPLAY_ORDER):     # bottom first, so Ctl ends on top
+            sel = selections[group]
+            print('*** group {}'.format(group))
+            m = mice_to_use[group]
+            sess = session[m]
+            C = sess.C
+            S_spikes = sess.S_spikes
+            S_peakval = sess.S_peakval
 
-        c_group = group_colours[group]
-        for (cell_random, t_idx_random) in sel:
-            print('   cell {}, t_idx_random {} '.format(cell_random, t_idx_random), end='')
-            max_val = np.max(C[cell_random,t_idx_random:t_idx_random+len_trace])
-            print('[C..', end='')
-            ax.plot(y_offset + (C[cell_random, t_idx_random:t_idx_random+len_trace]/(height_scale*max_val)), c='grey', lw=my_lw, alpha=0.5)
-            print('] ', end='')
-            #ax.scatter(spk_times-t_idx_random, sess.S[cell_random][spk_times], s=80, facecolor='none', edgecolors='k')
-            max_val = np.max(sess.S[cell_random,t_idx_random:t_idx_random+len_trace])
-            spk_indeces = np.logical_and(sess.S_spikes[cell_random] >= t_idx_random, sess.S_spikes[cell_random] < t_idx_random+len_trace)
-            spk_times = S_spikes[cell_random][spk_indeces]
-            print('[scatter..', end='')
-            ax.scatter(spk_times-t_idx_random, y_offset + (S_peakval[cell_random][spk_indeces]/(height_scale*max_val)), s=marker_size, facecolor='none', edgecolors='k')
-            print('] [S..', end='')
-            ax.plot(y_offset + (sess.S[cell_random, t_idx_random:t_idx_random+len_trace]/(height_scale*max_val)), c=c_group, lw=my_lw, alpha=1.0)        
-            print('] [YrA..', end='')
-            YrA_sel = sess.YrA[cell_random, t_idx_random:t_idx_random+len_trace]
-            F0 = np.nanmedian(sess.YrA[cell_random,:])
-            delta_YrA = (YrA_sel - F0) / F0
-            max_val = np.max(delta_YrA)
-            ax.plot(y_offset + delta_YrA/(height_scale*max_val), c=c_group, lw=my_lw, alpha=0.5)
-            print(']')
-
-            y_offset += 1/height_scale
-    os.makedirs(os.path.join(PLOTS_DIR, 'plot_sample_traces'), exist_ok=True)
-    plt.savefig(os.path.join(PLOTS_DIR, 'plot_sample_traces', 'plot_sample_traces.png'), format='png', dpi=300)
-    if paper_dir:
-        path_name = os.path.join(paper_dir, 'plot_sample_traces.png')
-        print('*** Plotting paper_dir {}'.format(path_name))
-        plt.savefig(path_name, format='png', dpi=300)
-        plt.savefig(os.path.join(paper_dir, 'plot_sample_traces.svg'), format='svg')
+            c_group = group_colours[group]
+            group_start = y_offset
+            for (cell_random, t_idx_random) in sel:
+                print('   cell {}, t_idx_random {} '.format(cell_random, t_idx_random), end='')
+                max_val = np.max(C[cell_random,t_idx_random:t_idx_random+len_trace])
+                ax.plot(y_offset + (C[cell_random, t_idx_random:t_idx_random+len_trace]/(height_scale*max_val)),
+                        c='grey', lw=my_lw, alpha=0.5)
+                max_val = np.max(sess.S[cell_random,t_idx_random:t_idx_random+len_trace])
+                spk_indeces = np.logical_and(sess.S_spikes[cell_random] >= t_idx_random,
+                                             sess.S_spikes[cell_random] < t_idx_random+len_trace)
+                spk_times = S_spikes[cell_random][spk_indeces]
+                ax.scatter(spk_times-t_idx_random, y_offset + (S_peakval[cell_random][spk_indeces]/(height_scale*max_val)),
+                           s=marker_size, facecolor='none', edgecolors='k', linewidths=0.3)
+                ax.plot(y_offset + (sess.S[cell_random, t_idx_random:t_idx_random+len_trace]/(height_scale*max_val)),
+                        c=c_group, lw=my_lw, alpha=1.0)
+                YrA_sel = sess.YrA[cell_random, t_idx_random:t_idx_random+len_trace]
+                F0 = np.nanmedian(sess.YrA[cell_random,:])
+                delta_YrA = (YrA_sel - F0) / F0
+                max_val = np.max(delta_YrA)
+                ax.plot(y_offset + delta_YrA/(height_scale*max_val), c=c_group, lw=my_lw, alpha=0.5)
+                print()
+                y_offset += 1/height_scale
+            group_spans[group] = (group_start, y_offset)
+        for group, (lo, hi) in group_spans.items():
+            ax.text(len_trace * 1.01, (lo + hi) / 2, _SU_GROUP_LABELS[group], color=group_colours[group],
+                    ha='left', va='center')
+        bar = 5 * MINISCOPE_FPS                         # 5-s time bar under the traces
+        ax.plot([len_trace - bar, len_trace], [-0.12, -0.12], color='k', lw=0.75, clip_on=False)
+        ax.text(len_trace - bar / 2, -0.16, '5 s', ha='center', va='top')
+        ax.set_xlim(0, len_trace)
+        os.makedirs(os.path.join(PLOTS_DIR, 'plot_sample_traces'), exist_ok=True)
+        save_paper_panel(fig, os.path.join(PLOTS_DIR, 'plot_sample_traces', 'plot_sample_traces'))
+        if paper_dir:
+            print('*** Plotting paper_dir {}'.format(paper_dir))
+            save_paper_panel(fig, os.path.join(paper_dir, 'plot_sample_traces'))
     plt.close()
     return selections
 
