@@ -2180,21 +2180,21 @@ def plot_firing_rate_changes(PLOTS_DIR, mice_per_group, crossreg_mice, session1,
 
         for m in range(len(mice)):
             mouse = mice[m]
-            if mouse not in session1 or mouse not in session2:
-                # G07 has no Test_B, G15 no Test_B_1wk: this pair of sessions does not exist for it.
-                print(f'  {mouse}: no {"session1" if mouse not in session1 else "session2"} for this pair')
+            crossreg = crossreg_mice[mouse]
+            missing = mapping_sessions_missing(crossreg, mapping_type)
+            if missing:
+                print(f'  {mouse}: no {missing} session, so no cells registered across {mapping_type}; '
+                      f'left out of this figure')
                 continue
             s1 = session1[mouse]
             s2 = session2[mouse]
-            crossreg = crossreg_mice[mouse]
 
             period_s1 = [s1.miniscope_exp_fnum[s1.start_idx], s1.miniscope_exp_fnum[s1.stop_idx]]
             period_s2 = [s2.miniscope_exp_fnum[s2.start_idx], s2.miniscope_exp_fnum[s2.stop_idx]]
             period_s1_length = (period_s1[1] - period_s1[0]) / MINISCOPE_FPS
             period_s2_length = (period_s2[1] - period_s2[0]) / MINISCOPE_FPS
 
-            df_mapping = crossreg.get_mappings_cells(
-                mapping_type=mapping_for_available_sessions(crossreg, mapping_type))
+            df_mapping = crossreg.get_mappings_cells(mapping_type=mapping_type)
             s1_df_col = s1.get_df_col()
             s2_df_col = s2.get_df_col()
             #s1_unit_column = df_mapping[s1.get_df_col()]
@@ -5302,6 +5302,10 @@ def plot_pf_analyses(PLOTS_DIR, session, mouse_groups, session_str, crossreg=Non
 
     for mouse, sess in session.items():
         group = mouse_groups[mouse]
+        if crossreg and mapping_sessions_missing(crossreg[mouse], mapping):
+            print(f'  {mouse}: no {mapping_sessions_missing(crossreg[mouse], mapping)} session, so no '
+                  f'cells registered across {mapping}; left out of this figure')
+            continue
         if group not in processed_groups:
             processed_groups[group] = True
             
@@ -5312,8 +5316,7 @@ def plot_pf_analyses(PLOTS_DIR, session, mouse_groups, session_str, crossreg=Non
         
         pf_keys = list(sess.fm.pf.pf_size.keys()) # pf keys should be the same for all pf-related dicts, so just use this one
         if crossreg:
-            S_i = get_S_indeces_crossreg(sess, crossreg[mouse],
-                                         mapping_for_available_sessions(crossreg[mouse], mapping))
+            S_i = get_S_indeces_crossreg(sess, crossreg[mouse], mapping)
             pf_keys = np.intersect1d(S_i, pf_keys)
 
         # Get length of pf_size as num_pfs
@@ -5520,6 +5523,10 @@ def plot_pf_analyses_within_group(PLOTS_DIR, session_1, session_2, session_3, mo
     for mouse, group in mouse_groups.items():
         if mouse in skip_mice:
             continue
+        if crossreg and mapping_sessions_missing(crossreg[mouse], mapping):
+            print(f'  {mouse}: no {mapping_sessions_missing(crossreg[mouse], mapping)} session, so no '
+                  f'cells registered across {mapping}; left out of this figure')
+            continue
         if group not in processed_groups:
             processed_groups[group] = True
             meas_num_pfs[group] = {}
@@ -5541,8 +5548,7 @@ def plot_pf_analyses_within_group(PLOTS_DIR, session_1, session_2, session_3, mo
             
             pf_keys = list(sess.fm.pf.pf_size.keys()) # pf keys should be the same for all pf-related dicts, so just use this one
             if crossreg:
-                S_i = get_S_indeces_crossreg(sess, crossreg[mouse],
-                                             mapping_for_available_sessions(crossreg[mouse], mapping))
+                S_i = get_S_indeces_crossreg(sess, crossreg[mouse], mapping)
                 pf_keys = np.intersect1d(S_i, pf_keys)
 
             # Get length of pf_size as num_pfs

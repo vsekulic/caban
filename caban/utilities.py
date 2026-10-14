@@ -652,22 +652,15 @@ def get_engram_crossreg(mouse, TFC_cond, Test_B, Test_B_1wk, crossreg, mapping, 
 
     return [S_i_engram_TFC_cond, S_i_engram_Test_B, S_i_engram_Test_B_1wk]
 
-def mapping_for_available_sessions(crossreg, mapping):
-    """``mapping`` ('A+B+C') restricted to the sessions this mouse's cross-registration has.
+def mapping_sessions_missing(crossreg, mapping):
+    """Sessions of a cross-registered ``mapping`` ('A+B+C') that this mouse does not have.
 
-    G07 has no Test_B (not recorded) and G15 no *_1wk sessions; instead of leaving such a mouse
-    out of an analysis, its cells are taken from the sessions it does have (VS, 2026-10-14: do not
-    throw away data). Prints when the mapping is narrowed; raises if none of the sessions exist.
+    A figure built on cells registered in ALL of a mapping's sessions has no such cell set for a
+    mouse missing one of them (G07: no Test_B; G15: no *_1wk), so it leaves that mouse out, with a
+    printed note; the mouse stays in every per-session analysis (VS, 2026-10-14: restricted rather
+    than mixing two- and three-session cell sets, which made two hM4D mice dominate the group).
     """
-    labels = mapping.split('+')
-    present = [lab for lab in labels if lab in crossreg.mappings_labels]
-    if not present:
-        raise KeyError(f'{crossreg.mouse}: none of the sessions in mapping {mapping!r} are in its '
-                       f'cross-registration ({sorted(crossreg.mappings_labels)})')
-    if len(present) < len(labels):
-        print(f'  {crossreg.mouse}: mapping {mapping!r} narrowed to {"+".join(present)!r} '
-              f'(no {sorted(set(labels) - set(present))} session)')
-    return '+'.join(present)
+    return [lab for lab in mapping.split('+') if lab not in crossreg.mappings_labels]
 
 
 def get_S_indeces_crossreg(session, crossreg, mapping, want_peakval=True):
