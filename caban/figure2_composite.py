@@ -2,8 +2,8 @@
 
 Layout follows VS's PowerPoint draft (~/Documents/DB/1-McHugh postdoc/3-PAPER/Figure2_ppt_draft.pptx,
 2026-08-24), panels a-j, plus the start of the per-cell block that replaces its "TODO" box: k, the
-held-out tone-aligned heatmaps (epoch_modulation panel K, sorted on other trials, §O.8), on YrA, the
-primary signal. Further per-cell panels (modulation index, split-half stability) wait until they are
+event-aligned activity around tone, trace, shock and post-shock onset (epoch_modulation panel M,
+event-proximal lane), on YrA, the primary signal (VS, 2026-10-15; it replaced the held-out heatmaps). Further per-cell panels (modulation index, split-half stability) wait until they are
 drawn at final size and the YrA check is done (VS, 2026-10-14).
 
 Every panel is placed from its CURRENT output file, so rerunning the pipeline and then this rebuilds
@@ -44,7 +44,7 @@ PANEL_FILES = {
     'h': 'sp_rates_lmm/TFC_cond/amplitude_ecdf.png',
     'i': 'sp_rates_lmm/TFC_cond/epoch_profile.png',
     'j': 'sp_rates_lmm/paper/recall/Test_B/testb_amplitude_rate_modulation.png',
-    'k': 'epoch_modulation/YrA/panel_K_tone_aligned_heatmaps.png',
+    'k': 'epoch_modulation/YrA/event_proximal/panel_M_event_aligned_traces.png',
 }
 
 FIG_WIDTH_MM = 183.0          # Nature double column
@@ -61,7 +61,7 @@ LAYOUT_MM = {
     'h': (106, 76, 36, 36),
     'i': (144, 76, 39, 36),
     'j': (106, 115, 77, 35),
-    'k': (0, 153, 183, 60),
+    'k': (0, 153, 183, 46),
 }
 
 
@@ -107,10 +107,10 @@ amplitude, per group (thick) and per animal (thin). **i**, Log amplitude across 
 epochs: animals (thin lines), group means (thick lines, markers) and s.e.m. (bands); descriptive.
 **j**, 48-h recall (Test B): per-animal change from pre-tone to post-tone in log per-event amplitude
 (left) and log population event rate (right); dashed line, no change; brackets show unadjusted
-model-derived contrasts. **k**, Tone-aligned activity of every cell (YrA, standardized once per cell
-over the session), rows sorted by the trace-interval modulation index on trials 1, 3 and 5 and
-showing the mean of trials 2 and 4, so the order is independent of the data displayed; solid line,
-tone onset; dotted lines, tone offset, shock and end of the post-shock window; grey band, shock (US).
+model-derived contrasts. **k**, Event-aligned activity (YrA, standardized once per cell over the session, minus each trial's
+pre-tone mean) around tone onset, trace onset (tone offset), shock onset and post-shock onset (shock
+offset), all retained trials: mean (lines) and s.e.m. (bands) across animals; grey, the 3-s window
+analysed; dashed line, zero.
 Brackets in d and e: Welch tests on animal values, Holm-corrected over the two
 treatment-versus-control comparisons (Exc versus Inh uncorrected); in g: contrasts of the group x
 epoch mixed model with animal as random intercept, Holm-corrected over the two treatment-versus-

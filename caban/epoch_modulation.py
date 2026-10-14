@@ -93,7 +93,7 @@ from scipy import stats
 from scipy.optimize import approx_fprime, minimize
 
 from caban.utilities import MINISCOPE_FPS
-from caban.nature_comm_style import nature_style, save_paper_panel, AXIS_PT
+from caban.nature_comm_style import nature_style, save_paper_panel, AXIS_PT, FONT_PT
 from caban.figure2_composite import panel_figsize
 from caban.epoch_analysis import get_epoch_frames, post_shock_frames_needed, TRACE_MATCHED_WINDOW_S
 from caban.decoder import _copy_analysis_methods_template
@@ -2771,6 +2771,7 @@ EVENT_PROXIMAL_POST_S = 10.0
 
 # What the four onsets ARE, as opposed to what the four epochs are. The distinction is the
 # whole point of the lane, so the figures never reuse the epoch names unqualified.
+_EVENT_TAGS = {'tone': 'Tone', 'trace': 'Trace', 'shock': 'Shock', 'post_shock': 'Post-shock'}
 EVENT_ONSET_LABELS = {'tone': 'tone onset', 'trace': 'trace onset (tone offset)',
                       'shock': 'shock onset (US)', 'post_shock': 'post-shock onset'}
 
@@ -2828,7 +2829,7 @@ def collect_event_aligned_traces(mice_per_group, sessions, signal, mapping='full
     for group in DREADD_DISPLAY_ORDER:
         for mouse in mice_per_group.get(group, []):
             if mouse not in sessions:
-                continue
+                raise KeyError(f'epoch_modulation: no conditioning session for mouse {mouse!r}')
             session = sessions[mouse]
             wc = crossreg_to_use[mouse] if (crossreg_to_use is not None and mapping != 'full') else None
             cell_ids, _ = resolve_shared_cells(session, mapping=mapping, with_crossreg=wc)
@@ -2856,36 +2857,31 @@ def plot_event_aligned_traces(traces, time_axis, out_path, window_seconds, signa
 
     Mean +/- SEM ACROSS MICE (n = mice, the unit of inference), never across cells.
     """
-    fig, axs = plt.subplots(1, len(RESPONSE_EPOCHS),
-                            figsize=(3.1 * len(RESPONSE_EPOCHS), 3.6), sharey=True)
-    axs = np.atleast_1d(axs)
+    # Figure 2k, drawn at its size in the composite (Nature style).
+    with nature_style():
+        fig, axs = plt.subplots(1, len(RESPONSE_EPOCHS), figsize=panel_figsize('k'), sharey=True,
+                                layout='constrained')
+        axs = np.atleast_1d(axs)
 
-    for ax, epoch in zip(axs.flat, RESPONSE_EPOCHS):
-        ax.axvspan(0.0, window_seconds, color='0.85', lw=0, zorder=0)
-        ax.axvline(0.0, color='k', lw=0.8, zorder=1)
-        ax.axhline(0.0, color='0.6', lw=0.8, ls='--', zorder=1)
-        for group in DREADD_DISPLAY_ORDER:
-            mat = traces[group][epoch]
-            mu = mat.mean(axis=0)
-            sem = mat.std(axis=0, ddof=1) / np.sqrt(mat.shape[0])
-            ax.plot(time_axis, mu, color=GROUP_COLOURS[group], lw=1.4,
-                    label=f'{GROUP_LABELS[group]} (n = {mat.shape[0]})', zorder=3)
-            ax.fill_between(time_axis, mu - sem, mu + sem, color=GROUP_COLOURS[group],
-                            alpha=0.18, lw=0, zorder=2)
-        ax.set_title(EVENT_ONSET_LABELS[epoch], size='medium')
-        ax.set_xlabel('Time from onset (s)')
-    axs.flat[0].set_ylabel('Activity − pre-tone\n(cell SD units)')
-    axs.flat[0].legend(frameon=False, fontsize='x-small', loc='upper left')
-    fig.suptitle(f'Event-aligned activity ({signal}); shaded band = the analysed '
-                 f'{window_seconds:g} s window', size='medium')
-    fig.text(0.5, 0.015,
-             'Mean ± SEM across MICE. Standardized once per cell over the whole session and '
-             'baseline-subtracted per trial;\nno re-scaling inside the alignment window. Curves '
-             'average over trials where the index takes each cell\'s median, so the shaded '
-             'window\'s\nmean is close to but not identical to the plotted index.',
-             ha='center', size='xx-small')
-    fig.subplots_adjust(left=0.075, right=0.99, bottom=0.28, top=0.84, wspace=0.12)
-    save_fig(fig, out_path)
+        for ax, epoch in zip(axs.flat, RESPONSE_EPOCHS):
+            ax.axvspan(0.0, window_seconds, color='0.88', lw=0, zorder=0)
+            ax.axvline(0.0, color='k', lw=AXIS_PT, zorder=1)
+            ax.axhline(0.0, color='0.6', lw=AXIS_PT, ls='--', zorder=1)
+            for group in DREADD_DISPLAY_ORDER:
+                mat = traces[group][epoch]
+                mu = mat.mean(axis=0)
+                sem = mat.std(axis=0, ddof=1) / np.sqrt(mat.shape[0])
+                ax.plot(time_axis, mu, color=GROUP_COLOURS[group], lw=0.75,
+                        label=GROUP_LABELS[group], zorder=3)
+                ax.fill_between(time_axis, mu - sem, mu + sem, color=GROUP_COLOURS[group],
+                                alpha=0.2, lw=0, zorder=2)
+            ax.set_title(_EVENT_TAGS[epoch])
+        axs.flat[0].set_ylabel('Activity (s.d.)')
+        axs.flat[0].legend(loc='upper left', handlelength=1.0)
+        fig.supxlabel('Time from onset (s)', fontsize=FONT_PT)
+        # What the curves are (mean +/- s.e.m. across mice; baseline-subtracted; the shaded window is the
+        # analysed one; mean over trials vs the index's median) is in the Figure 2 caption.
+        save_paper_panel(fig, os.path.splitext(out_path)[0])
     if auto_close:
         plt.close(fig)
 
@@ -4437,7 +4433,7 @@ def run_epoch_modulation(PLOTS_DIR, mice_per_group, TFC_cond, mapping='full',
         plot_modulation_heatmaps(
             heldout_mats, heldout_sort, time_axis,
             os.path.join(sig_dir, 'panel_K_tone_aligned_heatmaps.png'),
-            signal=signal, auto_close=auto_close, figsize=panel_figsize('k'),   # Figure 2k
+            signal=signal, auto_close=auto_close,
             ylabel='Cell (sorted on other trials)',
             title=(f'Tone-aligned per-cell activity on held-out trials ({signal}): rows sorted by '
                    f'the trace index of trials 1, 3, 5 (G09: 1, 3);\nshown: the mean of trials 2, '
