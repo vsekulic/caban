@@ -880,11 +880,12 @@ def split_trials(trials):
 
 
 def _tone_aligned_trials(z, session, trials, pre_s, post_s):
-    """({trial: cells x window frames, or None where the window does not fit}, time axis).
+    """({trial: cells x window frames}, time axis).
 
     Per-trial standardized activity aligned to tone onset. No re-standardization happens here
-    (see ``_tone_aligned_matrix``); each caller decides what to do with a trial whose window
-    does not fit inside the recording.
+    (see ``_tone_aligned_matrix``). Every trial is kept: where the window reaches past the start
+    or end of the recording (G09's imaging stops ~50 s after its last tone onset), those frames
+    are NaN and every recorded frame is kept (VS, 2026-10-14: do not throw away data).
     """
     pre_f = _window_frames(pre_s)
     post_f = _window_frames(post_s)
@@ -894,7 +895,10 @@ def _tone_aligned_trials(z, session, trials, pre_s, post_s):
     for trial_idx in trials:
         onset = get_epoch_frames(session, 'tone', trial_idx)[0]
         lo, hi = onset - pre_f, onset + post_f
-        per_trial[trial_idx] = None if (lo < 0 or hi > n_frames) else z[:, lo:hi]
+        window = np.full((z.shape[0], hi - lo), np.nan)
+        a, b = max(lo, 0), min(hi, n_frames)
+        window[:, a - lo:b - lo] = z[:, a:b]
+        per_trial[trial_idx] = window
     time_axis = (np.arange(pre_f + post_f) - pre_f) / MINISCOPE_FPS
     return per_trial, time_axis
 
@@ -910,13 +914,11 @@ def _tone_aligned_matrix(z, session, trials):
     whole session and is only averaged over trials here.
 
     Averaged over the SAME retained trials the index uses, so panel and statistics describe
-    the same data.
+    the same data; a frame past the end of the recording on one trial is averaged over the
+    trials that have it (nanmean).
     """
     per_trial, time_axis = _tone_aligned_trials(z, session, trials, HEATMAP_PRE_S, HEATMAP_POST_S)
-    fitting = [m for m in per_trial.values() if m is not None]
-    if not fitting:
-        return None, None
-    return np.mean(np.stack(fitting, axis=0), axis=0), time_axis
+    return np.nanmean(np.stack(list(per_trial.values()), axis=0), axis=0), time_axis
 
 
 def _draw_tone_aligned_frame(ax, time_axis):
@@ -3438,7 +3440,7 @@ def collect_heldout_heatmap(mice_per_group, sessions, signal, df_fold, mapping='
             z = _standardized_trace(session, signal, cell_ids)
             trials, _ = retained_trials(session)
             aligned, axis = _tone_aligned_trials(z, session, trials, pre_s, post_s)
-            missing = [t for t, m in aligned.items() if m is None]
+            missing = [t for t, m in aligned.items() if np.isnan(m).any()]
             if missing:
                 raise RuntimeError(
                     f'epoch_modulation: mouse {mouse!r} retained trials {missing} but the '
@@ -4395,14 +4397,6 @@ def run_epoch_modulation(PLOTS_DIR, mice_per_group, TFC_cond, mapping='full',
                 # sorted-noise diagonal of §R.9 cannot arise. Median over the half's trials, as
                 # df_cell's index is the median over all of them.
                 sort_half, shown_half = split_trials(trials)
-                # Every shown trial must fit the window: _tone_aligned_matrix would silently
-                # average fewer trials than the title states.
-                per_trial, _ = _tone_aligned_trials(z, session, shown_half, HEATMAP_PRE_S, HEATMAP_POST_S)
-                not_fitting = [t for t, m in per_trial.items() if m is None]
-                if not_fitting:
-                    raise RuntimeError(
-                        f'epoch_modulation: mouse {mouse!r}: held-out panel K trials {not_fitting} '
-                        f'do not fit the -{HEATMAP_PRE_S:.0f}/+{HEATMAP_POST_S:.0f} s window.')
                 mat_shown, _ = _tone_aligned_matrix(z, session, shown_half)
                 sort_a = (df[(df['mouse'] == mouse) & (df['epoch'] == 'trace')
                              & df['trial'].isin(sort_half)]
