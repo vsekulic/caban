@@ -2822,11 +2822,10 @@ def _event_aligned_trial_traces(z, session, trials, epoch):
     return np.stack(per_trial, axis=0), time_axis
 
 
-def _shock_to_post_shock_s(session, trials):
-    """Seconds from shock onset to post-shock onset (= shock offset) on each trial."""
-    return np.array([(get_epoch_frames(session, 'post_shock', t)[0]
-                      - get_epoch_frames(session, 'shock', t)[0]) / MINISCOPE_FPS
-                     for t in trials])
+def _shock_to_post_shock_frames(session, trials):
+    """Frames from shock onset to post-shock onset (= shock offset) on each trial."""
+    return np.array([get_epoch_frames(session, 'post_shock', t)[0]
+                     - get_epoch_frames(session, 'shock', t)[0] for t in trials])
 
 
 def collect_event_aligned_traces(mice_per_group, sessions, signal, mapping='full',
@@ -2858,7 +2857,7 @@ def collect_event_aligned_traces(mice_per_group, sessions, signal, mapping='full
             z = _standardized_trace(session, signal, cell_ids)
             trials, _ = retained_trials(session)
             mice[group].append(mouse)
-            shock_durations.append(_shock_to_post_shock_s(session, trials))
+            shock_durations.append(_shock_to_post_shock_frames(session, trials))
             for epoch in PANEL_M_EVENTS:
                 per_trial, time_axis = _event_aligned_trial_traces(z, session, trials, epoch)
                 mouse_tr[group][epoch].append(per_trial.mean(axis=0))
@@ -2867,13 +2866,15 @@ def collect_event_aligned_traces(mice_per_group, sessions, signal, mapping='full
     if time_axis is None:
         raise RuntimeError('epoch_modulation: collected no event-aligned traces for panel M.')
 
+    # Compared in whole frames: the timestamp -> frame mapping leaves one frame of jitter
+    # (39 or 40 frames for the 2 s US at 19.76 fps), which is the most the single line may hide.
     shock_durations = np.concatenate(shock_durations)
-    if np.ptp(shock_durations) > 1.0 / MINISCOPE_FPS:
+    if np.ptp(shock_durations) > 1:
         raise RuntimeError(
-            f'epoch_modulation: shock onset -> post-shock onset ranges '
-            f'{shock_durations.min():.3f}-{shock_durations.max():.3f} s across trials. Panel M '
-            f'draws post-shock onset as one line on the shock-aligned facet, which needs it the '
-            f'same on every trial (within one frame).')
+            f'epoch_modulation: shock onset -> post-shock onset ranges {shock_durations.min()}-'
+            f'{shock_durations.max()} frames across trials. Panel M draws post-shock onset as one '
+            f'line on the shock-aligned facet, which needs it the same on every trial (within one '
+            f'frame).')
 
     groups = [g for g in DREADD_DISPLAY_ORDER if mice[g]]
     return {
@@ -2882,7 +2883,7 @@ def collect_event_aligned_traces(mice_per_group, sessions, signal, mapping='full
         'mice': {g: mice[g] for g in groups},
         'trial': {g: {e: {t: np.stack(v, axis=0) for t, v in sorted(trial_tr[g][e].items())}
                       for e in PANEL_M_EVENTS} for g in groups},
-        'post_shock_onset_s': float(np.median(shock_durations)),
+        'post_shock_onset_s': float(np.median(shock_durations)) / MINISCOPE_FPS,
     }
 
 
