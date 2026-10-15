@@ -2895,11 +2895,17 @@ def _mark_event_axes(ax, epoch, window_seconds, post_shock_onset_s, lw):
     """The analysed window (grey), onset (solid), zero (dashed grey) and, on the shock facet,
     post-shock onset (dashed black).
 
-    On the shock facet the grey spans both windows analysed from it -- shock (onset + window)
-    and post-shock (shock offset + window) -- i.e. 0 to shock duration + window (VS, 2026-10-15).
+    On the shock facet the two windows analysed from it are shaded separately (VS, 2026-10-15):
+    darker the shock window (the 2 s US), lighter the post-shock window (window_seconds from
+    shock offset).
     """
-    span_end = post_shock_onset_s + window_seconds if epoch == 'shock' else window_seconds
-    ax.axvspan(0.0, span_end, color='0.88', lw=0, zorder=0)
+    if epoch == 'shock':
+        # Two tests, two shades: darker the shock window (the US), lighter the post-shock one.
+        ax.axvspan(0.0, post_shock_onset_s, color='0.80', lw=0, zorder=0)
+        ax.axvspan(post_shock_onset_s, post_shock_onset_s + window_seconds, color='0.92', lw=0,
+                   zorder=0)
+    else:
+        ax.axvspan(0.0, window_seconds, color='0.88', lw=0, zorder=0)
     ax.axvline(0.0, color='k', lw=lw, zorder=1)
     ax.axhline(0.0, color='0.6', lw=lw, ls='--', zorder=1)
     if epoch == 'shock':

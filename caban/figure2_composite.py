@@ -110,8 +110,8 @@ epochs: animals (thin lines), group means (thick lines, markers) and s.e.m. (ban
 model-derived contrasts. **k**, Event-aligned activity (YrA, standardized once per cell over the session, minus each trial's
 pre-tone mean) around tone onset, trace onset (tone offset) and shock onset, all retained trials:
 mean (lines) and s.e.m. (bands) across animals; grey, the windows analysed: 3 s from tone and
-trace onset; on Shock, the 2-s shock and the 3 s from shock offset (dashed black line), together
-0-5 s; dashed grey line, zero.
+trace onset; on Shock, the 2-s shock (darker) and the 3 s from shock offset (lighter; dashed black
+line, shock offset); dashed grey line, zero.
 Brackets in d and e: Welch tests on animal values, Holm-corrected over the two
 treatment-versus-control comparisons (Exc versus Inh uncorrected); in g: contrasts of the group x
 epoch mixed model with animal as random intercept, Holm-corrected over the two treatment-versus-
