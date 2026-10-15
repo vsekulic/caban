@@ -2780,20 +2780,26 @@ def _event_proximal_epoch_titles(window_seconds):
     return {e: f'{EVENT_ONSET_LABELS[e]}\n+{window_seconds:g} s' for e in RESPONSE_EPOCHS}
 
 
-def _event_aligned_mouse_trace(z, session, trials, epoch):
-    """One mouse's mean standardized activity around one event onset (a vector over frames).
+# Panel M's events. Shock and post-shock are ONE alignment: post-shock onset is shock offset, a
+# fixed shock duration later, so the two former facets were the same curves shifted along x (VS,
+# 2026-10-15). The shock facet is centred on shock onset and marks post-shock onset with a dashed line.
+PANEL_M_EVENTS = ('tone', 'trace', 'shock')
+
+
+def _event_aligned_trial_traces(z, session, trials, epoch):
+    """One mouse's cell-mean activity around one event onset, per trial: (n_trials, win).
 
     Baseline-subtracted exactly as the index is -- each trial's own full-length pre-tone
-    mean, per cell -- then averaged over trials and over cells. ** No re-standardization
-    happens here ** (see ``_tone_aligned_matrix`` for why that matters): the trace arrives
-    standardized once over the whole session and is only averaged.
+    mean, per cell -- then averaged over cells. ** No re-standardization happens here ** (see
+    ``_tone_aligned_matrix`` for why that matters): the trace arrives standardized once over
+    the whole session and is only averaged.
 
-    The one deliberate mismatch with the index: this averages over trials, whereas
-    ``summarize_cells`` takes each cell's MEDIAN over trials. So the mean of this curve over
-    the shaded window is close to, but not identical to, the mouse's plotted index. Stated
-    rather than papered over by switching either one to match the other -- the median is
-    there so a single anomalous trial cannot define a neuron, and a median is the wrong
-    thing to draw a time course with.
+    The mouse's panel-M curve is the mean of these rows over trials (cells and trials are both
+    plain means, so the order does not matter). The one deliberate mismatch with the index:
+    ``summarize_cells`` takes each cell's MEDIAN over trials, so the mean of the curve over the
+    shaded window is close to, but not identical to, the mouse's plotted index. Stated rather
+    than papered over -- the median is there so a single anomalous trial cannot define a
+    neuron, and a median is the wrong thing to draw a time course with.
     """
     pre_f = _window_frames(EVENT_PROXIMAL_PRE_S)
     post_f = _window_frames(EVENT_PROXIMAL_POST_S)
@@ -2810,21 +2816,37 @@ def _event_aligned_mouse_trace(z, session, trials, epoch):
                 f'The trial was retained, so every window this lane needs must be present.')
         base_on, base_off = get_epoch_frames(session, BASELINE_EPOCH, trial_idx)
         baseline = z[:, base_on:base_off].mean(axis=1, keepdims=True)
-        per_trial.append(z[:, lo:hi] - baseline)
+        per_trial.append((z[:, lo:hi] - baseline).mean(axis=0))
 
-    avg = np.mean(np.stack(per_trial, axis=0), axis=0)      # (n_cells, win)
     time_axis = (np.arange(pre_f + post_f) - pre_f) / MINISCOPE_FPS
-    return avg.mean(axis=0), time_axis
+    return np.stack(per_trial, axis=0), time_axis
+
+
+def _shock_to_post_shock_s(session, trials):
+    """Seconds from shock onset to post-shock onset (= shock offset) on each trial."""
+    return np.array([(get_epoch_frames(session, 'post_shock', t)[0]
+                      - get_epoch_frames(session, 'shock', t)[0]) / MINISCOPE_FPS
+                     for t in trials])
 
 
 def collect_event_aligned_traces(mice_per_group, sessions, signal, mapping='full',
                                  crossreg_to_use=None):
-    """{group: {epoch: (n_mice, win) array}} plus the time axis, for panel M.
+    """Panel M's curves and their per-trial breakdown, for every mouse.
+
+    Returns a dict:
+      'time'               the time axis (s from onset)
+      'mouse'              {group: {event: (n_mice, win)}} -- each mouse's mean over trials
+      'mice'               {group: [mouse, ...]} in the row order of 'mouse'
+      'trial'              {group: {event: {trial_idx: (n_mice_with_trial, win)}}}
+      'post_shock_onset_s' shock onset -> post-shock onset, the same on every trial (checked)
 
     Built from the same ``resolve_shared_cells`` / ``retained_trials`` pair the index uses, so
     the curves and the numbers describe the same cells and the same trials.
     """
-    traces = {g: {e: [] for e in RESPONSE_EPOCHS} for g in DREADD_DISPLAY_ORDER}
+    mouse_tr = {g: {e: [] for e in PANEL_M_EVENTS} for g in DREADD_DISPLAY_ORDER}
+    trial_tr = {g: {e: {} for e in PANEL_M_EVENTS} for g in DREADD_DISPLAY_ORDER}
+    mice = {g: [] for g in DREADD_DISPLAY_ORDER}
+    shock_durations = []
     time_axis = None
     for group in DREADD_DISPLAY_ORDER:
         for mouse in mice_per_group.get(group, []):
@@ -2835,47 +2857,80 @@ def collect_event_aligned_traces(mice_per_group, sessions, signal, mapping='full
             cell_ids, _ = resolve_shared_cells(session, mapping=mapping, with_crossreg=wc)
             z = _standardized_trace(session, signal, cell_ids)
             trials, _ = retained_trials(session)
-            for epoch in RESPONSE_EPOCHS:
-                vec, time_axis = _event_aligned_mouse_trace(z, session, trials, epoch)
-                traces[group][epoch].append(vec)
-    out = {g: {e: np.stack(v, axis=0) for e, v in per_epoch.items() if v}
-           for g, per_epoch in traces.items()}
-    out = {g: v for g, v in out.items() if v}
-    if not out:
+            mice[group].append(mouse)
+            shock_durations.append(_shock_to_post_shock_s(session, trials))
+            for epoch in PANEL_M_EVENTS:
+                per_trial, time_axis = _event_aligned_trial_traces(z, session, trials, epoch)
+                mouse_tr[group][epoch].append(per_trial.mean(axis=0))
+                for trial_idx, row in zip(trials, per_trial):
+                    trial_tr[group][epoch].setdefault(int(trial_idx), []).append(row)
+    if time_axis is None:
         raise RuntimeError('epoch_modulation: collected no event-aligned traces for panel M.')
-    return out, time_axis
+
+    shock_durations = np.concatenate(shock_durations)
+    if np.ptp(shock_durations) > 1.0 / MINISCOPE_FPS:
+        raise RuntimeError(
+            f'epoch_modulation: shock onset -> post-shock onset ranges '
+            f'{shock_durations.min():.3f}-{shock_durations.max():.3f} s across trials. Panel M '
+            f'draws post-shock onset as one line on the shock-aligned facet, which needs it the '
+            f'same on every trial (within one frame).')
+
+    groups = [g for g in DREADD_DISPLAY_ORDER if mice[g]]
+    return {
+        'time': time_axis,
+        'mouse': {g: {e: np.stack(mouse_tr[g][e], axis=0) for e in PANEL_M_EVENTS} for g in groups},
+        'mice': {g: mice[g] for g in groups},
+        'trial': {g: {e: {t: np.stack(v, axis=0) for t, v in sorted(trial_tr[g][e].items())}
+                      for e in PANEL_M_EVENTS} for g in groups},
+        'post_shock_onset_s': float(np.median(shock_durations)),
+    }
 
 
-def plot_event_aligned_traces(traces, time_axis, out_path, window_seconds, signal=PRIMARY_SIGNAL,
+def _mark_event_axes(ax, epoch, window_seconds, post_shock_onset_s, lw):
+    """The analysed window (grey), onset (solid), zero (dashed grey) and, on the shock facet,
+    post-shock onset (dashed black)."""
+    ax.axvspan(0.0, window_seconds, color='0.88', lw=0, zorder=0)
+    ax.axvline(0.0, color='k', lw=lw, zorder=1)
+    ax.axhline(0.0, color='0.6', lw=lw, ls='--', zorder=1)
+    if epoch == 'shock':
+        ax.axvline(post_shock_onset_s, color='k', lw=lw, ls='--', zorder=1)
+
+
+def _plot_group_mean(ax, time_axis, mat, group, lw, label=None):
+    """Mean +/- SEM across the rows of ``mat`` (mice); a single row is drawn without a band."""
+    mu = mat.mean(axis=0)
+    ax.plot(time_axis, mu, color=GROUP_COLOURS[group], lw=lw, label=label, zorder=3)
+    if mat.shape[0] > 1:
+        sem = mat.std(axis=0, ddof=1) / np.sqrt(mat.shape[0])
+        ax.fill_between(time_axis, mu - sem, mu + sem, color=GROUP_COLOURS[group],
+                        alpha=0.2, lw=0, zorder=2)
+
+
+def plot_event_aligned_traces(aligned, out_path, window_seconds, signal=PRIMARY_SIGNAL,
                               auto_close=True):
-    """Panel M: group-mean activity around each event onset, with the analysed window shaded.
+    """Panel M (Figure 2k): group-mean activity around tone, trace and shock onset.
 
     ** This is the panel the whole lane rests on. ** If there is no onset-locked transient
     here, then a null on the short windows means "there is nothing brief to find", not "the
     brief response does not differ between groups" -- a different statement, and the results
     write-up has to say which one it is.
 
-    Mean +/- SEM ACROSS MICE (n = mice, the unit of inference), never across cells.
+    The shock facet is centred on shock onset; the dashed line is post-shock onset (shock
+    offset), whose own 3 s window starts there. Mean +/- SEM ACROSS MICE (n = mice, the unit of
+    inference), never across cells.
     """
+    time_axis = aligned['time']
     # Figure 2k, drawn at its size in the composite (Nature style).
     with nature_style():
-        fig, axs = plt.subplots(1, len(RESPONSE_EPOCHS), figsize=panel_figsize('k'), sharey=True,
+        fig, axs = plt.subplots(1, len(PANEL_M_EVENTS), figsize=panel_figsize('k'), sharey=True,
                                 layout='constrained')
-        axs = np.atleast_1d(axs)
-
-        for ax, epoch in zip(axs.flat, RESPONSE_EPOCHS):
-            ax.axvspan(0.0, window_seconds, color='0.88', lw=0, zorder=0)
-            ax.axvline(0.0, color='k', lw=AXIS_PT, zorder=1)
-            ax.axhline(0.0, color='0.6', lw=AXIS_PT, ls='--', zorder=1)
-            for group in DREADD_DISPLAY_ORDER:
-                mat = traces[group][epoch]
-                mu = mat.mean(axis=0)
-                sem = mat.std(axis=0, ddof=1) / np.sqrt(mat.shape[0])
-                ax.plot(time_axis, mu, color=GROUP_COLOURS[group], lw=0.75,
-                        label=GROUP_LABELS[group], zorder=3)
-                ax.fill_between(time_axis, mu - sem, mu + sem, color=GROUP_COLOURS[group],
-                                alpha=0.2, lw=0, zorder=2)
+        for ax, epoch in zip(axs.flat, PANEL_M_EVENTS):
+            _mark_event_axes(ax, epoch, window_seconds, aligned['post_shock_onset_s'], AXIS_PT)
+            for group, per_event in aligned['mouse'].items():
+                _plot_group_mean(ax, time_axis, per_event[epoch], group, 0.75,
+                                 label=GROUP_LABELS[group])
             ax.set_title(_EVENT_TAGS[epoch])
+            ax.set_xticks(np.arange(-EVENT_PROXIMAL_PRE_S, EVENT_PROXIMAL_POST_S + 1, 5.0))
         axs.flat[0].set_ylabel('Activity (s.d.)')
         axs.flat[0].legend(loc='upper left', handlelength=1.0)
         fig.supxlabel('Time from onset (s)', fontsize=FONT_PT)
@@ -2884,6 +2939,108 @@ def plot_event_aligned_traces(traces, time_axis, out_path, window_seconds, signa
         save_paper_panel(fig, os.path.splitext(out_path)[0])
     if auto_close:
         plt.close(fig)
+
+
+def plot_event_aligned_per_trial(aligned, out_path, window_seconds, signal=PRIMARY_SIGNAL,
+                                 auto_close=True):
+    """Panel M split by conditioning trial: one row per trial, groups overlaid.
+
+    Diagnostic, not a paper panel. Shows whether a group's event response changes across the
+    five tone-shock pairings -- in particular whether the first (shock-naive) trial differs --
+    which the trial-averaged panel M cannot. Mean +/- SEM across the mice that retain the trial.
+    Rows are labelled with PROTOCOL trial numbers (code trial 0 = protocol trial 1).
+    """
+    time_axis = aligned['time']
+    trial_ids = sorted({t for per_event in aligned['trial'].values()
+                        for t in per_event[PANEL_M_EVENTS[0]]})
+    fig, axs = plt.subplots(len(trial_ids), len(PANEL_M_EVENTS), sharex=True, sharey=True,
+                            figsize=(3.0 * len(PANEL_M_EVENTS), 1.9 * len(trial_ids)),
+                            squeeze=False)
+    for row, trial_idx in enumerate(trial_ids):
+        for col, epoch in enumerate(PANEL_M_EVENTS):
+            ax = axs[row, col]
+            _mark_event_axes(ax, epoch, window_seconds, aligned['post_shock_onset_s'], 0.6)
+            for group, per_event in aligned['trial'].items():
+                if trial_idx not in per_event[epoch]:
+                    raise RuntimeError(
+                        f'epoch_modulation: no {GROUP_LABELS[group]} mouse retains protocol '
+                        f'trial {trial_idx + 1}; the per-trial panel has nothing to draw there.')
+                mat = per_event[epoch][trial_idx]
+                _plot_group_mean(ax, time_axis, mat, group, 1.0,
+                                 label=f'{GROUP_LABELS[group]} (n = {mat.shape[0]})')
+            if row == 0:
+                ax.set_title(_EVENT_TAGS[epoch])
+            if col == 0:
+                ax.set_ylabel(f'Trial {trial_idx + 1}\nactivity (s.d.)')
+                ax.legend(loc='upper left', fontsize='x-small', frameon=False)
+    for ax in axs[-1]:
+        ax.set_xlabel('Time from onset (s)')
+    fig.suptitle(f'Event-aligned activity by conditioning trial ({signal}); mean ± s.e.m. across '
+                 f'mice; dashed black on Shock = post-shock onset', size='medium')
+    fig.tight_layout()
+    save_fig(fig, out_path)
+    if auto_close:
+        plt.close(fig)
+
+
+def plot_event_aligned_per_mouse(aligned, out_path, window_seconds, signal=PRIMARY_SIGNAL,
+                                 auto_close=True):
+    """Panel M with every mouse drawn: one column per group, one row per event.
+
+    Diagnostic, not a paper panel. Each thin line is one mouse's mean over its retained trials
+    (the rows panel M averages); the thick line is the group mean panel M draws. Shows whether
+    a group-mean response is shared by its animals or carried by one of them.
+    """
+    time_axis = aligned['time']
+    groups = list(aligned['mouse'])
+    fig, axs = plt.subplots(len(PANEL_M_EVENTS), len(groups), sharex=True, sharey=True,
+                            figsize=(3.2 * len(groups), 2.3 * len(PANEL_M_EVENTS)), squeeze=False)
+    mouse_colours = plt.get_cmap('tab10').colors
+    for col, group in enumerate(groups):
+        for row, epoch in enumerate(PANEL_M_EVENTS):
+            ax = axs[row, col]
+            _mark_event_axes(ax, epoch, window_seconds, aligned['post_shock_onset_s'], 0.6)
+            mat = aligned['mouse'][group][epoch]
+            for i, (mouse, vec) in enumerate(zip(aligned['mice'][group], mat)):
+                ax.plot(time_axis, vec, color=mouse_colours[i % len(mouse_colours)], lw=0.6,
+                        alpha=0.85, label=mouse, zorder=2)
+            ax.plot(time_axis, mat.mean(axis=0), color=GROUP_COLOURS[group], lw=1.8,
+                    label=f'{GROUP_LABELS[group]} mean', zorder=3)
+            if row == 0:
+                ax.set_title(f'{GROUP_LABELS[group]} (n = {mat.shape[0]})')
+                ax.legend(loc='upper left', fontsize='x-small', frameon=False, ncol=2)
+            if col == 0:
+                ax.set_ylabel(f'{_EVENT_TAGS[epoch]}\nactivity (s.d.)')
+    for ax in axs[-1]:
+        ax.set_xlabel('Time from onset (s)')
+    fig.suptitle(f'Event-aligned activity per mouse ({signal}); thin = one mouse (mean over its '
+                 f'trials), thick = group mean', size='medium')
+    fig.tight_layout()
+    save_fig(fig, out_path)
+    if auto_close:
+        plt.close(fig)
+
+
+def plot_event_aligned_panels(event_proximal_dir, mice_per_group, sessions, signal,
+                              window_seconds=EVENT_PROXIMAL_WINDOW_S, mapping='full',
+                              crossreg_to_use=None, auto_close=True):
+    """Panel M and its two diagnostics (per trial, per mouse) into ``event_proximal_dir``.
+
+    Called by the event-proximal lane; also callable on its own (sections.run_event_aligned_panels)
+    to redraw the figures without rerunning the lane's statistics.
+    """
+    aligned = collect_event_aligned_traces(mice_per_group, sessions, signal, mapping=mapping,
+                                           crossreg_to_use=crossreg_to_use)
+    plot_event_aligned_traces(aligned, os.path.join(event_proximal_dir,
+                                                    'panel_M_event_aligned_traces.png'),
+                              window_seconds, signal=signal, auto_close=auto_close)
+    plot_event_aligned_per_trial(aligned, os.path.join(event_proximal_dir,
+                                                       'panel_M_per_trial.png'),
+                                 window_seconds, signal=signal, auto_close=auto_close)
+    plot_event_aligned_per_mouse(aligned, os.path.join(event_proximal_dir,
+                                                       'panel_M_per_mouse.png'),
+                                 window_seconds, signal=signal, auto_close=auto_close)
+    return aligned
 
 
 def dilution_table(df_mouse_event, df_mouse_full):
@@ -3067,11 +3224,9 @@ def run_event_proximal_lane(sig_dir, signal, mice_per_group, sessions, df_mouse_
                + '-' * 74 + '\n' + model_text)
 
     # ── Panel M: the premise ──
-    traces, time_axis = collect_event_aligned_traces(
-        mice_per_group, sessions, signal, mapping=mapping, crossreg_to_use=crossreg_to_use)
-    plot_event_aligned_traces(traces, time_axis,
-                              os.path.join(out_dir, 'panel_M_event_aligned_traces.png'),
-                              window_seconds, signal=signal, auto_close=auto_close)
+    plot_event_aligned_panels(out_dir, mice_per_group, sessions, signal,
+                              window_seconds=window_seconds, mapping=mapping,
+                              crossreg_to_use=crossreg_to_use, auto_close=auto_close)
     plot_dilution_comparison(dilution, os.path.join(out_dir, 'dilution_vs_full_epoch.png'),
                              window_seconds, signal=signal, auto_close=auto_close)
 

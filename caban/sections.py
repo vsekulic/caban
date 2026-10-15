@@ -48,6 +48,9 @@ import caban.locomotion as locomotion
 import caban.speed_tuning as speed_tuning
 from caban.event_locked_responsiveness import run_event_locked_responsiveness as _run_event_locked_responsiveness
 from caban.epoch_modulation import run_epoch_modulation as _run_epoch_modulation
+from caban.epoch_modulation import (plot_event_aligned_panels as _plot_event_aligned_panels,
+                                   SIGNALS as _EPOCH_MODULATION_SIGNALS,
+                                   EVENT_PROXIMAL_DIRNAME as _EVENT_PROXIMAL_DIRNAME)
 from caban.epoch_sequence import run_epoch_sequence as _run_epoch_sequence
 from caban.freezing_tuned_cells import run_freezing_tuned_cells as _run_freezing_tuned_cells
 from caban.population_coupling import run_population_coupling as _run_population_coupling
@@ -1757,6 +1760,22 @@ def run_epoch_modulation(ds, cfg):
         run_event_proximal=cfg.epoch_modulation_event_proximal,
         run_cell_selectivity=cfg.epoch_modulation_cell_selectivity,
         run_split_half_stability=cfg.epoch_modulation_split_half_stability)
+    msg_end()
+
+
+# ---------------------------------------------------------------------------
+def run_event_aligned_panels(ds, cfg):
+    """Redraw panel M (Figure 2k) and its per-trial and per-mouse diagnostics, both signals,
+    into ``<PLOTS_DIR>/epoch_modulation/<signal>/event_proximal/`` -- without rerunning the
+    event-proximal lane's statistics (run_epoch_modulation draws the same figures)."""
+    msg_start('*** Event-aligned activity: panel M + per-trial / per-mouse diagnostics')
+    for signal in _EPOCH_MODULATION_SIGNALS:
+        out_dir = os.path.join(cfg.PLOTS_DIR, 'epoch_modulation', signal, _EVENT_PROXIMAL_DIRNAME)
+        if not os.path.isdir(out_dir):
+            raise FileNotFoundError(f'{out_dir} does not exist: run run_epoch_modulation first.')
+        aligned = _plot_event_aligned_panels(out_dir, ds.mice_per_group, ds.TFC_cond, signal)
+        print(f'[{signal}] shock -> post-shock onset {aligned["post_shock_onset_s"]:.2f} s; '
+              f'wrote panel_M_event_aligned_traces, panel_M_per_trial, panel_M_per_mouse -> {out_dir}')
     msg_end()
 
 

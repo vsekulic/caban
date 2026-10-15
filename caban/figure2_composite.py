@@ -108,9 +108,9 @@ epochs: animals (thin lines), group means (thick lines, markers) and s.e.m. (ban
 **j**, 48-h recall (Test B): per-animal change from pre-tone to post-tone in log per-event amplitude
 (left) and log population event rate (right); dashed line, no change; brackets show unadjusted
 model-derived contrasts. **k**, Event-aligned activity (YrA, standardized once per cell over the session, minus each trial's
-pre-tone mean) around tone onset, trace onset (tone offset), shock onset and post-shock onset (shock
-offset), all retained trials: mean (lines) and s.e.m. (bands) across animals; grey, the 3-s window
-analysed; dashed line, zero.
+pre-tone mean) around tone onset, trace onset (tone offset) and shock onset, all retained trials:
+mean (lines) and s.e.m. (bands) across animals; grey, the 3-s window analysed; dashed grey line,
+zero; dashed black line (Shock), shock offset, where the 3-s post-shock window begins.
 Brackets in d and e: Welch tests on animal values, Holm-corrected over the two
 treatment-versus-control comparisons (Exc versus Inh uncorrected); in g: contrasts of the group x
 epoch mixed model with animal as random intercept, Holm-corrected over the two treatment-versus-
