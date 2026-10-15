@@ -150,6 +150,7 @@ SESSIONS_NOT_RUN = {
     "G14-ST719-hM4D/2022_01_18-TFC_test_B_1wk/14_52_35-TFC_test_B_1wk-borked": "re-recorded as 15_10_50-TFC_test_B_1wk (VS, 2026-10-10)",
     "G18-ST734-hM3D/2022_02_07-TFC_cond/14_57_23-CNO2-borked": "disk filled; re-recorded as 15_03_49-CNO2 (VS, 2026-10-10)",
     "G13-ST710-mCherry/2022_01_10-TFC_test_B_1wk/16_38_56-HC2b": "broken recording: only 0.avi finalised, 1.avi unfinalised, 2-6 fragments or empty; a misc short repeat in no grouping (VS, 2026-10-11)",
+    "G13-ST710-mCherry/2021_12_13/15_53_03": "unusable for now: almost no expression yet (HC0 GCaMP check); initialization kept 6 seeds and minian's unit_merge failed on an empty merge (ValueError: need at least one array to concatenate). Known failure; minian not patched for it (VS, 2026-10-15)",
 }
 
 

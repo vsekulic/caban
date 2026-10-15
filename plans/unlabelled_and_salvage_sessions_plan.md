@@ -35,7 +35,7 @@ ordinary sessions (VS, 2026-10-10):
 
 | session | what it is |
 |---|---|
-| G12 `2021_12_13/14_43_31`, G13 `2021_12_13/15_53_03` | **HC0**: ~5 min homecage, before any track day; GCaMP expression check |
+| G12 `2021_12_13/14_43_31`, G13 `2021_12_13/15_53_03` | **HC0**: ~5 min homecage, before any track day; GCaMP expression check. G13's is **unusable for now** (batch run 2026-10-15 kept 6 seeds; Minian's `unit_merge` failed on the empty merge): in `SESSIONS_NOT_RUN`, Minian not patched for it (VS, 2026-10-15) |
 | G06 `2021_10_07-check1/15_00_46` | 3 min check recording |
 | G05 `2021_09_01-TFC_test_B/15_20_05-iso` | 3 min under isoflurane, then waking; supplementary analysis in [isoflurane_recording_analysis_plan.md](isoflurane_recording_analysis_plan.md) |
 | G05 `2021_08_23-track_day1-tests/13_59_41-HC1a`, `14_23_55-LT1a` | short repeats beside the labelled HC1 / LT1 |

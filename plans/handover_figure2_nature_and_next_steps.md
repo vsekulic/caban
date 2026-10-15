@@ -78,9 +78,10 @@ Both reviews done (no code defects; statistics sound). Key changes vs the paper 
 
 - Left-out batch **finished**: 520 of 521 done. G05 iso rerun **done** (densify fix works). G09 HC3
   done. G13 HC2b cleared (never run, by decision).
-- **One failure, not diagnosed**: G13 `2021_12_13/15_53_03` (HC0 expression check, in no grouping):
-  papermill failed at notebook cell 160 (CNMF, `A, …`). Read its error in `~/minian.log` /
-  `minian_batch_status.md`, diagnose, tell VS before relaunching.
+- **One failure, resolved (2026-10-15)**: G13 `2021_12_13/15_53_03` (HC0 expression check, in no
+  grouping): almost no expression; initialization kept 6 seeds and `unit_merge` failed on the empty
+  merge. VS: known failure, **unusable for now**, Minian not patched; added to
+  `session_queue.SESSIONS_NOT_RUN`. Not relaunched.
 - **Then** the old handover's §1 "When it finishes" steps: sync to MINISCOPE (**VS must plug in
   MINISCOPE**; `scripts/sync_manifest.py` on the Razer, `run_final_sync.sh`-style chain on the Mac),
   snapshot `minian_batch_status.md` into `reports/`, close A1/A2/A5/A6 in
@@ -96,8 +97,8 @@ Both reviews done (no code defects; statistics sound). Key changes vs the paper 
 
 ## 5. Next, in order (VS's agreed list, updated)
 
-1. Check the rebuilt Figure 2 (§2); get VS's approval of the paper-text draft and commit it.
-2. Razer: G13 HC0 failure, then sync, then crossreg gate (§4).
+1. ~~Check the rebuilt Figure 2 (§2); paper-text draft~~ — done 2026-10-15 (figure checked; text approved, `4f1bbb0`).
+2. Razer: ~~G13 HC0 failure~~ (unusable, §4), then sync, then crossreg gate (§4).
 3. **G17's LT2 in Fig. 2d** (recorded after conditioning): check whether 2d changes without G17 —
    as a *check reported to VS*, not a new lane; add as an item in the Figure 2 plan §6.
 4. `docs/epoch_modulation.md` results part for the trial-0 rerun (§3).
