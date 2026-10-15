@@ -48,6 +48,7 @@ import caban.locomotion as locomotion
 import caban.speed_tuning as speed_tuning
 from caban.event_locked_responsiveness import run_event_locked_responsiveness as _run_event_locked_responsiveness
 from caban.epoch_modulation import run_epoch_modulation as _run_epoch_modulation
+from caban.shock_motion import run_shock_motion_check as _run_shock_motion_check
 from caban.epoch_modulation import (plot_event_aligned_panels as _plot_event_aligned_panels,
                                    SIGNALS as _EPOCH_MODULATION_SIGNALS,
                                    EVENT_PROXIMAL_DIRNAME as _EVENT_PROXIMAL_DIRNAME)
@@ -1776,6 +1777,18 @@ def run_event_aligned_panels(ds, cfg):
         aligned = _plot_event_aligned_panels(out_dir, ds.mice_per_group, ds.TFC_cond, signal)
         print(f'[{signal}] shock -> post-shock onset {aligned["post_shock_onset_s"]:.2f} s; '
               f'wrote panel_M_event_aligned_traces, panel_M_per_trial, panel_M_per_mouse -> {out_dir}')
+    msg_end()
+
+
+# ---------------------------------------------------------------------------
+def run_shock_motion_check(ds, cfg):
+    """Shock-motion check (diagnostic for Figure 2k): Minian's motion-correction shifts against the
+    activity around the shock, both signals, into
+    ``<PLOTS_DIR>/epoch_modulation/<signal>/event_proximal/shock_motion_check/``. Needs the shifts
+    exported by scripts/export_tfc_cond_motion.py (caban.shock_motion.MOTION_EXPORT_PATH)."""
+    msg_start('*** Shock-motion check')
+    for signal in _EPOCH_MODULATION_SIGNALS:
+        _run_shock_motion_check(cfg.PLOTS_DIR, ds.mice_per_group, ds.TFC_cond, signal)
     msg_end()
 
 
