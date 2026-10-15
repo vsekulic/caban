@@ -12,14 +12,15 @@ A response locked to an event *onset* — a transient lasting a second or two �
 small fraction of such a mean and can be diluted below detectability. This companion asks whether
 that is what is happening, by recomputing the identical modulation index over a **3 s window
 beginning at each event onset**: tone onset, trace onset (tone offset), shock onset, and post-shock
-onset.
+onset (shock offset). **No window extends past the end of its own epoch**, so the shock window is the
+2 s unconditioned stimulus itself and ends where the post-shock window begins.
 
 ## The measurement
 
 For cell *c* on trial *t*, with the trace standardised **once** per cell over the whole session
 exactly as in the primary analysis:
 
-    index(c, t, event) = mean over [onset, onset + 3 s) − mean over that trial's pre-tone window
+    index(c, t, event) = mean over [onset, min(onset + 3 s, epoch end)) − mean over that trial's pre-tone window
 
 - The **window is the only thing that differs** from the primary analysis. The standardisation, the
   trial-retention rule, the resolved cell set, the two signals and the summarisation are identical,
@@ -29,8 +30,9 @@ exactly as in the primary analysis:
   difference of two window means and is not exposure-scaled, so a longer baseline is simply a more
   precisely estimated one; shortening it to match the response window would add noise to every
   index without changing what is measured.
-- The window length is **uniform across all four events**, so every window contains the same number
-  of frames and the four-level event factor is a clean comparison.
+- The window is **3 s for tone, trace and post-shock and 2 s for shock** (the US). The index is a
+  window mean, so a shorter window changes its precision, not what it estimates; the design stays
+  balanced within cell (one value per cell per event), which is what the hierarchical model needs.
 - The **trial dimension is preserved** until summarisation: one index per cell per trial per event,
   then each cell's value is the median across its retained trials, and each animal's value is the
   mean across its cells.
@@ -40,13 +42,13 @@ exactly as in the primary analysis:
 ## Two properties of the design, stated rather than corrected
 
 **The shock window is the one that was never diluted.** The primary analysis's shock epoch is
-already the 2 s unconditioned stimulus, so the two lanes measure nearly the same quantity there.
-Agreement in that window is an internal consistency check on the windowing, not independent
-evidence.
+already the 2 s unconditioned stimulus, and this lane's shock window is that same 2 s, so the two
+lanes' shock values are identical. That identity is checked on every run; it is a consistency check
+on the windowing, not independent evidence.
 
-**The shock and post-shock windows overlap by 1 s**, because the US is 2 s long and the window is
-3 s. Those two estimates are correlated by construction; no event-specificity claim is made across
-that boundary.
+**The shock and post-shock windows do not overlap.** Shock is the 2 s US; post-shock begins at shock
+offset. Calcium-indicator kinetics can still carry shock-evoked activity into the post-shock window,
+so the two are not independent readouts, and no claim of a response confined to one of them is made.
 
 **Deconvolved traces are constant inside a short window more often than inside an epoch.** The
 deconvolution-constrained signal is exactly zero between fitted transients, so a cell with no fitted

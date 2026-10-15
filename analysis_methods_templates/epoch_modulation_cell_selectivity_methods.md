@@ -11,8 +11,9 @@ of SST interneurons changes it.
 Per cell, activity was standardized once over the whole session (see the parent METHODS; YrA
 primary, C confirmatory), and for every retained conditioning trial an index was formed for each
 of the four events — tone onset, trace onset (tone offset), shock onset and post-shock onset — as
-the mean of the standardized trace over the **3 s from that onset** minus the mean over the same
-trial's 20 s pre-tone window. This is the event-proximal index, unchanged.
+the mean of the standardized trace over the **3 s from that onset** (for shock, the 2 s shock
+itself: no window extends past its own epoch) minus the mean over the same trial's 20 s pre-tone
+window. This is the event-proximal index, unchanged.
 
 Each (mouse, trial, event) mean **across that mouse's cells** was then subtracted, so every index
 expresses a cell's departure from its own animal's average cell on that trial. Without this

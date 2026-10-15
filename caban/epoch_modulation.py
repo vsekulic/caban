@@ -328,9 +328,14 @@ def _index_window(session, epoch, trial_idx, window_seconds, n_frames):
     the module docstring. This is the default everywhere and nothing about it changes.
 
     ``window_seconds`` a float -- the EVENT-PROXIMAL window: that many seconds starting at the
-    epoch's ONSET. The onset is read from ``get_epoch_frames`` rather than recomputed from the
-    session's declared times, so the two lanes anchor on exactly the same frame and can differ
-    only in how far forward they average.
+    epoch's ONSET, ** capped at the epoch's own end **. The onset is read from ``get_epoch_frames``
+    rather than recomputed from the session's declared times, so the two lanes anchor on exactly
+    the same frame and can differ only in how far forward they average.
+
+    The cap means no window straddles an epoch boundary (VS, 2026-10-15). It binds only for
+    'shock': the US is 2 s, so the shock window is the US itself and ends where post-shock
+    begins, rather than running 1 s into it. Tone, trace and post-shock are far longer than the
+    window and are not affected.
 
     The offset guard is not defensive boilerplate: for 'post_shock' a short window is always
     inside the recording whenever the full one is (``retained_trials`` requires a 20 s ITI), so
@@ -346,7 +351,7 @@ def _index_window(session, epoch, trial_idx, window_seconds, n_frames):
         return int(frames[0]), int(frames[1])
 
     onset = int(frames[0])
-    offset = onset + _window_frames(window_seconds)
+    offset = min(onset + _window_frames(window_seconds), int(frames[1]))
     if offset > n_frames:
         raise RuntimeError(
             f'epoch_modulation: mouse {session.mouse!r} trial {trial_idx} {epoch!r} '
@@ -702,8 +707,7 @@ def format_model_report(contrasts, omnibus, method, n_mice, window_seconds=None)
 
     ``window_seconds`` mirrors ``build_modulation_table``: None describes the full-epoch
     analysis (unchanged), a float describes the event-proximal windows, whose per-window
-    caveats are different ones -- the shock window is no longer the 2 s US, and the overlap
-    with post-shock is created by the window length rather than by indicator kinetics alone.
+    caveats are different ones (see ``_index_window``: the shock window is capped at the US).
     """
     if window_seconds is None:
         heading = 'Mouse-level model of per-cell epoch modulation'
@@ -720,15 +724,13 @@ def format_model_report(contrasts, omnibus, method, n_mice, window_seconds=None)
                    f'({window_seconds:g} s from onset)')
         shock_note = ''
         tail = [
-            f'Every window is {window_seconds:g} s from its event onset, so all four are',
-            'estimated from the same number of frames. Two consequences to keep in view:',
-            f'  - the shock window OVERLAPS the post-shock window by '
-            f'{max(0.0, window_seconds - 2.0):g} s, because the',
-            '    US is only 2 s long. Those two estimates are correlated by construction, and',
-            '    no epoch-specificity claim should be made across that boundary.',
-            '  - the shock event is the one window the full-epoch analysis did NOT dilute:',
-            '    its epoch was already the 2 s US, so agreement between the two lanes there',
-            '    is an internal check rather than an independent result.',
+            f'Every window is {window_seconds:g} s from its event onset, capped at its epoch\'s',
+            'end so that no window straddles an epoch boundary. Two consequences to keep in view:',
+            '  - the cap binds only for shock: its window is the 2 s US itself, ending where the',
+            '    post-shock window begins. The two do not overlap; GCaMP kinetics can still carry',
+            '    shock-evoked activity into post-shock, so they are not independent readouts.',
+            '  - the shock window is therefore IDENTICAL to the full-epoch analysis\'s shock epoch,',
+            '    so the two lanes must agree exactly there: an internal check, not a result.',
             '',
             'This is a COMPANION lane. The full-epoch analysis beside it is unchanged and',
             'remains the paper-facing one.',
@@ -2756,9 +2758,9 @@ def compare_hierarchical_signals(perm_by_signal):
 # itself against -- but it is written out as a labelled CROSS-CHECK and brackets nothing.
 # ─────────────────────────────────────────────────────────────────────────────
 
-# The one number that defines this lane. Uniform across all four events, so the four
-# windows hold the same number of frames and the epoch factor stays a clean 4-level
-# comparison. 3 s is short enough to be genuinely event-proximal (a seventh of the 20 s
+# The one number that defines this lane: every window is this long from its event onset, capped
+# at the epoch's own end (_index_window), so tone, trace and post-shock are 3 s and shock is the
+# 2 s US -- no window straddles the shock offset (VS, 2026-10-15). 3 s is short enough to be genuinely event-proximal (a seventh of the 20 s
 # epochs) and long enough to contain a GCaMP transient's rise and part of its decay.
 EVENT_PROXIMAL_WINDOW_S = 3.0
 
@@ -2777,7 +2779,9 @@ EVENT_ONSET_LABELS = {'tone': 'tone onset', 'trace': 'trace onset (tone offset)'
 
 
 def _event_proximal_epoch_titles(window_seconds):
-    return {e: f'{EVENT_ONSET_LABELS[e]}\n+{window_seconds:g} s' for e in RESPONSE_EPOCHS}
+    # Shock's window is capped at the US (_index_window).
+    return {e: (f'{EVENT_ONSET_LABELS[e]}\n+2 s (the US)' if e == 'shock'
+                else f'{EVENT_ONSET_LABELS[e]}\n+{window_seconds:g} s') for e in RESPONSE_EPOCHS}
 
 
 # Panel M's events. Shock and post-shock are ONE alignment: post-shock onset is shock offset, a
@@ -3066,6 +3070,13 @@ def dilution_table(df_mouse_event, df_mouse_full):
             f'rows but only {len(merged)} of them matched the full-epoch lane. Both lanes must '
             f'describe the same mice and epochs.')
     merged['difference'] = merged['value_event'] - merged['value_full']
+    # Shock's event-proximal window is capped at the US, i.e. it IS the full-epoch shock window.
+    shock = merged[merged['epoch'] == 'shock']
+    if not np.allclose(shock['value_event'], shock['value_full'], rtol=0, atol=1e-12):
+        raise RuntimeError(
+            'epoch_modulation: the event-proximal shock index differs from the full-epoch one '
+            f'(max |difference| {shock["difference"].abs().max():.3g}). Both windows are the 2 s US, '
+            'so they must be identical; the windowing is wrong.')
     # Magnitude ratio, not signed: "did the short window see MORE modulation" is a question
     # about size. A sign flip between the two lanes is visible in the two value columns.
     merged['abs_ratio'] = np.abs(merged['value_event']) / np.abs(merged['value_full'])
@@ -3118,7 +3129,7 @@ def format_dilution_report(dilution, coverage, window_seconds, signal):
         '=' * len(heading),
         '',
         f'Response window: {window_seconds:g} s from each event onset (tone, trace, shock,',
-        f'post-shock), uniform across all four. Baseline: the SAME trial-matched '
+        f'post-shock), capped at the epoch\'s end -- so shock is the 2 s US. Baseline: the SAME trial-matched '
         f'{TRACE_MATCHED_WINDOW_S:.0f} s',
         'pre-tone window the full-epoch analysis uses -- a mean against a mean is not',
         'exposure-scaled, so a longer baseline is simply a more precise one.',
@@ -3146,9 +3157,9 @@ def format_dilution_report(dilution, coverage, window_seconds, signal):
             f'{n_larger}/{len(sub)} mice larger in the short window')
     lines += [
         '',
-        'The shock row is the internal check, not a result: the full-epoch shock window was',
-        'already the 2 s US, so the two lanes are measuring nearly the same thing there and',
-        'should agree. A large divergence in that row means the windowing is wrong.',
+        'The shock row is the internal check, not a result: both lanes\' shock window is the',
+        '2 s US, so the two values are identical (dilution_table checks this and fails',
+        'otherwise).',
         '',
     ]
     if 'frac_flat_window' in coverage.columns:
@@ -3259,8 +3270,8 @@ def run_event_proximal_lane(sig_dir, signal, mice_per_group, sessions, df_mouse_
                   f'Brackets are Holm-adjusted EXACT mouse-label randomization P-values '
                   f'({HIERARCHICAL_DIRNAME}/tables/hierarchical_permutation.csv), whose model '
                   f'gives each event window its own between-animal variance.\n'
-                  f'The shock window overlaps the post-shock window by '
-                  f'{max(0.0, window_seconds - 2.0):g} s, because the US is only 2 s long.')
+                  f'The shock window is the 2 s US (windows are capped at their epoch\'s end), '
+                  f'so it ends where the post-shock window begins.')
     else:
         # Stated on the figure rather than silently substituted: with the hierarchical lane
         # off, the only brackets available are the ones this lane does not report.
