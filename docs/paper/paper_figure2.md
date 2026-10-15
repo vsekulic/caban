@@ -123,29 +123,31 @@ mCherry within each epoch by linear contrasts of the fitted model, Holm-correcte
 treatment-versus-control comparisons in that epoch (Fig. 2i).
 
 hM3D increased per-event amplitude relative to control during the **trace** interval, the primary
-comparison (1.55-fold, 95% CI 1.11 to 2.16; Holm-adjusted *P* = 0.025). Because CA1 activity rises
+comparison (1.53-fold, 95% CI 1.10 to 2.12; Holm-adjusted *P* = 0.028). Because CA1 activity rises
 after the footshock, and silencing CA1 immediately afterwards impairs trace fear memory (Puhger et
 al., 2024), the **post-shock** window was examined as a hypothesis-driven secondary comparison: hM3D
-amplitude there was elevated by a similar amount (1.46-fold, 95% CI 1.05 to 2.03; Holm-adjusted
-*P* = 0.056, unadjusted *P* = 0.028), as it was before the tone (1.38-fold, 95% CI 0.99 to 1.93;
-*P* = 0.108). hM4D did not significantly alter per-event amplitude in any epoch (trace 1.18-fold,
-95% CI 0.86 to 1.62, *P* = 0.278; pre-tone 1.14-fold, *P* = 0.386; post-shock 1.17-fold,
-*P* = 0.299) (Fig. 2i, top).
+amplitude there was elevated by a similar amount (1.49-fold, 95% CI 1.08 to 2.07; Holm-adjusted
+*P* = 0.038, unadjusted *P* = 0.019). Before the tone the difference was of similar size (1.42-fold,
+95% CI 1.03 to 1.97; unadjusted *P* = 0.035, Holm-adjusted *P* = 0.071) but did not survive
+correction. hM3D mice thus showed larger per-event amplitude than controls, evident in the trace
+(primary) and post-shock (secondary) epochs. hM4D did not significantly alter per-event amplitude
+in any epoch (trace 1.18-fold, 95% CI 0.87 to 1.61, *P* = 0.271; pre-tone 1.13-fold, *P* = 0.412;
+post-shock 1.21-fold, *P* = 0.207) (Fig. 2i, top).
 
 Population event rate showed the complementary pattern. hM4D reduced the event rate during the
-**trace** interval (rate ratio 0.51, 95% CI 0.33 to 0.77; absolute difference −0.039 events s⁻¹
-per cell; Holm-adjusted *P* = 0.0073). In the post-shock window, hM4D lowered the event rate by a
-similar proportion (0.65, 95% CI 0.43 to 1.00; −0.030 events s⁻¹ per cell; Holm-adjusted
-*P* = 0.097, unadjusted *P* = 0.048), as it did before the tone (0.64, 95% CI 0.42 to 0.98;
-*P* = 0.083). hM3D did not significantly alter population event rate in any epoch (trace rate ratio
-0.78, 95% CI 0.50 to 1.22, *P* = 0.249; pre-tone 0.89, *P* = 0.586; post-shock 1.10, *P* = 0.658)
-(Fig. 2i, bottom).
+**trace** interval (rate ratio 0.54, 95% CI 0.36 to 0.81; absolute difference −0.036 events s⁻¹
+per cell; Holm-adjusted *P* = 0.011). In the post-shock window, hM4D lowered the event rate by a
+similar proportion (0.67, 95% CI 0.45 to 1.01; −0.028 events s⁻¹ per cell; Holm-adjusted
+*P* = 0.109, unadjusted *P* = 0.055), as it did before the tone (0.66, 95% CI 0.44 to 0.99;
+unadjusted *P* = 0.046, Holm-adjusted *P* = 0.092). hM3D did not significantly alter population
+event rate in any epoch (trace rate ratio 0.79, 95% CI 0.52 to 1.22, *P* = 0.269; pre-tone 0.95,
+*P* = 0.808; post-shock 1.11, *P* = 0.604) (Fig. 2i, bottom).
 
 Despite these epoch-wise simple effects, **there was no evidence that the magnitude of either
 treatment effect differed across epochs**, for per-event amplitude (group × epoch joint Wald test
-*F*(4,16) = 0.39, *P* = 0.811) or for population event rate (*F*(4,16) = 1.54, *P* = 0.239); an
-independent mouse-label permutation test of epoch specificity agreed (amplitude *T* = 1.83,
-*P* = 0.31, *q* = 0.76; population rate *T* = 0.75, *P* = 0.64, *q* = 0.76). A significant
+*F*(4,16) = 0.35, *P* = 0.841) or for population event rate (*F*(4,16) = 1.80, *P* = 0.178); an
+independent mouse-label permutation test of epoch specificity agreed (amplitude *T* = 1.36,
+*P* = 0.43, *q* = 0.73; population rate *T* = 1.06, *P* = 0.53, *q* = 0.73). A significant
 comparison in one epoch and not in another is not itself evidence of epoch dependence, which was
 tested by the interaction and by nothing else. The data therefore support **differential effects
 of SST-interneuron excitation and inhibition on the magnitude versus the frequency of CA1
@@ -157,16 +159,16 @@ evidence for epoch specificity, not evidence of a uniform, tonic effect.
 Two further analyses, run independently of the mixed models, agreed. A distribution-aware
 negative-binomial mixed-effects count model of the same event counts (log cell-seconds offset,
 random intercepts for animal and animal × trial) reproduced the direction and approximate size of
-the rate result: trace-interval rate ratio 0.57 (94% HDI 0.34 to 0.84) for hM4D and 0.84 (94% HDI
-0.51 to 1.26) for hM3D, and leave-one-out comparison did not distinguish the group × epoch
-model from the additive one (Δelpd 1.16, s.e. of the difference 4.69, nominally favouring the
-model with the interaction, well within one standard error). A cell-level model of the trace
+the rate result: trace-interval rate ratio 0.57 (94% HDI 0.35 to 0.84) for hM4D and 0.84 (94% HDI
+0.50 to 1.26) for hM3D, and leave-one-out comparison did not distinguish the group × epoch
+model from the additive one (Δelpd 2.35, s.e. of the difference 4.24, nominally favouring the
+additive model, well within one standard error). A cell-level model of the trace
 interval (random intercept on animal) gave the same amplitude ordering (hM3D 1.53-fold, 95% CI
 1.14 to 2.05, equal-animal-weighted; group omnibus *F*(2,16) = 4.08, *P* = 0.037), which did not
 survive Holm correction across that lane's three-member family (adjusted *P* = 0.111); the two
 within-cell epoch-change contrasts — trace minus pre-tone and post-shock minus pre-tone, computed
-on the 7,067 and 7,609 cells active in both windows — were null (*F*(2,16) = 0.012, *P* = 0.988
-and *F*(2,16) = 0.055, *P* = 0.947; both Holm-adjusted *P* = 1.0), consistent with the parallel
+on the 7,059 and 7,585 cells active in both windows — were null (*F*(2,16) = 0.016, *P* = 0.984
+and *F*(2,16) = 0.030, *P* = 0.970; both Holm-adjusted *P* = 1.0), consistent with the parallel
 profile in Fig. 2g and with the null interaction above.
 
 **Controls.** The amplitude effect was stable across event-detection thresholds spanning 1.5–3.0
@@ -244,7 +246,10 @@ cell) 67–91% at 0.05–0.2 Hz).
 All conditioning trials were used. The trace interval on the first trial is 15 s rather than 20 s;
 each window's exposure is its measured duration, so the pooled trace window is 95 s against 100 s
 for the pre-tone and post-shock windows. A trial was left out only where one of its windows was not
-recorded (4–5 of 5 trials per animal). One window was accepted short: one control animal's last post-shock window, whose
+recorded (4–5 of 5 trials per animal). An earlier version of these analyses wrongly excluded the
+first conditioning trial because of its shorter trace interval; all results reported here include
+it. The post-shock comparison was designated a secondary, hypothesis-driven comparison before that
+correction, when its Holm-adjusted *P* was 0.056. One window was accepted short: one control animal's last post-shock window, whose
 recording stopped 13 frames (0.65 s) before its end, was kept at 387 of 400 frames, its exposure
 counted as imaged. **Both outcomes were computed from that same set of animal × trial windows**, so the
 amplitude and rate rows of Fig. 2i provably describe the same animals, epochs and trials.
@@ -531,6 +536,13 @@ Paths are relative to `PLOTS_DIR/sp_rates_lmm/`. Rows of
    primary (VS, 2026-10-09). Alternatives considered: trace and post-shock as co-primaries
    (four-comparison Holm: trace *P* = 0.049, post-shock 0.084); the six-comparison sensitivity family
    (trace 0.074, post-shock 0.139).
+   **Update 2026-10-14:** with the first conditioning trial restored (it had been excluded by error;
+   Methods), post-shock is ratio 1.49×, Holm-adjusted *P* = 0.038 (unadjusted 0.019), and is now
+   reported as significant — still as the declared secondary comparison, beside the trace primary
+   (Holm 0.028). The pre-tone difference is of similar size (1.42×, Holm 0.071) and the interaction
+   is null (*P* = 0.84), so the reading remains an amplitude shift common to the epochs, not a
+   post-shock-specific effect (statistics review, 2026-10-14). The four- and six-comparison figures
+   above are from the earlier trial set; `p_holm_six` now gives trace 0.083, post-shock 0.096.
 10. **The cell-level lane changed model between runs (2026-10-01).** On the 2026-08-24 run the
     random-intercept fit of `fit_primary_trace_amplitude` and of both within-cell deltas came back
     with non-finite fixed-effect standard errors, and `single_unit_common.fit_mixed_model` fell
