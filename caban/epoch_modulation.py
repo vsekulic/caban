@@ -2889,8 +2889,13 @@ def collect_event_aligned_traces(mice_per_group, sessions, signal, mapping='full
 
 def _mark_event_axes(ax, epoch, window_seconds, post_shock_onset_s, lw):
     """The analysed window (grey), onset (solid), zero (dashed grey) and, on the shock facet,
-    post-shock onset (dashed black)."""
-    ax.axvspan(0.0, window_seconds, color='0.88', lw=0, zorder=0)
+    post-shock onset (dashed black).
+
+    On the shock facet the grey spans both windows analysed from it -- shock (onset + window)
+    and post-shock (shock offset + window) -- i.e. 0 to shock duration + window (VS, 2026-10-15).
+    """
+    span_end = post_shock_onset_s + window_seconds if epoch == 'shock' else window_seconds
+    ax.axvspan(0.0, span_end, color='0.88', lw=0, zorder=0)
     ax.axvline(0.0, color='k', lw=lw, zorder=1)
     ax.axhline(0.0, color='0.6', lw=lw, ls='--', zorder=1)
     if epoch == 'shock':
