@@ -30,7 +30,7 @@ from caban.sessions import *   # noqa: F401,F403
 from caban.analysis import *   # noqa: F401,F403
 from caban.decoder import *    # noqa: F401,F403
 from caban.decoder import _PVT_MODE_LABEL_TO_KEY, _copy_analysis_methods_template  # noqa: F401
-from caban.figure2_composite import build_figure2_composite
+from caban.figure2_composite import build_figure2_composite, PANEL_FILES as FIGURE2_PANEL_FILES
 from caban.engram import ENGRAM_REFERENCE
 from caban.population import run_population_pca_pipeline, run_pca_state_metrics_from_results
 from caban.isomap import run_isomap_pipeline
@@ -1793,11 +1793,6 @@ def run_shock_motion_check(ds, cfg):
 
 
 # ---------------------------------------------------------------------------
-def run_figure2_composite(ds, cfg):
-    """Figure 2 assembled from the panels the sections above wrote (caban.figure2_composite):
-    ``<PAPER_DIR>/fig2/fig2.png`` (600 dpi) and ``fig2.svg``. Run after the Figure 2 sections."""
-    out_dir = os.path.join(cfg.PAPER_DIR, 'fig2')
-    return build_figure2_composite(cfg.PLOTS_DIR, out_dir)
 
 
 def run_epoch_sequence(ds, cfg):
@@ -1927,6 +1922,56 @@ def run_want_sample_traces_paper(ds, cfg, selection_mode=False, len_trace=1200):
 
         msg_end()
 
+
+
+# ---------------------------------------------------------------------------
+# Figure 2, assembled. Defined after every section it calls.
+def _figure2_panel_k(ds, cfg):
+    """Panel k is drawn by the epoch-modulation lane. If the lane has run, redraw only the panel
+    (seconds); otherwise run the lane (about an hour), which draws it."""
+    lane_stats = os.path.join(cfg.PLOTS_DIR, 'epoch_modulation', 'YrA', _EVENT_PROXIMAL_DIRNAME, 'stats')
+    if os.path.isdir(lane_stats):
+        run_event_aligned_panels(ds, cfg)
+    else:
+        run_epoch_modulation(ds, cfg)
+
+
+# Which section draws each pipeline panel of Figure 2 (caban.figure2_composite.PANEL_FILES).
+FIGURE2_PANEL_SECTIONS = {
+    'c': run_want_sample_traces_paper,
+    'd': run_sp_rates_lmm, 'e': run_sp_rates_lmm, 'f': run_sp_rates_lmm, 'g': run_sp_rates_lmm,
+    'h': run_sp_rates_lmm, 'i': run_sp_rates_lmm, 'j': run_sp_rates_lmm,
+    'k': _figure2_panel_k,
+}
+
+
+def run_figure2_composite(ds, cfg, rerun=()):
+    """Figure 2, from scratch or from panels already drawn: ``<PAPER_DIR>/fig2/fig2.png`` (600 dpi),
+    ``fig2.svg`` and ``fig2_caption.md`` (caban.figure2_composite).
+
+    Each panel's section runs only if its file is missing, or if its letter is in ``rerun``
+    (e.g. ``rerun='k'`` after changing panel k's code); a section that draws several panels runs
+    once. So the cell can follow the sections above or stand alone.
+    """
+    unknown = set(rerun) - set(FIGURE2_PANEL_SECTIONS)
+    if unknown:
+        raise ValueError(f'rerun: unknown panel letter(s) {sorted(unknown)}; '
+                         f'pipeline panels are {sorted(FIGURE2_PANEL_SECTIONS)}.')
+    todo = []
+    for letter, section in FIGURE2_PANEL_SECTIONS.items():
+        missing = not os.path.isfile(os.path.join(cfg.PLOTS_DIR, FIGURE2_PANEL_FILES[letter]))
+        if (missing or letter in rerun) and section not in todo:
+            print(f'figure 2: panel {letter} {"missing" if missing else "rerun"} -> {section.__name__}')
+            todo.append(section)
+    for section in todo:
+        section(ds, cfg)
+    still_missing = [l for l in FIGURE2_PANEL_SECTIONS
+                     if not os.path.isfile(os.path.join(cfg.PLOTS_DIR, FIGURE2_PANEL_FILES[l]))]
+    if still_missing:
+        raise FileNotFoundError(f'figure 2: panels {still_missing} still missing after running their '
+                                f'sections; check those sections\' cfg switches.')
+    out_dir = os.path.join(cfg.PAPER_DIR, 'fig2')
+    return build_figure2_composite(cfg.PLOTS_DIR, out_dir)
 
 # ---------------------------------------------------------------------------
 # Section: PSTH  (caban/main.py L1647-1681)
