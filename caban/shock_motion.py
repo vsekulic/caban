@@ -61,14 +61,34 @@ def _window_mean(x, lo, hi, what):
     return vals.mean(axis=-1)
 
 
-def mouse_shock_motion(session, signal, speed, mapping='full', with_crossreg=None):
+def session_motion_speed(session, speed_full):
+    """The motion speed in the session's analysis frames.
+
+    Minian's frames are the imaged timestamp rows (sessions.py checks C_full against them); the
+    analysis then cuts C/S/YrA to the experiment, [miniscope_exp_fnum[start], miniscope_exp_fnum[stop]),
+    and every epoch frame (shock onsets included) counts from that start. So analysis frame i is
+    Minian frame i + miniscope_exp_fnum[start]. A re-timed session has no such mapping and fails.
+    """
+    if session.miniscope_retimed:
+        raise RuntimeError(f'shock-motion check: {session.mouse} {session.session_type} was re-timed '
+                           f'onto another frame grid; its frames are not Minian frames.')
+    if speed_full.size != session.n_timestamp_rows_imaged:
+        raise RuntimeError(f'shock-motion check: {session.mouse} motion has {speed_full.size} frames, '
+                           f'the session {session.n_timestamp_rows_imaged} imaged frames (= Minian C).')
+    start = session.miniscope_exp_fnum[session.start_idx]
+    stop = session.miniscope_exp_fnum[session.stop_idx]
+    return speed_full[start:stop]
+
+
+def mouse_shock_motion(session, signal, speed_full, mapping='full', with_crossreg=None):
     """Per-trial table and shock-aligned traces (activity and motion) for one mouse."""
     cell_ids, _ = resolve_shared_cells(session, mapping=mapping, with_crossreg=with_crossreg)
     z = _standardized_trace(session, signal, cell_ids)
     n_frames = z.shape[1]
+    speed = session_motion_speed(session, speed_full)
     if speed.size != n_frames:
-        raise RuntimeError(f'shock-motion check: {session.mouse} motion has {speed.size} frames, '
-                           f'{signal} has {n_frames}; analysis frame i must be Minian frame i.')
+        raise RuntimeError(f'shock-motion check: {session.mouse} motion in the experiment has '
+                           f'{speed.size} frames, {signal} has {n_frames}.')
     trials, _ = retained_trials(session)
 
     rows = []
