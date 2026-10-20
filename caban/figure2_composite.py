@@ -148,7 +148,7 @@ FIGURE2_SPEC = {'name': 'fig2', 'layout': LAYOUT_MM, 'panel_files': PANEL_FILES,
 # The redesign (plans/figure2_redesign_plan.md, agreed 2026-10-21): SST cells, pyramidal cells before
 # and after CNO, the double dissociation during conditioning, redone example events, and the shock.
 # Panels reused from the current figure keep their box sizes, so their files place 1:1 unchanged.
-LAYOUT_DISSOCIATION_MM = {
+LAYOUT_V2_MM = {
     'a': (0, 0, 46, 32),
     'b': (48, 0, 52, 32),
     'c': (102, 0, 81, 32),
@@ -159,19 +159,19 @@ LAYOUT_DISSOCIATION_MM = {
     'h': (0, 155, 40, 46),
     'i': (42, 155, 141, 46),
 }
-PANEL_FILES_DISSOCIATION = {
+PANEL_FILES_V2 = {
     'c': PANEL_FILES['c'],
     'f': PANEL_FILES['g'],          # the primary model, per-event amplitude and population rate by epoch
 }
-# Move a letter from here to PANEL_FILES_DISSOCIATION when its section draws it at its box size.
-PENDING_DISSOCIATION = {
+# Move a letter from here to PANEL_FILES_V2 when its section draws it at its box size.
+PENDING_V2 = {
     'd': 'SST cells (DIO-GCaMP6f): event rate and amplitude before vs after CNO',
     'e': 'Pyramidal cells, homecage before vs after CNO: change in amplitude and frequency',
     'g': 'Double dissociation: per-animal amplitude vs rate change; 2 x 2 effects; other sessions',
     'h': 'Example events, each group its own median event, common scale',
     'i': 'Shock-locked event amplitude and probability',
 }
-CAPTION_DISSOCIATION = """**Fig. 2 (redesign, in progress) | Chemogenetic excitation and inhibition of SST interneurons
+CAPTION_V2 = """**Fig. 2 (redesign, in progress) | Chemogenetic excitation and inhibition of SST interneurons
 dissociate the magnitude and the frequency of CA1 pyramidal calcium events.**
 **a**, Viral strategy. **b**, Mean field of view and Minian spatial footprints from one animal.
 **c**, Example traces from three cells per group. **d**, SST cells: activity before and after CNO
@@ -183,10 +183,10 @@ epoch. **g**, Double dissociation (not built). **h**, Example events (not built)
 event response (not built). n = 5 Exc, 6 Inh and 6 Ctl animals; the animal is the unit of inference
 throughout. Plan: plans/figure2_redesign_plan.md.
 """
-FIGURE2_DISSOCIATION_SPEC = {'name': 'fig2_dissociation', 'layout': LAYOUT_DISSOCIATION_MM,
-                             'panel_files': PANEL_FILES_DISSOCIATION,
-                             'caption': CAPTION_DISSOCIATION, 'pending': PENDING_DISSOCIATION}
-for _spec in (FIGURE2_SPEC, FIGURE2_DISSOCIATION_SPEC):
+FIGURE2_V2_SPEC = {'name': 'fig2_v2', 'layout': LAYOUT_V2_MM,
+                             'panel_files': PANEL_FILES_V2,
+                             'caption': CAPTION_V2, 'pending': PENDING_V2}
+for _spec in (FIGURE2_SPEC, FIGURE2_V2_SPEC):
     _placed = set(_spec['panel_files']) | set(_spec['pending']) | set(STATIC_CROPS)
     if _placed != set(_spec['layout']) or set(_spec['panel_files']) & set(_spec['pending']):
         raise RuntimeError(f"{_spec['name']}: every layout panel must be exactly one of static, a "
@@ -332,7 +332,7 @@ def _build_svg(plots_dir, static, out_path, height_mm, spec):
 def build_figure2_composite(plots_dir, out_dir, static_dir=STATIC_DIR, spec=None):
     """Write ``<name>.png`` (600 dpi), ``<name>.svg`` and ``<name>_caption.md`` to ``out_dir``.
 
-    ``spec`` is a layout (FIGURE2_SPEC, the default, or FIGURE2_DISSOCIATION_SPEC)."""
+    ``spec`` is a layout (FIGURE2_SPEC, the default, or FIGURE2_V2_SPEC)."""
     spec = FIGURE2_SPEC if spec is None else spec
     static = _static_panels(static_dir)
     height_mm = max(y + h for _, y, _, h in spec['layout'].values())

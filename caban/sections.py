@@ -31,7 +31,7 @@ from caban.analysis import *   # noqa: F401,F403
 from caban.decoder import *    # noqa: F401,F403
 from caban.decoder import _PVT_MODE_LABEL_TO_KEY, _copy_analysis_methods_template  # noqa: F401
 from caban.figure2_composite import (build_figure2_composite, FIGURE2_SPEC,
-                                     FIGURE2_DISSOCIATION_SPEC)
+                                     FIGURE2_V2_SPEC)
 from caban.engram import ENGRAM_REFERENCE
 from caban.population import run_population_pca_pipeline, run_pca_state_metrics_from_results
 from caban.isomap import run_isomap_pipeline
@@ -1984,19 +1984,19 @@ def run_figure2_composite(ds, cfg, rerun=()):
 
 
 # The redesign's placed panels and their sections; its unbuilt panels are boxes
-# (caban.figure2_composite.PENDING_DISSOCIATION). Add a letter here when its panel is built.
-FIGURE2_DISSOCIATION_PANEL_SECTIONS = {
+# (caban.figure2_composite.PENDING_V2). Add a letter here when its panel is built.
+FIGURE2_V2_PANEL_SECTIONS = {
     'c': run_want_sample_traces_paper,
     'f': run_sp_rates_lmm,
 }
 
 
-def run_figure2_dissociation_composite(ds, cfg, rerun=()):
-    """Figure 2 redesign (plans/figure2_redesign_plan.md): ``<PAPER_DIR>/fig2_dissociation/``.
+def run_figure2_v2_composite(ds, cfg, rerun=()):
+    """Figure 2 redesign (plans/figure2_redesign_plan.md): ``<PAPER_DIR>/fig2_v2/``.
     Same skip/rerun rule as run_figure2_composite; panels not built yet are drawn as labelled boxes
     and listed on every build. The current figure (``fig2/``) is untouched."""
-    return _build_figure2_layout(ds, cfg, FIGURE2_DISSOCIATION_SPEC,
-                                 FIGURE2_DISSOCIATION_PANEL_SECTIONS, rerun)
+    return _build_figure2_layout(ds, cfg, FIGURE2_V2_SPEC,
+                                 FIGURE2_V2_PANEL_SECTIONS, rerun)
 
 # ---------------------------------------------------------------------------
 # Section: PSTH  (caban/main.py L1647-1681)

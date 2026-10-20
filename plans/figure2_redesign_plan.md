@@ -1,7 +1,7 @@
 # Plan: Figure 2 redesign — one story, in order
 
 Status: **agreed in outline (VS and PI), 2026-10-21; decisions in §7.** The composite is
-scaffolded as `fig2_dissociation` (§8); the new panels are not built. Supersedes the panel list
+scaffolded as `fig2_v2` (§8); the new panels are not built. Supersedes the panel list
 in [handover_figure2_nature_and_next_steps.md](handover_figure2_nature_and_next_steps.md) §2 once
 agreed; the paper-facing results of [../docs/paper/paper_figure2.md](../docs/paper/paper_figure2.md)
 stay valid and move panel by panel as below.
@@ -166,8 +166,8 @@ homecage sessions loaded into `ds`, so the cache is rebuilt once (on the Razer i
 
 ## 8. The scaffold
 
-`run_figure2_dissociation_composite(ds, cfg)` (notebook: Figure 2, dissociation layout) writes
-`<PAPER_DIR>/fig2_dissociation/`, beside the current `fig2/`, which stays as it is. Panels that
+`run_figure2_v2_composite(ds, cfg)` (notebook: Figure 2, v2 layout) writes
+`<PAPER_DIR>/fig2_v2/`, beside the current `fig2/`, which stays as it is. Panels that
 exist are placed from their files; panels not yet built are drawn as labelled empty boxes, listed
 in the module and printed on every build, so the layout can be judged while the panels are made.
 
