@@ -30,7 +30,8 @@ from caban.sessions import *   # noqa: F401,F403
 from caban.analysis import *   # noqa: F401,F403
 from caban.decoder import *    # noqa: F401,F403
 from caban.decoder import _PVT_MODE_LABEL_TO_KEY, _copy_analysis_methods_template  # noqa: F401
-from caban.figure2_composite import build_figure2_composite, PANEL_FILES as FIGURE2_PANEL_FILES
+from caban.figure2_composite import (build_figure2_composite, FIGURE2_SPEC,
+                                     FIGURE2_DISSOCIATION_SPEC)
 from caban.engram import ENGRAM_REFERENCE
 from caban.population import run_population_pca_pipeline, run_pca_state_metrics_from_results
 from caban.isomap import run_isomap_pipeline
@@ -1945,6 +1946,32 @@ FIGURE2_PANEL_SECTIONS = {
 }
 
 
+def _build_figure2_layout(ds, cfg, spec, panel_sections, rerun):
+    """Run each placed panel's section if its file is missing or its letter is in ``rerun`` (each
+    section once), then build ``spec`` into ``<PAPER_DIR>/<spec name>/``."""
+    unknown = set(rerun) - set(panel_sections)
+    if unknown:
+        raise ValueError(f'rerun: unknown panel letter(s) {sorted(unknown)}; '
+                         f'pipeline panels are {sorted(panel_sections)}.')
+    files = spec['panel_files']
+    if set(panel_sections) != set(files):
+        raise RuntimeError(f"{spec['name']}: panel sections {sorted(panel_sections)} do not match its "
+                           f"panel files {sorted(files)}.")
+    todo = []
+    for letter, section in panel_sections.items():
+        missing = not os.path.isfile(os.path.join(cfg.PLOTS_DIR, files[letter]))
+        if (missing or letter in rerun) and section not in todo:
+            print(f'{spec["name"]}: panel {letter} {"missing" if missing else "rerun"} -> {section.__name__}')
+            todo.append(section)
+    for section in todo:
+        section(ds, cfg)
+    still_missing = [l for l in files if not os.path.isfile(os.path.join(cfg.PLOTS_DIR, files[l]))]
+    if still_missing:
+        raise FileNotFoundError(f'{spec["name"]}: panels {still_missing} still missing after running their '
+                                f'sections; check those sections\' cfg switches.')
+    return build_figure2_composite(cfg.PLOTS_DIR, os.path.join(cfg.PAPER_DIR, spec['name']), spec=spec)
+
+
 def run_figure2_composite(ds, cfg, rerun=()):
     """Figure 2, from scratch or from panels already drawn: ``<PAPER_DIR>/fig2/fig2.png`` (600 dpi),
     ``fig2.svg`` and ``fig2_caption.md`` (caban.figure2_composite).
@@ -1953,25 +1980,23 @@ def run_figure2_composite(ds, cfg, rerun=()):
     (e.g. ``rerun='k'`` after changing panel k's code); a section that draws several panels runs
     once. So the cell can follow the sections above or stand alone.
     """
-    unknown = set(rerun) - set(FIGURE2_PANEL_SECTIONS)
-    if unknown:
-        raise ValueError(f'rerun: unknown panel letter(s) {sorted(unknown)}; '
-                         f'pipeline panels are {sorted(FIGURE2_PANEL_SECTIONS)}.')
-    todo = []
-    for letter, section in FIGURE2_PANEL_SECTIONS.items():
-        missing = not os.path.isfile(os.path.join(cfg.PLOTS_DIR, FIGURE2_PANEL_FILES[letter]))
-        if (missing or letter in rerun) and section not in todo:
-            print(f'figure 2: panel {letter} {"missing" if missing else "rerun"} -> {section.__name__}')
-            todo.append(section)
-    for section in todo:
-        section(ds, cfg)
-    still_missing = [l for l in FIGURE2_PANEL_SECTIONS
-                     if not os.path.isfile(os.path.join(cfg.PLOTS_DIR, FIGURE2_PANEL_FILES[l]))]
-    if still_missing:
-        raise FileNotFoundError(f'figure 2: panels {still_missing} still missing after running their '
-                                f'sections; check those sections\' cfg switches.')
-    out_dir = os.path.join(cfg.PAPER_DIR, 'fig2')
-    return build_figure2_composite(cfg.PLOTS_DIR, out_dir)
+    return _build_figure2_layout(ds, cfg, FIGURE2_SPEC, FIGURE2_PANEL_SECTIONS, rerun)
+
+
+# The redesign's placed panels and their sections; its unbuilt panels are boxes
+# (caban.figure2_composite.PENDING_DISSOCIATION). Add a letter here when its panel is built.
+FIGURE2_DISSOCIATION_PANEL_SECTIONS = {
+    'c': run_want_sample_traces_paper,
+    'f': run_sp_rates_lmm,
+}
+
+
+def run_figure2_dissociation_composite(ds, cfg, rerun=()):
+    """Figure 2 redesign (plans/figure2_redesign_plan.md): ``<PAPER_DIR>/fig2_dissociation/``.
+    Same skip/rerun rule as run_figure2_composite; panels not built yet are drawn as labelled boxes
+    and listed on every build. The current figure (``fig2/``) is untouched."""
+    return _build_figure2_layout(ds, cfg, FIGURE2_DISSOCIATION_SPEC,
+                                 FIGURE2_DISSOCIATION_PANEL_SECTIONS, rerun)
 
 # ---------------------------------------------------------------------------
 # Section: PSTH  (caban/main.py L1647-1681)

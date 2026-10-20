@@ -69,15 +69,15 @@ LAYOUT_MM = {
 LETTER_BAND_MM = 3.2
 
 
-def content_box(letter):
+def content_box(letter, layout=None):
     """(x, y, width, height) in mm of the panel itself, below its letter band."""
-    x, y, w, h = LAYOUT_MM[letter]
+    x, y, w, h = (LAYOUT_MM if layout is None else layout)[letter]
     return (x, y + LETTER_BAND_MM, w, h - LETTER_BAND_MM)
 
 
-def panel_figsize(letter):
+def panel_figsize(letter, layout=None):
     """(width, height) in inches of Figure 2 panel ``letter``, for the function that draws it."""
-    _, _, w, h = content_box(letter)
+    _, _, w, h = content_box(letter, layout)
     return (w / 25.4, h / 25.4)
 
 
@@ -120,6 +120,79 @@ control comparisons within each epoch. * P < 0.05, ** P < 0.01, *** P < 0.001. n
 """
 
 
+# Empty boxes for panels a layout places before they are built (drawn and printed, never silent).
+PENDING_FILL = '#f2f2f2'
+PENDING_EDGE = '#999999'
+FONT_PT_PENDING = 6
+
+
+def _pending_label(letter, spec, w_mm):
+    """``"<what>\n(not built yet)"``, wrapped to the box width."""
+    words, lines, line = spec['pending'][letter].split(), [], ''
+    max_chars = max(12, int(w_mm / (FONT_PT_PENDING * 25.4 / 72 * 0.55)))
+    for word in words:
+        if line and len(line) + 1 + len(word) > max_chars:
+            lines.append(line)
+            line = word
+        else:
+            line = f'{line} {word}'.strip()
+    lines.append(line)
+    return '\n'.join(lines + ['(not built yet)'])
+
+
+# The current figure (VS's PowerPoint draft, 2026-08-24, with k from 2026-10-15).
+FIGURE2_SPEC = {'name': 'fig2', 'layout': LAYOUT_MM, 'panel_files': PANEL_FILES,
+                'caption': CAPTION, 'pending': {}}
+
+
+# The redesign (plans/figure2_redesign_plan.md, agreed 2026-10-21): SST cells, pyramidal cells before
+# and after CNO, the double dissociation during conditioning, redone example events, and the shock.
+# Panels reused from the current figure keep their box sizes, so their files place 1:1 unchanged.
+LAYOUT_DISSOCIATION_MM = {
+    'a': (0, 0, 46, 32),
+    'b': (48, 0, 52, 32),
+    'c': (102, 0, 81, 32),
+    'd': (0, 35, 88, 40),
+    'e': (90, 35, 93, 40),
+    'f': (0, 78, 78, 74),
+    'g': (80, 78, 103, 74),
+    'h': (0, 155, 40, 46),
+    'i': (42, 155, 141, 46),
+}
+PANEL_FILES_DISSOCIATION = {
+    'c': PANEL_FILES['c'],
+    'f': PANEL_FILES['g'],          # the primary model, per-event amplitude and population rate by epoch
+}
+# Move a letter from here to PANEL_FILES_DISSOCIATION when its section draws it at its box size.
+PENDING_DISSOCIATION = {
+    'd': 'SST cells (DIO-GCaMP6f): event rate and amplitude before vs after CNO',
+    'e': 'Pyramidal cells, homecage before vs after CNO: change in amplitude and frequency',
+    'g': 'Double dissociation: per-animal amplitude vs rate change; 2 x 2 effects; other sessions',
+    'h': 'Example events, each group its own median event, common scale',
+    'i': 'Shock-locked event amplitude and probability',
+}
+CAPTION_DISSOCIATION = """**Fig. 2 (redesign, in progress) | Chemogenetic excitation and inhibition of SST interneurons
+dissociate the magnitude and the frequency of CA1 pyramidal calcium events.**
+**a**, Viral strategy. **b**, Mean field of view and Minian spatial footprints from one animal.
+**c**, Example traces from three cells per group. **d**, SST cells: activity before and after CNO
+(not built). **e**, Pyramidal cells in the homecage before and after CNO (not built). **f**,
+Per-event amplitude (top) and population event rate (bottom) in the three 20-s conditioning epochs;
+small points are cells, large points animals; contrasts of the group x epoch mixed model with animal
+as random intercept, Holm-corrected over the two treatment-versus-control comparisons within each
+epoch. **g**, Double dissociation (not built). **h**, Example events (not built). **i**, Shock-locked
+event response (not built). n = 5 Exc, 6 Inh and 6 Ctl animals; the animal is the unit of inference
+throughout. Plan: plans/figure2_redesign_plan.md.
+"""
+FIGURE2_DISSOCIATION_SPEC = {'name': 'fig2_dissociation', 'layout': LAYOUT_DISSOCIATION_MM,
+                             'panel_files': PANEL_FILES_DISSOCIATION,
+                             'caption': CAPTION_DISSOCIATION, 'pending': PENDING_DISSOCIATION}
+for _spec in (FIGURE2_SPEC, FIGURE2_DISSOCIATION_SPEC):
+    _placed = set(_spec['panel_files']) | set(_spec['pending']) | set(STATIC_CROPS)
+    if _placed != set(_spec['layout']) or set(_spec['panel_files']) & set(_spec['pending']):
+        raise RuntimeError(f"{_spec['name']}: every layout panel must be exactly one of static, a "
+                           f"file or pending")
+
+
 SVG_NS = 'http://www.w3.org/2000/svg'
 XLINK_NS = 'http://www.w3.org/1999/xlink'
 ET.register_namespace('', SVG_NS)
@@ -138,8 +211,8 @@ def _static_panels(static_dir):
     return {letter: tif.crop(box) for letter, box in STATIC_CROPS.items()}
 
 
-def _panel_paths(plots_dir, letter):
-    root = os.path.splitext(os.path.join(plots_dir, PANEL_FILES[letter]))[0]
+def _panel_paths(plots_dir, letter, panel_files):
+    root = os.path.splitext(os.path.join(plots_dir, panel_files[letter]))[0]
     paths = (root + '.png', root + '.svg')
     for p in paths:
         if not os.path.isfile(p):
@@ -148,8 +221,8 @@ def _panel_paths(plots_dir, letter):
     return paths
 
 
-def _check_size(letter, image):
-    _, _, w, h = content_box(letter)
+def _check_size(letter, image, layout):
+    _, _, w, h = content_box(letter, layout)
     want = (_px(w), _px(h))
     if abs(image.size[0] - want[0]) > SIZE_TOLERANCE_PX or abs(image.size[1] - want[1]) > SIZE_TOLERANCE_PX:
         raise ValueError(f'figure 2 composite: panel {letter} is {image.size} px, its box is {want} px '
@@ -165,19 +238,27 @@ def _fit(image, w_mm, h_mm):
                         Image.LANCZOS)
 
 
-def _build_png(plots_dir, static, out_path, height_mm):
+def _build_png(plots_dir, static, out_path, height_mm, spec):
+    layout = spec['layout']
     page = Image.new('RGB', (_px(FIG_WIDTH_MM), _px(height_mm)), 'white')
-    for letter in LAYOUT_MM:
-        x, y, w, h = content_box(letter)
+    font = ImageFont.truetype(LETTER_FONT, size=round(LETTER_PT / 72 * DPI_PNG))
+    pending_font = ImageFont.truetype(LETTER_FONT.replace(' Bold', ''), size=round(FONT_PT_PENDING / 72 * DPI_PNG))
+    draw = ImageDraw.Draw(page)
+    for letter in layout:
+        x, y, w, h = content_box(letter, layout)
+        if letter in spec['pending']:
+            draw.rectangle((_px(x), _px(y), _px(x + w), _px(y + h)), fill=PENDING_FILL, outline=PENDING_EDGE,
+                           width=_px(0.25))
+            draw.multiline_text((_px(x + w / 2), _px(y + h / 2)), _pending_label(letter, spec, w),
+                                fill='black', font=pending_font, anchor='mm', align='center')
+            continue
         if letter in static:
             img = _fit(static[letter], w, h)
         else:
-            img = Image.open(_panel_paths(plots_dir, letter)[0]).convert('RGB')
-            _check_size(letter, img)
+            img = Image.open(_panel_paths(plots_dir, letter, spec['panel_files'])[0]).convert('RGB')
+            _check_size(letter, img, layout)
         page.paste(img, (_px(x), _px(y)))
-    font = ImageFont.truetype(LETTER_FONT, size=round(LETTER_PT / 72 * DPI_PNG))
-    draw = ImageDraw.Draw(page)
-    for letter, (x, y, _, _) in LAYOUT_MM.items():
+    for letter, (x, y, _, _) in layout.items():
         draw.text((_px(x), _px(y)), letter, fill='black', font=font)
     page.save(out_path, dpi=(DPI_PNG, DPI_PNG))
 
@@ -210,23 +291,37 @@ def _image_element(image, x, y, w, h):
     return el
 
 
-def _build_svg(plots_dir, static, out_path, height_mm):
+def _build_svg(plots_dir, static, out_path, height_mm, spec):
+    layout = spec['layout']
     # User units are millimetres; each nested panel keeps its own viewBox (points).
     doc = ET.Element(f'{{{SVG_NS}}}svg', {'version': '1.1', 'width': f'{FIG_WIDTH_MM}mm',
                                           'height': f'{height_mm}mm',
                                           'viewBox': f'0 0 {FIG_WIDTH_MM} {height_mm}'})
     ET.SubElement(doc, f'{{{SVG_NS}}}rect', {'width': '100%', 'height': '100%', 'fill': 'white'})
-    for letter in LAYOUT_MM:
-        x, y, w, h = content_box(letter)
+    pending_size = FONT_PT_PENDING * 25.4 / 72
+    for letter in layout:
+        x, y, w, h = content_box(letter, layout)
+        if letter in spec['pending']:
+            ET.SubElement(doc, f'{{{SVG_NS}}}rect', {'x': f'{x}', 'y': f'{y}', 'width': f'{w}',
+                                                       'height': f'{h}', 'fill': PENDING_FILL,
+                                                       'stroke': PENDING_EDGE, 'stroke-width': '0.25'})
+            lines = _pending_label(letter, spec, w).split('\n')
+            for i, line in enumerate(lines):
+                t = ET.SubElement(doc, f'{{{SVG_NS}}}text', {
+                    'x': f'{x + w / 2}', 'y': f'{y + h / 2 + (i - (len(lines) - 1) / 2) * pending_size * 1.3}',
+                    'font-family': 'Arial', 'font-size': f'{pending_size:.3f}', 'text-anchor': 'middle',
+                    'dominant-baseline': 'middle', 'fill': 'black'})
+                t.text = line
+            continue
         if letter in static:
             doc.append(_image_element(static[letter], x, y, w, h))
             continue
-        panel = _prefixed_panel_svg(_panel_paths(plots_dir, letter)[1], f'p{letter}_')
+        panel = _prefixed_panel_svg(_panel_paths(plots_dir, letter, spec['panel_files'])[1], f'p{letter}_')
         for attr, value in (('x', x), ('y', y), ('width', w), ('height', h)):
             panel.set(attr, f'{value}')
         doc.append(panel)
     letter_size = LETTER_PT * 25.4 / 72          # points to mm (user units)
-    for letter, (x, y, _, _) in LAYOUT_MM.items():
+    for letter, (x, y, _, _) in layout.items():
         t = ET.SubElement(doc, f'{{{SVG_NS}}}text', {
             'x': f'{x}', 'y': f'{y + letter_size * 0.8}', 'font-family': 'Arial',
             'font-weight': 'bold', 'font-size': f'{letter_size:.3f}', 'fill': 'black'})
@@ -234,15 +329,21 @@ def _build_svg(plots_dir, static, out_path, height_mm):
     ET.ElementTree(doc).write(out_path, encoding='utf-8', xml_declaration=True)
 
 
-def build_figure2_composite(plots_dir, out_dir, static_dir=STATIC_DIR):
-    """Write ``fig2.png`` (600 dpi), ``fig2.svg`` and ``fig2_caption.md`` to ``out_dir``."""
+def build_figure2_composite(plots_dir, out_dir, static_dir=STATIC_DIR, spec=None):
+    """Write ``<name>.png`` (600 dpi), ``<name>.svg`` and ``<name>_caption.md`` to ``out_dir``.
+
+    ``spec`` is a layout (FIGURE2_SPEC, the default, or FIGURE2_DISSOCIATION_SPEC)."""
+    spec = FIGURE2_SPEC if spec is None else spec
     static = _static_panels(static_dir)
-    height_mm = max(y + h for _, y, _, h in LAYOUT_MM.values())
+    height_mm = max(y + h for _, y, _, h in spec['layout'].values())
     os.makedirs(out_dir, exist_ok=True)
-    png, svg = os.path.join(out_dir, 'fig2.png'), os.path.join(out_dir, 'fig2.svg')
-    _build_png(plots_dir, static, png, height_mm)
-    _build_svg(plots_dir, static, svg, height_mm)
-    with open(os.path.join(out_dir, 'fig2_caption.md'), 'w') as fh:
-        fh.write(CAPTION)
-    print(f'figure 2 composite: {png} ({DPI_PNG} dpi), {svg}')
+    name = spec['name']
+    png, svg = os.path.join(out_dir, f'{name}.png'), os.path.join(out_dir, f'{name}.svg')
+    _build_png(plots_dir, static, png, height_mm, spec)
+    _build_svg(plots_dir, static, svg, height_mm, spec)
+    with open(os.path.join(out_dir, f'{name}_caption.md'), 'w') as fh:
+        fh.write(spec['caption'])
+    print(f'{name} composite: {png} ({DPI_PNG} dpi), {svg}')
+    for letter, what in spec['pending'].items():
+        print(f'  panel {letter}: NOT BUILT YET (empty box) -- {what}')
     return png, svg
