@@ -75,6 +75,41 @@ control for injection, handling and time**, in an identical context.
   cross-registration. A within-cell version would need the cross-registration runner (D3,
   not yet run) and is a later option.
 
+### 4.1.1 Pre-specification (revised 2026-10-21 after `statistics-checker`; no homecage result computed)
+
+**Timing (from folder start times, minutes after the start of CNO1).** Taking CNO1's start as the
+injection (G26's notes: "CNO1 starts right after injection"; **to be confirmed by VS for G05–G21**):
+
+| mice | LT2 | conditioning | homecage recordings after injection |
+|---|---|---|---|
+| G05–G11 | +30 to +44 | +59 to +90 | CNO2 +15 to +25; HC2 +50 to +65 (not G07, G08) |
+| G12, G13, G17–G19 | +17 to +32 (G17: +65, after conditioning) | +29 to +51 | CNO2 +9 to +26 (not G12); HC3 +28 to +44 (G17: after conditioning) |
+| G14–G16, G20, G21 | **+5 to +8** | **+25 to +28** | HC3 +17 to +20 |
+
+If CNO1's start is the injection, LT2 in five animals began before CNO could act, which bears on the
+existing LT1→LT2 manipulation check as well.
+
+- **pre** = HC1 (every animal; −23 to −70 min). Pooled pre (HC1 + HC2) is a labelled sensitivity.
+- **post** = the homecage recording that **starts 15–35 min after the injection** and before
+  conditioning. Exactly one per animal on the timing above (CNO2 in G05–G11, G13, G17, G18; HC3 in
+  G12, G14–G16, G19–G21). The window is set by CNO onset (≈ 15–30 min), not by session name, and was
+  fixed from the timing table alone. Pooling every post-injection homecage recording is a labelled
+  sensitivity.
+- **Measures**, as in the primary analysis: `find_event_runs_ca_S(S, 2)` on each recording's whole S
+  (all Minian units, the recording's own output, no cross-registration); per animal and recording,
+  mean log per-event amplitude over active cells and population event rate over all cells
+  (`build_mouse_epoch_unified_table`). The estimand is the population statistic of the detected
+  units, not a within-cell change.
+- **Primary test.** Per animal, Δ = log(post) − log(pre) for each measure. Exc vs Ctl and Inh vs Ctl
+  by Welch t-test, Holm across the two within each measure, two-sided; mouse-label permutation of the
+  same contrasts beside it. Pre-stated directions from the conditioning result: amplitude Exc > Ctl;
+  population rate Inh < Ctl. The `group × window` mixed model (`fit_unified_group_epoch_model`) is a
+  consistency check. Exc − Inh is uncorrected and exploratory.
+- **Detection diagnostics, reported per recording by group:** number of units, fraction of units
+  with ≥ 1 event, and the S noise level. A group × window change in these qualifies the result: the
+  amplitude effect in particular is exposed to a CNO-driven change in which cells are detected.
+- An animal whose recording has no unit with an event fails the run (log of zero); none is expected.
+
 ### 4.2 SST validation (new d) — needs Minian first
 
 G22 and G23 (hM3D) and G26 and G27 (hM4D) have no Minian output at all (audited 2026-10-20). The
