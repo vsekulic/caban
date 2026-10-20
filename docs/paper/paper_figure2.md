@@ -39,6 +39,7 @@ All figures' panels, files and notebook sections in one place: [figure_panel_map
 | **g** | Descriptive per-animal amplitude profile across five disjoint conditioning epochs | `sp_rates_lmm/TFC_cond/epoch_profile.png` |
 | **h** | Trace-interval per-cell amplitude ECDF, pooled and per animal | `sp_rates_lmm/TFC_cond/amplitude_ecdf.png` |
 | **i** | **Primary analysis.** Per-event amplitude (top) and population event rate (bottom) by group, in each of the three duration-matched epochs | `sp_rates_lmm/paper/tfc_amplitude_rate/tfc_amplitude_rate_by_epoch.png` |
+| **k** | Event-aligned activity (YrA) around tone, trace and shock onset; descriptive, with the per-cell modulation lanes as its tests (`caban.epoch_modulation`) | `epoch_modulation/YrA/event_proximal/panel_M_event_aligned_traces.png` |
 
 Panels **e–h** are descriptive or secondary; panel **i** carries the manuscript's inferential
 claims. Panel **d** is a manipulation check and is in no multiplicity family with either.
@@ -182,6 +183,16 @@ trial that cancels in a between-group contrast (group × trial interaction *F*(8
 detects: the absence of an hM4D amplitude effect cannot exclude changes in neurons that became
 undetectable, although the matched cross-session dropout in Fig. 2d makes such loss unlikely to
 account for it.
+
+**Event-aligned activity.** Aligned to the conditioning events, group-mean activity (YrA) showed no
+response larger than ~0.1 s.d. at tone onset or tone offset, and a transient response to the shock
+in all three groups (Fig. 2k). A per-cell modulation index (activity relative to the trial's
+pre-tone baseline) did not differ between groups, whether taken over whole epochs (group × epoch
+omnibus *F*(6,16) = 0.50, *P* = 0.80) or over the first seconds after each event (*P* = 0.20). In
+the 3 s after shock offset, the index was larger in hM3D than in hM4D animals (difference 0.10 s.d.,
+95% CI 0.01 to 0.19; *P* = 0.019, uncorrected and following a null omnibus) and did not differ
+detectably from control (0.08 s.d., 95% CI −0.01 to 0.17; Holm-adjusted *P* = 0.21). The denoised
+trace *C* gave no group difference (Supplementary Fig. 2f–h and Supplementary Methods).
 
 ---
 
@@ -373,6 +384,20 @@ contrast at detection thresholds of 1.5, 2.0 and 3.0, and a group × trial model
 (`log(amplitude) ~ group * trial + (1|animal)` on animal × trial trace-interval means) tested
 whether the across-trial decline differed by group.
 
+### Statistical analysis — event-aligned activity (Fig. 2k)
+
+Activity was the Minian residual trace YrA (primary) and the denoised trace *C* (confirmatory),
+each standardized once per cell over the session. For each cell, trial and epoch (tone, trace
+interval, 2 s shock, 20 s after shock offset) a modulation index was the mean activity in the epoch
+minus the mean over that trial's 20 s pre-tone window; each cell's value was its median across
+trials. Groups were compared with the animal as the unit, in an animal-level mixed model (group ×
+epoch; Holm correction across the two treatment-versus-control contrasts within each epoch) and in
+a cell-level hierarchical model with *P* values from randomizing group labels across animals. An
+exploratory event-proximal variant used the first 3 s after tone onset, trace onset and shock
+offset and the 2 s shock itself. Panel **k** is descriptive. Model specification, the history of the
+event-proximal windows and a check of motion during the shock are given in the Supplementary
+Methods.
+
 ### Supplementary methods — sensitivity analyses
 
 A **negative-binomial mixed-effects count model** of the per-cell event counts was fitted as a
@@ -453,7 +478,12 @@ conditioning epochs; thin lines, individual animals; bold lines and shading, gro
 bold, pooled per group; thin, individual animals. **i**, Primary analysis. Per-event amplitude
 (top) and population event rate (bottom) by group in each of the three duration-matched 20 s
 epochs. Small points, individual cells (description only); large markers, the per-animal values
-the models were fitted on. *n* = 5 hM3D, 6 hM4D, 6 mCherry animals throughout. Statistics in
+the models were fitted on. **k**, Event-aligned activity (YrA, standardized once per cell over
+the session, minus each trial's pre-tone mean) around tone onset, trace onset (tone offset) and
+shock onset, all trials: mean (lines) and s.e.m. (bands) across animals of the trial-mean,
+cell-mean trace. Grey, the windows analysed: 3 s from tone and trace onset; at the shock, the 2 s
+shock (darker) and the 3 s from shock offset (lighter; dashed line, shock offset). Descriptive: no
+group difference in the per-cell modulation index (see text). *n* = 5 hM3D, 6 hM4D, 6 mCherry animals throughout. Statistics in
 **i** are linear contrasts of `log(metric) ~ group × epoch + (1|animal)`, Holm-corrected across
 the two treatment-versus-control comparisons within each epoch; in **d** and **e**, Welch tests on
 per-animal means with the same two-member Holm family, with the hM3D-versus-hM4D comparison shown
@@ -563,3 +593,11 @@ Paths are relative to `PLOTS_DIR/sp_rates_lmm/`. Rows of
     19.76 fps (open item 13), so every absolute rate (events s⁻¹, e.g. the −0.039 above) is ~1.2 %
     high in every group. Ratios, contrasts and *P* are unaffected (log-exposure offset). Fix or
     state as nominal — VS's decision.
+
+- **Panel letters and scope out of date (flagged 2026-10-18).** This document's panel letters
+  predate the composite (`caban/figure2_composite.py`): its **i** (primary) is the composite's **g**,
+  its **g** (epoch profile) is the composite's **i**, and the composite adds **j** (Test B recall
+  modulation) although the Scope paragraph says no recall number appears in Figure 2. Panel **k**
+  above uses the composite's letter. Relettering the text is a separate pass.
+- **Panel k numbers** are from the 2026-10-17 run (`epoch_modulation/{YrA,C}/…`, hierarchical and
+  event-proximal lanes; motion check in `event_proximal/shock_motion_check/`); not yet in §5.

@@ -32,10 +32,14 @@ See §6 note 1.
 | **c** | Effect estimates with 95% CI for all four decomposition components × four epochs, with each component's BH-adjusted group × epoch *q* | `TFC_cond/decomposition_grid.png` |
 | **d** | Recall, per-event amplitude (top) and population event rate (bottom), pre-tone vs post-tone. Left, 48 h (Test B); right, 1 week (Test B 1wk) | `paper/recall/Test_B/testb_amplitude_rate_by_epoch.png`; `paper/recall/Test_B_1wk/testb_1wk_amplitude_rate_by_epoch.png` |
 | **e** | Per-animal pre-tone → post-tone modulation. Top, 48 h; bottom, 1 week | `paper/recall/Test_B/testb_amplitude_rate_modulation.png`; `paper/recall/Test_B_1wk/testb_1wk_amplitude_rate_modulation.png` |
+| **f** | Event-aligned activity (YrA) per animal: one column per group, one row per event (tone, trace, shock) | `../epoch_modulation/YrA/event_proximal/panel_M_per_mouse.png` |
+| **g** | Event-proximal modulation index by event and group: cells (small) and animals (large) | `../epoch_modulation/YrA/event_proximal/panel_N_event_proximal_index.png` |
+| **h** | Motion (Minian rigid shift) and activity around the shock, per animal | `../epoch_modulation/YrA/event_proximal/shock_motion_check/shock_aligned_motion.png` |
 
 Panels **a–c** are secondary/descriptive: they are one exact decomposition computed over
 overlapping cells, and their intervals are uncorrected. Panels **d–e** are paper-facing, with the
-same statistical framework as Fig. 2i.
+same statistical framework as Fig. 2i. Panels **f–h** are descriptive companions to Fig. 2k
+(event-aligned activity); their tests are the per-cell modulation models described below.
 
 ---
 
@@ -130,6 +134,33 @@ effect declined, resolved or persisted between 48 h and 1 week: the two cohorts 
 animals, and a longitudinal claim requires a fixed-cohort model that was not fitted. Because no
 CNO was present at either recall session, any recall difference is a persistent consequence of the
 conditioning-day manipulation and not evidence of ongoing receptor activation.
+
+### Event-aligned activity on the conditioning day (Supplementary Fig. 2f–h)
+
+Supplementary Fig. 2f shows, for every animal, the activity around tone onset, trace onset and shock
+onset that Fig. 2k averages, and Supplementary Fig. 2g the event-proximal modulation index per
+animal. Over whole epochs, the per-cell modulation index (YrA) did not differ between groups in the
+animal-level model (group × epoch *F*(6,16) = 0.50, *P* = 0.80; shock, hM3D − control −0.010, 95% CI
+−0.123 to 0.102; hM4D − control −0.078, 95% CI −0.185 to 0.029, Holm-adjusted *P* = 0.29) or in the
+cell-level hierarchical model (randomization *P* = 0.21). In the event-proximal windows the
+hierarchical omnibus was *P* = 0.20; during the 2 s shock, hM3D and control animals did not differ
+(−0.011 s.d., 95% CI −0.217 to 0.195; exact *P* = 0.93), and in the 3 s after shock offset the
+contrasts were those reported in the main text (hM3D − control 0.082, 95% CI −0.009 to 0.173, exact
+*P* = 0.11, Holm-adjusted *P* = 0.21; hM3D − hM4D 0.097, 95% CI 0.006 to 0.187, exact *P* = 0.019,
+in no correction family). With the event-proximal shock window defined, as first specified, as
+3 s from shock onset, the omnibus was *P* = 0.16. The denoised trace *C* showed no group difference
+in any analysis (omnibus *P* = 0.80, 0.53 and 0.52 for the animal-level, hierarchical and
+event-proximal analyses).
+
+During the 2 s shock, Minian's rigid motion-correction shift jumped by tens of pixels in single
+frames in four animals (two hM3D, two hM4D) and in no control animal (Supplementary Fig. 2h), and
+activity in those animals deflected, in either direction, at the same frames. Shock-window values
+in these animals therefore partly reflect movement; the frames were retained. Movement had returned
+to the pre-tone level by shock offset in every group (mean frame-to-frame displacement 0.17–0.32
+pixels per frame after shock offset, against 0.17–0.27 before the tone), and across animals and
+trials activity did not covary with movement (Spearman ρ = 0.08 for the shock window and 0.22 for
+the 3 s after shock offset, across animals; mean within-animal ρ = 0.05 and 0.10). The shifts capture
+in-plane movement only.
 
 ---
 
@@ -236,12 +267,48 @@ persistence analysis; no responder classification; no tone-epoch statistics; no 
 count model as a recall rate sensitivity analysis; and no hierarchical cell-level companion
 analysis — that suite is gated off by default and was not run for the output reported here.
 
+### Event-aligned activity (Supplementary Fig. 2f–h; Fig. 2k)
+
+**Signals and index.** Activity was the Minian residual trace YrA (primary; recomputed from the
+motion-corrected movie) and the denoised trace *C* (confirmatory), each standardized once per cell
+over the whole session; no window was standardized against itself. For each cell, trial and epoch,
+the modulation index was the mean activity in the epoch minus the mean over that trial's 20 s
+pre-tone window, and each cell's value was its median across all five trials. The epochs were the
+tone, the trace interval, the 2 s shock and the 20 s after shock offset.
+
+**Models.** Both use the animal as the unit. (i) An animal-level mixed model of the per-animal mean
+index, group × epoch with a random intercept on animal; joint Wald omnibus on the six interaction
+coefficients (df 6, 16) and within-epoch treatment-versus-control contrasts, Holm-corrected across
+the two within each epoch, with hM3D versus hM4D in no family. (ii) A cell-level hierarchical
+model, `index ~ group × epoch + (1|animal) + (0 + epoch‖animal) + (1|animal:cell)`, which gives each
+epoch its own between-animal variance; *P* values come from randomizing group labels across animals
+with each cell kept with its animal (exact enumeration for pairwise contrasts, 462 or 924
+relabellings; 2,000 Monte Carlo draws, seed 0, for the omnibus). Intervals are the model's Wald
+intervals on df = 16.
+
+**Event-proximal variant (exploratory).** The same index over the first 3 s after tone onset, trace
+onset and shock offset, and over the 2 s shock itself, so that no window spans an epoch boundary,
+analysed with the hierarchical model. This variant was added after the epoch-wide analysis. Its
+windows were first specified as 3 s from every onset, so that the shock window extended 1 s past
+shock offset into the post-shock window (omnibus *P* = 0.16); after inspection of the event-aligned
+traces, the shock window was restricted to the shock itself (omnibus *P* = 0.20). Both are reported.
+
+**Panels.** Fig. 2k and Supplementary Fig. 2f plot, per animal, the trial-mean activity from −5 to
++10 s around each onset, averaged over cells; Fig. 2k shows the mean ± s.e.m. across animals. The
+index uses each cell's median over trials, so the mean of a plotted curve over a window approximates
+but does not equal the index.
+
+**Motion.** Minian's rigid motion-correction shifts (height and width, in pixels, per frame) were
+taken from the same output as the activity, and motion was the frame-to-frame displacement of the
+shift, averaged over exactly the frames of each index window. It was compared with the trial's
+index across animals and, within each animal, across trials (Spearman correlation; descriptive).
+
 ---
 
 ## 4. Figure legend
 
-**Supplementary Figure 2 | Epoch-resolved decomposition of conditioning-day activity, and CA1
-calcium event amplitude and rate during drug-free recall.**
+**Supplementary Figure 2 | Epoch-resolved decomposition of conditioning-day activity, CA1
+calcium event amplitude and rate during drug-free recall, and event-aligned activity per animal.**
 
 **a,b**, Decomposition of population calcium activity during the matched 20 s pre-tone baseline
 (**a**) and the 20 s post-shock window (**b**), in the same five quantities and the same format as
@@ -266,6 +333,16 @@ same animals and are never compared. **No CNO was present at either recall sessi
 **a** and **b** are Welch tests on per-animal means, Holm-corrected across the two
 treatment-versus-control comparisons, with the hM3D-versus-hM4D comparison shown uncorrected.
 **P* < 0.05, ***P* < 0.01.
+
+**f**, Event-aligned activity (YrA, standardized once per cell over the session, minus each trial's
+pre-tone mean) around tone onset, trace onset and shock onset for every animal: thin lines, one
+animal (trial-mean, cell-mean trace); thick line, the group mean shown in Fig. 2k. Grey, the windows
+analysed; at the shock, the 2 s shock (darker) and the 3 s from shock offset (lighter; dashed line,
+shock offset). **g**, Event-proximal modulation index by event and group; small points, cells
+(description only); large markers, per-animal values. **h**, Motion and activity around shock onset:
+top, frame-to-frame displacement of Minian's rigid motion-correction shift; bottom, YrA; thin lines,
+animals; thick line, group mean. *n* = 5 hM3D, 6 hM4D, 6 mCherry animals. Panels **f–h** are
+descriptive.
 
 ---
 
@@ -321,3 +398,7 @@ Paths are relative to `PLOTS_DIR/sp_rates_lmm/`.
    `hierarchical_cells/` directory under either recall session), so no number from it appears here.
    If you want its paired-cell amplitude sensitivity result in the supplement, that lane has to be
    rerun with `run_hierarchical_cell_analysis=True`.
+
+- **Panels f–h (added 2026-10-18)** are pipeline diagnostics not yet drawn in Nature style or at a
+  fixed panel size; restyle with the decomposition grid. Their numbers are from the 2026-10-17 run
+  and are not yet in §5.
