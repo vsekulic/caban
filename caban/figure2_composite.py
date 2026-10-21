@@ -183,9 +183,11 @@ Per-event amplitude (top) and population event rate (bottom) in the three 20-s c
 small points are cells, large points animals; contrasts of the group x epoch mixed model with animal
 as random intercept, Holm-corrected over the two treatment-versus-control comparisons within each
 epoch. **g**, Double dissociation (not built). **h**, Average trace-interval event per group: every event's deconvolved trace around its
-peak, averaged per animal; mean (lines) and s.e.m. (bands) across animals. **i**, Pyramidal events around
+peak, averaged per animal; mean (lines) and s.e.m. (bands) across animals; above, the trace-interval
+amplitude contrasts vs Ctl from the model in f (ratio, Holm-adjusted P). **i**, Pyramidal events around
 shock onset, 1-s bins: event rate per cell (left) and log per-event amplitude (right); mean (lines)
-and s.e.m. (bands) across animals; darker shading, the 2-s shock; dashed line, shock offset. n = 5 Exc, 6 Inh and 6 Ctl animals; the animal is the unit of inference
+and s.e.m. (bands) across animals; darker shading, the 2-s shock; dashed line, shock offset; above, the
+post-shock (20 s) contrasts vs Ctl from the model in f (ratio, Holm-adjusted P). n = 5 Exc, 6 Inh and 6 Ctl animals; the animal is the unit of inference
 throughout. Plan: plans/figure2_redesign_plan.md.
 """
 FIGURE2_V2_SPEC = {'name': 'fig2_v2', 'layout': LAYOUT_V2_MM,

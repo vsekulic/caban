@@ -26,6 +26,7 @@ from caban.single_unit_common import (GROUP_COLOURS, GROUP_LABELS, DREADD_DISPLA
 from caban.decoder import _copy_analysis_methods_template
 from caban.nature_comm_style import nature_style, save_paper_panel, AXIS_PT, LINE_PT, FONT_PT
 from caban.figure2_composite import panel_figsize, LAYOUT_V2_MM
+from caban.sp_rates_lmm import paper_contrast, format_paper_contrast
 
 OUT_DIRNAME = 'shock_events'
 METHODS_FILENAME = 'shock_events_methods.md'
@@ -77,7 +78,7 @@ def collect(mice_per_group, sessions, mapping='full', thres=None):
     return pd.concat(rows, ignore_index=True)
 
 
-def plot_panel(table, shock_s, out_path):
+def plot_panel(table, shock_s, out_path, contrasts):
     """Figure 2 v2 i: event rate (left) and per-event log amplitude (right) around shock onset."""
     with nature_style():
         fig, axs = plt.subplots(1, 2, figsize=panel_figsize('i', LAYOUT_V2_MM), layout='constrained')
@@ -98,6 +99,10 @@ def plot_panel(table, shock_s, out_path):
                                 alpha=0.2, lw=0)
             ax.set_ylabel(ylabel)
             ax.set_xlabel('Time from shock onset (s)')
+            # The paper model's post-shock contrasts (20 s from shock offset, Holm within the epoch).
+            c = contrasts['population_rate' if col == 'rate' else 'amplitude']
+            ax.set_title('Post-shock 20 s vs Ctl\n' + format_paper_contrast(c['hM3D'], 'Exc') + '; '
+                         + format_paper_contrast(c['hM4D'], 'Inh'), fontsize=FONT_PT - 1)
         axs[0].legend(loc='upper right', handlelength=1.0)
         save_paper_panel(fig, os.path.splitext(out_path)[0])
     plt.close(fig)
@@ -115,7 +120,9 @@ def run_shock_events(PLOTS_DIR, mice_per_group, TFC_cond, mapping='full', thres=
                            f'frames across trials.')
     shock_s = float(np.median(shock_frames)) / MINISCOPE_FPS
     table.to_csv(os.path.join(out_dir, 'shock_locked_bins_per_animal.csv'), index=False)
-    plot_panel(table, shock_s, os.path.join(out_dir, PANEL_ROOT + '.png'))
+    contrasts = {o: {g: paper_contrast(PLOTS_DIR, o, 'post_shock', g) for g in ('hM3D', 'hM4D')}
+                 for o in ('amplitude', 'population_rate')}
+    plot_panel(table, shock_s, os.path.join(out_dir, PANEL_ROOT + '.png'), contrasts)
     write_text(os.path.join(out_dir, 'shock_events_summary.txt'),
                'Shock-locked events, group mean over animals per bin (descriptive):\n'
                + table.groupby(['group', 't'])[['rate', 'log_amplitude']].mean().unstack('group')
