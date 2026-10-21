@@ -30,7 +30,7 @@ from caban.sessions import *   # noqa: F401,F403
 from caban.analysis import *   # noqa: F401,F403
 from caban.decoder import *    # noqa: F401,F403
 from caban.decoder import _PVT_MODE_LABEL_TO_KEY, _copy_analysis_methods_template  # noqa: F401
-from caban.figure2_composite import (build_figure2_composite, FIGURE2_SPEC,
+from caban.figure2_composite import (build_figure2_composite, FIGURE2_SPEC, panel_figsize, LAYOUT_V2_MM,
                                      FIGURE2_V2_SPEC)
 from caban.engram import ENGRAM_REFERENCE
 from caban.population import run_population_pca_pipeline, run_pca_state_metrics_from_results
@@ -61,6 +61,8 @@ from caban.population_coupling import run_population_coupling as _run_population
 from caban.sp_rates_lmm import run_sp_rates_lmm as _run_sp_rates_lmm
 from caban.event_waveform import draw_event_waveforms as _draw_event_waveforms
 from caban.figure2_effect_profile import run_figure2_effect_profile as _run_figure2_effect_profile
+from caban.sp_rates_lmm import run_paper_tfc_four_epochs as _run_paper_tfc_four_epochs
+from caban.freezing_check import run_freezing_check as _run_freezing_check
 
 import statsmodels.api as sm  # noqa: F401
 from statsmodels.regression.mixed_linear_model import MixedLM as mixedlm  # noqa: F401
@@ -1963,6 +1965,25 @@ def run_figure2_effect_profile(ds, cfg):
     model's per-animal table; into <PLOTS_DIR>/figure2_effect_profile/."""
     msg_start('*** Figure 2 v2 g: effect profile')
     _run_figure2_effect_profile(cfg.PLOTS_DIR, ds.mice_per_group)
+    msg_end()
+
+
+# ---------------------------------------------------------------------------
+def run_paper_tfc_four_epochs(ds, cfg):
+    """The conditioning model with the tone as a fourth epoch (plans/figure2_redesign_plan.md §13,
+    POST HOC, beside the three-epoch primary): <PLOTS_DIR>/sp_rates_lmm/paper/tfc_amplitude_rate_four_epochs/.
+    Needs run_sp_rates_lmm's three-epoch output for the side-by-side table."""
+    msg_start('*** Conditioning model with the tone (four epochs, post hoc)')
+    _run_paper_tfc_four_epochs(cfg.PLOTS_DIR, ds.mice_per_group, ds.TFC_cond,
+                               distribution_figsize=panel_figsize('f', LAYOUT_V2_MM))
+    msg_end()
+
+
+def run_freezing_check(ds, cfg):
+    """Freezing check (plans/figure2_redesign_plan.md §14): freezing by group and the four-epoch
+    effects in moving frames only; <PLOTS_DIR>/freezing_check/. Needs the four-epoch lane's output."""
+    msg_start('*** Freezing check')
+    _run_freezing_check(cfg.PLOTS_DIR, ds.mice_per_group, ds.TFC_cond)
     msg_end()
 
 
