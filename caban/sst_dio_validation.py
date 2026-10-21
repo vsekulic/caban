@@ -8,14 +8,20 @@ Raw projections (:func:`raw_projections`) are computed from the session's .avi f
 before any Minian step, so the four fields of view can be compared before the baseline Minian runs.
 """
 
+import concurrent.futures
 import glob
+import json
 import os
 import re
+import time
 
 import cv2
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 
+from caban import minian_runner as mr
+from caban import yra_recompute as yr
 from caban.nature_comm_style import MM, FONT_PT
 
 SST_DIO_DREADD = {'G22': 'hM3D', 'G23': 'hM3D', 'G26': 'hM4D', 'G27': 'hM4D'}
@@ -231,3 +237,130 @@ def plot_seed_mask(max_proj, A, mask, title, out_path):
     fig.savefig(out_path, dpi=200)
     plt.close(fig)
     return out_path
+
+
+# Lens-interior ellipses proposed for the parameter check, before VS approves them into
+# session_queue.SEED_MASKS (which production runs read). Drawn over the baseline max_proj.
+SEED_MASKS_PROPOSED = {
+    'G27-ST895-hM4D-DIOGC/2023_05_22-TFC_cond/15_21_41-HC2': {
+        'center_height': 335.0, 'center_width': 300.0, 'radius_height': 265.0, 'radius_width': 285.0},
+}
+
+
+# --- parameter grids (plan §6): full Minian runs outside the session folder ----------------------
+# One value changed at a time from the frozen set; every variant gets the same seed mask and the
+# del_frames production would get. VS judges them in the review notebook.
+PARAMETER_GRID_ONE_AT_A_TIME = {
+    'frozen': {},
+    'background_wnd_10': {'param_background_removal': {'wnd': 10}},
+    'background_wnd_20': {'param_background_removal': {'wnd': 20}},
+    'seeds_max_wnd_10': {'param_seeds_init': {'max_wnd': 10}},
+    'seeds_max_wnd_20': {'param_seeds_init': {'max_wnd': 20}},
+    'pnr_thres_1_5': {'param_pnr_refine': {'thres': 1.5}},
+    'pnr_thres_2': {'param_pnr_refine': {'thres': 2.0}},
+    'seeds_merge_dist_5': {'param_seeds_merge': {'thres_dist': 5}},
+    'seeds_merge_dist_15': {'param_seeds_merge': {'thres_dist': 15}},
+    'merge_corr_0_7': {name: {'thres_corr': 0.7} for name in
+                       ('param_seeds_merge', 'param_init_merge', 'param_first_merge')},
+    'merge_corr_0_9': {name: {'thres_corr': 0.9} for name in
+                       ('param_seeds_merge', 'param_init_merge', 'param_first_merge')},
+    'spatial_penal_1e-3': {name: {'sparse_penal': 1e-3} for name in
+                           ('param_first_spatial', 'param_second_spatial')},
+    'spatial_penal_1e-5': {name: {'sparse_penal': 1e-5} for name in
+                           ('param_first_spatial', 'param_second_spatial')},
+    'spatial_dl_wnd_8': {name: {'dl_wnd': 8} for name in
+                         ('param_first_spatial', 'param_second_spatial')},
+}
+GRID_NOTEBOOK_FLAGS = dict(mr.NOTEBOOK_FLAGS, want_mc_video=False, want_final_video=False)
+FRAGMENT_DISTANCE_PX = 8.0      # two units' centroids closer than this: likely one cell split
+
+
+def close_pairs(height, width, max_dist=FRAGMENT_DISTANCE_PX):
+    """Number of unit pairs whose centroids lie within ``max_dist`` px of each other."""
+    points = np.column_stack([height, width])
+    dist = np.sqrt(((points[:, None, :] - points[None, :, :]) ** 2).sum(-1))
+    return int(np.triu(dist < max_dist, k=1).sum())
+
+
+def run_parameter_variant(session_dir, name, overrides, out_root, seed_mask=None, n_workers=6):
+    """One full Minian run of ``session_dir`` with ``overrides``, written to ``out_root/name``.
+
+    As :func:`caban.minian_runner.reestimate_motion`: ``intpath`` and ``minian_ds_path`` both under
+    the variant's folder (verified from the kernel), no videos, the session folder's listing
+    checked unchanged. ``del_frames`` come from ``yra_recompute.NOTEBOOK_DEL_FRAMES`` as in
+    production. Intermediates are kept for the review. Writes ``variant.json``; raises on failure.
+    """
+    work = os.path.join(out_root, name)
+    if os.path.lexists(work):
+        raise FileExistsError('{} exists; remove it to re-run the variant'.format(work))
+    intpath, output = os.path.join(work, 'minian_intermediate'), os.path.join(work, mr.OUTPUT_NAME)
+    os.makedirs(intpath)
+    os.makedirs(output)
+    del_frames = yr.notebook_del_frames(session_dir)
+    nb, edits = mr.build_run_notebook(mr.load_template(), session_dir,
+                                      os.path.join(work, mr.PARAMETERS_JSON), scratch=intpath,
+                                      flags=GRID_NOTEBOOK_FLAGS, minian_ds_path=output,
+                                      del_frames=del_frames, seed_mask=seed_mask,
+                                      parameter_overrides=overrides)
+    before = sorted(os.listdir(session_dir))
+    record = {'session_dir': session_dir, 'variant': name, 'overrides': overrides,
+              'seed_mask': seed_mask, 'del_frames': del_frames, 'notebook_edits': edits,
+              'caban': mr._git_state(mr.REPO_DIR), 'minian_fork': mr._git_state(mr.MINIAN_FORK_DIR),
+              'started': pd.Timestamp.now().isoformat(timespec='seconds'), 'timings': {}}
+    started = time.time()
+    try:
+        mr.execute_and_check(nb, work, record, n_workers=n_workers)
+        with open(os.path.join(work, mr.PARAMETERS_JSON)) as fh:
+            parameters = json.load(fh)
+        mr._check_edits_held(parameters, session_dir, GRID_NOTEBOOK_FLAGS, intpath, output)
+        mr.overrides_held(parameters, overrides)
+        if sorted(os.listdir(session_dir)) != before:
+            raise RuntimeError('the run changed {}'.format(session_dir))
+        record['parameters'] = parameters['param']
+        record['report'] = mr.report_session(output, work, parameters['FRAMERATE'])
+        A = yr.open_minian_array(output, 'A').compute()
+        height, width = footprint_centroids(A)
+        record['report']['close_pairs'] = close_pairs(height, width)
+        record['status'] = 'done'
+    except BaseException as error:
+        record['status'] = 'failed'
+        record['error'] = '{}: {}'.format(type(error).__name__, error)
+        raise
+    finally:
+        record['timings']['total_s'] = round(time.time() - started, 1)
+        with open(os.path.join(work, 'variant.json'), 'w') as fh:
+            json.dump(record, fh, indent=1, default=str)
+    return record
+
+
+def run_parameter_grid(session_dir, grid, out_root, seed_mask=None, n_parallel=4, n_workers=6):
+    """Every variant of ``grid``, ``n_parallel`` at a time. A failed variant is recorded in its
+    ``variant.json`` and printed, and the others carry on (an unattended grid; each failure is a
+    result to look at, e.g. the empty-merge failure). Returns {name: 'done' | error}."""
+    outcome = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=n_parallel) as pool:
+        futures = {pool.submit(run_parameter_variant, session_dir, name, overrides, out_root,
+                               seed_mask, n_workers): name for name, overrides in grid.items()}
+        for future in concurrent.futures.as_completed(futures):
+            name = futures[future]
+            error = future.exception()
+            outcome[name] = 'done' if error is None else '{}: {}'.format(type(error).__name__, error)
+            print('{} {}: {}'.format(pd.Timestamp.now().strftime('%H:%M:%S'), name, outcome[name]),
+                  flush=True)
+    return outcome
+
+
+def grid_summary(out_root):
+    """One row per variant: status, unit count, footprint size, close pairs, run time."""
+    rows = []
+    for path in sorted(glob.glob(os.path.join(out_root, '*', 'variant.json'))):
+        with open(path) as fh:
+            r = json.load(fh)
+        report = r.get('report', {})
+        rows.append({'variant': r['variant'], 'status': r['status'],
+                     'n_units': report.get('n_units'),
+                     'footprint_px_median': report.get('footprint_px', {}).get('median'),
+                     'close_pairs': report.get('close_pairs'),
+                     'minutes': round(r['timings']['total_s'] / 60, 1),
+                     'error': r.get('error', '')})
+    return pd.DataFrame(rows).set_index('variant')
