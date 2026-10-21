@@ -308,6 +308,7 @@ import collections
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 from scipy import stats as scipy_stats
 import statsmodels.formula.api as smf
 from statsmodels.stats.multitest import multipletests
@@ -4526,6 +4527,53 @@ _GridPanel = collections.namedtuple(
     defaults=(None, None, None))
 
 
+def _draw_superplot_panels(axs, panels, row_ylabels, col_titles, panel_name, annotate='stats'):
+    """Draw ``panels`` ({(row, col): _GridPanel}) into the (n_rows, n_cols) array ``axs`` with the
+    row-wise y-limits and single bracket-headroom reservation of _draw_superplot_panel_grid (whose
+    drawing this is, factored out so Figure 2 v2 f can place a grid column beside other axes).
+    Returns {panel label: contrast payload}."""
+    n_rows = axs.shape[0]
+    contrasts_by_panel = {}
+    row_values = [[] for _ in range(n_rows)]
+    for (r, c), panel in sorted(panels.items()):
+        row_values[r].append(panel.df[panel.col].to_numpy(dtype=float))
+        _draw_cell_superplot_panel(
+            axs[r, c], panel.df, panel.col,
+            ylabel=(row_ylabels[r] if c == 0 else ''),
+            panel_name=f'{panel_name}[{panel.key}]',
+            # Column titles go on the top row only, and are re-set below with a pad: the bracket
+            # stack is drawn above the axes in axes-fraction coordinates and the title sits there
+            # too, so a zero pad puts the topmost asterisks through the column label.
+            title='', yscale=panel.yscale, y_quantum=panel.quantum,
+            annotate=annotate, bracket_mode='axes', jitter_width=0.22,
+            stat_fn=panel.stat_fn, mouse_means_override=panel.mouse_values)
+        if r == 0:
+            axs[r, c].set_title(col_titles[c])
+        contrasts_by_panel[panel.label] = (
+            _panel_contrasts(panel.df, panel.col, panel.ci_scale, panel.ci_unit)
+            if panel.contrast_payload is None else panel.contrast_payload)
+
+    for r in range(n_rows):
+        ax0 = axs[r, 0]
+        vals = np.concatenate(row_values[r])
+        vals = vals[np.isfinite(vals)]
+        if ax0.get_yscale() == 'linear':
+            lo, hi = float(vals.min()), float(vals.max())
+            pad = 0.05 * max(hi - lo, 1e-9)
+            ax0.set_ylim(lo - pad, hi + pad)
+        else:
+            # A log axis cannot show the exact zeros that zero-event cells contribute; a symlog
+            # one can, and its bottom must stay at zero so those cells are not silently dropped.
+            positive = vals[vals > 0]
+            bottom = 0.0 if ax0.get_yscale() == 'symlog' else float(positive.min()) / 1.3
+            ax0.set_ylim(bottom, float(positive.max()) * 1.3)
+        # Only reserve bracket headroom when brackets were actually drawn -- annotate='none'
+        # would otherwise leave a fifth of every panel empty for annotations that do not exist.
+        if annotate == 'stats':
+            reserve_top_fraction(ax0)
+    return contrasts_by_panel
+
+
 def _draw_superplot_panel_grid(panels, row_ylabels, col_titles, save_dir, filename_root,
                                panel_name, annotate='stats', figure_has_stars=True,
                                no_star_note=None, contrasts_title='Decomposition panel contrasts',
@@ -4575,44 +4623,8 @@ def _draw_superplot_panel_grid(panels, row_ylabels, col_titles, save_dir, filena
         # transpose the figure; reshape to the intended shape explicitly.
         axs = np.atleast_2d(axs).reshape(n_rows, n_cols)
 
-        contrasts_by_panel = {}
-        row_values = [[] for _ in range(n_rows)]
-        for (r, c), panel in sorted(panels.items()):
-            row_values[r].append(panel.df[panel.col].to_numpy(dtype=float))
-            _draw_cell_superplot_panel(
-                axs[r, c], panel.df, panel.col,
-                ylabel=(row_ylabels[r] if c == 0 else ''),
-                panel_name=f'{panel_name}[{panel.key}]',
-                # Column titles go on the top row only, and are re-set below with a pad: the bracket
-                # stack is drawn above the axes in axes-fraction coordinates and the title sits there
-                # too, so a zero pad puts the topmost asterisks through the column label.
-                title='', yscale=panel.yscale, y_quantum=panel.quantum,
-                annotate=annotate, bracket_mode='axes', jitter_width=0.22,
-                stat_fn=panel.stat_fn, mouse_means_override=panel.mouse_values)
-            if r == 0:
-                axs[r, c].set_title(col_titles[c])
-            contrasts_by_panel[panel.label] = (
-                _panel_contrasts(panel.df, panel.col, panel.ci_scale, panel.ci_unit)
-                if panel.contrast_payload is None else panel.contrast_payload)
-
-        for r in range(n_rows):
-            ax0 = axs[r, 0]
-            vals = np.concatenate(row_values[r])
-            vals = vals[np.isfinite(vals)]
-            if ax0.get_yscale() == 'linear':
-                lo, hi = float(vals.min()), float(vals.max())
-                pad = 0.05 * max(hi - lo, 1e-9)
-                ax0.set_ylim(lo - pad, hi + pad)
-            else:
-                # A log axis cannot show the exact zeros that zero-event cells contribute; a symlog
-                # one can, and its bottom must stay at zero so those cells are not silently dropped.
-                positive = vals[vals > 0]
-                bottom = 0.0 if ax0.get_yscale() == 'symlog' else float(positive.min()) / 1.3
-                ax0.set_ylim(bottom, float(positive.max()) * 1.3)
-            # Only reserve bracket headroom when brackets were actually drawn -- annotate='none'
-            # would otherwise leave a fifth of every panel empty for annotations that do not exist.
-            if annotate == 'stats':
-                reserve_top_fraction(ax0)
+        contrasts_by_panel = _draw_superplot_panels(axs, panels, row_ylabels, col_titles,
+                                                    panel_name, annotate)
 
         # No suptitle: each row carries its own y-label and each column its own title, and these
         # figures are always presented with a caption. Same choice plot_decomposition made.
@@ -4745,6 +4757,47 @@ def _paper_panel_star_pvalues(contrasts, outcome_key, epoch):
     return tuple(out)
 
 
+def _paper_distribution_panels(df_matched, mouse_epoch, contrasts, epochs, rows, untested_epochs=()):
+    """(specs, {(row, col): _GridPanel}) for plot_paper_epoch_distributions' grid -- one panel per
+    (outcome row, epoch column), with the paper's precomputed stars -- factored out so Figure 2 v2 f
+    can draw one column of it."""
+    specs = [_DECOMPOSITION_COMPONENTS_BY_KEY[k] for k in rows]
+    payloads = _unified_contrast_payloads(contrasts, epochs=epochs)
+
+    panels = {}
+    for c, epoch in enumerate(epochs):
+        frames = _decomposition_grid_frames(aggregate_over_trials(df_matched, epoch))
+        for r, spec in enumerate(specs):
+            display = _PAPER_ROW_DISPLAY[spec.key]
+            sub = frames[spec.frame]
+            col = display['col']
+            # One count = one quantum of rate. exposure_seconds is the same matched window for
+            # every cell within a trial, so the median is that window pooled over trials.
+            quantum = (1.0 / float(np.median(sub['exposure_seconds']))
+                       if display['quantum'] else None)
+            marker_col = display['marker_col']
+            epoch_rows = mouse_epoch[mouse_epoch['epoch'] == epoch]
+            mouse_values = {
+                g: dict(zip(epoch_rows.loc[epoch_rows['group'] == g, 'mouse'],
+                            epoch_rows.loc[epoch_rows['group'] == g, marker_col]))
+                for g in DREADD_DISPLAY_ORDER}
+            _assert_markers_match_model(mouse_epoch, marker_col, mouse_values,
+                                        f'{spec.key}/{epoch}', epoch)
+            # untested_epochs: drawn with no test, by declaration (Figure 2 v2 f: the tone, which the
+            # three-epoch primary model does not contain). Every other panel must have its two
+            # Holm-adjusted P-values, as before.
+            stars = ((np.nan, np.nan) if epoch in untested_epochs
+                     else _paper_panel_star_pvalues(contrasts, spec.key, epoch))
+            panels[(r, c)] = _GridPanel(
+                key=f'{spec.key}/{epoch}', label=f'{spec.label} — {epoch}', df=sub,
+                col=col, yscale=display['yscale'], quantum=quantum,
+                ci_scale=spec.ci_scale, ci_unit=spec.ci_unit,
+                stat_fn=_precomputed_stat_fn(*stars),
+                mouse_values=mouse_values,
+                contrast_payload=payloads[(spec.key, epoch)])
+    return specs, panels
+
+
 def plot_paper_epoch_distributions(df_matched, mouse_epoch, contrasts, save_dir,
                                    epochs=TFC_MATCHED_PROFILE_EPOCHS,
                                    rows=('amplitude', 'population_rate'),
@@ -4796,40 +4849,8 @@ def plot_paper_epoch_distributions(df_matched, mouse_epoch, contrasts, save_dir,
     contrasts_preamble = (_PAPER_CONTRASTS_PREAMBLE if contrasts_preamble is None
                           else contrasts_preamble)
     no_star_note = _PAPER_DISTRIBUTION_STAR_NOTE if no_star_note is None else no_star_note
-    specs = [_DECOMPOSITION_COMPONENTS_BY_KEY[k] for k in rows]
-    payloads = _unified_contrast_payloads(contrasts, epochs=epochs)
-
-    panels = {}
-    for c, epoch in enumerate(epochs):
-        frames = _decomposition_grid_frames(aggregate_over_trials(df_matched, epoch))
-        for r, spec in enumerate(specs):
-            display = _PAPER_ROW_DISPLAY[spec.key]
-            sub = frames[spec.frame]
-            col = display['col']
-            # One count = one quantum of rate. exposure_seconds is the same matched window for
-            # every cell within a trial, so the median is that window pooled over trials.
-            quantum = (1.0 / float(np.median(sub['exposure_seconds']))
-                       if display['quantum'] else None)
-            marker_col = display['marker_col']
-            epoch_rows = mouse_epoch[mouse_epoch['epoch'] == epoch]
-            mouse_values = {
-                g: dict(zip(epoch_rows.loc[epoch_rows['group'] == g, 'mouse'],
-                            epoch_rows.loc[epoch_rows['group'] == g, marker_col]))
-                for g in DREADD_DISPLAY_ORDER}
-            _assert_markers_match_model(mouse_epoch, marker_col, mouse_values,
-                                        f'{spec.key}/{epoch}', epoch)
-            # untested_epochs: drawn with no test, by declaration (Figure 2 v2 f: the tone, which the
-            # three-epoch primary model does not contain). Every other panel must have its two
-            # Holm-adjusted P-values, as before.
-            stars = ((np.nan, np.nan) if epoch in untested_epochs
-                     else _paper_panel_star_pvalues(contrasts, spec.key, epoch))
-            panels[(r, c)] = _GridPanel(
-                key=f'{spec.key}/{epoch}', label=f'{spec.label} — {epoch}', df=sub,
-                col=col, yscale=display['yscale'], quantum=quantum,
-                ci_scale=spec.ci_scale, ci_unit=spec.ci_unit,
-                stat_fn=_precomputed_stat_fn(*stars),
-                mouse_values=mouse_values,
-                contrast_payload=payloads[(spec.key, epoch)])
+    specs, panels = _paper_distribution_panels(df_matched, mouse_epoch, contrasts, epochs, rows,
+                                               untested_epochs)
 
     # Returned so the Results summary can quote the SAME payloads the panels were drawn from,
     # rather than recomputing the contrasts and risking a figure and its own summary disagreeing.
@@ -5499,6 +5520,58 @@ def exposure_matched_event_table(mice_per_group, TFC_cond, epochs, mapping='full
 
 
 FIGURE2_V2_CONTRASTS_CSV = os.path.join('sp_rates_lmm', 'paper', 'figure2_v2', 'figure2_v2_contrasts.csv')
+FIGURE2_V2_F_ROOT = 'figure2_v2_f'
+FIGURE2_V2_F_ALL_EPOCHS_ROOT = 'tfc_amplitude_rate_by_epoch_all_epochs'   # the full grid, supplement
+
+
+def plot_figure2_v2_f(df_paper, mouse_epoch, contrasts, save_dir, figsize):
+    """Figure 2 v2 f (VS, 2026-10-22): left, the trace interval's amplitude and rate SuperPlots with
+    the primary model's stars (the grid's own panels, _paper_distribution_panels); right, each
+    epoch's ratio vs mCherry with its 95% CI, both DREADD groups, so the reader sees the effects are
+    of similar size throughout (filled: tested, * Holm P < 0.05; open: the untested tone)."""
+    specs, panels = _paper_distribution_panels(df_paper, mouse_epoch, contrasts, (TFC_TRACE_EPOCH,),
+                                               ('amplitude', 'population_rate'))
+    with nature_style():
+        fig = plt.figure(figsize=figsize, layout='constrained')
+        gs = fig.add_gridspec(2, 2, width_ratios=[1, 1.1])
+        axs_left = np.array([[fig.add_subplot(gs[r, 0])] for r in range(2)])
+        _draw_superplot_panels(axs_left, panels,
+                               [_PAPER_ROW_DISPLAY[spec.key]['ylabel'] for spec in specs],
+                               [_PAPER_EPOCH_LABELS[TFC_TRACE_EPOCH]], 'figure2_v2_f', 'stats')
+        offsets = {'hM3D': -0.13, 'hM4D': 0.13}
+        for r, spec in enumerate(specs):
+            ax = fig.add_subplot(gs[r, 1])
+            ax.axhline(1.0, color='0.6', lw=AXIS_PT, ls='--', zorder=0)
+            for x, epoch in enumerate(TFC_FOUR_EPOCHS):
+                for group, dx in offsets.items():
+                    row = unified_contrast_lookup(contrasts, spec.key, epoch, group)
+                    tested = np.isfinite(row['p_holm_epoch'])
+                    ratio = row['ratio']
+                    ax.errorbar(x + dx, ratio, yerr=[[ratio - row['ratio_ci_low']], [row['ratio_ci_high'] - ratio]],
+                                fmt='o', ms=3, color=GROUP_COLOURS[group], mfc=GROUP_COLOURS[group] if tested else 'white',
+                                lw=LINE_PT, capsize=1.5, label=GROUP_LABELS[group] if x == 0 else None)
+                    if tested and row['p_holm_epoch'] < 0.05:
+                        ax.text(x + dx, row['ratio_ci_high'] * 1.04, '*', ha='center', va='bottom',
+                                fontsize=FONT_PT)
+            ax.set_yscale('log')
+            rows_all = [unified_contrast_lookup(contrasts, spec.key, e, g)
+                        for e in TFC_FOUR_EPOCHS for g in offsets]
+            lo = min(float(x['ratio_ci_low']) for x in rows_all) / 1.15
+            hi = max(float(x['ratio_ci_high']) for x in rows_all) * 1.35   # room for the asterisks
+            ax.set_ylim(lo, hi)
+            ticks = [t for t in (0.25, 0.5, 1.0, 2.0, 4.0) if lo <= t <= hi]
+            ax.yaxis.set_major_locator(mticker.FixedLocator(ticks))
+            ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _pos: f'{v:g}'))
+            ax.yaxis.set_minor_formatter(mticker.NullFormatter())
+            ax.set_xticks(range(len(TFC_FOUR_EPOCHS)))
+            ax.set_xticklabels([_PAPER_EPOCH_LABELS[e] for e in TFC_FOUR_EPOCHS], rotation=35, ha='right')
+            ax.set_xlim(-0.5, len(TFC_FOUR_EPOCHS) - 0.5)
+            ax.set_ylabel('Ratio vs Ctl')
+            if r == 0:
+                ax.set_title('All epochs')
+        save_paper_panel(fig, os.path.join(save_dir, FIGURE2_V2_F_ROOT))
+    plt.close(fig)
+
 FIGURE2_V2_STAR_NOTE = (
     'Asterisks are the three-epoch PRIMARY model\'s within-epoch Holm-adjusted contrasts (pre-tone, '
     'trace, post-shock). The tone is drawn without a test: the primary model does not contain it; its '
@@ -5542,11 +5615,15 @@ def run_paper_tfc_four_epochs(PLOTS_DIR, mice_per_group, TFC_cond, mapping='full
     v2_dir = os.path.join(PLOTS_DIR, FIGURE2_V2_CONTRASTS_CSV.rsplit(os.sep, 1)[0])
     ensure_dirs(v2_dir)
     combined.to_csv(os.path.join(PLOTS_DIR, FIGURE2_V2_CONTRASTS_CSV), index=False)
+    df_four = df_grid[df_grid['epoch'].isin(TFC_FOUR_EPOCHS)]
+    # The full four-epoch grid with the primary stars: supplement.
     plot_paper_epoch_distributions(
-        df_grid[df_grid['epoch'].isin(TFC_FOUR_EPOCHS)], res['mouse_epoch'], combined, v2_dir,
-        epochs=TFC_FOUR_EPOCHS, figsize=distribution_figsize, untested_epochs=('tone',),
-        contrasts_title='Figure 2 v2 f — the three-epoch primary model; tone untested',
+        df_four, res['mouse_epoch'], combined, v2_dir, epochs=TFC_FOUR_EPOCHS,
+        filename_root=FIGURE2_V2_F_ALL_EPOCHS_ROOT, untested_epochs=('tone',),
+        contrasts_title='All four epochs — the three-epoch primary model; tone untested',
         no_star_note=FIGURE2_V2_STAR_NOTE)
+    # Figure 2 v2 f: the trace interval, plus every epoch's effect as a forest.
+    plot_figure2_v2_f(df_four, res['mouse_epoch'], combined, v2_dir, distribution_figsize)
     three_path = os.path.join(PLOTS_DIR, UNIFIED_CONTRASTS_CSV)
     if not os.path.isfile(three_path):
         raise FileNotFoundError(f'{three_path} not found: run run_sp_rates_lmm (the three-epoch '

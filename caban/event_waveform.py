@@ -47,6 +47,8 @@ PANEL_SIGNAL = 'C'                                # VS, 2026-10-21; 'YrA' is the
 WINDOWS_S = {'S': (1.0, 1.0), 'C': (1.0, 3.0), 'YrA': (1.0, 3.0)}   # (before, after) the S peak
 BASELINE_S = (-1.0, -0.5)
 PANEL_EPOCHS = TFC_FOUR_EPOCHS                   # f's windows, the tone included (VS, 2026-10-21)
+H_EPOCH = 'trace'                                # the Figure 2 v2 h panel (VS, 2026-10-22); all four: supplement
+ALL_EPOCHS_ROOT = PANEL_ROOT + '_all_epochs'
 UNTESTED_EPOCHS = ('tone',)                      # not in the three-epoch primary model: no stars
 EPOCH_TITLES = {'pre_tone_matched': 'Pre-tone', 'tone': 'Tone', 'trace': 'Trace', 'post_shock': 'Post-shock'}
 FOUR_EPOCH_TABLE = os.path.join('sp_rates_lmm', 'paper', FOUR_EPOCH_SUBDIR, 'stats',
@@ -113,12 +115,12 @@ def _draw(ax, per_group, t, lw):
         ax.fill_between(t, mu - sem, mu + sem, color=GROUP_COLOURS[group], alpha=0.2, lw=0)
 
 
-def plot_panel(by_epoch, t, signal, contrasts, values_by_epoch, out_root):
+def plot_panel(by_epoch, t, signal, contrasts, values_by_epoch, out_root, figsize):
     """Figure 2 v2 h, Nature style at h's box size: per epoch (columns), top the average event, bottom
     the per-animal log amplitude the primary model was fitted on, with that model's Holm-adjusted
     stars vs Ctl for that epoch (no statistic is computed here)."""
     with nature_style():
-        fig, axs = plt.subplots(2, len(PANEL_EPOCHS), figsize=panel_figsize('h', LAYOUT_V2_MM),
+        fig, axs = plt.subplots(2, len(PANEL_EPOCHS), figsize=figsize,
                                 layout='constrained', sharey='row', gridspec_kw={'height_ratios': [1.25, 1]})
         for col, epoch in enumerate(PANEL_EPOCHS):
             ax, axb = axs[0, col], axs[1, col]
@@ -136,6 +138,19 @@ def plot_panel(by_epoch, t, signal, contrasts, values_by_epoch, out_root):
         axs[0, 0].set_ylabel(YLABEL[signal].split(' (')[0] + ' (a.u.)')
         axs[1, 0].set_ylabel('Log amplitude')
         axs[0, -1].legend(loc='upper right', handlelength=0.8, borderaxespad=0.1)
+        save_paper_panel(fig, out_root)
+    plt.close(fig)
+
+
+def plot_h_panel(per_group, t, signal, out_root):
+    """Figure 2 v2 h: the trace interval's average calcium event, Nature style at h's box size."""
+    with nature_style():
+        fig, ax = plt.subplots(figsize=panel_figsize('h', LAYOUT_V2_MM), layout='constrained')
+        _draw(ax, per_group, t, LINE_PT)
+        ax.set_title(EPOCH_TITLES[H_EPOCH])
+        ax.set_xlabel('Time from event (s)')
+        ax.set_ylabel(YLABEL[signal].split(' (')[0] + ' (a.u.)')
+        ax.legend(loc='upper right', handlelength=0.8, borderaxespad=0.1)
         save_paper_panel(fig, out_root)
     plt.close(fig)
 
@@ -205,7 +220,10 @@ def draw_event_waveforms(PLOTS_DIR, mice_per_group, TFC_cond, mapping='full', th
             plot_signal_diagnostics(per_group, t, table, signal, epoch, out_dir)
             if signal == PANEL_SIGNAL:
                 panel_curves[epoch], t_panel = per_group, t
+    plot_h_panel(panel_curves[H_EPOCH], t_panel, PANEL_SIGNAL, os.path.join(out_dir, PANEL_ROOT))
+    # The four-epoch version (waveforms + per-animal boxes with the primary stars): supplement,
+    # drawn at the same width as f's full grid.
     plot_panel(panel_curves, t_panel, PANEL_SIGNAL, contrasts, values_by_epoch,
-               os.path.join(out_dir, PANEL_ROOT))
+               os.path.join(out_dir, ALL_EPOCHS_ROOT), figsize=(108 / 25.4, 52.8 / 25.4))
     pd.concat(tables, ignore_index=True).to_csv(
         os.path.join(out_dir, f'{PANEL_ROOT}_per_animal.csv'), index=False)

@@ -156,13 +156,13 @@ LAYOUT_V2_MM = {
     'e': (125, 35, 58, 38),         # = the current figure's d box: the LT1 -> LT2 check places 1:1
     'f': (0, 78, 78, 74),
     'g': (80, 78, 103, 74),
-    'h': (0, 155, 108, 56),
-    'i': (110, 155, 73, 56),
+    'h': (0, 155, 52, 56),
+    'i': (54, 155, 129, 56),
 }
 PANEL_FILES_V2 = {
     'c': PANEL_FILES['c'],
     'e': PANEL_FILES['d'],          # LT1 -> LT2 within-cell amplitude change and dropout (VS, 2026-10-21)
-    'f': 'sp_rates_lmm/paper/figure2_v2/tfc_amplitude_rate_by_epoch.png',   # four epochs, primary stars
+    'f': 'sp_rates_lmm/paper/figure2_v2/figure2_v2_f.png',   # trace interval + all-epoch forest
     'h': 'sp_rates_lmm/TFC_cond/group_mean_event_waveform.png',   # each group's average event
     'i': 'shock_events/shock_locked_events.png',   # caban.shock_events
     'g': 'figure2_effect_profile/effect_profile_panel.png',   # caban.figure2_effect_profile
@@ -179,16 +179,15 @@ dissociate the magnitude and the frequency of CA1 pyramidal calcium events.**
 within-cell change in log per-event amplitude (left) and the fraction of LT1 cells not re-registered
 in LT2 (right).
 **f**,
-Per-event amplitude (top) and population event rate (bottom) in the pre-tone, tone, trace and
-post-shock epochs; small points are cells, large points animals; asterisks, the primary (three-epoch:
-pre-tone, trace, post-shock) group x epoch mixed model with animal as random intercept, Holm-corrected
-over the two treatment-versus-control comparisons within each epoch; the tone is shown without a test.
-**g**, Effect profile per animal (trace interval): left, amplitude effect (A, s.d. units, increase
+Trace interval: per-event amplitude (top) and population event rate (bottom); small points are cells,
+large points animals; asterisks, the primary group x epoch mixed model (pre-tone, trace, post-shock;
+animal as random intercept), Holm-corrected over the two treatment-versus-control comparisons within
+the epoch. Right, the ratio to Ctl with 95% CI in every epoch (filled, tested; * Holm P < 0.05; open,
+the tone, shown without a test): both effects are of similar size throughout. **g**, Effect profile per animal (trace interval): left, amplitude effect (A, s.d. units, increase
 positive) against rate effect (R, s.d. units, decrease positive), relative to the control mean; right,
-the profile index P = A − R; ** exact mouse-label randomization P < 0.01 (Exc vs Inh, the one test). **h**, Single-cell calcium events in each epoch of f: top, the cell's denoised calcium trace C
-around every event detected in that epoch, aligned on the event's peak and baseline-subtracted,
-averaged per animal; mean (lines) and s.e.m. (bands) across animals; bottom, per-animal log per-event
-amplitude in that epoch, with the asterisks of f; the tone is shown without a test. **i**, Pyramidal events around
+the profile index P = A − R; ** exact mouse-label randomization P < 0.01 (Exc vs Inh, the one test). **h**, Average single-cell calcium event in the trace interval: the denoised calcium trace C around
+every event detected in that epoch, aligned on the event's peak and baseline-subtracted, averaged per
+animal; mean (lines) and s.e.m. (bands) across animals. **i**, Pyramidal events around
 shock onset, 1-s bins: event rate per cell (left) and log per-event amplitude (right); mean (lines)
 and s.e.m. (bands) across animals; darker shading, the 2-s shock; dashed line, shock offset; above, the
 post-shock (20 s) contrasts vs Ctl from the model in f (ratio, Holm-adjusted P). n = 5 Exc, 6 Inh and 6 Ctl animals; the animal is the unit of inference
