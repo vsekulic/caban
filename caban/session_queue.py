@@ -154,6 +154,13 @@ SESSIONS_NOT_RUN = {
 }
 
 
+# Per-session lens-interior ellipse (pixels of the motion-corrected movie) applied to Minian's
+# seeds by caban.minian_runner (seeds outside removed, so no unit starts on the lens rim). SST DIO
+# mice only (plans/sst_dio_dreadd_validation_plan.md §6); each drawn over the session's max_proj
+# and shown to VS before it is listed. Sessions not listed get no mask.
+SEED_MASKS = {}
+
+
 def session_label(session_dir: str):
     """The type :data:`SESSION_LABELS` assigns this session, or None."""
     return SESSION_LABELS.get(session_tail(session_dir))

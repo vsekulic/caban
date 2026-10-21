@@ -253,8 +253,17 @@ print("parameters written to", {path!r})
 
 def build_run_notebook(template, session_dir: str, parameters_path: str,
                        scratch: Optional[str] = None, flags: Optional[dict] = None,
-                       minian_ds_path: Optional[str] = None, cut_after: Optional[str] = None):
+                       minian_ds_path: Optional[str] = None, cut_after: Optional[str] = None,
+                       del_frames: Optional[List[int]] = None, seed_mask: Optional[dict] = None,
+                       parameter_overrides: Optional[dict] = None):
     """The copy that runs: ``dpath`` set, the §4 flags set, the parameters cell appended.
+
+    Three optional edits, none made when unset (so the main cohort's runs are unchanged):
+    ``del_frames`` drops those frames from ``varr`` right after ``load_videos``, exactly as
+    the template's own G25 block does (:func:`_insert_del_frames`); ``seed_mask`` removes
+    seeds outside an ellipse (:func:`_insert_seed_mask`); ``parameter_overrides``
+    (``{"param_seeds_init": {"max_wnd": 10}}``) re-applies each value after every cell that
+    assigns that parameter (:func:`_apply_parameter_overrides`).
 
     With ``scratch``, ``intpath`` -- where the notebook writes its intermediates -- is set to
     that folder instead of ``<dpath>/minian_intermediate``, so the session folder holds only
@@ -333,11 +342,107 @@ def build_run_notebook(template, session_dir: str, parameters_path: str,
                       "now": "cells {}-{} removed".format(hits[0] + 1, len(nb.cells) - 1)})
         nb.cells = nb.cells[:hits[0] + 1]
 
+    # Inserted cells first, so the indices recorded by the in-place edits below are final.
+    if seed_mask is not None:
+        edits.append(_insert_seed_mask(nb, seed_mask))
+    if parameter_overrides:
+        edits.extend(_apply_parameter_overrides(nb, parameter_overrides))
+    if del_frames:
+        edits.append(_insert_del_frames(nb, del_frames))
+
     appended = nbformat.v4.new_code_cell(parameters_cell_source(parameters_path))
     appended.metadata["tags"] = ["caban-minian-runner"]
     nb.cells.append(appended)
     edits.append({"cell": len(nb.cells) - 1, "was": None, "now": "appended parameters cell"})
     return nb, edits
+
+
+LOAD_VIDEOS_LINE = "varr = load_videos(dpath, **param_load_videos)"
+SEEDS_INIT_ANCHOR = "seeds = seeds_init(Y_fm_chk, **param_seeds_init)"
+SEED_MASK_KEYS = ("center_height", "center_width", "radius_height", "radius_width")
+
+
+def _single_code_cell(nb, text: str) -> int:
+    hits = [i for i, c in enumerate(nb.cells) if c.cell_type == "code" and text in c.source]
+    if len(hits) != 1:
+        raise ValueError("expected one code cell containing {!r}, found cells {}".format(text, hits))
+    return hits[0]
+
+
+def _insert_del_frames(nb, del_frames: List[int]) -> dict:
+    """Drop ``del_frames`` from ``varr`` on the line after ``load_videos``, frame labels kept --
+    the template's G25 block (``varr.where(~varr.frame.isin(del_frames), drop=True)``), placed
+    before ``get_optimal_chk`` and everything downstream. The same per-session list
+    (:data:`caban.yra_recompute.NOTEBOOK_DEL_FRAMES`) drives the YrA recompute's replay, which
+    also checks it against the saved ``frame`` coordinate."""
+    frames = [int(f) for f in del_frames]
+    if frames != sorted(set(frames)) or frames[0] < 0:
+        raise ValueError("del_frames must be sorted, unique and non-negative: {}".format(del_frames))
+    idx = _single_code_cell(nb, LOAD_VIDEOS_LINE)
+    lines = nb.cells[idx].source.split("\n")
+    hits = [k for k, ln in enumerate(lines) if ln.strip() == LOAD_VIDEOS_LINE]
+    if len(hits) != 1:
+        raise ValueError("`{}` not found exactly once in cell {}".format(LOAD_VIDEOS_LINE, idx))
+    new = ["del_frames = {!r}  # set by caban.minian_runner (yra_recompute.NOTEBOOK_DEL_FRAMES)".format(frames),
+           "varr = varr.where(~varr.frame.isin(del_frames), drop=True).astype('uint8')  # set by caban.minian_runner"]
+    lines[hits[0] + 1:hits[0] + 1] = new
+    nb.cells[idx].source = "\n".join(lines)
+    return {"cell": idx, "was": None, "now": "\n".join(new)}
+
+
+def _insert_seed_mask(nb, seed_mask: dict) -> dict:
+    """A cell after ``seeds_init`` that keeps only the seeds inside an ellipse (pixel coordinates,
+    :data:`SEED_MASK_KEYS`): no unit can start on the lens rim or the image edge. The movie is not
+    altered."""
+    if set(seed_mask) != set(SEED_MASK_KEYS):
+        raise ValueError("seed_mask must have exactly {}, got {}".format(SEED_MASK_KEYS, sorted(seed_mask)))
+    mask = {k: float(seed_mask[k]) for k in SEED_MASK_KEYS}
+    idx = _single_code_cell(nb, SEEDS_INIT_ANCHOR)
+    source = (
+        "# Inserted by caban.minian_runner: seeds outside the lens interior removed\n"
+        "# (plans/sst_dio_dreadd_validation_plan.md §6).\n"
+        "seed_mask = {!r}\n"
+        "_inside = (((seeds['height'] - seed_mask['center_height']) / seed_mask['radius_height']) ** 2\n"
+        "           + ((seeds['width'] - seed_mask['center_width']) / seed_mask['radius_width']) ** 2) <= 1\n"
+        "print('seed mask: {{}} of {{}} seeds outside the lens interior removed'.format(int((~_inside).sum()), len(seeds)))\n"
+        "seeds = seeds[_inside].reset_index(drop=True)"
+    ).format(mask)
+    cell = nbformat.v4.new_code_cell(source)
+    cell.metadata["tags"] = ["caban-minian-runner"]
+    nb.cells.insert(idx + 1, cell)
+    return {"cell": idx + 1, "was": None, "now": source}
+
+
+def _apply_parameter_overrides(nb, overrides: dict) -> List[dict]:
+    """Append ``param_X[key] = value`` to every code cell that assigns ``param_X`` (``param_X =``
+    or ``param_X[...] =`` at the start of a line), so no later reassignment in the template can
+    undo it; the appended parameters cell records what the kernel held at the end."""
+    edits = []
+    for name, values in overrides.items():
+        if not re.match(r"param_\w+$", name) or not isinstance(values, dict) or not values:
+            raise ValueError("override {!r}: expected param_<name> -> non-empty dict".format(name))
+        assigns = re.compile(r"^{}\s*(=|\[)".format(re.escape(name)), re.M)
+        cells = [i for i, c in enumerate(nb.cells) if c.cell_type == "code" and assigns.search(c.source)]
+        if not cells:
+            raise ValueError("no cell assigns {}".format(name))
+        lines = ["{}[{!r}] = {!r}  # override set by caban.minian_runner".format(name, k, v)
+                 for k, v in values.items()]
+        for i in cells:
+            nb.cells[i].source = nb.cells[i].source.rstrip("\n") + "\n" + "\n".join(lines)
+            edits.append({"cell": i, "was": None, "now": "\n".join(lines)})
+    return edits
+
+
+def overrides_held(parameters: dict, overrides: dict) -> None:
+    """Raise unless the kernel's final parameters (``parameters.json``) hold every override."""
+    for name, values in overrides.items():
+        held = parameters["param"].get(name)
+        if held is None:
+            raise ValueError("{} is not in the kernel's parameters".format(name))
+        for key, value in values.items():
+            if held.get(key) != json.loads(json.dumps(value)):   # tuples are lists in JSON
+                raise ValueError("{}[{!r}] ended as {!r}, not the override {!r}".format(
+                    name, key, held.get(key), value))
 
 
 def _import_statements(source: str) -> List[str]:
@@ -1129,8 +1234,11 @@ def run_session(
     if work_dir != session_dir:
         os.makedirs(run_dir)
     parameters_path = os.path.join(run_dir, PARAMETERS_JSON)
+    del_frames = yr.notebook_del_frames(session_dir)
+    seed_mask = sq.SEED_MASKS.get(sq.session_tail(session_dir))
     nb, edits = build_run_notebook(template, work_dir, parameters_path,
-                                   scratch=set_aside["scratch"])
+                                   scratch=set_aside["scratch"], del_frames=del_frames,
+                                   seed_mask=seed_mask)
     record = {
         "label": item.label,
         "session_dir": session_dir,
@@ -1145,6 +1253,8 @@ def run_session(
         "papermill": papermill.__version__,
         "minian_nworkers_env": n_workers,
         "notebook_edits": edits,
+        "del_frames": del_frames,
+        "seed_mask": seed_mask,
         "preflight": preflight,
         "stage_in": staged,
         "set_aside": set_aside,

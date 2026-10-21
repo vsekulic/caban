@@ -144,6 +144,14 @@ NOTEBOOK_DEL_FRAMES = {
         11719, 13537, 13915, 14081, 16368, 17018, 17038, 18219, 18632, 18639,
         18644, 18696, 18812, 18846, 25563,
     ],
+    # SST DIO mice (plans/sst_dio_dreadd_validation_plan.md §6), added 2026-10-21: frames with
+    # whole bright rows from the Miniscope's connection drop-outs, VS's G25 practice. Found by
+    # caban.sst_dio_validation.row_artefact_scores (max row z > ROW_ARTEFACT_Z; every unflagged
+    # frame z <= ~5), each frame shown to VS on a contact sheet. caban.minian_runner drops them
+    # from varr in the notebook, as the G25 block does.
+    "G22-ST875-hM3D-DIOGC/2023_03_20-TFC_cond/14_15_20-HC2": [
+        206, 1249, 2814, 3705, 3740, 4375, 4396, 4702,
+    ],
 }
 NOTEBOOK_DEL_FRAMES_DEFAULT: List[int] = []
 

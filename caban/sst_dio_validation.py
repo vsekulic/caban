@@ -192,3 +192,42 @@ def plot_frame_sheet(session_dir, frames, frame_max_z, title, out_path, n_column
     fig.savefig(out_path, dpi=200)
     plt.close(fig)
     return out_path
+
+
+# --- lens-interior seed mask (session_queue.SEED_MASKS) -----------------------------------------
+
+
+def inside_ellipse(height, width, mask):
+    """True where (height, width) lies inside the ellipse ``mask`` (minian_runner.SEED_MASK_KEYS)."""
+    return (((np.asarray(height) - mask['center_height']) / mask['radius_height']) ** 2
+            + ((np.asarray(width) - mask['center_width']) / mask['radius_width']) ** 2) <= 1
+
+
+def footprint_centroids(A):
+    """(height, width) centroid of each unit's footprint, weighted by footprint value."""
+    values = A.values.reshape(A.sizes['unit_id'], -1)
+    hh, ww = np.meshgrid(A.coords['height'].values, A.coords['width'].values, indexing='ij')
+    weights = values / values.sum(axis=1, keepdims=True)
+    return weights @ hh.ravel(), weights @ ww.ravel()
+
+
+def plot_seed_mask(max_proj, A, mask, title, out_path):
+    """``max_proj`` with the ellipse, and each unit's centroid: kept (inside) or not (outside)."""
+    height, width = footprint_centroids(A)
+    inside = inside_ellipse(height, width, mask)
+    fig, ax = plt.subplots(figsize=(120 * MM, 120 * MM))
+    low, high = np.percentile(max_proj, PROJECTION_PERCENTILES)
+    ax.imshow(max_proj, cmap='gray', vmin=low, vmax=high, interpolation='nearest')
+    theta = np.linspace(0, 2 * np.pi, 400)
+    ax.plot(mask['center_width'] + mask['radius_width'] * np.cos(theta),
+            mask['center_height'] + mask['radius_height'] * np.sin(theta), color='C1', lw=0.75)
+    ax.scatter(width[inside], height[inside], s=6, facecolor='none', edgecolor='C0', lw=0.5)
+    ax.scatter(width[~inside], height[~inside], s=6, marker='x', color='C3', lw=0.5)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_title('{}: {} units inside (o), {} outside (x)'.format(title, int(inside.sum()),
+                                                                  int((~inside).sum())), fontsize=FONT_PT)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=200)
+    plt.close(fig)
+    return out_path
