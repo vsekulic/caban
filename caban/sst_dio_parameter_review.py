@@ -108,6 +108,34 @@ def compare(grid_root, variant, reference='frozen', save=True):
     return fig
 
 
+def open_stage_array(stage_root, variant, name, intermediate=False):
+    """One saved array of a staged-walk variant (same layout as the grid's)."""
+    return open_array(stage_root, variant, name, intermediate=intermediate)
+
+
+def compare_preprocessing(stage_root, variant, reference='ksize_5_wnd_15', crop=((180, 480), (150, 450)),
+                          save=True):
+    """Max projections (after background removal and motion correction) of ``reference`` and
+    ``variant``: full field and a crop, same display range per pair; saved as a snapshot."""
+    images = {name: open_stage_array(stage_root, name, 'max_proj').values for name in (reference, variant)}
+    low = min(np.percentile(im, 0.5) for im in images.values())
+    high = max(np.percentile(im, 99.5) for im in images.values())
+    (h0, h1), (w0, w1) = crop
+    fig, axes = plt.subplots(2, 2, figsize=(13, 13))
+    for col, name in enumerate((reference, variant)):
+        for row, image in enumerate((images[name], images[name][h0:h1, w0:w1])):
+            ax = axes[row, col]
+            ax.imshow(image, cmap='gray', vmin=low, vmax=high, interpolation='nearest')
+            ax.set_xticks([])
+            ax.set_yticks([])
+            ax.set_title('{}{}'.format(name, '' if row == 0 else ' (crop)'), fontsize=10)
+    fig.tight_layout()
+    if save:
+        os.makedirs(os.path.join(stage_root, SNAPSHOT_DIR), exist_ok=True)
+        fig.savefig(os.path.join(stage_root, SNAPSHOT_DIR, '{}_vs_{}.png'.format(variant, reference)), dpi=90)
+    return fig
+
+
 def log_decision(grid_root, stage, values_tried, value_chosen, why):
     """Append one decision to ``parameter_log.csv`` (the parameter log of plan §6)."""
     path = os.path.join(grid_root, LOG_NAME)
