@@ -51,6 +51,7 @@ from caban.event_locked_responsiveness import run_event_locked_responsiveness as
 from caban.epoch_modulation import run_epoch_modulation as _run_epoch_modulation
 from caban.shock_motion import run_shock_motion_check as _run_shock_motion_check
 from caban.homecage_cno import run_homecage_cno as _run_homecage_cno
+from caban.shock_events import run_shock_events as _run_shock_events
 from caban.epoch_modulation import (plot_event_aligned_panels as _plot_event_aligned_panels,
                                    SIGNALS as _EPOCH_MODULATION_SIGNALS,
                                    EVENT_PROXIMAL_DIRNAME as _EVENT_PROXIMAL_DIRNAME)
@@ -1947,6 +1948,15 @@ def run_figure2_example_events(ds, cfg):
 
 
 # ---------------------------------------------------------------------------
+def run_figure2_shock_events(ds, cfg):
+    """Figure 2 v2 panel i: shock-locked pyramidal event rate and amplitude (caban.shock_events),
+    into <PLOTS_DIR>/shock_events/."""
+    msg_start('*** Figure 2 v2 i: shock-locked events')
+    _run_shock_events(cfg.PLOTS_DIR, ds.mice_per_group, ds.TFC_cond)
+    msg_end()
+
+
+# ---------------------------------------------------------------------------
 # Figure 2, assembled. Defined after every section it calls.
 def _figure2_panel_k(ds, cfg):
     """Panel k is drawn by the epoch-modulation lane. If the lane has run, redraw only the panel
@@ -2007,6 +2017,7 @@ def run_figure2_composite(ds, cfg, rerun=()):
 # The redesign's placed panels and their sections; its unbuilt panels are boxes
 # (caban.figure2_composite.PENDING_V2). Add a letter here when its panel is built.
 FIGURE2_V2_PANEL_SECTIONS = {
+    'i': run_figure2_shock_events,
     'h': run_figure2_example_events,
     'c': run_want_sample_traces_paper,
     'e': run_sp_rates_lmm,

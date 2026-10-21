@@ -164,12 +164,12 @@ PANEL_FILES_V2 = {
     'e': PANEL_FILES['d'],          # LT1 -> LT2 within-cell amplitude change and dropout (VS, 2026-10-21)
     'f': PANEL_FILES['g'],          # the primary model, per-event amplitude and population rate by epoch
     'h': 'sp_rates_lmm/TFC_cond/group_median_examples_vertical.png',   # each group's own median event
+    'i': 'shock_events/shock_locked_events.png',   # caban.shock_events
 }
 # Move a letter from here to PANEL_FILES_V2 when its section draws it at its box size.
 PENDING_V2 = {
     'd': 'SST cells (DIO-GCaMP6f): event rate and amplitude before vs after CNO',
     'g': 'Double dissociation: per-animal amplitude vs rate change; 2 x 2 effects; other sessions',
-    'i': 'Shock-locked event amplitude and probability',
 }
 CAPTION_V2 = """**Fig. 2 (redesign, in progress) | Chemogenetic excitation and inhibition of SST interneurons
 dissociate the magnitude and the frequency of CA1 pyramidal calcium events.**
@@ -184,8 +184,9 @@ small points are cells, large points animals; contrasts of the group x epoch mix
 as random intercept, Holm-corrected over the two treatment-versus-control comparisons within each
 epoch. **g**, Double dissociation (not built). **h**, Example trace-interval events, one per group: the event whose per-event amplitude is
 closest to that group's own median, on a common scale; shading marks the detected run, the dotted
-line the detection threshold. **i**, Shock-locked
-event response (not built). n = 5 Exc, 6 Inh and 6 Ctl animals; the animal is the unit of inference
+line the detection threshold. **i**, Pyramidal events around
+shock onset, 1-s bins: event rate per cell (left) and log per-event amplitude (right); mean (lines)
+and s.e.m. (bands) across animals; darker shading, the 2-s shock; dashed line, shock offset. n = 5 Exc, 6 Inh and 6 Ctl animals; the animal is the unit of inference
 throughout. Plan: plans/figure2_redesign_plan.md.
 """
 FIGURE2_V2_SPEC = {'name': 'fig2_v2', 'layout': LAYOUT_V2_MM,
