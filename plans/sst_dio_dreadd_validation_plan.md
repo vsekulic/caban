@@ -264,7 +264,8 @@ registry and a notebook edit after the `varr_ref` cell (small, additive).
 | merge `thres_corr` 0.9 | 75 | 26 | 384 | more splitting: the useful direction is lower |
 | merge `thres_corr` 0.7 | — | — | — | **crashed**: the empty-merge failure |
 | spatial `sparse_penal` 1e-3 / 1e-5 | 61 / 61 | 12 / 10 | 376 / 458 | small effect |
-| `max_wnd` 10, `dl_wnd` 8 | | | | re-run (kernel-start race; one .avi read returned 1001 frames under four readers) |
+| `max_wnd` 10 | 54 | 8 | 479 | re-run after a kernel-start race |
+| spatial `dl_wnd` 8 | 61 | 6 | 688 | fewest splits, larger footprints; re-run after one .avi read returned 1001 frames under four readers |
 
 **The empty-merge failure, diagnosed:** `unit_merge` → `adj_corr` → `graph_optimize_corr` builds the
 graph of spatially overlapping unit pairs; when **no two units overlap** the graph has no edges,
