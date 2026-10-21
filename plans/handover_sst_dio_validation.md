@@ -20,6 +20,16 @@ and open questions) and [figure2_redesign_plan.md](figure2_redesign_plan.md) §3
     Changes there are allowed but small and additive (e.g. extending the mouse scope), on your
     branch; say so in the commit message.
   - Razer `screen` names start with `sst_` so they cannot collide with the main chat's.
+  - **On the Razer, use your own clone**, e.g. `git clone ~/code/caban ~/code/caban_sst` then
+    `git checkout -b feat/sst-dio-validation` there (push your branch from it). **Never `git checkout`
+    or commit in `~/code/caban` on the Razer**: the main chat's runs `git pull` there on
+    `feat/yra-unit-alignment`, and a branch switch would silently run the other chat's code.
+  - The Razer `caban` conda env is shared: install nothing into it without telling VS; if you need a
+    package, make your own env (e.g. `conda create --clone caban -n caban_sst`).
+  - Also off limits (main chat's, added 2026-10-21): `caban/homecage_cno.py`, `caban/shock_motion.py`,
+    `scripts/run_homecage_cno.py`, `scripts/export_tfc_*`.
+  - Analyses of Minian outputs run wholly on the Razer (VS, 2026-10-21); plots are rsynced into the
+    Mac's `plots/CURRENT/<your folder>`.
 - **Never throw away data.** No rule may drop trials, windows, frames, cells, sessions or mice;
   any exclusion goes to VS as a decision, keep-the-data option first.
 - Every Razer command through `~/bin/logrun "<title>" …`; read `~/minian.log` with plain
