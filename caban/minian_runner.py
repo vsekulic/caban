@@ -98,6 +98,11 @@ KERNEL_PACKAGES = (
 # session_queue.SESSION_LABELS -- is a stub, never queued. Until 2026-10-10 every time-only name was
 # a stub, which left 28 real sessions out of the batch (plans/unlabelled_and_salvage_sessions_plan.md).
 MOUSE_RANGE = ("G05", "G21")
+# The SST DIO-GCaMP6f mice (plans/sst_dio_dreadd_validation_plan.md), imaging the DREADD-expressing
+# SST cells themselves; added 2026-10-21 on feat/sst-dio-validation. Their bare-timestamp folders
+# (G22/G23, before HC1) are VS's electrowetting-lens focal sweep for finding the plane -- stubs by
+# design, never run, kept on disk (VS, 2026-10-21).
+SST_DIO_MICE = ("G22", "G23", "G26", "G27")
 # The batch's order (VS, 2026-09-28): whole experiment days first -- every session of the day,
 # HC, LT, CNO and the TFC/test session -- then the track days, then the rest. Each group is a list
 # of regexes searched in <mouse>/<day>/<session> (select_sessions' `labels`); the trailing "/" ends
@@ -458,7 +463,7 @@ def discover_sessions(roots=None, verbose: bool = True) -> List[sq.SessionWork]:
     return [
         sq.SessionWork(candidate=c, minian_dir=None, output_dir=c.session_dir)
         for c in candidates
-        if c.n_avi and MOUSE_RANGE[0] <= c.mouse <= MOUSE_RANGE[1]
+        if c.n_avi and (MOUSE_RANGE[0] <= c.mouse <= MOUSE_RANGE[1] or c.mouse in SST_DIO_MICE)
     ]
 
 
