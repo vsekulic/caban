@@ -124,6 +124,25 @@ def add_significance_bars(ax, comparisons, p_values, y_max,
 
 
 # ---------------------------------------------------------------------------
+# The cohort's DREADD group per mouse: the one assignment, used by _build_dataset and by analyses that
+# run without the dataset (e.g. caban.homecage_cno on the Razer).
+MOUSE_GROUPS = {
+    'G05': 'hM3D', 'G06': 'hM4D', 'G07': 'hM4D', 'G08': 'mCherry',
+    'G09': 'mCherry', 'G10': 'hM3D', 'G11': 'hM3D', 'G12': 'mCherry',
+    'G13': 'mCherry', 'G14': 'hM4D', 'G15': 'hM4D', 'G16': 'mCherry',
+    'G17': 'mCherry', 'G18': 'hM3D', 'G19': 'hM3D', 'G20': 'hM4D',
+    'G21': 'hM4D',
+}
+
+
+def mice_per_group_from(mouse_groups):
+    """{group: [mouse, ...]} in mouse order, as _build_dataset builds ds.mice_per_group."""
+    out = {}
+    for mouse, group in mouse_groups.items():
+        out.setdefault(group, []).append(mouse)
+    return out
+
+
 def _resolve_plots_dir(plots_dir: Optional[str], plots_dir_singular: bool = False) -> str:
     """Mirror caban/main.py's host-aware PLOTS_DIR choice."""
     if plots_dir is not None:
@@ -566,13 +585,7 @@ def _build_dataset(
     # -----------------------------------------------------------------------
     # Mouse metadata (verbatim from caban/main.py L126-840)
     # -----------------------------------------------------------------------
-    mouse_groups = {
-        'G05': 'hM3D', 'G06': 'hM4D', 'G07': 'hM4D', 'G08': 'mCherry',
-        'G09': 'mCherry', 'G10': 'hM3D', 'G11': 'hM3D', 'G12': 'mCherry',
-        'G13': 'mCherry', 'G14': 'hM4D', 'G15': 'hM4D', 'G16': 'mCherry',
-        'G17': 'mCherry', 'G18': 'hM3D', 'G19': 'hM3D', 'G20': 'hM4D',
-        'G21': 'hM4D',
-    }
+    mouse_groups = dict(MOUSE_GROUPS)
     if DEBUG:
         mouse_groups = {'G05': 'hM3D'}
     mouse_list = list(mouse_groups.keys())
