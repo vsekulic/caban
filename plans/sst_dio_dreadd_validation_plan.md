@@ -202,6 +202,30 @@ G27 has the most cells (~30) and the cleanest field; G26 ~15, a few elongated; G
 which would seed false units unless handled; G22 and G23 also have bright out-of-focus discs
 (debris on the optics). To check: how many G22 frames carry lines, and on which other days.
 
+**Baseline with the frozen set (2026-10-21, ~16–18 min per HC2 on the Razer; figures in
+`plots/CURRENT/sst_dio_validation/parameter_check/baseline_frozen/`):**
+
+| mouse | units | what the footprints show |
+|---|---|---|
+| G22 | 84 | a few somata; most units sit on the bright line artefacts (one spans the full width) |
+| G23 | — | **failed** at `unit_merge` after initialisation: "need at least one array to concatenate" (no pair to merge; the same failure as G13's HC0) |
+| G26 | 23 | ~17 somata, plus units on the lens edge (top right) |
+| G27 | 151 | ~50 somata found well in the centre; ~40+ units along the lens rim and image edges |
+
+So the first problems are not cell size: (1) line artefacts (G22), (2) units on the lens rim
+(G26, G27), (3) the empty-merge failure on a sparse field (G23).
+
+**Line artefacts = Miniscope connection drop-outs (VS).** VS's hand-run notebooks dropped such
+frames per session (the template's commented "CUSTOM SUBSETS FOR FRAMES" cell: a `del_frames`
+list, `varr_ref.where(~frame.isin(del_frames), drop=True)` before motion correction, frame labels
+kept; e.g. G25 TFC_cond, 27 frames). Automated here by score
+(`sst_dio_validation.row_artefact_scores`: each row's contrast against its neighbours, robust z
+against the same row over the recording, so the steady lens edge does not score): HC2 G22 **8 of
+5978 frames** (206, 1249, 2814, 3705, 3740, 4375, 4396, 4702; z 17–58), G23/G26/G27 none; every
+unflagged frame z ≤ ~5. All eight visibly carry a line. Each flagged frame goes to VS on a
+contact sheet before it is listed. To apply them the runner needs a per-session dropped-frames
+registry and a notebook edit after the `varr_ref` cell (small, additive).
+
 **Decision with VS.** Accept the frozen set, or a documented per-cohort set. If parameters
 change, the runner needs an override mechanism (additive: a named set applied as assignments after
 the template's last assignment of each key, recorded in `run.json`, the README and
