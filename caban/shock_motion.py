@@ -198,6 +198,41 @@ def plot_motion_vs_activity(table, out_path, signal):
     plt.close(fig)
 
 
+def plot_trial_course_per_animal(table, out_path, signal):
+    """Per-trial index in the shock and post-shock windows, one line per animal (labelled), group mean
+    thick; one column per group. Shows which animals carry a group's across-trial trend."""
+    groups = [g for g in DREADD_DISPLAY_ORDER if (table['group'] == g).any()]
+    fig, axs = plt.subplots(len(CHECK_WINDOWS), len(groups), sharex=True, sharey='row',
+                            figsize=(3.3 * len(groups), 2.6 * len(CHECK_WINDOWS)), squeeze=False)
+    mouse_colours = plt.get_cmap('tab10').colors
+    for col, group in enumerate(groups):
+        sub = table[table['group'] == group]
+        for row, epoch in enumerate(CHECK_WINDOWS):
+            ax = axs[row, col]
+            ax.axhline(0, color='0.6', lw=0.6, ls='--', zorder=0)
+            for i, (mouse, m) in enumerate(sub.groupby('mouse', sort=True)):
+                m = m.sort_values('trial')
+                ax.plot(m['trial'], m[f'activity_{epoch}'], marker='o', ms=3, lw=0.9,
+                        color=mouse_colours[i % 10], alpha=0.9, label=mouse)
+            mean = sub.groupby('trial')[f'activity_{epoch}'].mean()
+            ax.plot(mean.index, mean.values, color=GROUP_COLOURS[group], lw=2.4, zorder=4,
+                    label=f'{GROUP_LABELS[group]} mean')
+            if row == 0:
+                ax.set_title(f'{GROUP_LABELS[group]} (n = {sub["mouse"].nunique()})')
+                ax.legend(fontsize='x-small', frameon=False, ncol=2)
+            if col == 0:
+                ax.set_ylabel({'shock': f'Shock (2 s US)\n{signal} index', 'post_shock':
+                               f'Post-shock (3 s)\n{signal} index'}[epoch])
+    for ax in axs[-1]:
+        ax.set_xlabel('Conditioning trial')
+        ax.set_xticks(sorted(table['trial'].unique()))
+    fig.suptitle(f'Shock and post-shock response by trial, per animal ({signal}; cell-mean index, '
+                 f'trial minus its pre-tone mean)', size='medium')
+    fig.tight_layout()
+    save_fig(fig, out_path)
+    plt.close(fig)
+
+
 def format_report(table, signal):
     lines = [f'Shock-motion check ({signal}) — descriptive; the unit is the mouse', '=' * 60, '',
              'Motion = frame-to-frame displacement of Minian\'s rigid motion-correction shift',
@@ -239,6 +274,7 @@ def run_shock_motion_check(PLOTS_DIR, mice_per_group, TFC_cond, signal, motion_p
     plot_shock_aligned_motion(traces, time_axis, os.path.join(out_dir, 'shock_aligned_motion.png'),
                               signal, post_shock_onset_s)
     plot_motion_vs_activity(table, os.path.join(out_dir, 'motion_vs_activity.png'), signal)
+    plot_trial_course_per_animal(table, os.path.join(out_dir, 'shock_by_trial_per_animal.png'), signal)
     report = format_report(table, signal)
     write_text(os.path.join(out_dir, 'shock_motion_report.txt'), report)
     print(report)
