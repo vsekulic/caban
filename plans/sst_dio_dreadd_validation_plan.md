@@ -226,6 +226,32 @@ unflagged frame z ≤ ~5. All eight visibly carry a line. Each flagged frame goe
 contact sheet before it is listed. To apply them the runner needs a per-session dropped-frames
 registry and a notebook edit after the `varr_ref` cell (small, additive).
 
+**Done for the parameter check (2026-10-21, VS agreed):**
+- `caban.minian_runner` (additive; unset, the run notebook is byte-identical to before, tested):
+  `del_frames` from `yra_recompute.NOTEBOOK_DEL_FRAMES` dropped from `varr` after `load_videos`
+  (as the template's G25 block; the YrA replay reads the same table); an optional lens-interior
+  **seed mask** (`session_queue.SEED_MASKS`, a cell after `seeds_init` keeping seeds inside an
+  ellipse; the movie is not altered); optional **parameter overrides**, appended after every cell
+  assigning that parameter and checked against the kernel's `parameters.json`.
+- G27's ellipse proposed (`sst_dio_validation.SEED_MASKS_PROPOSED`; centre 335, 300; radii 265,
+  285): 60 baseline units inside, every rim/edge unit outside
+  (`parameter_check/seed_mask/G27_HC2_try2.png`). Into `SEED_MASKS` once VS approves.
+- **Cell size is not the problem:** with the frozen set, G27's footprints (median 330 px, A > 0)
+  are *smaller* than pyramidal G12 homecage's (390–420 px). Several G27 cells carry 2–3 units
+  (fragments), which points at the merge and seed-merge settings more than at sizes.
+- Effective `max_wnd` is **15** (kernel's `parameters.json`; template cell 14), not the 7 in
+  [local_minian_pipeline_plan.md](local_minian_pipeline_plan.md) §3.2's table — for VS / the main
+  chat, whose plan that is.
+- Grid on G27 HC2, one value at a time (`PARAMETER_GRID_ONE_AT_A_TIME`, 14 variants: tophat `wnd`
+  10/20, `max_wnd` 10/20, PNR `thres` 1.5/2, seed-merge `thres_dist` 5/15, all merge `thres_corr`
+  0.7/0.9, spatial `sparse_penal` 1e-3/1e-5, `dl_wnd` 8), full runs outside the session folder in
+  `~/sst_dio_out/parameter_grid/G27_HC2/` on the Razer, intermediates kept (~7 GB each), four at a
+  time. Kernel starts are spaced 30 s (four started together: one kernel died before replying).
+- Review: `notebooks/sst_dio_parameter_review.ipynb` (helpers `caban/sst_dio_parameter_review.py`),
+  served by Jupyter Notebook from the `minian-native` env (nothing installed) in
+  `screen sst_jupyter`, port 8899 on the Razer's loopback; VS tunnels with
+  `ssh -N -L 8899:localhost:8899 minastirith`.
+
 **Decision with VS.** Accept the frozen set, or a documented per-cohort set. If parameters
 change, the runner needs an override mechanism (additive: a named set applied as assignments after
 the template's last assignment of each key, recorded in `run.json`, the README and
