@@ -185,6 +185,23 @@ run; not synced to MINISCOPE until the gate is accepted.
 - every unit's C, YrA and S (sparse, so all of them, not a sample); PNR per unit;
 - residual (`Y − AC − b·f`) max projection: unexplained cells show up there.
 
+**How VS and Claude review it (VS, 2026-10-21).** Claude computes parameter grids in advance on
+the Razer, stage by stage from the baseline run's kept intermediates (no stage recomputed
+upstream of the one varied), starting with the cell-size-linked values (`wnd` 15, `max_wnd` 7,
+`dl_wnd` 5, `thres_dist` 10) set against measured SST soma sizes, then `pnr_refine` thres, the
+spatial/temporal `sparse_penal` and the merge `thres_corr`. VS judges them in an interactive review
+notebook on the Razer's Jupyter (its own `screen sst_jupyter`, own port, SSH tunnel): per stage, a
+widget flips between grid values on the same field (seeds or footprints over `max_proj`, traces),
+with the baseline beside it. Every checkpoint also writes a PNG to the gate folder so Claude sees
+what VS sees. Decisions go into a gate log (stage, values tried, value chosen, why). One mouse in
+full, then the chosen set headless on the other three and a shorter review.
+
+**Raw projections (2026-10-21, `plots/CURRENT/sst_dio_validation/gate/gate_projections.png`):**
+G27 has the most cells (~30) and the cleanest field; G26 ~15, a few elongated; G22 and G23 under
+~10 each. G22's max − mean shows **horizontal line artefacts**: whole bright rows in some frames,
+which would seed false units unless handled; G22 and G23 also have bright out-of-focus discs
+(debris on the optics). To check: how many G22 frames carry lines, and on which other days.
+
 **Decision with VS.** Accept the frozen set, or a documented per-cohort set. If parameters
 change, the runner needs an override mechanism (additive: a named set applied as assignments after
 the template's last assignment of each key, recorded in `run.json`, the README and
