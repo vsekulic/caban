@@ -156,8 +156,8 @@ LAYOUT_V2_MM = {
     'e': (125, 35, 58, 38),         # = the current figure's d box: the LT1 -> LT2 check places 1:1
     'f': (0, 78, 78, 74),
     'g': (80, 78, 103, 74),
-    'h': (0, 155, 52, 56),
-    'i': (54, 155, 129, 56),
+    'h': (0, 155, 64, 56),
+    'i': (66, 155, 117, 56),
 }
 PANEL_FILES_V2 = {
     'c': PANEL_FILES['c'],
@@ -187,7 +187,8 @@ the tone, shown without a test): both effects are of similar size throughout. **
 positive) against rate effect (R, s.d. units, decrease positive), relative to the control mean; right,
 the profile index P = A − R; ** exact mouse-label randomization P < 0.01 (Exc vs Inh, the one test). **h**, Average single-cell calcium event in the trace interval: the denoised calcium trace C around
 every event detected in that epoch, aligned on the event's peak and baseline-subtracted, averaged per
-animal; mean (lines) and s.e.m. (bands) across animals. **i**, Pyramidal events around
+animal; mean (lines) and s.e.m. (bands) across animals; right, per-animal trace-interval log per-event
+amplitude with the asterisks of f. **i**, Pyramidal events around
 shock onset, 1-s bins: event rate per cell (left) and log per-event amplitude (right); mean (lines)
 and s.e.m. (bands) across animals; darker shading, the 2-s shock; dashed line, shock offset; above, the
 post-shock (20 s) contrasts vs Ctl from the model in f (ratio, Holm-adjusted P). n = 5 Exc, 6 Inh and 6 Ctl animals; the animal is the unit of inference

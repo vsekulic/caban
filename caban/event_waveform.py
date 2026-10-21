@@ -142,15 +142,21 @@ def plot_panel(by_epoch, t, signal, contrasts, values_by_epoch, out_root, figsiz
     plt.close(fig)
 
 
-def plot_h_panel(per_group, t, signal, out_root):
-    """Figure 2 v2 h: the trace interval's average calcium event, Nature style at h's box size."""
+def plot_h_panel(per_group, t, signal, values, p_holm, out_root):
+    """Figure 2 v2 h: left, the trace interval's average calcium event; right, the per-animal trace
+    log amplitude with the primary model's Holm-adjusted stars vs Ctl (no statistic computed here)."""
     with nature_style():
-        fig, ax = plt.subplots(figsize=panel_figsize('h', LAYOUT_V2_MM), layout='constrained')
+        fig, (ax, axb) = plt.subplots(1, 2, figsize=panel_figsize('h', LAYOUT_V2_MM), layout='constrained',
+                                      gridspec_kw={'width_ratios': [1.6, 1]})
         _draw(ax, per_group, t, LINE_PT)
         ax.set_title(EPOCH_TITLES[H_EPOCH])
         ax.set_xlabel('Time from event (s)')
         ax.set_ylabel(YLABEL[signal].split(' (')[0] + ' (a.u.)')
         ax.legend(loc='upper right', handlelength=0.8, borderaxespad=0.1)
+        box_strip(axb, values, DREADD_DISPLAY_ORDER, GROUP_COLOURS, labels=GROUP_LABELS, point_size=4)
+        axb.set_ylabel('Log amplitude')
+        annotate_pairwise_brackets(axb, values, DREADD_DISPLAY_ORDER,
+                                   _precomputed_stat_fn(p_holm['hM3D'], p_holm['hM4D']), fs=FONT_PT)
         save_paper_panel(fig, out_root)
     plt.close(fig)
 
@@ -220,7 +226,11 @@ def draw_event_waveforms(PLOTS_DIR, mice_per_group, TFC_cond, mapping='full', th
             plot_signal_diagnostics(per_group, t, table, signal, epoch, out_dir)
             if signal == PANEL_SIGNAL:
                 panel_curves[epoch], t_panel = per_group, t
-    plot_h_panel(panel_curves[H_EPOCH], t_panel, PANEL_SIGNAL, os.path.join(out_dir, PANEL_ROOT))
+    h_values = {g: values_by_epoch[H_EPOCH].loc[values_by_epoch[H_EPOCH]['group'] == g,
+                                                 'mouse_mean_log_amplitude'].to_numpy()
+                for g in DREADD_DISPLAY_ORDER}
+    plot_h_panel(panel_curves[H_EPOCH], t_panel, PANEL_SIGNAL, h_values, contrasts[H_EPOCH],
+                 os.path.join(out_dir, PANEL_ROOT))
     # The four-epoch version (waveforms + per-animal boxes with the primary stars): supplement,
     # drawn at the same width as f's full grid.
     plot_panel(panel_curves, t_panel, PANEL_SIGNAL, contrasts, values_by_epoch,
