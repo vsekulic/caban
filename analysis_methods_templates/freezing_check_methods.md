@@ -14,7 +14,9 @@ pairwise mouse-label randomization (Holm across the two comparisons), with the W
 its 95% CI beside. With 5–6 animals per group, an absence of a difference is not evidence that
 freezing was equal.
 
-**(b) Effects at matched behaviour.** The four-epoch model was refitted using only moving frames:
+**(b) Effects at matched behaviour.** "Moving" frames are all frames outside a freezing bout, so they
+include slow pauses shorter than 1 s (no frame lacked a speed value). The four-epoch model was refitted
+using only moving frames:
 events whose peak fell in a moving frame, per-event amplitude as before, and event rate per moving
 cell-second. Its treatment-versus-control ratios and 95% CIs were compared with those of the
 all-frames model by effect size. An animal × epoch cell with no moving frames or no event is listed

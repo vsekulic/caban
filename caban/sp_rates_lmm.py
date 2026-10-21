@@ -5520,7 +5520,9 @@ def run_paper_tfc_four_epochs(PLOTS_DIR, mice_per_group, TFC_cond, mapping='full
     text = ['Four-epoch conditioning model (POST HOC, plan §13) beside the three-epoch primary',
             '=' * 78, '', 'Interactions (four epochs):',
             res['interactions'].to_string(index=False), '',
-            'Contrasts vs mCherry, side by side (empty _three columns: the tone, absent there):',
+            'Contrasts vs mCherry, side by side (empty _three columns: the tone, absent there).',
+            'p_holm_epoch: Holm over the 2 contrasts of an epoch in both models; p_holm_across_epochs:',
+            'Holm over all contrasts of an outcome -- 6 in the three-epoch model, 8 in the four-epoch one.',
             side.round(4).to_string(index=False)]
     write_text(os.path.join(stats_dir, 'four_vs_three_epoch_summary.txt'), '\n'.join(text) + '\n')
     print('\n'.join(text))
