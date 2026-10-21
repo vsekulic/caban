@@ -287,3 +287,39 @@ next to the existing unweighted Welch test on animal fractions, which is unchang
   results; driven mostly by hM4D's rate drop.
 - 12.2: Inh vs Ctl OR 0.66 [0.42, 1.04], P = 0.068, Holm 0.14, permutation 0.09; Exc vs Ctl OR 1.01.
   Reported as null (not "a trend"); fraction active depends on rate, so it is not independent of it.
+
+## 13. Four-epoch conditioning model (VS, 2026-10-21) — pre-specified before it is run
+
+VS: "pre-tone is pointless without tone; need all four." **Disclosed as added after the three-epoch
+results were known**; the three-epoch model stays reported as originally specified.
+
+- **Epochs:** pre-tone (20 s, matched; reference), **tone (20 s)**, trace (15 s on trial 1, 20 s
+  otherwise), post-shock (20 s from shock offset). Same exposure-matched trials, events, measures and
+  per-animal table as now (`build_mouse_epoch_unified_table`).
+- **Model, per outcome (log per-event amplitude; log population rate):** `log(metric) ~ group × epoch
+  + (1|animal)` (`fit_unified_group_epoch_model`); joint Wald test of the 6 interaction coefficients;
+  within-epoch Holm across the two treatment-vs-control contrasts (now in four epochs); the
+  across-epoch sensitivity is Holm over all 8 contrasts of an outcome (reported, not the decision).
+- **Code:** the existing paper lane (`render_paper_tfc_amplitude_rate`, which already takes `epochs`)
+  with an output directory of its own, `sp_rates_lmm/paper/tfc_amplitude_rate_four_epochs/`; the
+  three-epoch output is untouched. Figure 2 v2 f and h then draw from the four-epoch lane (h gains a
+  tone column).
+- **Expectation stated before running:** the three shared epochs' simple effects should change little
+  (each epoch's contrast rests mainly on that epoch's data; epochs share the animal intercept); the
+  interaction test changes (6 df instead of 4).
+
+## 14. Freezing check (VS, 2026-10-21) — pre-specified before it is run
+
+Does a group difference in behaviour account for the amplitude and rate effects?
+
+- **Freezing** = speed below `freezing_tuned_cells.FREEZE_THRESH_CM_S` per miniscope frame (the
+  pipeline's existing definition; behaviour-camera speed, nearest-timestamp to each frame).
+- **(a) Does freezing differ?** Per animal and epoch (the four of §13, exposure-matched trials), the
+  fraction of frames freezing. Per epoch, Exc − Ctl and Inh − Ctl by Welch t-test, Holm across the
+  two; descriptive plot per animal.
+- **(b) Do the effects survive freezing?** The §13 model with the per-animal × epoch freezing
+  fraction added as a covariate: `log(metric) ~ group × epoch + freezing + (1|animal)`. Reported: the
+  Exc amplitude and Inh rate contrasts per epoch with and without the covariate, and the covariate's
+  own coefficient. Descriptive companion: amplitude and rate recomputed in moving frames only and in
+  freezing frames only (events assigned by peak frame), per animal, plotted; no test (an animal with
+  no frames of one state in an epoch leaves that cell of the plot empty — no animal is dropped).
