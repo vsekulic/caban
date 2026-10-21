@@ -323,3 +323,26 @@ Does a group difference in behaviour account for the amplitude and rate effects?
   own coefficient. Descriptive companion: amplitude and rate recomputed in moving frames only and in
   freezing frames only (events assigned by peak frame), per animal, plotted; no test (an animal with
   no frames of one state in an epoch leaves that cell of the plot empty — no animal is dropped).
+
+### 13–14 revised after `statistics-checker` (2026-10-21, before anything was built)
+
+- **§13 status:** the three-epoch model stays the paper's primary (specified before the results);
+  the four-epoch model is reported **alongside it, labelled post hoc** with its rationale (a pre-tone
+  baseline needs the tone to be interpretable), whatever the tone shows. The 8-contrast Holm per
+  outcome is reported prominently, not as a footnote; outcomes are separate families. Both models'
+  shared-epoch estimates and P side by side (estimates are expected unchanged with a balanced
+  table; SEs and P can move because variances are pooled across epochs). Same df method in both.
+  The interaction test is not used as a gate. Figure 2 v2 f/h: VS to choose (four epochs labelled
+  post hoc, or three epochs plus a descriptive tone column).
+- **§14 freezing definition:** speed < 2 cm/s **sustained for ≥ 1 s** (a minimum bout); the
+  frame-wise definition without the bout criterion reported beside it.
+- **§14(a):** per epoch, Exc − Ctl and Inh − Ctl on the logit of the freezing fraction, by exact
+  pairwise mouse-label permutation, with 95% CIs (Welch beside); no claim of "no difference" without
+  that caveat about power.
+- **§14(b) replaced:** the pre-specified sensitivity is the **moving-frames-only recomputation**:
+  events whose peak falls in a moving frame, amplitude as before, rate per moving cell-second; the
+  same four-epoch model fitted to it (empty animal × epoch cells allowed and listed). Effect sizes
+  and CIs compared with the all-frames model, not P values. Interpreted as "does the effect persist
+  at matched behaviour", not as "is it an artefact" (freezing may mediate the DREADD effect). The
+  freezing-fraction covariate model, with the animal-mean and within-animal (epoch) parts separated
+  and the fraction logit-transformed, is a secondary report. Freezing-only frames: descriptive.
