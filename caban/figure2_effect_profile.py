@@ -62,7 +62,7 @@ def effect_profile(df):
     return out
 
 
-def _exact_pair_p(values, mice_per_group, a, b, stat):
+def _exact_pair_p(mice_per_group, a, b, stat):
     def stat_fn(mouse_to_group):
         return stat([m for m, g in mouse_to_group.items() if g == a],
                     [m for m, g in mouse_to_group.items() if g == b])
@@ -76,7 +76,7 @@ def test_profile(profile, mice_per_group):
     pb = profile.loc[profile['group'] == b, 'P']
     welch = stats.ttest_ind(pa, pb, equal_var=False)
     P = profile['P'].to_dict()
-    p_perm = _exact_pair_p(P, mice_per_group, a, b,
+    p_perm = _exact_pair_p(mice_per_group, a, b,
                            lambda ma, mb: np.mean([P[m] for m in ma]) - np.mean([P[m] for m in mb]))
     return {'hM3D_mean_P': float(pa.mean()), 'hM4D_mean_P': float(pb.mean()),
             'difference': float(pa.mean() - pb.mean()), 'welch_t': float(welch.statistic),
@@ -113,14 +113,61 @@ def fraction_active_weighted(df, mice_per_group):
                      'ci_low': float(np.exp(ci.loc[term, 0])), 'ci_high': float(np.exp(ci.loc[term, 1])),
                      'p_glm': float(fit.pvalues[term]),
                      'weighted_fraction_diff': weighted_diff(mice_per_group[g], mice_per_group[REFERENCE]),
-                     'p_permutation': float(_exact_pair_p(None, mice_per_group, g, REFERENCE, weighted_diff))})
+                     'p_permutation': float(_exact_pair_p(mice_per_group, g, REFERENCE, weighted_diff))})
     out = pd.DataFrame(rows)
     out['p_holm'] = holm_correct(out['p_glm'].to_numpy())[1]
     return out, fit
 
 
+def profile_sensitivity(df, mice_per_group):
+    """Robustness of 12.1 (reviews of 2026-10-21; checks, not further tests): the hM3D - hM4D
+    difference in P under other scalings, each with its exact pairwise permutation p; the scaling is
+    recomputed inside every relabelling in 'pooled SD, recomputed per relabelling'."""
+    amp, rate = df['mouse_mean_log_amplitude'], df['log_population_rate']
+    ctl = df['group'] == REFERENCE
+    a, b = 'hM3D', 'hM4D'
+
+    def p_from(A, R):
+        return (A - R).to_dict()
+
+    variants = {
+        'pooled SD (as reported)': lambda g: (_pooled_sd(amp, g), _pooled_sd(rate, g)),
+        'control SD only': lambda g: (float(amp[ctl].std(ddof=1)), float(rate[ctl].std(ddof=1))),
+        'raw log units (no scaling)': lambda g: (1.0, 1.0),
+    }
+    rows = []
+    for name, scale_fn in variants.items():
+        s_amp, s_rate = scale_fn(df['group'])
+        P = p_from((amp - amp[ctl].mean()) / s_amp, -(rate - rate[ctl].mean()) / s_rate)
+        diff = lambda ma, mb, P=P: np.mean([P[m] for m in ma]) - np.mean([P[m] for m in mb])
+        rows.append({'variant': name, 'difference': diff(mice_per_group[a], mice_per_group[b]),
+                     'p_permutation': _exact_pair_p(mice_per_group, a, b, diff),
+                     'hM3D_all_positive': all(P[m] > 0 for m in mice_per_group[a]),
+                     'hM4D_all_negative': all(P[m] < 0 for m in mice_per_group[b])})
+
+    observed_groups = df['group'].copy()
+
+    def recomputed(ma, mb):
+        g = observed_groups.copy()
+        g.loc[ma], g.loc[mb] = a, b
+        P = p_from((amp - amp[ctl].mean()) / _pooled_sd(amp, g),
+                   -(rate - rate[ctl].mean()) / _pooled_sd(rate, g))
+        return np.mean([P[m] for m in ma]) - np.mean([P[m] for m in mb])
+
+    rows.append({'variant': 'pooled SD, recomputed per relabelling',
+                 'difference': recomputed(mice_per_group[a], mice_per_group[b]),
+                 'p_permutation': _exact_pair_p(mice_per_group, a, b, recomputed),
+                 'hM3D_all_positive': np.nan, 'hM4D_all_negative': np.nan})
+    out = pd.DataFrame(rows)
+    A = (amp - amp[ctl].mean()) / _pooled_sd(amp, df['group'])
+    R = -(rate - rate[ctl].mean()) / _pooled_sd(rate, df['group'])
+    corr = {g: stats.spearmanr(A[df['group'] == g], R[df['group'] == g])[0] for g in DREADD_DISPLAY_ORDER}
+    corr['all animals'] = stats.spearmanr(A, R)[0]
+    return out, corr
+
+
 def plot_profile_plane(profile, out_path):
-    """One point per animal in the (A, R) plane; control at the origin by construction."""
+    """One point per animal in the (A, R) plane; the control MEAN is at the origin."""
     fig, ax = plt.subplots(figsize=(3.6, 3.4))
     ax.axhline(0, color='0.7', lw=0.6)
     ax.axvline(0, color='0.7', lw=0.6)
@@ -153,6 +200,8 @@ def run_figure2_effect_profile(PLOTS_DIR, mice_per_group):
     profile = effect_profile(df)
     prof_test = test_profile(profile, mice_per_group)
     frac, fit = fraction_active_weighted(df, mice_per_group)
+    sens, corr = profile_sensitivity(df, mice_per_group)
+    sens.to_csv(os.path.join(out_dir, 'effect_profile_sensitivity.csv'), index=False)
     profile.to_csv(os.path.join(out_dir, 'effect_profile_per_animal.csv'))
     frac.to_csv(os.path.join(out_dir, 'fraction_active_weighted.csv'), index=False)
     plot_profile_plane(profile, os.path.join(out_dir, 'effect_profile_plane.png'))
@@ -160,6 +209,9 @@ def run_figure2_effect_profile(PLOTS_DIR, mice_per_group):
               '12.1 Effect profile, trace interval: P = A - R per animal; hM3D vs hM4D',
               pd.Series(prof_test).round(4).to_string(), '',
               'Per animal:', profile.round(3).to_string(), '',
+              'Robustness of 12.1 (checks, not further tests):', sens.round(4).to_string(index=False), '',
+              'Spearman correlation of A and R across animals: '
+              + ', '.join(f'{k} {v:+.2f}' for k, v in corr.items()), '',
               '12.2 Fraction active, quasi-binomial GLM weighted by cell count (vs mCherry, Holm over two)',
               frac.round(4).to_string(index=False), '',
               f'Dispersion (Pearson chi2 / df): {fit.scale:.2f}', '', fit.summary().as_text()]

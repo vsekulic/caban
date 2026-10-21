@@ -273,3 +273,17 @@ cell count and between-animal overdispersion widens the intervals. Contrasts Exc
 (odds ratios, 95% CI), Holm across the two; the exact pairwise mouse-label randomization of the
 cell-weighted proportion difference beside each. Every animal included (G13: 89 cells). Reported
 next to the existing unweighted Welch test on animal fractions, which is unchanged.
+
+**12.3 Results (2026-10-21; both reviews done; `plots/CURRENT/figure2_effect_profile/`).**
+- 12.1: hM3D mean P +0.94 (all 5 > 0), hM4D −1.50 (all 6 < 0); difference 2.44 s.d., exact
+  permutation P = 0.002 (the floor for 5 vs 6; Welch 0.0001 not to be led with). Robust: control-SD
+  scaling 2.16, P = 0.004 (one hM4D animal ≥ 0); raw log units 0.64, P = 0.002; scaling recomputed per
+  relabelling, P = 0.002. A–R Spearman: hM4D +0.77, hM3D +0.30, control +0.03.
+- **Wording (statistics review):** "the amplitude/rate balance differs: hM3D relatively
+  amplitude-led, hM4D relatively rate-led" — a difference in degree. Not "double dissociation" or
+  "opposite effects": on average both DREADD groups raise amplitude and lower rate vs control (4 of 6
+  hM4D animals have A > 0). Built from the same two effects as the primary model, so it formalises
+  their difference rather than adding independent evidence; exploratory, motivated by the primary
+  results; driven mostly by hM4D's rate drop.
+- 12.2: Inh vs Ctl OR 0.66 [0.42, 1.04], P = 0.068, Holm 0.14, permutation 0.09; Exc vs Ctl OR 1.01.
+  Reported as null (not "a trend"); fraction active depends on rate, so it is not independent of it.
