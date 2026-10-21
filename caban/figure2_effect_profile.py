@@ -89,7 +89,15 @@ def fraction_active_weighted(df, mice_per_group):
     X = pd.DataFrame({f'is_{g}': (df['group'] == g).astype(float) for g in groups}, index=df.index)
     X = sm.add_constant(X)
     y = np.column_stack([df['n_active_cells'], df['n_cells'] - df['n_active_cells']])
-    fit = sm.GLM(y, X, family=sm.families.Binomial()).fit(scale='X2', use_t=True)
+    # Dispersion set explicitly as Pearson chi2 / residual df: statsmodels' scale='X2' with a
+    # two-column (successes, failures) response returned 0.05 where chi2/df is ~11 (2026-10-21),
+    # which would shrink every interval ~15-fold.
+    binomial = sm.GLM(y, X, family=sm.families.Binomial()).fit()
+    dispersion = float(binomial.pearson_chi2 / binomial.df_resid)
+    fit = sm.GLM(y, X, family=sm.families.Binomial()).fit(scale=dispersion, use_t=True)
+    if not np.isclose(fit.scale, dispersion):
+        raise RuntimeError(f'fraction_active_weighted: fitted scale {fit.scale} is not the Pearson '
+                           f'dispersion {dispersion}.')
     ci = fit.conf_int()
     n_act, n_all = df['n_active_cells'].to_dict(), df['n_cells'].to_dict()
 
