@@ -497,8 +497,9 @@ def preprocessing_metrics(variant_dir, cells, seed_mask):
             'n_cells': int(len(disc)), 'n_frames': int(n_frames)}
 
 
-def plot_preprocessing_grid(stage_root, out_path, crop=((180, 480), (150, 450))):
-    """The max projection of every preprocessing variant, rows ksize, columns wnd, one crop."""
+def plot_preprocessing_grid(stage_root, done, out_path, crop=((180, 480), (150, 450))):
+    """The max projection of every finished preprocessing variant (``done``: their names), rows
+    ksize, columns wnd, one crop; a variant that did not finish is drawn as a labelled empty panel."""
     (h0, h1), (w0, w1) = crop
     fig, axes = plt.subplots(len(PREPROCESSING_KSIZES), len(PREPROCESSING_WNDS),
                              figsize=(3.2 * len(PREPROCESSING_WNDS), 3.3 * len(PREPROCESSING_KSIZES)),
@@ -506,13 +507,16 @@ def plot_preprocessing_grid(stage_root, out_path, crop=((180, 480), (150, 450)))
     for i, k in enumerate(PREPROCESSING_KSIZES):
         for j, w in enumerate(PREPROCESSING_WNDS):
             name = 'ksize_{}_wnd_{}'.format(k, w)
+            ax = axes[i, j]
+            ax.set_xticks([])
+            ax.set_yticks([])
+            if name not in done:
+                ax.set_title('ksize {}, wnd {}: NOT FINISHED'.format(k, w), fontsize=9, color='C3')
+                continue
             image = yr.open_minian_array(os.path.join(stage_root, name, mr.OUTPUT_NAME),
                                          'max_proj').compute().values[h0:h1, w0:w1]
             low, high = np.percentile(image, PROJECTION_PERCENTILES)
-            ax = axes[i, j]
             ax.imshow(image, cmap='gray', vmin=low, vmax=high, interpolation='nearest')
-            ax.set_xticks([])
-            ax.set_yticks([])
             ax.set_title('ksize {}, wnd {}'.format(k, w), fontsize=9)
     fig.tight_layout()
     fig.savefig(out_path, dpi=110)
