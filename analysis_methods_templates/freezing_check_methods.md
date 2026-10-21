@@ -24,3 +24,12 @@ and left out of that refit. Because freezing may lie on the path from the manipu
 effect, this asks whether the effect persists at matched behaviour, not whether it is an artefact. A
 secondary model added the freezing fraction (logit) to the all-frames model, split into each animal's
 mean and the epoch deviation from it; freezing-only frames are reported descriptively.
+
+**Caveats.** The bout and frame-wise definitions answer the same question and are not separate
+tests; Holm is applied across the two treatment-versus-control comparisons within each epoch and
+definition only, so the 16 freezing comparisons are reported as a description of behaviour, not as a
+family of findings. In the state-restricted refits each event counts in the state of its peak frame,
+even if it spans a state change. The freezing-only refit rests on few events (one animal × epoch cell
+has none) and is descriptive only. In the covariate model the animal-mean freezing term varies between
+animals, as group does, and can absorb part of a group difference; it is therefore secondary to the
+moving-frames refit.

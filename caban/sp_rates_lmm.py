@@ -5481,14 +5481,17 @@ FOUR_EPOCH_SUBDIR = 'tfc_amplitude_rate_four_epochs'
 
 
 def exposure_matched_event_table(mice_per_group, TFC_cond, epochs, mapping='full', thres=None):
-    """The fine event table over ``epochs`` on the exposure-matched (mouse, trial) pairs, exactly as
-    run_sp_rates_lmm builds the paper lane's input: build_epoch_event_table with the module's epoch
-    windows, then restrict_to_exposure_matched_trials. Returns (table, coverage)."""
+    """The fine event table over ``epochs`` (only those epochs' rows) on the exposure-matched
+    (mouse, trial) pairs, as run_sp_rates_lmm builds the paper lane's input:
+    build_epoch_event_table with the module's epoch windows, then
+    restrict_to_exposure_matched_trials. Returns (table, coverage)."""
     df_fine = build_epoch_event_table(mice_per_group, TFC_cond, TFC_EPOCHS, tfc_epoch_frames_fn(),
                                       mapping=mapping, thres=thres)
     df_matched, coverage = restrict_to_exposure_matched_trials(df_fine, epochs)
     pairs = set(zip(df_matched['mouse'], df_matched['trial']))
-    return df_fine[[(m, t) in pairs for m, t in zip(df_fine['mouse'], df_fine['trial'])]], coverage
+    keep = [(m, t) in pairs and e in epochs
+            for m, t, e in zip(df_fine['mouse'], df_fine['trial'], df_fine['epoch'])]
+    return df_fine[keep], coverage
 
 
 def run_paper_tfc_four_epochs(PLOTS_DIR, mice_per_group, TFC_cond, mapping='full', thres=None,
