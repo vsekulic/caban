@@ -9659,95 +9659,6 @@ def format_paper_contrast(c, label):
     return f"{label}: ×{c['ratio']:.2f}, P = {c['p_holm']:.3f}"
 
 
-MEAN_EVENT_WAVEFORM_ROOT = 'group_mean_event_waveform'
-EVENT_WAVEFORM_HALF_S = 1.0
-
-
-def plot_group_mean_event_waveform(PLOTS_DIR, sessions, df_runs_trace, mapping='full'):
-    """Figure 2 v2 h: each group's average trace-interval event (VS, 2026-10-21; plan §10).
-
-    Per animal, every trace-interval event's S segment from -EVENT_WAVEFORM_HALF_S to
-    +EVENT_WAVEFORM_HALF_S around its peak frame, averaged over all of that animal's events; then mean
-    +/- s.e.m. across animals per group, on one axis. Nothing is selected: unlike a single example,
-    the curve is every event of every animal.
-    """
-    save_dir = os.path.join(PLOTS_DIR, 'sp_rates_lmm', 'TFC_cond')
-    half = int(round(EVENT_WAVEFORM_HALF_S * MINISCOPE_FPS))
-    t = np.arange(-half, half + 1) / MINISCOPE_FPS
-    per_group, table = {}, []
-    for group in DREADD_DISPLAY_ORDER:
-        rows = []
-        gsub = df_runs_trace[df_runs_trace['group'] == group]
-        if gsub.empty:
-            raise RuntimeError(f'plot_group_mean_event_waveform: no runs for group {group!r}.')
-        for mouse, msub in gsub.groupby('mouse', sort=True):
-            _S, _Ss, _Sp, S_idx = sessions[mouse].get_S_mapping(mapping)
-            row_of = {c: i for i, c in enumerate(S_idx)}
-            S = sessions[mouse].S
-            segs = []
-            for cell, peak in zip(msub['cell'], msub['peak_frame'].astype(int)):
-                lo, hi = peak - half, peak + half + 1
-                if lo < 0 or hi > S.shape[1]:
-                    raise RuntimeError(f'plot_group_mean_event_waveform: {mouse} event at frame {peak} '
-                                       f'is within {EVENT_WAVEFORM_HALF_S} s of the recording edge.')
-                segs.append(S[row_of[cell], lo:hi])
-            rows.append(np.mean(segs, axis=0))
-            table.append({'mouse': mouse, 'group': group, 'n_events': len(segs),
-                          'peak': float(rows[-1][half]), **{f'{x:+.3f}s': v for x, v in zip(t, rows[-1])}})
-        per_group[group] = np.vstack(rows)
-    ensure_dirs(save_dir)
-    pd.DataFrame(table).to_csv(os.path.join(save_dir, MEAN_EVENT_WAVEFORM_ROOT + '_per_animal.csv'),
-                               index=False)
-    amp = {g: paper_contrast(PLOTS_DIR, 'amplitude', TFC_TRACE_EPOCH, g) for g in ('hM3D', 'hM4D')}
-    with nature_style():
-        fig, ax = plt.subplots(figsize=panel_figsize('h', LAYOUT_V2_MM), layout='constrained')
-        for group, mat in per_group.items():
-            mu = mat.mean(axis=0)
-            sem = mat.std(axis=0, ddof=1) / np.sqrt(mat.shape[0])
-            ax.plot(t, mu, color=GROUP_COLOURS[group], lw=LINE_PT, label=GROUP_LABELS[group])
-            ax.fill_between(t, mu - sem, mu + sem, color=GROUP_COLOURS[group], alpha=0.2, lw=0)
-        ax.set_xlabel('Time from event peak (s)')
-        ax.set_ylabel('Activity (a.u.)')
-        ax.legend(loc='center right', handlelength=1.0)
-        # The paper model's trace-interval amplitude contrasts vs Ctl (Holm within the epoch); this
-        # panel computes no statistic of its own.
-        ax.set_title(format_paper_contrast(amp['hM3D'], 'Exc') + '\n'
-                     + format_paper_contrast(amp['hM4D'], 'Inh'), fontsize=FONT_PT - 1)
-        _save_panel(fig, save_dir, MEAN_EVENT_WAVEFORM_ROOT)
-    _plot_event_waveform_per_animal(per_group, t, sorted(df_runs_trace['mouse'].unique()), table,
-                                    os.path.join(save_dir, MEAN_EVENT_WAVEFORM_ROOT + '_per_animal.png'))
-
-
-def _plot_event_waveform_per_animal(per_group, t, _mice, table, out_path):
-    """Diagnostic for h: every animal's average event (thin, labelled with its event count) and the
-    group mean (thick), one column per group, common y-axis."""
-    mice_by_group = {g: [r for r in table if r['group'] == g] for g in per_group}
-    fig, axs = plt.subplots(1, len(per_group), figsize=(3.2 * len(per_group), 3.0), sharey=True,
-                            squeeze=False)
-    colours = plt.get_cmap('tab10').colors
-    for ax, (group, mat) in zip(axs[0], per_group.items()):
-        for i, (row, rec) in enumerate(zip(mat, mice_by_group[group])):
-            ax.plot(t, row, color=colours[i % 10], lw=0.8, label=f"{rec['mouse']} (n={rec['n_events']})")
-        ax.plot(t, mat.mean(axis=0), color=GROUP_COLOURS[group], lw=2.2, label=f'{GROUP_LABELS[group]} mean')
-        ax.set_title(f'{GROUP_LABELS[group]} ({mat.shape[0]} animals)')
-        ax.set_xlabel('Time from event peak (s)')
-        ax.legend(fontsize='x-small', frameon=False)
-    axs[0, 0].set_ylabel('Activity (a.u.)')
-    fig.suptitle('Average trace-interval event per animal (n = events)', size='medium')
-    fig.tight_layout()
-    save_fig(fig, out_path)
-    plt.close(fig)
-
-
-def draw_group_mean_event_waveform(PLOTS_DIR, mice_per_group, TFC_cond, mapping='full', thres=None):
-    """The h panel alone, without the rest of run_sp_rates_lmm: the trace-interval run table from the
-    same detector and windows (build_run_structure_table, tfc_epoch_frames_fn), then the panel, into
-    <PLOTS_DIR>/sp_rates_lmm/TFC_cond/."""
-    df_runs = build_run_structure_table(mice_per_group, TFC_cond, (TFC_TRACE_EPOCH,),
-                                        tfc_epoch_frames_fn(), mapping=mapping, thres=thres)
-    plot_group_mean_event_waveform(PLOTS_DIR, TFC_cond, df_runs, mapping=mapping)
-
-
 def plot_width_vs_height_matched_examples(sessions, df_runs_trace, save_dir, mapping='full',
                                           thres=None, target_height_percentile=50,
                                           orientation='horizontal',
@@ -10294,8 +10205,6 @@ def run_sp_rates_lmm(PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond
     # exist until the secondary family is complete.
     render_paper_tfc_amplitude_rate(PLOTS_DIR, df_grid, primary_contrasts, holm,
                                     perm_results, interactions, _q_by_name, rate_fit, delta_df)
-    # Figure 2 v2 h annotates this lane's contrasts, so it is drawn only once they are written.
-    plot_group_mean_event_waveform(PLOTS_DIR, TFC_cond, df_runs_trace, mapping=mapping)
 
     # ---- The paper-facing RECALL lane, one INDEPENDENT analysis per recall session -------------
     # Same statistical logic as the conditioning lane above, applied to the two duration-matched
