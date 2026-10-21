@@ -13,6 +13,7 @@ import glob
 import json
 import os
 import re
+import threading
 import time
 
 import cv2
@@ -273,6 +274,7 @@ PARAMETER_GRID_ONE_AT_A_TIME = {
 }
 GRID_NOTEBOOK_FLAGS = dict(mr.NOTEBOOK_FLAGS, want_mc_video=False, want_final_video=False)
 FRAGMENT_DISTANCE_PX = 8.0      # two units' centroids closer than this: likely one cell split
+KERNEL_START_SPACING_S = 30.0   # between two variants' notebook starts
 
 
 def close_pairs(height, width, max_dist=FRAGMENT_DISTANCE_PX):
@@ -338,9 +340,20 @@ def run_parameter_grid(session_dir, grid, out_root, seed_mask=None, n_parallel=4
     ``variant.json`` and printed, and the others carry on (an unattended grid; each failure is a
     result to look at, e.g. the empty-merge failure). Returns {name: 'done' | error}."""
     outcome = {}
+    start_lock, last_start = threading.Lock(), [0.0]
+
+    def staggered(name, overrides):
+        # Kernels started in the same second can die before replying (seen 2026-10-21), so
+        # starts are spaced by KERNEL_START_SPACING_S.
+        with start_lock:
+            wait = last_start[0] + KERNEL_START_SPACING_S - time.time()
+            if wait > 0:
+                time.sleep(wait)
+            last_start[0] = time.time()
+        return run_parameter_variant(session_dir, name, overrides, out_root, seed_mask, n_workers)
+
     with concurrent.futures.ThreadPoolExecutor(max_workers=n_parallel) as pool:
-        futures = {pool.submit(run_parameter_variant, session_dir, name, overrides, out_root,
-                               seed_mask, n_workers): name for name, overrides in grid.items()}
+        futures = {pool.submit(staggered, name, overrides): name for name, overrides in grid.items()}
         for future in concurrent.futures.as_completed(futures):
             name = futures[future]
             error = future.exception()
