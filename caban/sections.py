@@ -1998,7 +1998,7 @@ def run_figure2_composite(ds, cfg, rerun=()):
 # (caban.figure2_composite.PENDING_V2). Add a letter here when its panel is built.
 FIGURE2_V2_PANEL_SECTIONS = {
     'c': run_want_sample_traces_paper,
-    'e': run_homecage_cno,
+    'e': run_sp_rates_lmm,
     'f': run_sp_rates_lmm,
 }
 

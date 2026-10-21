@@ -152,8 +152,8 @@ LAYOUT_V2_MM = {
     'a': (0, 0, 46, 32),
     'b': (48, 0, 52, 32),
     'c': (102, 0, 81, 32),
-    'd': (0, 35, 88, 40),
-    'e': (90, 35, 93, 40),
+    'd': (0, 35, 123, 40),
+    'e': (125, 35, 58, 38),         # = the current figure's d box: the LT1 -> LT2 check places 1:1
     'f': (0, 78, 78, 74),
     'g': (80, 78, 103, 74),
     'h': (0, 155, 40, 46),
@@ -161,7 +161,7 @@ LAYOUT_V2_MM = {
 }
 PANEL_FILES_V2 = {
     'c': PANEL_FILES['c'],
-    'e': 'homecage_cno/homecage_cno_delta.png',   # caban.homecage_cno, drawn at e's box size
+    'e': PANEL_FILES['d'],          # LT1 -> LT2 within-cell amplitude change and dropout (VS, 2026-10-21)
     'f': PANEL_FILES['g'],          # the primary model, per-event amplitude and population rate by epoch
 }
 # Move a letter from here to PANEL_FILES_V2 when its section draws it at its box size.
@@ -175,9 +175,9 @@ CAPTION_V2 = """**Fig. 2 (redesign, in progress) | Chemogenetic excitation and i
 dissociate the magnitude and the frequency of CA1 pyramidal calcium events.**
 **a**, Viral strategy. **b**, Mean field of view and Minian spatial footprints from one animal.
 **c**, Example traces from three cells per group. **d**, SST cells: activity before and after CNO
-(not built). **e**, Pyramidal cells in the homecage before and after CNO on the conditioning day:
-per-animal change (post − pre, log) in per-event amplitude (left) and population event rate (right);
-pre, the first homecage recording; post, the homecage recording 15–35 min after the injection.
+(not built). **e**, Manipulation check across the drug-free (LT1) and CNO (LT2) linear-track sessions:
+within-cell change in log per-event amplitude (left) and the fraction of LT1 cells not re-registered
+in LT2 (right).
 **f**,
 Per-event amplitude (top) and population event rate (bottom) in the three 20-s conditioning epochs;
 small points are cells, large points animals; contrasts of the group x epoch mixed model with animal

@@ -90,7 +90,7 @@ CNO1 began about 30 min after the injection. Minutes after the injection, from f
 the 30-min rule its drug-free LT1 (CNO1 − 20 min) would follow the injection; its day has G13's
 layout, so its injection is taken as CNO1's start (post = HC3, +31 min). In G14–G16, G20 and G21 the
 rule puts the injection at HC2's start (HC2 begins +1 to +2 min), so HC2 is not a pre-CNO recording
-there and pre = HC1 throughout. G19 confirmed by VS (post = HC3, after LT2); G12 to be confirmed.
+there and pre = HC1 throughout. G19 (post = HC3, after LT2) and G12 confirmed by VS.
 
 LT2 was therefore under CNO in every animal (an earlier reading of the folder times, which took
 CNO1's start as the injection everywhere, was wrong). G19: post = HC3 (its CNO2 starts 9 min after CNO1), confirmed by VS.
@@ -199,7 +199,11 @@ homecage sessions loaded into `ds`, so the cache is rebuilt once (on the Razer i
    panel too. The SST validation (Minian parameter gate on the DIO mice, then the runs) is **a
    separate project, in its own chat**, starting from
    [sst_dio_dreadd_validation_plan.md](sst_dio_dreadd_validation_plan.md).
-3. **Panel e: homecage pre/post-injection.** LT1→LT2 goes to the supplement at most.
+3. **Panel e: LT1→LT2 within-cell amplitude change and dropout** (VS, 2026-10-21, revised after
+   seeing the homecage result). The homecage pre/post-CNO analysis (§4.1) was run as pre-specified
+   and is kept as a record (`plots/CURRENT/homecage_cno/`) but is not in the figure: control animals'
+   event rate rose after the injection and both DREADD groups' did not (Exc 0.58×, Holm *P* = 0.008;
+   Inh 0.67×, Holm *P* = 0.015); amplitude did not differ.
 4. **Example events: keep, redone (§10).**
 5. **Shock panel: the pre-specified test of §5.2 for now**; VS revisits after seeing it, with
    §5.3 open.

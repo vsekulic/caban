@@ -77,7 +77,7 @@ and open questions) and [figure2_redesign_plan.md](figure2_redesign_plan.md) §3
    day is needed for "within cell"; session-level per-animal means are the fallback that needs none.
 4. **Panel.** Figure 2 v2 panel **d**, Nature style, drawn at its box size:
    `caban.figure2_composite.panel_figsize('d', caban.figure2_composite.LAYOUT_V2_MM)`
-   (88 × 36.8 mm). Write it into your own plots folder under `PLOTS_DIR` and tell VS the path; the
+   (123 × 36.8 mm). Write it into your own plots folder under `PLOTS_DIR` and tell VS the path; the
    main chat moves `d` from `PENDING_V2` to `PANEL_FILES_V2` and adds its section to
    `FIGURE2_V2_PANEL_SECTIONS` in `caban/sections.py` (a shared file).
 
