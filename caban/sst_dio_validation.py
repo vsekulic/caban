@@ -19,6 +19,8 @@ import time
 import cv2
 import numpy as np
 import pandas as pd
+import scipy.ndimage
+import scipy.sparse
 import matplotlib.pyplot as plt
 
 from caban import minian_runner as mr
@@ -284,13 +286,16 @@ def close_pairs(height, width, max_dist=FRAGMENT_DISTANCE_PX):
     return int(np.triu(dist < max_dist, k=1).sum())
 
 
-def run_parameter_variant(session_dir, name, overrides, out_root, seed_mask=None, n_workers=6):
-    """One full Minian run of ``session_dir`` with ``overrides``, written to ``out_root/name``.
+def run_parameter_variant(session_dir, name, overrides, out_root, seed_mask=None, n_workers=6,
+                          cut_after=None):
+    """One Minian run of ``session_dir`` with ``overrides``, written to ``out_root/name``.
 
     As :func:`caban.minian_runner.reestimate_motion`: ``intpath`` and ``minian_ds_path`` both under
     the variant's folder (verified from the kernel), no videos, the session folder's listing
     checked unchanged. ``del_frames`` come from ``yra_recompute.NOTEBOOK_DEL_FRAMES`` as in
-    production. Intermediates are kept for the review. Writes ``variant.json``; raises on failure.
+    production. With ``cut_after`` (:data:`STAGE_CUT_AFTER`) the run stops after that stage and
+    has no units to report. Intermediates are kept for the review. Writes ``variant.json``; raises
+    on failure.
     """
     work = os.path.join(out_root, name)
     if os.path.lexists(work):
@@ -303,9 +308,9 @@ def run_parameter_variant(session_dir, name, overrides, out_root, seed_mask=None
                                       os.path.join(work, mr.PARAMETERS_JSON), scratch=intpath,
                                       flags=GRID_NOTEBOOK_FLAGS, minian_ds_path=output,
                                       del_frames=del_frames, seed_mask=seed_mask,
-                                      parameter_overrides=overrides)
+                                      parameter_overrides=overrides, cut_after=cut_after)
     before = sorted(os.listdir(session_dir))
-    record = {'session_dir': session_dir, 'variant': name, 'overrides': overrides,
+    record = {'session_dir': session_dir, 'variant': name, 'overrides': overrides, 'cut_after': cut_after,
               'seed_mask': seed_mask, 'del_frames': del_frames, 'notebook_edits': edits,
               'caban': mr._git_state(mr.REPO_DIR), 'minian_fork': mr._git_state(mr.MINIAN_FORK_DIR),
               'started': pd.Timestamp.now().isoformat(timespec='seconds'), 'timings': {}}
@@ -319,10 +324,11 @@ def run_parameter_variant(session_dir, name, overrides, out_root, seed_mask=None
         if sorted(os.listdir(session_dir)) != before:
             raise RuntimeError('the run changed {}'.format(session_dir))
         record['parameters'] = parameters['param']
-        record['report'] = mr.report_session(output, work, parameters['FRAMERATE'])
-        A = yr.open_minian_array(output, 'A').compute()
-        height, width = footprint_centroids(A)
-        record['report']['close_pairs'] = close_pairs(height, width)
+        if cut_after is None:
+            record['report'] = mr.report_session(output, work, parameters['FRAMERATE'])
+            A = yr.open_minian_array(output, 'A').compute()
+            height, width = footprint_centroids(A)
+            record['report']['close_pairs'] = close_pairs(height, width)
         record['status'] = 'done'
     except BaseException as error:
         record['status'] = 'failed'
@@ -335,7 +341,8 @@ def run_parameter_variant(session_dir, name, overrides, out_root, seed_mask=None
     return record
 
 
-def run_parameter_grid(session_dir, grid, out_root, seed_mask=None, n_parallel=4, n_workers=6):
+def run_parameter_grid(session_dir, grid, out_root, seed_mask=None, n_parallel=4, n_workers=6,
+                       cut_after=None):
     """Every variant of ``grid``, ``n_parallel`` at a time. A failed variant is recorded in its
     ``variant.json`` and printed, and the others carry on (an unattended grid; each failure is a
     result to look at, e.g. the empty-merge failure). Returns {name: 'done' | error}."""
@@ -350,7 +357,8 @@ def run_parameter_grid(session_dir, grid, out_root, seed_mask=None, n_parallel=4
             if wait > 0:
                 time.sleep(wait)
             last_start[0] = time.time()
-        return run_parameter_variant(session_dir, name, overrides, out_root, seed_mask, n_workers)
+        return run_parameter_variant(session_dir, name, overrides, out_root, seed_mask, n_workers,
+                                     cut_after)
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=n_parallel) as pool:
         futures = {pool.submit(staggered, name, overrides): name for name, overrides in grid.items()}
@@ -377,3 +385,151 @@ def grid_summary(out_root):
                      'minutes': round(r['timings']['total_s'] / 60, 1),
                      'error': r.get('error', '')})
     return pd.DataFrame(rows).set_index('variant')
+
+
+# --- staged parameter walk (VS, 2026-10-22): one pipeline stage at a time, judged at its own ------
+# output, decided before the next stage's grid runs on top of it. The one-at-a-time grid above
+# stays as a sensitivity map.
+PIPELINE_STAGES = ('preprocessing', 'seeds', 'initialisation', 'cnmf')
+STAGE_CUT_AFTER = {'preprocessing': mr.MOTION_CUT_ANCHOR}    # later stages: added as they are built
+PREPROCESSING_KSIZES = (3, 5, 7)
+PREPROCESSING_WNDS = (10, 15, 20, 25, 30)
+STAGE_GRIDS = {
+    'preprocessing': {'ksize_{}_wnd_{}'.format(k, w): {'param_denoise': {'ksize': k},
+                                                       'param_background_removal': {'wnd': w}}
+                      for k in PREPROCESSING_KSIZES for w in PREPROCESSING_WNDS},
+}
+# VS's decisions, stage by stage (the parameter log), carried into every later stage's grid.
+DECIDED_OVERRIDES = {}
+# Reference cells for the stage measurements: the units of the G27 grid's merge_corr_0_7 run
+# (inside the lens mask, the cleanest separation of the one-at-a-time grid). Only their positions
+# are used, the same for every variant, so the variants are compared on the same cells.
+REFERENCE_UNITS_VARIANT = 'merge_corr_0_7'
+CELL_DISC_RADIUS_PX = 3.0
+ANNULUS_PX = (12.0, 18.0)
+NEIGHBOUR_EXCLUSION_PX = 8.0    # annulus pixels this close to another reference cell are left out
+BACKGROUND_SMOOTH_SIGMA_PX = 10.0
+FRAME_BLOCK = 500
+
+
+def merged_overrides(*parts):
+    """Overrides combined left to right, per parameter and key (later wins)."""
+    out = {}
+    for part in parts:
+        for name, values in part.items():
+            out.setdefault(name, {}).update(values)
+    return out
+
+
+def reference_cells(grid_root, variant=REFERENCE_UNITS_VARIANT):
+    """(height, width) centroids of the reference units."""
+    A = yr.open_minian_array(os.path.join(grid_root, variant, mr.OUTPUT_NAME), 'A').compute()
+    return footprint_centroids(A)
+
+
+def _region_weights(cells, shape, seed_mask):
+    """Sparse row-normalised weights: one disc row and one annulus row per cell (pixels flattened),
+    and the background pixels (inside the mask, beyond the annulus of every cell)."""
+    hh, ww = np.meshgrid(np.arange(shape[0]), np.arange(shape[1]), indexing='ij')
+    height, width = cells
+    dist = np.sqrt((hh[None] - np.asarray(height)[:, None, None]) ** 2
+                   + (ww[None] - np.asarray(width)[:, None, None]) ** 2)
+    if len(height) < 2:
+        raise ValueError('need at least two reference cells')
+    nearest = np.partition(dist, 1, axis=0)[:2]      # the two smallest distances at each pixel
+    rows = []
+    for i in range(len(height)):
+        disc = dist[i] <= CELL_DISC_RADIUS_PX
+        others = np.where(dist[i] <= nearest[0], nearest[1], nearest[0])   # nearest *other* cell
+        ring = (dist[i] >= ANNULUS_PX[0]) & (dist[i] <= ANNULUS_PX[1]) & (others > NEIGHBOUR_EXCLUSION_PX)
+        if not disc.any() or not ring.any():
+            raise ValueError('reference cell {} has an empty disc or annulus'.format(i))
+        rows += [disc.ravel(), ring.ravel()]
+    weights = scipy.sparse.csr_matrix(np.array(rows, dtype=np.float32))
+    weights = scipy.sparse.diags(1.0 / np.asarray(weights.sum(axis=1)).ravel()) @ weights
+    background = (nearest[0] > ANNULUS_PX[1]) & inside_ellipse(hh, ww, seed_mask)
+    return weights, background, dist
+
+
+def preprocessing_metrics(variant_dir, cells, seed_mask):
+    """Stage-1 measurements of one variant on the reference cells (see the section comment above).
+
+    contrast_z: median over cells of (disc - annulus) in max_proj, in background robust s.d.;
+    transient_snr: median over cells of the 99.9th-percentile excursion of (disc - annulus) trace
+    of Y_fm_chk over its noise (robust s.d. of frame differences / sqrt 2);
+    residual_background: s.d. of the smoothed max_proj over background pixels / median cell
+    contrast (structure left that is not cells); core_fwhm_px: full width at half maximum of the
+    mean radial profile (max_proj, annulus subtracted).
+    """
+    max_proj = yr.open_minian_array(os.path.join(variant_dir, mr.OUTPUT_NAME), 'max_proj').compute().values
+    weights, background, dist = _region_weights(cells, max_proj.shape, seed_mask)
+    regions = weights @ max_proj.ravel()
+    disc, ring = regions[0::2], regions[1::2]
+    bg = max_proj[background]
+    bg_sd = 1.4826 * np.median(np.abs(bg - np.median(bg)))
+    cell_contrast = disc - ring
+    smooth = scipy.ndimage.gaussian_filter(max_proj, BACKGROUND_SMOOTH_SIGMA_PX)
+
+    Y = yr.open_minian_array(os.path.join(variant_dir, 'minian_intermediate'), 'Y_fm_chk')
+    n_frames = Y.sizes['frame']
+    traces = np.empty((weights.shape[0], n_frames), dtype=np.float64)
+    for start in range(0, n_frames, FRAME_BLOCK):
+        block = Y.isel(frame=slice(start, start + FRAME_BLOCK)).values
+        traces[:, start:start + block.shape[0]] = weights @ block.reshape(block.shape[0], -1).T
+    signal = traces[0::2] - traces[1::2]
+    step = np.diff(signal, axis=1)
+    noise = 1.4826 * np.median(np.abs(step - np.median(step, axis=1, keepdims=True)), axis=1) / np.sqrt(2)
+    excursion = np.percentile(signal - np.median(signal, axis=1, keepdims=True), 99.9, axis=1)
+
+    radii = np.arange(0, int(ANNULUS_PX[0]))       # bins [r, r + 1) px from the centroid
+    profile = np.array([[max_proj[(dist[i] >= r) & (dist[i] < r + 1)].mean() - ring[i]
+                         for r in radii] for i in range(len(disc))]).mean(axis=0)
+    profile = profile / profile[0]
+    below = np.flatnonzero(profile < 0.5)
+    if len(below) == 0:
+        raise ValueError('{}: the radial profile never falls below half its peak'.format(variant_dir))
+    return {'contrast_z': float(np.median(cell_contrast) / bg_sd),
+            'transient_snr': float(np.median(excursion / noise)),
+            'residual_background': float(np.std(smooth[background]) / np.median(cell_contrast)),
+            'core_fwhm_px': float(2 * below[0]),     # in 1-px radial bins: a coarse width
+            'n_cells': int(len(disc)), 'n_frames': int(n_frames)}
+
+
+def plot_preprocessing_grid(stage_root, out_path, crop=((180, 480), (150, 450))):
+    """The max projection of every preprocessing variant, rows ksize, columns wnd, one crop."""
+    (h0, h1), (w0, w1) = crop
+    fig, axes = plt.subplots(len(PREPROCESSING_KSIZES), len(PREPROCESSING_WNDS),
+                             figsize=(3.2 * len(PREPROCESSING_WNDS), 3.3 * len(PREPROCESSING_KSIZES)),
+                             squeeze=False)
+    for i, k in enumerate(PREPROCESSING_KSIZES):
+        for j, w in enumerate(PREPROCESSING_WNDS):
+            name = 'ksize_{}_wnd_{}'.format(k, w)
+            image = yr.open_minian_array(os.path.join(stage_root, name, mr.OUTPUT_NAME),
+                                         'max_proj').compute().values[h0:h1, w0:w1]
+            low, high = np.percentile(image, PROJECTION_PERCENTILES)
+            ax = axes[i, j]
+            ax.imshow(image, cmap='gray', vmin=low, vmax=high, interpolation='nearest')
+            ax.set_xticks([])
+            ax.set_yticks([])
+            ax.set_title('ksize {}, wnd {}'.format(k, w), fontsize=9)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=110)
+    plt.close(fig)
+    return out_path
+
+
+def plot_preprocessing_metrics(metrics, out_path):
+    """Each measurement against wnd, one line per ksize."""
+    columns = ('contrast_z', 'transient_snr', 'residual_background', 'core_fwhm_px')
+    fig, axes = plt.subplots(1, len(columns), figsize=(4.2 * len(columns), 3.4))
+    for ax, column in zip(axes, columns):
+        for k in PREPROCESSING_KSIZES:
+            part = metrics[metrics['ksize'] == k].sort_values('wnd')
+            ax.plot(part['wnd'], part[column], marker='o', label='ksize {}'.format(k))
+        ax.set_xlabel('background wnd (px)')
+        ax.set_title(column, fontsize=10)
+    axes[0].legend(fontsize=8, frameon=False)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=110)
+    plt.close(fig)
+    return out_path
