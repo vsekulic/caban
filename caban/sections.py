@@ -2048,12 +2048,14 @@ def run_figure2_composite(ds, cfg, rerun=()):
 # The redesign's placed panels and their sections; its unbuilt panels are boxes
 # (caban.figure2_composite.PENDING_V2). Add a letter here when its panel is built.
 FIGURE2_V2_PANEL_SECTIONS = {
-    'g': run_figure2_effect_profile,
-    'i': run_figure2_shock_events,
-    'h': run_figure2_example_events,
+    # In panel order, which is also the order they run in: h reads the contrast table f's section
+    # (run_paper_tfc_four_epochs) writes, so f must come first.
     'c': run_want_sample_traces_paper,
     'e': run_sp_rates_lmm,
-    'f': run_sp_rates_lmm,
+    'f': run_paper_tfc_four_epochs,
+    'g': run_figure2_effect_profile,
+    'h': run_figure2_example_events,
+    'i': run_figure2_shock_events,
 }
 
 

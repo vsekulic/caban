@@ -33,9 +33,10 @@ METHODS_FILENAME = 'figure2_effect_profile_methods.md'
 REFERENCE = 'mCherry'
 
 
-def trace_table(PLOTS_DIR, mice_per_group, epoch=TFC_TRACE_EPOCH):
-    """The primary model's per-animal values for one epoch (default the trace interval)."""
-    path = os.path.join(PLOTS_DIR, UNIFIED_TABLE)
+def trace_table(PLOTS_DIR, mice_per_group, epoch=TFC_TRACE_EPOCH, table=UNIFIED_TABLE):
+    """Per-animal values for one epoch (default the trace interval) from a paper-lane table (default
+    the three-epoch primary's)."""
+    path = os.path.join(PLOTS_DIR, table)
     if not os.path.isfile(path):
         raise FileNotFoundError(f'{path} not found: run run_sp_rates_lmm first.')
     df = pd.read_csv(path)

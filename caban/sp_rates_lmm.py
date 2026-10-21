@@ -4751,7 +4751,7 @@ def plot_paper_epoch_distributions(df_matched, mouse_epoch, contrasts, save_dir,
                                    filename_root='tfc_amplitude_rate_by_epoch',
                                    epoch_labels=None, contrasts_preamble=None,
                                    contrasts_title='Paper figure contrasts — unified mixed models',
-                                   no_star_note=None, figsize=None):
+                                   no_star_note=None, figsize=None, untested_epochs=()):
     """
     The paper-facing distribution figure: per-event amplitude (top) and population event rate
     (bottom) for each DREADD group, across the three exposure-matched TFC windows.
@@ -4818,7 +4818,11 @@ def plot_paper_epoch_distributions(df_matched, mouse_epoch, contrasts, save_dir,
                 for g in DREADD_DISPLAY_ORDER}
             _assert_markers_match_model(mouse_epoch, marker_col, mouse_values,
                                         f'{spec.key}/{epoch}', epoch)
-            stars = _paper_panel_star_pvalues(contrasts, spec.key, epoch)
+            # untested_epochs: drawn with no test, by declaration (Figure 2 v2 f: the tone, which the
+            # three-epoch primary model does not contain). Every other panel must have its two
+            # Holm-adjusted P-values, as before.
+            stars = ((np.nan, np.nan) if epoch in untested_epochs
+                     else _paper_panel_star_pvalues(contrasts, spec.key, epoch))
             panels[(r, c)] = _GridPanel(
                 key=f'{spec.key}/{epoch}', label=f'{spec.label} — {epoch}', df=sub,
                 col=col, yscale=display['yscale'], quantum=quantum,
@@ -5494,6 +5498,29 @@ def exposure_matched_event_table(mice_per_group, TFC_cond, epochs, mapping='full
     return df_fine[keep], coverage
 
 
+FIGURE2_V2_CONTRASTS_CSV = os.path.join('sp_rates_lmm', 'paper', 'figure2_v2', 'figure2_v2_contrasts.csv')
+FIGURE2_V2_STAR_NOTE = (
+    'Asterisks are the three-epoch PRIMARY model\'s within-epoch Holm-adjusted contrasts (pre-tone, '
+    'trace, post-shock). The tone is drawn without a test: the primary model does not contain it; its '
+    'estimates here are the four-epoch model\'s (post hoc, supplement) and carry no P-value.')
+
+
+def figure2_v2_contrasts(PLOTS_DIR, four_epoch_contrasts):
+    """The contrasts Figure 2 v2 annotates: the three-epoch primary model's rows for its epochs,
+    and the four-epoch model's tone rows with every P-value removed (the tone is untested there)."""
+    path = os.path.join(PLOTS_DIR, UNIFIED_CONTRASTS_CSV)
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f'{path} not found: run run_sp_rates_lmm first.')
+    primary = pd.read_csv(path)
+    tone = four_epoch_contrasts[four_epoch_contrasts['epoch'] == 'tone'].copy()
+    for col in [c for c in tone.columns if c.startswith('p_') or c.endswith('_reject')]:
+        tone[col] = np.nan if col.startswith('p_') else False
+    out = pd.concat([primary, tone[[c for c in primary.columns if c in tone.columns]]],
+                    ignore_index=True)
+    out['source'] = np.where(out['epoch'] == 'tone', 'four-epoch model, untested', 'three-epoch primary')
+    return out
+
+
 def run_paper_tfc_four_epochs(PLOTS_DIR, mice_per_group, TFC_cond, mapping='full', thres=None,
                               distribution_figsize=None):
     """The primary conditioning model with the tone added as a fourth epoch (plans/
@@ -5508,6 +5535,18 @@ def run_paper_tfc_four_epochs(PLOTS_DIR, mice_per_group, TFC_cond, mapping='full
                                           distribution_figsize=distribution_figsize)
     stats_dir = os.path.join(res['paper_dir'], 'stats')
     write_text(os.path.join(stats_dir, 'matched_trial_coverage.csv'), coverage.to_csv(index=False))
+
+    # Figure 2 v2 f (VS, 2026-10-21, option 1): the four epochs drawn, the stars the three-epoch
+    # PRIMARY model's; the tone drawn without a test.
+    combined = figure2_v2_contrasts(PLOTS_DIR, res['contrasts'])
+    v2_dir = os.path.join(PLOTS_DIR, FIGURE2_V2_CONTRASTS_CSV.rsplit(os.sep, 1)[0])
+    ensure_dirs(v2_dir)
+    combined.to_csv(os.path.join(PLOTS_DIR, FIGURE2_V2_CONTRASTS_CSV), index=False)
+    plot_paper_epoch_distributions(
+        df_grid[df_grid['epoch'].isin(TFC_FOUR_EPOCHS)], res['mouse_epoch'], combined, v2_dir,
+        epochs=TFC_FOUR_EPOCHS, figsize=distribution_figsize, untested_epochs=('tone',),
+        contrasts_title='Figure 2 v2 f — the three-epoch primary model; tone untested',
+        no_star_note=FIGURE2_V2_STAR_NOTE)
     three_path = os.path.join(PLOTS_DIR, UNIFIED_CONTRASTS_CSV)
     if not os.path.isfile(three_path):
         raise FileNotFoundError(f'{three_path} not found: run run_sp_rates_lmm (the three-epoch '

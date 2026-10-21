@@ -35,8 +35,8 @@ from caban.decoder import _copy_analysis_methods_template
 from caban.nature_comm_style import nature_style, save_paper_panel, box_strip, LINE_PT, FONT_PT
 from caban.single_unit_common import annotate_pairwise_brackets
 from caban.figure2_composite import panel_figsize, LAYOUT_V2_MM
-from caban.sp_rates_lmm import (build_run_structure_table, tfc_epoch_frames_fn, paper_contrast,
-                                _precomputed_stat_fn, TFC_MATCHED_PROFILE_EPOCHS)
+from caban.sp_rates_lmm import (build_run_structure_table, tfc_epoch_frames_fn, _precomputed_stat_fn,
+                                TFC_FOUR_EPOCHS, FOUR_EPOCH_SUBDIR, FIGURE2_V2_CONTRASTS_CSV)
 from caban.figure2_effect_profile import trace_table
 from caban.epoch_modulation import _unit_id_rows
 
@@ -46,8 +46,11 @@ PANEL_ROOT = 'group_mean_event_waveform'          # the Figure 2 v2 h file
 PANEL_SIGNAL = 'C'                                # VS, 2026-10-21; 'YrA' is the less-modelled option
 WINDOWS_S = {'S': (1.0, 1.0), 'C': (1.0, 3.0), 'YrA': (1.0, 3.0)}   # (before, after) the S peak
 BASELINE_S = (-1.0, -0.5)
-PANEL_EPOCHS = TFC_MATCHED_PROFILE_EPOCHS        # pre_tone_matched, trace, post_shock: f's windows
-EPOCH_TITLES = {'pre_tone_matched': 'Pre-tone', 'trace': 'Trace', 'post_shock': 'Post-shock'}
+PANEL_EPOCHS = TFC_FOUR_EPOCHS                   # f's windows, the tone included (VS, 2026-10-21)
+UNTESTED_EPOCHS = ('tone',)                      # not in the three-epoch primary model: no stars
+EPOCH_TITLES = {'pre_tone_matched': 'Pre-tone', 'tone': 'Tone', 'trace': 'Trace', 'post_shock': 'Post-shock'}
+FOUR_EPOCH_TABLE = os.path.join('sp_rates_lmm', 'paper', FOUR_EPOCH_SUBDIR, 'stats',
+                                'unified_lmm_mouse_epoch_values.csv')
 YLABEL = {'S': 'Deconvolved activity S (a.u.)', 'C': 'Calcium C (a.u., baseline-subtracted)',
           'YrA': 'Residual YrA (a.u., baseline-subtracted)'}
 
@@ -126,10 +129,10 @@ def plot_panel(by_epoch, t, signal, contrasts, values_by_epoch, out_root):
                                                     'mouse_mean_log_amplitude'].to_numpy()
                       for g in DREADD_DISPLAY_ORDER}
             box_strip(axb, values, DREADD_DISPLAY_ORDER, GROUP_COLOURS, labels=GROUP_LABELS, point_size=4)
-            c = contrasts[epoch]
-            annotate_pairwise_brackets(axb, values, DREADD_DISPLAY_ORDER,
-                                       _precomputed_stat_fn(c['hM3D']['p_holm'], c['hM4D']['p_holm']),
-                                       fs=FONT_PT)
+            if epoch not in UNTESTED_EPOCHS:
+                c = contrasts[epoch]
+                annotate_pairwise_brackets(axb, values, DREADD_DISPLAY_ORDER,
+                                           _precomputed_stat_fn(c['hM3D'], c['hM4D']), fs=FONT_PT)
         axs[0, 0].set_ylabel(YLABEL[signal].split(' (')[0] + ' (a.u.)')
         axs[1, 0].set_ylabel('Log amplitude')
         axs[0, -1].legend(loc='upper right', handlelength=0.8, borderaxespad=0.1)
@@ -163,6 +166,23 @@ def plot_signal_diagnostics(per_group, t, table, signal, epoch, out_dir):
     plt.close(fig)
 
 
+def _figure2_v2_amplitude_p(PLOTS_DIR):
+    """{epoch: {group: Holm-adjusted P}} for the tested epochs, from Figure 2 v2's contrast table (the
+    three-epoch primary's; written by sp_rates_lmm.run_paper_tfc_four_epochs)."""
+    path = os.path.join(PLOTS_DIR, FIGURE2_V2_CONTRASTS_CSV)
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f'{path} not found: run run_paper_tfc_four_epochs first.')
+    df = pd.read_csv(path)
+    df = df[df['outcome'] == 'amplitude']
+    out = {}
+    for e in PANEL_EPOCHS:
+        if e in UNTESTED_EPOCHS:
+            continue
+        rows = df[df['epoch'] == e].set_index('group')['p_holm_epoch']
+        out[e] = {g: float(rows[g]) for g in ('hM3D', 'hM4D')}
+    return out
+
+
 def draw_event_waveforms(PLOTS_DIR, mice_per_group, TFC_cond, mapping='full', thres=None):
     """All three signals' tables and diagnostics per epoch, and the Figure 2 v2 h panel from
     PANEL_SIGNAL."""
@@ -171,9 +191,9 @@ def draw_event_waveforms(PLOTS_DIR, mice_per_group, TFC_cond, mapping='full', th
     _copy_analysis_methods_template(METHODS_FILENAME, out_dir)
     df_runs = build_run_structure_table(mice_per_group, TFC_cond, PANEL_EPOCHS, tfc_epoch_frames_fn(),
                                         mapping=mapping, thres=thres)
-    contrasts = {e: {g: paper_contrast(PLOTS_DIR, 'amplitude', e, g) for g in ('hM3D', 'hM4D')}
-                 for e in PANEL_EPOCHS}
-    values_by_epoch = {e: trace_table(PLOTS_DIR, mice_per_group, epoch=e) for e in PANEL_EPOCHS}
+    contrasts = _figure2_v2_amplitude_p(PLOTS_DIR)
+    values_by_epoch = {e: trace_table(PLOTS_DIR, mice_per_group, epoch=e, table=FOUR_EPOCH_TABLE)
+                       for e in PANEL_EPOCHS}
     tables, panel_curves, t_panel = [], {}, None
     for signal in WINDOWS_S:
         for epoch in PANEL_EPOCHS:
