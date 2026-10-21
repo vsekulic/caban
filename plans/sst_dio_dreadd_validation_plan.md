@@ -279,6 +279,56 @@ on the Razer (`adj_corr` returns the all-zero matrix when the overlap graph has 
 record this fork commit in `run.json`; G13's HC0 (`SESSIONS_NOT_RUN`, the same failure) could now
 run, if VS wants it.
 
+### 6.1 The staged walk (VS, 2026-10-22)
+
+VS: the one-at-a-time grid conflates stages (a step-1 change is only seen after every later step
+has reacted to it), and deciding each value against the frozen set ignores that the steps build on
+each other. So the pipeline is walked one stage at a time, as in the Minian notebook: each stage's
+grid stops right after the stage (`STAGE_CUT_AFTER`), is judged at the stage's own output, and VS's
+decision (`DECIDED_OVERRIDES`, the parameter log) is carried into the next stage's grid. Claude
+gives its own recommendation per stage, **in bold**. The one-at-a-time grid stays as a
+sensitivity map. Runs: `scripts/sst_dio_parameter_stage.py`, output
+`~/sst_dio_out/parameter_stages/G27_HC2/<stage>/` (Razer); figures in
+`plots/CURRENT/sst_dio_validation/parameter_check/stage_<stage>_G27/`.
+
+**Stage 1: preprocessing** (denoise median `ksize` 3/5/7 × tophat `wnd` 10/15/20/25/30, runs to
+`max_proj` after motion correction). Measured on the same 52 reference cells (the merge 0.7
+run's units) for every variant: contrast in `max_proj` (cell disc − ring, in background s.d.),
+transient SNR (disc − ring trace of `Y_fm_chk`, 99.9th-percentile excursion over the frame-
+difference noise), residual background (s.d. of the smoothed `max_proj` away from cells, relative
+to cell contrast), core width (radial profile, 1-px bins: coarse). Cell size for reference: cores
+~10 px at half peak, ~16 px (largest ~21) at 20 % of peak.
+
+| | wnd 10 | 15 | 20 | 25 | 30 |
+|---|---|---|---|---|---|
+| ksize 3: contrast / SNR / residual | 3.07 / 5.23 / 0.190 | 3.36 / 6.10 / 0.185 | 3.36 / 6.10 / 0.194 | 3.24 / 6.34 / 0.210 | 3.17 / 6.32 / 0.223 |
+| ksize 5 | 4.72 / 5.67 / 0.100 | 4.99 / 6.38 / 0.109 | **4.89 / 6.74 / 0.124** | 4.61 / 6.59 / 0.143 | 4.53 / 6.71 / 0.157 |
+| ksize 7 | 5.12 / 5.98 / 0.083 | 4.93 / 6.65 / 0.111 | 5.23 / 6.82 / 0.121 | 5.05 / 6.91 / 0.136 | 4.75 / 6.81 / 0.154 |
+
+Core width 10 px at wnd 10 (ksize 5, 7), 12 px elsewhere. By eye (`max_proj_grid.png`): ksize 3 is
+grainy; wnd 25–30 leave a diffuse band (neuropil/processes, top right) that invites false seeds,
+faint at 20, mostly gone at 15; wnd 10 shrinks the cells; ksize 7 makes cells blobbier and brings
+out processes.
+
+**Claude's recommendation: ksize 5, wnd 20.** `wnd`: Minian sizes the tophat window to the largest
+expected cell; SST cells here reach ~19–21 px at 20 % of peak, so 15 trims the largest ones. Transient
+SNR rises to wnd 20 and then plateaus (6.38 → 6.74, +6 %), while contrast barely moves (−2 %) and the
+residual background grows steadily beyond 20 (the band). `ksize`: 3 is clearly worse (contrast −33 %,
+residual ×1.7); 7 gains only 1–4 % SNR over 5 at the cost of spatial blur, which matters where SST
+cells sit within ~10 px of each other, and 5 keeps the main cohort's denoising. Close second:
+ksize 5, wnd 15 (the frozen values; best contrast, least residual, identical preprocessing to the
+main cohort).
+
+Run note: one variant (`ksize_7_wnd_10`) failed under load when ffmpeg returned 1001 frames for one
+`.avi` (`dup=2`); the retried task carried on with a half-written `varr` (4857 of 6157 frames
+wrong, in 50-frame chunks). Its record said `failed`, but the first stage script measured it anyway;
+fixed (only finished variants are measured, failed ones listed by name), the attempt kept in
+`failed_attempts/`, re-run alone: raw movie identical to a clean single-process decode, as are all
+14 others. Unloaded, ffmpeg decodes that file to the same 1000 frames every time (identical to
+`-fps_mode passthrough`). Production is guarded: the runner's YrA replay compares every frame with
+the notebook's movie and hard-fails on any difference (all 520 batch sessions passed). Possible
+hardening for VS: `-fps_mode passthrough` in Minian's `load_avi_ffmpeg` (the fork).
+
 **Decision with VS.** Accept the frozen set, or a documented per-cohort set. If parameters
 change, the runner needs an override mechanism (additive: a named set applied as assignments after
 the template's last assignment of each key, recorded in `run.json`, the README and
