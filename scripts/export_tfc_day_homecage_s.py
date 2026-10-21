@@ -13,7 +13,7 @@ output is written to ``<out_dir>/<mouse>__<day>__<session>.npz`` holding
     imaged     (rows,) bool, session_queue.imaged_timestamp_rows
 
 S must have exactly one frame per imaged timestamp row, or the export fails. A recording in
-session_queue.SESSIONS_NOT_RUN is reported with its reason, not exported.
+session_queue.SESSIONS_NOT_RUN or PARTIAL_OUTPUT_NO_S is reported with its reason, not exported.
 """
 
 import glob
@@ -27,6 +27,14 @@ import pandas as pd
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from caban import session_queue as sq
 from caban import yra_recompute as yr
+
+# Recordings whose Minian output is an old partial run with no S, listed by name so any OTHER missing S
+# still fails. Reported on every export.
+PARTIAL_OUTPUT_NO_S = {
+    'G09-ST702_mCherry/2021_11_08-TFC_cond/19_28_33-HC3':
+        'old partial output (no S, all-NaN motion), never rerun; after conditioning; VS to decide '
+        '(minian_batch_status.md, open items 10)',
+}
 
 HOMECAGE_LABEL = re.compile(r'^\d\d_\d\d_\d\d-(HC\d+|CNO\d?)$')
 MICE = [f'G{i:02d}' for i in range(5, 22)]
@@ -50,6 +58,9 @@ def main(data_root, out_dir):
         tail = sq.session_tail(session_dir)
         if tail in sq.SESSIONS_NOT_RUN:
             print(f'{tail}: not exported -- {sq.SESSIONS_NOT_RUN[tail]}')
+            continue
+        if tail in PARTIAL_OUTPUT_NO_S:
+            print(f'{tail}: not exported -- {PARTIAL_OUTPUT_NO_S[tail]}')
             continue
         minian_dir = os.path.join(session_dir, 'Miniscope', 'minian')
         if not os.path.isdir(minian_dir):
