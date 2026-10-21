@@ -1,11 +1,11 @@
 """SST DIO-GCaMP6f mice: the DREADDs validated on the SST cells themselves (Figure 2 v2, d).
 
 plans/sst_dio_dreadd_validation_plan.md. GCaMP6f is Cre-dependent in SST-Cre mice, so the imaged
-cells are the DREADD-expressing SST cells. This module holds the parameter-gate diagnostics first;
+cells are the DREADD-expressing SST cells. This module holds the parameter-check diagnostics first;
 the analysis follows once the plan's §8 is fixed.
 
 Raw projections (:func:`raw_projections`) are computed from the session's .avi files directly,
-before any Minian step, so the four fields of view can be compared before the gate runs.
+before any Minian step, so the four fields of view can be compared before the baseline Minian runs.
 """
 
 import glob
@@ -28,18 +28,18 @@ CONDITIONING_DAYS = {
     'G22': '2023_03_20-TFC_cond', 'G23': '2023_03_20-TFC_cond',
     'G26': '2023_05_22-TFC_cond', 'G27': '2023_05_22-TFC_cond',
 }
-# The parameter gate's sessions (plan §6): HC2 of the conditioning day, the last pre-injection homecage.
-GATE_SESSIONS = {
+# The parameter check's sessions (plan §6): HC2 of the conditioning day, the last pre-injection homecage.
+PARAMETER_CHECK_SESSIONS = {
     'G22': '14_15_20-HC2', 'G23': '16_26_10-HC2', 'G26': '13_23_16-HC2', 'G27': '15_21_41-HC2',
 }
 OUT_DIRNAME = 'sst_dio_validation'
 PROJECTION_PERCENTILES = (0.5, 99.5)   # display range of each projection image
 
 
-def gate_session_dir(data_root, mouse):
+def parameter_check_session_dir(data_root, mouse):
     """``<data_root>/<mouse dir>/<conditioning day>/<HC2>`` for one DIO mouse."""
     return os.path.join(data_root, SST_DIO_MOUSE_DIRS[mouse], CONDITIONING_DAYS[mouse],
-                        GATE_SESSIONS[mouse])
+                        PARAMETER_CHECK_SESSIONS[mouse])
 
 
 def session_videos(session_dir):

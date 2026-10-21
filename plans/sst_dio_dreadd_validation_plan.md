@@ -118,7 +118,7 @@ Minutes from the start of the first CNO recording (folder times; durations from 
 
 ## 3. Open questions — status 2026-10-21
 
-1. **CNMF-E parameters** — the gate (§6) decides; frozen set first.
+1. **CNMF-E parameters** — the parameter check (§6) decides; frozen set first.
 2. **The primary comparison** — proposed in §8, to settle with VS, then `statistics-checker`.
 3. **No DIO-mCherry control** — the HC1 → HC2 drift is the only bound on time/handling; §8 uses
    it explicitly as the reference change, and the write-up says so.
@@ -132,17 +132,17 @@ Minutes from the start of the first CNO recording (folder times; durations from 
 
 ## 4. Deliverables
 
-- `caban/sst_dio_validation.py` (gate diagnostics, recording table, events, analysis, panel) and
+- `caban/sst_dio_validation.py` (parameter-check diagnostics, recording table, events, analysis, panel) and
   `notebooks/sst_dio_validation.ipynb`; a `scripts/run_sst_dio_validation.py` for the Razer, in the
   style of `scripts/run_homecage_cno.py`.
 - `analysis_methods_templates/sst_dio_validation_methods.md`, copied into the plot folder.
-- Plots under `plots/CURRENT/sst_dio_validation/` (rsynced from the Razer); a gate report in
-  `reports/sst_dio_parameter_gate.md`.
+- Plots under `plots/CURRENT/sst_dio_validation/` (rsynced from the Razer); a parameter-check report in
+  `reports/sst_dio_parameter_check.md`.
 - Panel d at its box size (123 × 36.8 mm), path handed to VS for the main chat (§10).
 
 ## 5. Code change first: scope and labels (small, additive, on this branch)
 
-`discover_sessions` keeps only `MOUSE_RANGE = ("G05", "G21")`, so even a `--path` gate run on
+`discover_sessions` keeps only `MOUSE_RANGE = ("G05", "G21")`, so even a `--path` run on
 G22 fails with "not found among … scanned sessions". Change, in `caban/minian_runner.py`:
 
 ```python
@@ -158,25 +158,25 @@ DIO mice must already be done or the next `--by-day` would pick them up. Say so 
 message. In `caban/session_queue.py`: the focal-sweep folders into `SESSIONS_NOT_RUN` (after VS
 decides). Both changes verified by `--dry-run` on the Razer clone.
 
-## 6. Stage: the parameter gate (Razer, own clone `~/code/caban_sst`)
+## 6. Stage: the parameter check (Razer, own clone `~/code/caban_sst`)
 
 **Run.** HC2 of each mouse's conditioning day (pre-injection, ~5 min, ~6000 frames; four runs),
 frozen parameters, `--keep-scratch` so seeds and every intermediate stay:
 
 ```
-~/bin/logrun "sst gate HC2" python scripts/run_minian_batch.py --keep-scratch --path \
+~/bin/logrun "sst: baseline (frozen parameters, HC2 x4)" python scripts/run_minian_batch.py --keep-scratch --path \
   G22-ST875-hM3D-DIOGC/2023_03_20-TFC_cond/14_15_20-HC2 \
   G23-ST856-hM3D-DIOGC/2023_03_20-TFC_cond/16_26_10-HC2 \
   G26-ST894-hM4D-DIOGC/2023_05_22-TFC_cond/13_23_16-HC2 \
   G27-ST895-hM4D-DIOGC/2023_05_22-TFC_cond/15_21_41-HC2
 ```
 
-in `screen -S sst_gate`, after `--dry-run`. Output lands in the session folders like any runner
-run; not synced to MINISCOPE until the gate is accepted.
+in `screen -S sst_gate` (named before VS's no-"gate" rule), after `--dry-run`. Output lands in the session folders like any runner
+run; not synced to MINISCOPE until the parameters are decided.
 
 **Inspect** (new diagnostics in `caban/sst_dio_validation.py`, beside the runner's own
-`summary_*.png`; there is no reference run, so this is an inspection gate, not
-`caban.minian_gate`'s reproduction gate):
+`summary_*.png`; there is no reference run, so this is an inspection, not
+`caban.minian_gate`'s reproduction check):
 - `max_proj` with seeds (initial, after PNR/KS refine, after merge) and final footprints outlined,
   numbered;
 - unit count; footprint area and equivalent diameter (px) against what an SST soma should span;
@@ -192,11 +192,11 @@ upstream of the one varied), starting with the cell-size-linked values (`wnd` 15
 spatial/temporal `sparse_penal` and the merge `thres_corr`. VS judges them in an interactive review
 notebook on the Razer's Jupyter (its own `screen sst_jupyter`, own port, SSH tunnel): per stage, a
 widget flips between grid values on the same field (seeds or footprints over `max_proj`, traces),
-with the baseline beside it. Every checkpoint also writes a PNG to the gate folder so Claude sees
-what VS sees. Decisions go into a gate log (stage, values tried, value chosen, why). One mouse in
+with the baseline beside it. Every checkpoint also writes a PNG to the parameter-check folder so Claude sees
+what VS sees. Decisions go into a parameter log (stage, values tried, value chosen, why). One mouse in
 full, then the chosen set headless on the other three and a shorter review.
 
-**Raw projections (2026-10-21, `plots/CURRENT/sst_dio_validation/gate/gate_projections.png`):**
+**Raw projections (2026-10-21, `plots/CURRENT/sst_dio_validation/parameter_check/raw_projections_HC2.png`):**
 G27 has the most cells (~30) and the cleanest field; G26 ~15, a few elongated; G22 and G23 under
 ~10 each. G22's max − mean shows **horizontal line artefacts**: whole bright rows in some frames,
 which would seed false units unless handled; G22 and G23 also have bright out-of-focus discs
@@ -205,8 +205,8 @@ which would seed false units unless handled; G22 and G23 also have bright out-of
 **Decision with VS.** Accept the frozen set, or a documented per-cohort set. If parameters
 change, the runner needs an override mechanism (additive: a named set applied as assignments after
 the template's last assignment of each key, recorded in `run.json`, the README and
-`parameters.json`, which is read back from the kernel). Not built unless the gate needs it.
-Gate runs with the frozen set that are superseded are set aside by the runner (`-ORIG`), not
+`parameters.json`, which is read back from the kernel). Not built unless the check needs it.
+Baseline runs with the frozen set that are superseded are set aside by the runner (`-ORIG`), not
 deleted.
 
 ## 7. Stage: the queue
@@ -223,7 +223,7 @@ tests) only if a later question needs them.
 
 **Pencilled in by VS (2026-10-21), until the lab notebooks are back:** pre = **HC1**, post = the
 **CNO** recording — VS recorded it as a short (5–8 min) post-injection snapshot before LT2.
-Open for G26/G27: CNO1 (right after the injection, per G26's `notes.txt`) or CNO2 (+15 min). The
+For G26/G27 (two CNO recordings), post = **CNO2** (+15 min; VS). The
 proposals below are superseded where they differ.
 
 - **Recordings:** the homecage recordings of the conditioning day. Pre = HC2 (the last before the
@@ -260,11 +260,13 @@ redesign called unpersuasive). Three options:
   table) and one CNMF-E fit spanning ~1 h of a single mount.
 
 **Recommendation:** A first (it comes free with §7 and gives the time course), C for the
-within-cell claim; B only if C fails. Decide after the gate.
+within-cell claim; B only if C fails. Decide after the parameter check.
 
 ### 8.3 Inference
 
-n = 2 animals per DREADD and no control: no group-level test. Per animal, cell-level: change
+n = 2 animals per DREADD and no control: no group-level test. VS (2026-10-21): an hM3D vs hM4D
+pilot comparison (2 vs 2) is wanted beside the per-animal display — descriptive, effect sizes
+with every animal shown, stated as a pilot. Per animal, cell-level: change
 post vs pre against the same cells' HC1 → HC2 change (a Poisson/NB model of event counts with
 recording duration as offset and cell as random effect, per animal, is the candidate — to be
 specified with `statistics-checker`). Shown per cell and per animal; the expected sign (hM3D up,
@@ -296,7 +298,7 @@ per-cell pre/post strips. Drafted after §8 is fixed; the layout is a proposal f
 
 1. VS: the focal-sweep folders — leave unrun, listed in `SESSIONS_NOT_RUN` (recommended), or run.
 2. Code (§5) on this branch; Razer clone `~/code/caban_sst`; dry-run.
-3. Gate runs (§6, ~4 h), diagnostics, gate report → VS decides parameters.
+3. Baseline runs (§6, ~4 h), parameter grids, review with VS → VS decides parameters.
 4. Queue (§7) → analysis A, while C is built if VS agrees (§8.2).
 5. VS / lab notebook: injection times for G22/G23; G22's TFC1/TFC2 split.
 6. §8 pre-specified, `statistics-checker`, run, `scientific-code-reviewer`, panel d (§9).
