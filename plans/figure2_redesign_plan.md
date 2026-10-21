@@ -250,3 +250,26 @@ here. The trace-interval amplitude (hM3D) and rate (hM4D) effects are present du
 the shock response is measured in five trials from 5–6 animals per group in the population-average
 activity, which is blind to which cells respond. A null at the shock is therefore consistent with
 the behaviour; it is not evidence against it, and it does not oblige a significant shock panel.
+
+## 12. Two checks, pre-specified 2026-10-21 before either was computed (VS: "check")
+
+Both are reported whatever they show, beside the existing analyses, which stay the baseline (§7.1:
+the claim is (a), two separate effects).
+
+**12.1 Effect-profile test (the dissociation, version (b)).** Data: the primary model's own per-animal
+trace-interval values (`sp_rates_lmm/paper/tfc_amplitude_rate/stats/unified_lmm_mouse_epoch_values.csv`:
+`mouse_mean_log_amplitude`, `log_population_rate`). Per measure, each animal's value minus the
+control mean, divided by the pooled within-group SD (all three groups). Per animal:
+A = standardized amplitude effect (positive = up, the hM3D prediction); R = minus the standardized
+rate effect (positive = down, the hM4D prediction); profile index P = A − R. Prediction: P > 0 in
+hM3D, P < 0 in hM4D. Test: hM3D vs hM4D on P, Welch two-sided, with the exact pairwise mouse-label
+randomization (462 relabellings); one test, no family. Control animals are shown, not tested.
+Descriptive: the (A, R) plane, one point per animal (the planned panel g(i)).
+
+**12.2 Fraction active weighted by cell count.** Data: per-animal trace-interval `n_active_cells` and
+`n_cells` (same table). Model: binomial GLM of active/total cells per animal on group (reference
+mCherry), dispersion estimated from Pearson χ² (quasi-binomial), so each animal is weighted by its
+cell count and between-animal overdispersion widens the intervals. Contrasts Exc − Ctl and Inh − Ctl
+(odds ratios, 95% CI), Holm across the two; the exact pairwise mouse-label randomization of the
+cell-weighted proportion difference beside each. Every animal included (G13: 89 cells). Reported
+next to the existing unweighted Welch test on animal fractions, which is unchanged.
