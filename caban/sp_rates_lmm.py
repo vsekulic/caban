@@ -9635,33 +9635,66 @@ def plot_example_traces(sessions, df_trace_amp, save_dir, mapping='full', thres=
     _save_panel(fig, save_dir, filename_root)
 
 
-GROUP_MEDIAN_EXAMPLES_ROOT = 'group_median_examples_vertical'
+MEAN_EVENT_WAVEFORM_ROOT = 'group_mean_event_waveform'
+EVENT_WAVEFORM_HALF_S = 1.0
 
 
-def plot_group_median_examples(sessions, df_runs_trace, save_dir, mapping='full', thres=None):
-    """Figure 2 v2 h: each group's own median trace-interval event, common scale, at h's box size."""
-    plot_width_vs_height_matched_examples(sessions, df_runs_trace, save_dir, mapping=mapping,
-                                          thres=thres, orientation='vertical',
-                                          filename_root=GROUP_MEDIAN_EXAMPLES_ROOT,
-                                          selection='group_median_amplitude',
-                                          figsize=panel_figsize('h', LAYOUT_V2_MM))
+def plot_group_mean_event_waveform(sessions, df_runs_trace, save_dir, mapping='full'):
+    """Figure 2 v2 h: each group's average trace-interval event (VS, 2026-10-21; plan §10).
+
+    Per animal, every trace-interval event's S segment from -EVENT_WAVEFORM_HALF_S to
+    +EVENT_WAVEFORM_HALF_S around its peak frame, averaged over all of that animal's events; then mean
+    +/- s.e.m. across animals per group, on one axis. Nothing is selected: unlike a single example,
+    the curve is every event of every animal.
+    """
+    half = int(round(EVENT_WAVEFORM_HALF_S * MINISCOPE_FPS))
+    t = np.arange(-half, half + 1) / MINISCOPE_FPS
+    per_group = {}
+    for group in DREADD_DISPLAY_ORDER:
+        rows = []
+        gsub = df_runs_trace[df_runs_trace['group'] == group]
+        if gsub.empty:
+            raise RuntimeError(f'plot_group_mean_event_waveform: no runs for group {group!r}.')
+        for mouse, msub in gsub.groupby('mouse', sort=True):
+            _S, _Ss, _Sp, S_idx = sessions[mouse].get_S_mapping(mapping)
+            row_of = {c: i for i, c in enumerate(S_idx)}
+            S = sessions[mouse].S
+            segs = []
+            for cell, peak in zip(msub['cell'], msub['peak_frame'].astype(int)):
+                lo, hi = peak - half, peak + half + 1
+                if lo < 0 or hi > S.shape[1]:
+                    raise RuntimeError(f'plot_group_mean_event_waveform: {mouse} event at frame {peak} '
+                                       f'is within {EVENT_WAVEFORM_HALF_S} s of the recording edge.')
+                segs.append(S[row_of[cell], lo:hi])
+            rows.append(np.mean(segs, axis=0))
+        per_group[group] = np.vstack(rows)
+    with nature_style():
+        fig, ax = plt.subplots(figsize=panel_figsize('h', LAYOUT_V2_MM), layout='constrained')
+        for group, mat in per_group.items():
+            mu = mat.mean(axis=0)
+            sem = mat.std(axis=0, ddof=1) / np.sqrt(mat.shape[0])
+            ax.plot(t, mu, color=GROUP_COLOURS[group], lw=LINE_PT, label=GROUP_LABELS[group])
+            ax.fill_between(t, mu - sem, mu + sem, color=GROUP_COLOURS[group], alpha=0.2, lw=0)
+        ax.set_xlabel('Time from event peak (s)')
+        ax.set_ylabel('Activity (a.u.)')
+        ax.legend(loc='upper right', handlelength=1.0)
+        _save_panel(fig, save_dir, MEAN_EVENT_WAVEFORM_ROOT)
 
 
-def draw_group_median_examples(PLOTS_DIR, mice_per_group, TFC_cond, mapping='full', thres=None):
+def draw_group_mean_event_waveform(PLOTS_DIR, mice_per_group, TFC_cond, mapping='full', thres=None):
     """The h panel alone, without the rest of run_sp_rates_lmm: the trace-interval run table from the
     same detector and windows (build_run_structure_table, tfc_epoch_frames_fn), then the panel, into
     <PLOTS_DIR>/sp_rates_lmm/TFC_cond/."""
     df_runs = build_run_structure_table(mice_per_group, TFC_cond, (TFC_TRACE_EPOCH,),
                                         tfc_epoch_frames_fn(), mapping=mapping, thres=thres)
-    plot_group_median_examples(TFC_cond, df_runs, os.path.join(PLOTS_DIR, 'sp_rates_lmm', 'TFC_cond'),
-                               mapping=mapping, thres=thres)
+    plot_group_mean_event_waveform(TFC_cond, df_runs, os.path.join(PLOTS_DIR, 'sp_rates_lmm', 'TFC_cond'),
+                                   mapping=mapping)
 
 
 def plot_width_vs_height_matched_examples(sessions, df_runs_trace, save_dir, mapping='full',
                                           thres=None, target_height_percentile=50,
                                           orientation='horizontal',
-                                          filename_root='width_height_matched_examples',
-                                          selection='pooled_peak_height', figsize=None):
+                                          filename_root='width_height_matched_examples'):
     """
     Plan section 5c's last bullet: one run per group, each matched to the SAME target peak
     HEIGHT (the `target_height_percentile`-th percentile of run peak height POOLED across all
@@ -9676,21 +9709,11 @@ def plot_width_vs_height_matched_examples(sessions, df_runs_trace, save_dir, map
 
     orientation : 'horizontal' (groups side by side) or 'vertical' (groups stacked in rows,
                   for narrow figure slots).
-    selection   : 'pooled_peak_height' (above: every group matched to one pooled peak height) or
-                  'group_median_amplitude' (Figure 2 v2 h, VS 2026-10-21): per group, the run whose
-                  per-event amplitude (the run integral, the paper's measure) is closest to that
-                  GROUP'S OWN median, on a common y-scale -- so the examples show the groups'
-                  typical events as they differ, not equalised.
-    figsize     : overrides the vertical panel size (default: Figure 2 f's box).
     """
-    if selection not in ('pooled_peak_height', 'group_median_amplitude'):
-        raise ValueError(f"plot_width_vs_height_matched_examples: selection must be "
-                         f"'pooled_peak_height' or 'group_median_amplitude', got {selection!r}.")
     if orientation not in ('horizontal', 'vertical'):
         raise ValueError(f"plot_width_vs_height_matched_examples: orientation must be "
                          f"'horizontal' or 'vertical', got {orientation!r}.")
     target = np.percentile(df_runs_trace['peak_height'], target_height_percentile)
-    common_scale = selection == 'group_median_amplitude'
     with nature_style():
         n = len(DREADD_DISPLAY_ORDER)
         if orientation == 'horizontal':
@@ -9698,18 +9721,15 @@ def plot_width_vs_height_matched_examples(sessions, df_runs_trace, save_dir, map
             axs = axs[0]
         else:
             # Figure 2f, drawn at its size in the composite.
-            fig, axs = plt.subplots(n, 1, figsize=figsize or panel_figsize('f'), squeeze=False,
-                                    sharex=True, sharey=common_scale, layout='constrained')
+            fig, axs = plt.subplots(n, 1, figsize=panel_figsize('f'), squeeze=False, sharex=True,
+                                    layout='constrained')
             axs = axs[:, 0]
 
         for ax, group in zip(axs, DREADD_DISPLAY_ORDER):
             gsub = df_runs_trace[df_runs_trace['group'] == group].sort_values(['mouse', 'cell', 'trial'])
             if gsub.empty:
                 raise RuntimeError(f'plot_width_vs_height_matched_examples: no runs for group {group!r}.')
-            if common_scale:
-                idx = (gsub['amplitude'] - gsub['amplitude'].median()).abs().idxmin()
-            else:
-                idx = (gsub['peak_height'] - target).abs().idxmin()
+            idx = (gsub['peak_height'] - target).abs().idxmin()
             sel = gsub.loc[idx]
             mouse, cell_id = sel['mouse'], sel['cell']
             session = sessions[mouse]
@@ -10144,7 +10164,7 @@ def run_sp_rates_lmm(PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond
     plot_width_vs_height_matched_examples(TFC_cond, df_runs_trace, out_dir, mapping=mapping, thres=thres,
                                          orientation='vertical',
                                          filename_root='width_height_matched_examples_vertical')
-    plot_group_median_examples(TFC_cond, df_runs_trace, out_dir, mapping=mapping, thres=thres)
+    plot_group_mean_event_waveform(TFC_cond, df_runs_trace, out_dir, mapping=mapping)
 
     # ---- Secondary: Test_B / Test_B_1wk post-tone amplitude (recall complement) -------------------
     for label, sessions in (('Test_B', Test_B), ('Test_B_1wk', Test_B_1wk)):

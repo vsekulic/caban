@@ -59,7 +59,7 @@ from caban.epoch_sequence import run_epoch_sequence as _run_epoch_sequence
 from caban.freezing_tuned_cells import run_freezing_tuned_cells as _run_freezing_tuned_cells
 from caban.population_coupling import run_population_coupling as _run_population_coupling
 from caban.sp_rates_lmm import (run_sp_rates_lmm as _run_sp_rates_lmm,
-                                draw_group_median_examples as _draw_group_median_examples)
+                                draw_group_mean_event_waveform as _draw_group_mean_event_waveform)
 
 import statsmodels.api as sm  # noqa: F401
 from statsmodels.regression.mixed_linear_model import MixedLM as mixedlm  # noqa: F401
@@ -1940,10 +1940,10 @@ def run_homecage_cno(ds, cfg):
 
 # ---------------------------------------------------------------------------
 def run_figure2_example_events(ds, cfg):
-    """Figure 2 v2 panel h alone: each group's own median trace-interval event
-    (sp_rates_lmm.draw_group_median_examples), without rerunning the rest of sp_rates_lmm."""
-    msg_start('*** Figure 2 v2 h: example events (group median)')
-    _draw_group_median_examples(cfg.PLOTS_DIR, ds.mice_per_group, ds.TFC_cond)
+    """Figure 2 v2 panel h alone: each group's average trace-interval event waveform
+    (sp_rates_lmm.draw_group_mean_event_waveform), without rerunning the rest of sp_rates_lmm."""
+    msg_start('*** Figure 2 v2 h: average event waveform')
+    _draw_group_mean_event_waveform(cfg.PLOTS_DIR, ds.mice_per_group, ds.TFC_cond)
     msg_end()
 
 

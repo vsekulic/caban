@@ -163,7 +163,7 @@ PANEL_FILES_V2 = {
     'c': PANEL_FILES['c'],
     'e': PANEL_FILES['d'],          # LT1 -> LT2 within-cell amplitude change and dropout (VS, 2026-10-21)
     'f': PANEL_FILES['g'],          # the primary model, per-event amplitude and population rate by epoch
-    'h': 'sp_rates_lmm/TFC_cond/group_median_examples_vertical.png',   # each group's own median event
+    'h': 'sp_rates_lmm/TFC_cond/group_mean_event_waveform.png',   # each group's average event
     'i': 'shock_events/shock_locked_events.png',   # caban.shock_events
 }
 # Move a letter from here to PANEL_FILES_V2 when its section draws it at its box size.
@@ -182,9 +182,8 @@ in LT2 (right).
 Per-event amplitude (top) and population event rate (bottom) in the three 20-s conditioning epochs;
 small points are cells, large points animals; contrasts of the group x epoch mixed model with animal
 as random intercept, Holm-corrected over the two treatment-versus-control comparisons within each
-epoch. **g**, Double dissociation (not built). **h**, Example trace-interval events, one per group: the event whose per-event amplitude is
-closest to that group's own median, on a common scale; shading marks the detected run, the dotted
-line the detection threshold. **i**, Pyramidal events around
+epoch. **g**, Double dissociation (not built). **h**, Average trace-interval event per group: every event's deconvolved trace around its
+peak, averaged per animal; mean (lines) and s.e.m. (bands) across animals. **i**, Pyramidal events around
 shock onset, 1-s bins: event rate per cell (left) and log per-event amplitude (right); mean (lines)
 and s.e.m. (bands) across animals; darker shading, the 2-s shock; dashed line, shock offset. n = 5 Exc, 6 Inh and 6 Ctl animals; the animal is the unit of inference
 throughout. Plan: plans/figure2_redesign_plan.md.
