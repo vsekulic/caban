@@ -231,12 +231,27 @@ def _panel_paths(plots_dir, letter, panel_files):
     return paths
 
 
-def _check_size(letter, image, layout):
+def _size_matches(letter, size, layout):
     _, _, w, h = content_box(letter, layout)
     want = (_px(w), _px(h))
-    if abs(image.size[0] - want[0]) > SIZE_TOLERANCE_PX or abs(image.size[1] - want[1]) > SIZE_TOLERANCE_PX:
+    return (abs(size[0] - want[0]) <= SIZE_TOLERANCE_PX and abs(size[1] - want[1]) <= SIZE_TOLERANCE_PX), want
+
+
+def panel_file_fits(plots_dir, letter, spec):
+    """Whether panel ``letter``'s existing PNG is drawn at its box size in ``spec``'s layout (False if
+    the file is missing). Lets a builder redraw a panel whose box changed."""
+    path = os.path.splitext(os.path.join(plots_dir, spec['panel_files'][letter]))[0] + '.png'
+    if not os.path.isfile(path):
+        return False
+    with Image.open(path) as im:
+        return _size_matches(letter, im.size, spec['layout'])[0]
+
+
+def _check_size(letter, image, layout):
+    ok, want = _size_matches(letter, image.size, layout)
+    if not ok:
         raise ValueError(f'figure 2 composite: panel {letter} is {image.size} px, its box is {want} px '
-                         f'at {DPI_PNG} dpi: the file predates the Nature-style restyle (2026-10-14); '
+                         f'at {DPI_PNG} dpi: the file was drawn for another box size (an older layout); '
                          f'rerun its section')
 
 

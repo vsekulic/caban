@@ -31,6 +31,7 @@ from caban.analysis import *   # noqa: F401,F403
 from caban.decoder import *    # noqa: F401,F403
 from caban.decoder import _PVT_MODE_LABEL_TO_KEY, _copy_analysis_methods_template  # noqa: F401
 from caban.figure2_composite import (build_figure2_composite, FIGURE2_SPEC, panel_figsize, LAYOUT_V2_MM,
+                                     panel_file_fits,
                                      FIGURE2_V2_SPEC)
 from caban.engram import ENGRAM_REFERENCE
 from caban.population import run_population_pca_pipeline, run_pca_state_metrics_from_results
@@ -2022,8 +2023,11 @@ def _build_figure2_layout(ds, cfg, spec, panel_sections, rerun):
     todo = []
     for letter, section in panel_sections.items():
         missing = not os.path.isfile(os.path.join(cfg.PLOTS_DIR, files[letter]))
-        if (missing or letter in rerun) and section not in todo:
-            print(f'{spec["name"]}: panel {letter} {"missing" if missing else "rerun"} -> {section.__name__}')
+        # A panel drawn for another box size (its layout box changed) is redrawn like a missing one.
+        resized = not missing and not panel_file_fits(cfg.PLOTS_DIR, letter, spec)
+        if (missing or resized or letter in rerun) and section not in todo:
+            why = 'missing' if missing else ('box size changed' if resized else 'rerun')
+            print(f'{spec["name"]}: panel {letter} {why} -> {section.__name__}')
             todo.append(section)
     for section in todo:
         section(ds, cfg)
