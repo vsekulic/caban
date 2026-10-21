@@ -221,6 +221,11 @@ tests) only if a later question needs them.
 
 ### 8.1 What is compared
 
+**Pencilled in by VS (2026-10-21), until the lab notebooks are back:** pre = **HC1**, post = the
+**CNO** recording — VS recorded it as a short (5–8 min) post-injection snapshot before LT2.
+Open for G26/G27: CNO1 (right after the injection, per G26's `notes.txt`) or CNO2 (+15 min). The
+proposals below are superseded where they differ.
+
 - **Recordings:** the homecage recordings of the conditioning day. Pre = HC2 (the last before the
   injection); drift reference = HC1 → HC2; post = the post-injection homecage recordings (CNO /
   CNO1, CNO2, HC3). LT1/LT2 shown alongside as context, not pooled with homecage.
@@ -264,6 +269,14 @@ post vs pre against the same cells' HC1 → HC2 change (a Poisson/NB model of ev
 recording duration as offset and cell as random effect, per animal, is the candidate — to be
 specified with `statistics-checker`). Shown per cell and per animal; the expected sign (hM3D up,
 hM4D down) stated beforehand.
+
+### 8.4 Later: SST cells and memory (VS, 2026-10-21 — a new question, not panel d)
+
+All four mice have the full recall series, each day HC1, LT1, HC2, test, HC3 (G22 TestA_1wk:
+HC1a/HC1b): TestB +48 h (2023_03_22 / 05_24), TestA (03_24 / 05_26), TestB_1wk (03_27 / 05_30),
+TestA_1wk (03_29–30 / 06_01). With conditioning (under CNO) this allows SST-cell tone/context
+coding across conditioning and recall. Needs the same Minian runs on those days (the queue's
+later stage) and, for single cells across days, cross-registration. Scoped after panel d.
 
 ## 9. Stage: panel d
 
