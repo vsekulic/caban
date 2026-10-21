@@ -46,6 +46,11 @@ EVENT_THRESHOLD = 2                 # sessions.BehaviourSession.thres, the prima
 POST_WINDOW_MIN = (15.0, 35.0)      # recording start, minutes after the injection
 CNO1_AFTER_INJECTION_MIN = 30.0     # where CNO1 is the only CNO recording (VS, 2026-10-21)
 PRE_LABEL = 'HC1'
+# Animals without a CNO2 whose CNO1 nevertheless began at the injection, by name and reason. G12: under
+# the CNO1-minus-30-min rule its drug-free LT1 (20 min before CNO1) would fall after the injection; its
+# day has G13's layout (HC1, LT1, HC2, CNO1, LT2, HC3), and G13's CNO1 began at the injection.
+# To be confirmed by VS (plans/figure2_redesign_plan.md §4.1.1).
+CNO1_AT_INJECTION_WITHOUT_CNO2 = {'G12': 'drug-free LT1 would otherwise follow the injection'}
 WINDOWS = ('pre_cno', 'post_cno')
 MEASURES = {'amplitude': ('mouse_mean_log_amplitude', 'Δ log amplitude'),
             'rate': ('log_population_rate', 'Δ log rate')}
@@ -79,7 +84,9 @@ def injection_minute(rec_mouse):
     if 'CNO1' not in labels:
         raise RuntimeError(f'homecage_cno: {rec_mouse["mouse"].iloc[0]} has no CNO1 recording')
     cno1 = float(cno.loc[cno['label'] == 'CNO1', 'start_min'].iloc[0])
-    return cno1 if 'CNO2' in labels else cno1 - CNO1_AFTER_INJECTION_MIN
+    if 'CNO2' in labels or rec_mouse['mouse'].iloc[0] in CNO1_AT_INJECTION_WITHOUT_CNO2:
+        return cno1
+    return cno1 - CNO1_AFTER_INJECTION_MIN
 
 
 def select_recordings(rec, mice):
