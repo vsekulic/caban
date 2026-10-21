@@ -56,6 +56,22 @@ def session_videos(session_dir):
     return [p for _, p in numbered]
 
 
+def iter_frames(session_dir):
+    """Every raw frame of the session, in order, as float64 (Miniscope v4 grayscale, read by OpenCV
+    as three equal channels). The frame index is the position in this sequence, which is Minian's
+    ``frame`` coordinate for the same session."""
+    for path in session_videos(session_dir):
+        capture = cv2.VideoCapture(path)
+        if not capture.isOpened():
+            raise IOError('cannot open {}'.format(path))
+        while True:
+            ok, frame = capture.read()
+            if not ok:
+                break
+            yield frame[:, :, 0].astype(np.float64)
+        capture.release()
+
+
 def raw_projections(session_dir):
     """Mean, max - mean and standard-deviation images over every frame of the session's raw video.
 
@@ -65,22 +81,13 @@ def raw_projections(session_dir):
     """
     total = total_sq = peak = None
     n_frames = 0
-    for path in session_videos(session_dir):
-        capture = cv2.VideoCapture(path)
-        if not capture.isOpened():
-            raise IOError('cannot open {}'.format(path))
-        while True:
-            ok, frame = capture.read()
-            if not ok:
-                break
-            frame = frame[:, :, 0].astype(np.float64)   # Miniscope v4 grayscale, read as 3 equal channels
-            if total is None:
-                total, total_sq, peak = np.zeros_like(frame), np.zeros_like(frame), frame.copy()
-            total += frame
-            total_sq += frame ** 2
-            np.maximum(peak, frame, out=peak)
-            n_frames += 1
-        capture.release()
+    for frame in iter_frames(session_dir):
+        if total is None:
+            total, total_sq, peak = np.zeros_like(frame), np.zeros_like(frame), frame.copy()
+        total += frame
+        total_sq += frame ** 2
+        np.maximum(peak, frame, out=peak)
+        n_frames += 1
     if n_frames == 0:
         raise ValueError('{}: no frames decoded'.format(session_dir))
     mean = total / n_frames
@@ -108,6 +115,79 @@ def plot_projection_grid(projections, out_path):
                 ax.set_ylabel('{} {}\n{} frames, {}×{} px'.format(
                     mouse, SST_DIO_DREADD[mouse], projections[mouse]['n_frames'],
                     image.shape[1], image.shape[0]), fontsize=FONT_PT)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=200)
+    plt.close(fig)
+    return out_path
+
+
+# --- line artefacts: whole bright rows from the Miniscope's connection drop-outs ---------------
+# VS's practice in the hand-run notebooks (template cell "CUSTOM SUBSETS FOR FRAMES"): a per-session
+# list of the frames carrying such lines, dropped from varr_ref before motion correction, frame
+# labels kept. Here the frames are found by score, then every flagged frame is shown to VS.
+ROW_ARTEFACT_Z = 12.0           # flag a frame when one row stands out this many robust s.d. (proposal)
+ROW_ARTEFACT_SHEET_FRAMES = 40  # frames per contact sheet
+
+
+def row_profiles(session_dir):
+    """Per-frame row means, shape (n_frames, height), and each frame's row-mean contrast against its
+    two neighbouring rows -- a thin bright line is a single-row spike in that contrast."""
+    profiles = np.array([frame.mean(axis=1) for frame in iter_frames(session_dir)])
+    if profiles.size == 0:
+        raise ValueError('{}: no frames decoded'.format(session_dir))
+    contrast = profiles[:, 1:-1] - 0.5 * (profiles[:, :-2] + profiles[:, 2:])
+    return profiles, contrast
+
+
+def row_artefact_scores(contrast):
+    """Robust z of each row's contrast against the same row over the whole recording.
+
+    Steady features (the lens edge, a static scratch) have a high contrast in every frame and so a
+    high median, not a high z; a line present in a few frames does. Returns z (n_frames, height - 2)
+    and each frame's maximum z.
+    """
+    median = np.median(contrast, axis=0)
+    spread = 1.4826 * np.median(np.abs(contrast - median), axis=0)
+    if np.any(spread == 0):
+        raise ValueError('rows with zero spread over frames: {}'.format(np.where(spread == 0)[0][:10]))
+    z = (contrast - median) / spread
+    return z, z.max(axis=1)
+
+
+def plot_row_artefact_scores(frame_max_z, threshold, title, out_path):
+    """Each frame's maximum row z over the recording, the threshold, and the flagged count."""
+    flagged = np.flatnonzero(frame_max_z > threshold)
+    fig, ax = plt.subplots(figsize=(180 * MM, 50 * MM))
+    ax.plot(frame_max_z, lw=0.5, color='0.3')
+    ax.axhline(threshold, color='C3', lw=0.75)
+    ax.set_yscale('log')
+    ax.set_xlabel('Frame', fontsize=FONT_PT)
+    ax.set_ylabel('Max row z', fontsize=FONT_PT)
+    ax.set_title('{}: {} of {} frames above z = {:g}'.format(title, len(flagged), len(frame_max_z),
+                                                            threshold), fontsize=FONT_PT)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=200)
+    plt.close(fig)
+    return out_path
+
+
+def plot_frame_sheet(session_dir, frames, frame_max_z, title, out_path, n_columns=8):
+    """The listed raw frames, each labelled with its index and max row z, for a frame-by-frame look."""
+    wanted = set(int(f) for f in frames)
+    images = {i: frame for i, frame in enumerate(iter_frames(session_dir)) if i in wanted}
+    missing = wanted - set(images)
+    if missing:
+        raise ValueError('{}: frames not in the video: {}'.format(session_dir, sorted(missing)[:10]))
+    n_rows = int(np.ceil(len(frames) / n_columns))
+    fig, axes = plt.subplots(n_rows, n_columns, figsize=(180 * MM, 24 * MM * n_rows), squeeze=False)
+    for ax in axes.ravel():
+        ax.axis('off')
+    for ax, frame in zip(axes.ravel(), frames):
+        image = images[int(frame)]
+        low, high = np.percentile(image, PROJECTION_PERCENTILES)
+        ax.imshow(image, cmap='gray', vmin=low, vmax=high, interpolation='nearest')
+        ax.set_title('{} (z {:.0f})'.format(int(frame), frame_max_z[int(frame)]), fontsize=5)
+    fig.suptitle(title, fontsize=FONT_PT)
     fig.tight_layout()
     fig.savefig(out_path, dpi=200)
     plt.close(fig)
