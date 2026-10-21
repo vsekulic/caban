@@ -252,6 +252,28 @@ registry and a notebook edit after the `varr_ref` cell (small, additive).
   `screen sst_jupyter`, port 8899 on the Razer's loopback; VS tunnels with
   `ssh -N -L 8899:localhost:8899 minastirith`.
 
+**G27 grid, first pass (2026-10-21; all with the seed mask; ~28 min per variant, 4 at a time):**
+
+| variant | units | close pairs (< 8 px) | median footprint px | note |
+|---|---|---|---|---|
+| frozen | 61 | 11 | 451 | left cluster split into several units |
+| background `wnd` 10 / 20 | 48 / 64 | 9 / 7 | 356 / 516 | 10 loses faint peripheral cells |
+| `max_wnd` 20 | 60 | 10 | 455 | ≈ frozen |
+| PNR `thres` 1.5 / 2 | 25 / 10 | 2 / 1 | 604 / 619 | clean but misses visibly active cells |
+| seed-merge `thres_dist` 5 / 15 | 62 / 61 | 11 / 11 | 451 | no effect |
+| merge `thres_corr` 0.9 | 75 | 26 | 384 | more splitting: the useful direction is lower |
+| merge `thres_corr` 0.7 | — | — | — | **crashed**: the empty-merge failure |
+| spatial `sparse_penal` 1e-3 / 1e-5 | 61 / 61 | 12 / 10 | 376 / 458 | small effect |
+| `max_wnd` 10, `dl_wnd` 8 | | | | re-run (kernel-start race; one .avi read returned 1001 frames under four readers) |
+
+**The empty-merge failure, diagnosed:** `unit_merge` → `adj_corr` → `graph_optimize_corr` builds the
+graph of spatially overlapping unit pairs; when **no two units overlap** the graph has no edges,
+no correlations are computed and `np.concatenate([])` raises. It is a valid state Minian does not
+handle (G23 HC2 with the frozen set; G27 at merge 0.7). Proposed fix (VS's decision; the fork
+`~/code/minian_vsekulic` is shared with the main chat): when there are no overlapping pairs,
+return the units unchanged. It changes behaviour only where Minian now crashes, so no finished
+run would differ.
+
 **Decision with VS.** Accept the frozen set, or a documented per-cohort set. If parameters
 change, the runner needs an override mechanism (additive: a named set applied as assignments after
 the template's last assignment of each key, recorded in `run.json`, the README and
