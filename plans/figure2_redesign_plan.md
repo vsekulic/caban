@@ -63,8 +63,8 @@ control for injection, handling and time**, in an identical context.
 - **Endpoint:** per-animal mean log per-event amplitude and population event rate, from the same
   event detection as the primary analysis. Pre = the homecage session(s) before injection (HC1,
   and HC2 where it precedes the injection); post = **CNO1**, which every animal has, with CNO2
-  where it exists. CNO1 begins right after the injection, so the post window is defined by time
-  from injection, not by session name (the injection time is to be read from each day's notes).
+  where it exists. The label "CNO1" changed meaning across the cohort, so the post window is
+  defined by time from injection, not by session name (§4.1.1).
 - **Model:** `log(metric) ~ group × time + (1|animal)`, with the group × time contrasts
   (Exc − Ctl, Inh − Ctl) as the test, Holm across the two. **This is a new, prospectively stated
   analysis**; the measures and windows are fixed here before it is run.
@@ -77,22 +77,23 @@ control for injection, handling and time**, in an identical context.
 
 ### 4.1.1 Pre-specification (revised 2026-10-21 after `statistics-checker`; no homecage result computed)
 
-**Timing (from folder start times, minutes after the start of CNO1).** Taking CNO1's start as the
-injection (G26's notes: "CNO1 starts right after injection"; **to be confirmed by VS for G05–G21**):
+**Timing.** VS (2026-10-21): the label "CNO1" changed meaning during data collection. In animals
+**with a CNO2**, CNO1 began right after the injection and CNO2 later; in animals **without a CNO2**,
+CNO1 began about 30 min after the injection. Minutes after the injection, from folder start times:
 
-| mice | LT2 | conditioning | homecage recordings after injection |
-|---|---|---|---|
-| G05–G11 | +30 to +44 | +59 to +90 | CNO2 +15 to +25; HC2 +50 to +65 (not G07, G08) |
-| G12, G13, G17–G19 | +17 to +32 (G17: +65, after conditioning) | +29 to +51 | CNO2 +9 to +26 (not G12); HC3 +28 to +44 (G17: after conditioning) |
-| G14–G16, G20, G21 | **+5 to +8** | **+25 to +28** | HC3 +17 to +20 |
+| mice | injection taken as | post-injection homecage recordings | LT2 | conditioning |
+|---|---|---|---|---|
+| G05–G11, G13, G17, G18, G19 | CNO1 start | CNO1 +0; CNO2 +15 to +26 (G19: +9); HC2/HC3 +28 to +65 where present | +17 to +44 (G17: after conditioning) | +29 to +90 |
+| G12, G14–G16, G20, G21 | CNO1 start − 30 min (≈) | CNO1 ≈ +30; HC3 ≈ +47 to +61 | ≈ +35 to +50 | ≈ +55 to +70 |
 
-If CNO1's start is the injection, LT2 in five animals began before CNO could act, which bears on the
-existing LT1→LT2 manipulation check as well.
+LT2 was therefore under CNO in every animal (an earlier reading of the folder times, which took
+CNO1's start as the injection everywhere, was wrong). **G19 to be confirmed by VS** (its CNO2 starts
+9 min after CNO1).
 
 - **pre** = HC1 (every animal; −23 to −70 min). Pooled pre (HC1 + HC2) is a labelled sensitivity.
 - **post** = the homecage recording that **starts 15–35 min after the injection** and before
-  conditioning. Exactly one per animal on the timing above (CNO2 in G05–G11, G13, G17, G18; HC3 in
-  G12, G14–G16, G19–G21). The window is set by CNO onset (≈ 15–30 min), not by session name, and was
+  conditioning. Exactly one per animal on the timing above: CNO2 in G05–G11, G13, G17, G18; CNO1 in
+  G12, G14–G16, G20, G21; HC3 in G19. The window is set by CNO onset (≈ 15–30 min), not by session name, and was
   fixed from the timing table alone. Pooling every post-injection homecage recording is a labelled
   sensitivity.
 - **Measures**, as in the primary analysis: `find_event_runs_ca_S(S, 2)` on each recording's whole S
