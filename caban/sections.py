@@ -50,6 +50,7 @@ import caban.speed_tuning as speed_tuning
 from caban.event_locked_responsiveness import run_event_locked_responsiveness as _run_event_locked_responsiveness
 from caban.epoch_modulation import run_epoch_modulation as _run_epoch_modulation
 from caban.shock_motion import run_shock_motion_check as _run_shock_motion_check
+from caban.homecage_cno import run_homecage_cno as _run_homecage_cno
 from caban.epoch_modulation import (plot_event_aligned_panels as _plot_event_aligned_panels,
                                    SIGNALS as _EPOCH_MODULATION_SIGNALS,
                                    EVENT_PROXIMAL_DIRNAME as _EVENT_PROXIMAL_DIRNAME)
@@ -1923,6 +1924,16 @@ def run_want_sample_traces_paper(ds, cfg, selection_mode=False, len_trace=1200):
 
         msg_end()
 
+
+
+# ---------------------------------------------------------------------------
+def run_homecage_cno(ds, cfg):
+    """Pyramidal events in the homecage before vs after CNO on the conditioning day (Figure 2 v2,
+    panel e; caban.homecage_cno). Needs the export of scripts/export_tfc_day_homecage_s.py in
+    caban.homecage_cno.HOMECAGE_EXPORT_DIR; writes <PLOTS_DIR>/homecage_cno/."""
+    msg_start('*** Homecage before vs after CNO (conditioning day)')
+    _run_homecage_cno(cfg.PLOTS_DIR, ds.mice_per_group)
+    msg_end()
 
 
 # ---------------------------------------------------------------------------
