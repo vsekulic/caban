@@ -82,8 +82,8 @@ def plot_panel(table, shock_s, out_path, contrasts):
     """Figure 2 v2 i: event rate (left) and per-event log amplitude (right) around shock onset."""
     with nature_style():
         fig, axs = plt.subplots(1, 2, figsize=panel_figsize('i', LAYOUT_V2_MM), layout='constrained')
-        for ax, (col, ylabel) in zip(axs, (('rate', 'Event rate (per cell per s)'),
-                                           ('log_amplitude', 'Log per-event amplitude'))):
+        for ax, (col, ylabel) in zip(axs, (('rate', 'Events per cell per s'),
+                                           ('log_amplitude', 'Log amplitude'))):
             ax.axvspan(0, shock_s, color='0.80', lw=0, zorder=0)
             ax.axvspan(shock_s, POST_S, color='0.92', lw=0, zorder=0)
             ax.axvline(0, color='k', lw=AXIS_PT)
@@ -98,12 +98,12 @@ def plot_panel(table, shock_s, out_path, contrasts):
                 ax.fill_between(mu.index, (mu - sem).values, (mu + sem).values, color=GROUP_COLOURS[g],
                                 alpha=0.2, lw=0)
             ax.set_ylabel(ylabel)
-            ax.set_xlabel('Time from shock onset (s)')
             # The paper model's post-shock contrasts (20 s from shock offset, Holm within the epoch).
             c = contrasts['population_rate' if col == 'rate' else 'amplitude']
-            ax.set_title('Post-shock 20 s vs Ctl\n' + format_paper_contrast(c['hM3D'], 'Exc') + '; '
+            ax.set_title('Post-shock 20 s vs Ctl\n' + format_paper_contrast(c['hM3D'], 'Exc') + '\n'
                          + format_paper_contrast(c['hM4D'], 'Inh'), fontsize=FONT_PT - 1)
         axs[0].legend(loc='upper right', handlelength=1.0)
+        fig.supxlabel('Time from shock onset (s)', fontsize=FONT_PT)
         save_paper_panel(fig, os.path.splitext(out_path)[0])
     plt.close(fig)
 
