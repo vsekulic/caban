@@ -262,7 +262,7 @@ registry and a notebook edit after the `varr_ref` cell (small, additive).
 | PNR `thres` 1.5 / 2 | 25 / 10 | 2 / 1 | 604 / 619 | clean but misses visibly active cells |
 | seed-merge `thres_dist` 5 / 15 | 62 / 61 | 11 / 11 | 451 | no effect |
 | merge `thres_corr` 0.9 | 75 | 26 | 384 | more splitting: the useful direction is lower |
-| merge `thres_corr` 0.7 | — | — | — | **crashed**: the empty-merge failure |
+| merge `thres_corr` 0.7 | 52 | 2 | 499 | crashed before the minian fix; after it (494e38e5): the left cluster mostly one outline per cell, peripheral cells kept — best so far (Claude's read; VS judges) |
 | spatial `sparse_penal` 1e-3 / 1e-5 | 61 / 61 | 12 / 10 | 376 / 458 | small effect |
 | `max_wnd` 10 | 54 | 8 | 479 | re-run after a kernel-start race |
 | spatial `dl_wnd` 8 | 61 | 6 | 688 | fewest splits, larger footprints; re-run after one .avi read returned 1001 frames under four readers |
