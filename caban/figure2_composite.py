@@ -161,12 +161,12 @@ LAYOUT_V2_MM = {
 }
 PANEL_FILES_V2 = {
     'c': PANEL_FILES['c'],
+    'e': 'homecage_cno/homecage_cno_delta.png',   # caban.homecage_cno, drawn at e's box size
     'f': PANEL_FILES['g'],          # the primary model, per-event amplitude and population rate by epoch
 }
 # Move a letter from here to PANEL_FILES_V2 when its section draws it at its box size.
 PENDING_V2 = {
     'd': 'SST cells (DIO-GCaMP6f): event rate and amplitude before vs after CNO',
-    'e': 'Pyramidal cells, homecage before vs after CNO: change in amplitude and frequency',
     'g': 'Double dissociation: per-animal amplitude vs rate change; 2 x 2 effects; other sessions',
     'h': 'Example events, each group its own median event, common scale',
     'i': 'Shock-locked event amplitude and probability',
@@ -175,7 +175,10 @@ CAPTION_V2 = """**Fig. 2 (redesign, in progress) | Chemogenetic excitation and i
 dissociate the magnitude and the frequency of CA1 pyramidal calcium events.**
 **a**, Viral strategy. **b**, Mean field of view and Minian spatial footprints from one animal.
 **c**, Example traces from three cells per group. **d**, SST cells: activity before and after CNO
-(not built). **e**, Pyramidal cells in the homecage before and after CNO (not built). **f**,
+(not built). **e**, Pyramidal cells in the homecage before and after CNO on the conditioning day:
+per-animal change (post − pre, log) in per-event amplitude (left) and population event rate (right);
+pre, the first homecage recording; post, the homecage recording 15–35 min after the injection.
+**f**,
 Per-event amplitude (top) and population event rate (bottom) in the three 20-s conditioning epochs;
 small points are cells, large points animals; contrasts of the group x epoch mixed model with animal
 as random intercept, Holm-corrected over the two treatment-versus-control comparisons within each

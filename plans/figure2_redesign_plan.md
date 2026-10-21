@@ -90,11 +90,10 @@ CNO1 began about 30 min after the injection. Minutes after the injection, from f
 the 30-min rule its drug-free LT1 (CNO1 − 20 min) would follow the injection; its day has G13's
 layout, so its injection is taken as CNO1's start (post = HC3, +31 min). In G14–G16, G20 and G21 the
 rule puts the injection at HC2's start (HC2 begins +1 to +2 min), so HC2 is not a pre-CNO recording
-there and pre = HC1 throughout. G12 and G19 to be confirmed by VS.
+there and pre = HC1 throughout. G19 confirmed by VS (post = HC3, after LT2); G12 to be confirmed.
 
 LT2 was therefore under CNO in every animal (an earlier reading of the folder times, which took
-CNO1's start as the injection everywhere, was wrong). **G19 to be confirmed by VS** (its CNO2 starts
-9 min after CNO1).
+CNO1's start as the injection everywhere, was wrong). G19: post = HC3 (its CNO2 starts 9 min after CNO1), confirmed by VS.
 
 - **pre** = HC1 (every animal; −23 to −70 min). Pooled pre (HC1 + HC2) is a labelled sensitivity.
 - **post** = the homecage recording that **starts 15–35 min after the injection** and before
