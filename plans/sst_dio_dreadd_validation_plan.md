@@ -273,7 +273,11 @@ no correlations are computed and `np.concatenate([])` raises. It is a valid stat
 handle (G23 HC2 with the frozen set; G27 at merge 0.7). Proposed fix (VS's decision; the fork
 `~/code/minian_vsekulic` is shared with the main chat): when there are no overlapping pairs,
 return the units unchanged. It changes behaviour only where Minian now crashes, so no finished
-run would differ.
+run would differ. **Done (VS approved, 2026-10-21):** minian fork `vsekulic_v4` commit `494e38e5`
+on the Razer (`adj_corr` returns the all-zero matrix when the overlap graph has no edges; covers
+`unit_merge` and `seeds_merge`). Not pushed to GitHub. **For the main chat:** runs from now on
+record this fork commit in `run.json`; G13's HC0 (`SESSIONS_NOT_RUN`, the same failure) could now
+run, if VS wants it.
 
 **Decision with VS.** Accept the frozen set, or a documented per-cohort set. If parameters
 change, the runner needs an override mechanism (additive: a named set applied as assignments after
