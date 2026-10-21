@@ -43,6 +43,8 @@ METHODS_FILENAME = 'homecage_cno_methods.md'
 OUT_DIRNAME = 'homecage_cno'
 
 EVENT_THRESHOLD = 2                 # sessions.BehaviourSession.thres, the primary analysis's value
+# The primary analysis's own threshold-sensitivity values (paper_figure2.md, Controls).
+SENSITIVITY_THRESHOLDS = (1.5, 2.0, 3.0)
 POST_WINDOW_MIN = (15.0, 35.0)      # recording start, minutes after the injection
 CNO1_AFTER_INJECTION_MIN = 30.0     # where CNO1 is the only CNO recording (VS, 2026-10-21)
 PRE_LABEL = 'HC1'
@@ -111,13 +113,13 @@ def select_recordings(rec, mice):
     return pd.DataFrame(chosen), pd.concat(timing, ignore_index=True)
 
 
-def recording_events(path, tail):
+def recording_events(path, tail, thres=EVENT_THRESHOLD):
     """Per-unit events of one recording: n_events, sum_amplitude, exposure_seconds; plus its
     detection diagnostics."""
     with np.load(path) as z:
         S, unit_id, tstamp, imaged = z['S'], z['unit_id'], z['tstamp_ms'], z['imaged']
     fps = check_miniscope_frame_rate(tail, pd.Series(tstamp[imaged]))
-    events = find_event_runs_ca_S(S, EVENT_THRESHOLD)
+    events = find_event_runs_ca_S(S, thres)
     exposure = S.shape[1] / MINISCOPE_FPS
     n_events = np.array([len(events[i][0]) for i in range(S.shape[0])])
     sum_amp = np.array([float(np.sum(events[i][1])) for i in range(S.shape[0])])
@@ -129,13 +131,13 @@ def recording_events(path, tail):
     return cells, diag
 
 
-def build_tables(mice_per_group, export_dir=HOMECAGE_EXPORT_DIR):
+def build_tables(mice_per_group, export_dir=HOMECAGE_EXPORT_DIR, thres=EVENT_THRESHOLD):
     group_of = {m: g for g, ms in mice_per_group.items() for m in ms}
     rec = recording_table(export_dir)
     chosen, timing = select_recordings(rec, list(group_of))
     fine, diags = [], []
     for _, r in chosen.iterrows():
-        cells, diag = recording_events(r['path'], r['tail'])
+        cells, diag = recording_events(r['path'], r['tail'], thres)
         cells = cells.assign(mouse=r['mouse'], group=group_of[r['mouse']], trial=0,
                              epoch=r['window'], cell=r['label'] + ':' + cells['unit_id'].astype(str))
         fine.append(cells)
@@ -241,5 +243,49 @@ def run_homecage_cno(PLOTS_DIR, mice_per_group, export_dir=HOMECAGE_EXPORT_DIR):
         report += f'\n--- {name} ---\n{fit["summary_text"]}\n'
     write_text(os.path.join(out_dir, 'homecage_cno_report.txt'), report)
     plot_panel(deltas, os.path.join(out_dir, 'homecage_cno_delta.png'))
+    print(report)
+    return tests
+
+
+def run_threshold_sensitivity(PLOTS_DIR, mice_per_group, export_dir=HOMECAGE_EXPORT_DIR,
+                              thresholds=SENSITIVITY_THRESHOLDS):
+    """The per-animal changes and the same tests at each event threshold: a detection check
+    (statistics-checker / code review, 2026-10-21), a diagnostic, not a figure panel. Writes
+    <PLOTS_DIR>/homecage_cno/threshold_sensitivity/."""
+    out_dir = os.path.join(PLOTS_DIR, OUT_DIRNAME, 'threshold_sensitivity')
+    ensure_dirs(out_dir)
+    all_deltas, all_tests = [], []
+    for thres in thresholds:
+        per_mouse, diags, _ = build_tables(mice_per_group, export_dir, thres)
+        deltas = per_animal_deltas(per_mouse).assign(threshold=thres)
+        all_deltas.append(deltas)
+        all_tests.append(test_deltas(deltas.drop(columns='threshold'), mice_per_group).assign(threshold=thres))
+    deltas = pd.concat(all_deltas, ignore_index=True)
+    tests = pd.concat(all_tests, ignore_index=True)
+    deltas.to_csv(os.path.join(out_dir, 'per_animal_delta_by_threshold.csv'), index=False)
+    tests.to_csv(os.path.join(out_dir, 'delta_tests_by_threshold.csv'), index=False)
+
+    fig, axs = plt.subplots(2, len(thresholds), figsize=(3.0 * len(thresholds), 5.4), sharey='row',
+                            squeeze=False)
+    for col, thres in enumerate(thresholds):
+        d = deltas[deltas['threshold'] == thres]
+        t = tests[tests['threshold'] == thres]
+        for row, (name, (_, ylabel)) in enumerate(MEASURES.items()):
+            ax = axs[row, col]
+            box_strip(ax, {g: d.loc[d['group'] == g, f'delta_{name}'] for g in DREADD_DISPLAY_ORDER},
+                      DREADD_DISPLAY_ORDER, GROUP_COLOURS, labels=GROUP_LABELS, point_size=14)
+            ax.axhline(0, color='0.5', lw=0.6, ls='--', zorder=0)
+            note = '\n'.join(f"{r['contrast']}: x{r['ratio']:.2f}, Holm P={r['p_holm']:.3f}"
+                             for _, r in t[t['family'] == name].iterrows())
+            ax.set_title(f'threshold {thres:g}\n{note}', fontsize='small')
+            if col == 0:
+                ax.set_ylabel(ylabel)
+    fig.suptitle('Homecage pre/post-CNO: per-animal change at each event threshold '
+                 '(diagnostic; primary threshold 2)', size='medium')
+    fig.tight_layout()
+    save_fig(fig, os.path.join(out_dir, 'threshold_sensitivity.png'))
+    plt.close(fig)
+    report = tests.round(4).to_string(index=False)
+    write_text(os.path.join(out_dir, 'threshold_sensitivity.txt'), report + '\n')
     print(report)
     return tests

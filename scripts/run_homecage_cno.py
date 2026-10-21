@@ -3,7 +3,7 @@
     python scripts/run_homecage_cno.py <export_dir> <plots_dir>
 
 <export_dir> holds the output of scripts/export_tfc_day_homecage_s.py; results go to
-<plots_dir>/homecage_cno/.
+<plots_dir>/homecage_cno/ (and its threshold_sensitivity/).
 """
 
 import os
@@ -14,9 +14,11 @@ matplotlib.use('Agg')
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from caban.loader import MOUSE_GROUPS, mice_per_group_from
-from caban.homecage_cno import run_homecage_cno
+from caban.homecage_cno import run_homecage_cno, run_threshold_sensitivity
 
 if __name__ == '__main__':
     if len(sys.argv) != 3:
         raise SystemExit(__doc__)
-    run_homecage_cno(sys.argv[2], mice_per_group_from(MOUSE_GROUPS), export_dir=sys.argv[1])
+    mice_per_group = mice_per_group_from(MOUSE_GROUPS)
+    run_homecage_cno(sys.argv[2], mice_per_group, export_dir=sys.argv[1])
+    run_threshold_sensitivity(sys.argv[2], mice_per_group, export_dir=sys.argv[1])
