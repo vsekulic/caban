@@ -28,10 +28,12 @@ from caban.utilities import MINISCOPE_FPS
 from caban.single_unit_common import (GROUP_COLOURS, GROUP_LABELS, DREADD_DISPLAY_ORDER, ensure_dirs,
                                       save_fig)
 from caban.decoder import _copy_analysis_methods_template
-from caban.nature_comm_style import nature_style, save_paper_panel, LINE_PT, FONT_PT
+from caban.nature_comm_style import nature_style, save_paper_panel, box_strip, LINE_PT, FONT_PT
+from caban.single_unit_common import annotate_pairwise_brackets
 from caban.figure2_composite import panel_figsize, LAYOUT_V2_MM
 from caban.sp_rates_lmm import (build_run_structure_table, tfc_epoch_frames_fn, TFC_TRACE_EPOCH,
-                                paper_contrast, format_paper_contrast)
+                                paper_contrast, _precomputed_stat_fn)
+from caban.figure2_effect_profile import trace_table
 from caban.epoch_modulation import _unit_id_rows
 
 OUT_SUBDIR = os.path.join('sp_rates_lmm', 'TFC_cond')
@@ -97,16 +99,24 @@ def _draw(ax, per_group, t, lw):
         ax.fill_between(t, mu - sem, mu + sem, color=GROUP_COLOURS[group], alpha=0.2, lw=0)
 
 
-def plot_panel(per_group, t, signal, amp, out_root):
-    """Figure 2 v2 h, Nature style at h's box size, the paper model's contrasts above the axis."""
+def plot_panel(per_group, t, signal, amp, per_animal, out_root):
+    """Figure 2 v2 h, Nature style at h's box size: left, the average event; right, the per-animal
+    trace-interval log amplitude the primary model was fitted on, with that model's Holm-adjusted
+    stars vs Ctl (no statistic is computed here)."""
     with nature_style():
-        fig, ax = plt.subplots(figsize=panel_figsize('h', LAYOUT_V2_MM), layout='constrained')
+        fig, (ax, axb) = plt.subplots(1, 2, figsize=panel_figsize('h', LAYOUT_V2_MM), layout='constrained',
+                                      gridspec_kw={'width_ratios': [1.7, 1]})
         _draw(ax, per_group, t, LINE_PT)
         ax.set_xlabel('Time from event (s)')
         ax.set_ylabel(YLABEL[signal].split(' (')[0] + ' (a.u.)')
         ax.legend(loc='upper right', handlelength=1.0)
-        ax.set_title(format_paper_contrast(amp['hM3D'], 'Exc') + '\n'
-                     + format_paper_contrast(amp['hM4D'], 'Inh'), fontsize=FONT_PT - 1)
+        values = {g: per_animal.loc[per_animal['group'] == g, 'mouse_mean_log_amplitude'].to_numpy()
+                  for g in DREADD_DISPLAY_ORDER}
+        box_strip(axb, values, DREADD_DISPLAY_ORDER, GROUP_COLOURS, labels=GROUP_LABELS)
+        axb.set_ylabel('Log amplitude')
+        annotate_pairwise_brackets(axb, values, DREADD_DISPLAY_ORDER,
+                                   _precomputed_stat_fn(amp['hM3D']['p_holm'], amp['hM4D']['p_holm']),
+                                   fs=FONT_PT)
         save_paper_panel(fig, out_root)
     plt.close(fig)
 
@@ -150,6 +160,7 @@ def draw_event_waveforms(PLOTS_DIR, mice_per_group, TFC_cond, mapping='full', th
         tables.append(table)
         plot_signal_diagnostics(per_group, t, table, signal, out_dir)
         if signal == PANEL_SIGNAL:
-            plot_panel(per_group, t, signal, amp, os.path.join(out_dir, PANEL_ROOT))
+            plot_panel(per_group, t, signal, amp, trace_table(PLOTS_DIR, mice_per_group),
+                       os.path.join(out_dir, PANEL_ROOT))
     pd.concat(tables, ignore_index=True).to_csv(
         os.path.join(out_dir, f'{PANEL_ROOT}_per_animal.csv'), index=False)

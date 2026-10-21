@@ -156,8 +156,8 @@ LAYOUT_V2_MM = {
     'e': (125, 35, 58, 38),         # = the current figure's d box: the LT1 -> LT2 check places 1:1
     'f': (0, 78, 78, 74),
     'g': (80, 78, 103, 74),
-    'h': (0, 155, 40, 46),
-    'i': (42, 155, 141, 46),
+    'h': (0, 155, 62, 46),
+    'i': (64, 155, 119, 46),
 }
 PANEL_FILES_V2 = {
     'c': PANEL_FILES['c'],
@@ -165,11 +165,11 @@ PANEL_FILES_V2 = {
     'f': PANEL_FILES['g'],          # the primary model, per-event amplitude and population rate by epoch
     'h': 'sp_rates_lmm/TFC_cond/group_mean_event_waveform.png',   # each group's average event
     'i': 'shock_events/shock_locked_events.png',   # caban.shock_events
+    'g': 'figure2_effect_profile/effect_profile_panel.png',   # caban.figure2_effect_profile
 }
 # Move a letter from here to PANEL_FILES_V2 when its section draws it at its box size.
 PENDING_V2 = {
     'd': 'SST cells (DIO-GCaMP6f): event rate and amplitude before vs after CNO',
-    'g': 'Double dissociation: per-animal amplitude vs rate change; 2 x 2 effects; other sessions',
 }
 CAPTION_V2 = """**Fig. 2 (redesign, in progress) | Chemogenetic excitation and inhibition of SST interneurons
 dissociate the magnitude and the frequency of CA1 pyramidal calcium events.**
@@ -182,9 +182,12 @@ in LT2 (right).
 Per-event amplitude (top) and population event rate (bottom) in the three 20-s conditioning epochs;
 small points are cells, large points animals; contrasts of the group x epoch mixed model with animal
 as random intercept, Holm-corrected over the two treatment-versus-control comparisons within each
-epoch. **g**, Double dissociation (not built). **h**, Event-triggered calcium transient per group: the denoised calcium trace C of every
+epoch. **g**, Effect profile per animal (trace interval): left, amplitude effect (A, s.d. units, increase
+positive) against rate effect (R, s.d. units, decrease positive), relative to the control mean; right,
+the profile index P = A − R; ** exact mouse-label randomization P < 0.01 (Exc vs Inh, the one test). **h**, Event-triggered calcium transient per group: the denoised calcium trace C of every
 trace-interval event's cell, aligned on the event and baseline-subtracted, averaged per animal; mean
-(lines) and s.e.m. (bands) across animals; above, the trace-interval amplitude contrasts vs Ctl from the model in f (ratio, Holm-adjusted P). **i**, Pyramidal events around
+(lines) and s.e.m. (bands) across animals; above, the trace-interval right, per-animal trace-interval log per-event amplitude (the values the model in f was fitted on), with
+that model's Holm-adjusted contrasts vs Ctl. **i**, Pyramidal events around
 shock onset, 1-s bins: event rate per cell (left) and log per-event amplitude (right); mean (lines)
 and s.e.m. (bands) across animals; darker shading, the 2-s shock; dashed line, shock offset; above, the
 post-shock (20 s) contrasts vs Ctl from the model in f (ratio, Holm-adjusted P). n = 5 Exc, 6 Inh and 6 Ctl animals; the animal is the unit of inference

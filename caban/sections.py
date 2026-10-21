@@ -60,6 +60,7 @@ from caban.freezing_tuned_cells import run_freezing_tuned_cells as _run_freezing
 from caban.population_coupling import run_population_coupling as _run_population_coupling
 from caban.sp_rates_lmm import run_sp_rates_lmm as _run_sp_rates_lmm
 from caban.event_waveform import draw_event_waveforms as _draw_event_waveforms
+from caban.figure2_effect_profile import run_figure2_effect_profile as _run_figure2_effect_profile
 
 import statsmodels.api as sm  # noqa: F401
 from statsmodels.regression.mixed_linear_model import MixedLM as mixedlm  # noqa: F401
@@ -1957,6 +1958,15 @@ def run_figure2_shock_events(ds, cfg):
 
 
 # ---------------------------------------------------------------------------
+def run_figure2_effect_profile(ds, cfg):
+    """Figure 2 v2 panel g and the plan §12 checks (caban.figure2_effect_profile), from the primary
+    model's per-animal table; into <PLOTS_DIR>/figure2_effect_profile/."""
+    msg_start('*** Figure 2 v2 g: effect profile')
+    _run_figure2_effect_profile(cfg.PLOTS_DIR, ds.mice_per_group)
+    msg_end()
+
+
+# ---------------------------------------------------------------------------
 # Figure 2, assembled. Defined after every section it calls.
 def _figure2_panel_k(ds, cfg):
     """Panel k is drawn by the epoch-modulation lane. If the lane has run, redraw only the panel
@@ -2017,6 +2027,7 @@ def run_figure2_composite(ds, cfg, rerun=()):
 # The redesign's placed panels and their sections; its unbuilt panels are boxes
 # (caban.figure2_composite.PENDING_V2). Add a letter here when its panel is built.
 FIGURE2_V2_PANEL_SECTIONS = {
+    'g': run_figure2_effect_profile,
     'i': run_figure2_shock_events,
     'h': run_figure2_example_events,
     'c': run_want_sample_traces_paper,

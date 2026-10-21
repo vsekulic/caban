@@ -21,7 +21,10 @@ from scipy import stats
 from caban.single_unit_common import (GROUP_COLOURS, GROUP_LABELS, DREADD_DISPLAY_ORDER,
                                       ensure_dirs, save_fig, write_text, holm_correct)
 from caban.decoder import _copy_analysis_methods_template
-from caban.sp_rates_lmm import mouse_label_permutation_test, TFC_TRACE_EPOCH
+from caban.sp_rates_lmm import mouse_label_permutation_test, TFC_TRACE_EPOCH, _precomputed_stat_fn
+from caban.single_unit_common import annotate_pairwise_brackets
+from caban.nature_comm_style import nature_style, save_paper_panel, box_strip, AXIS_PT, FONT_PT
+from caban.figure2_composite import panel_figsize, LAYOUT_V2_MM
 
 UNIFIED_TABLE = os.path.join('sp_rates_lmm', 'paper', 'tfc_amplitude_rate', 'stats',
                              'unified_lmm_mouse_epoch_values.csv')
@@ -192,6 +195,41 @@ def plot_profile_plane(profile, out_path):
     plt.close(fig)
 
 
+PANEL_ROOT = 'effect_profile_panel'
+
+
+def plot_panel(profile, prof_test, out_root):
+    """Figure 2 v2 g, Nature style at g's box size: the (A, R) plane, one point per animal, and the
+    profile index P per group with the one pre-specified test (Exc vs Inh, exact permutation p)."""
+    with nature_style():
+        fig, (ax, axb) = plt.subplots(1, 2, figsize=panel_figsize('g', LAYOUT_V2_MM), layout='constrained',
+                                      gridspec_kw={'width_ratios': [1.5, 1]})
+        lim = float(np.abs(profile[['A', 'R']].to_numpy()).max()) * 1.12
+        ax.axhline(0, color='0.75', lw=AXIS_PT, zorder=0)
+        ax.axvline(0, color='0.75', lw=AXIS_PT, zorder=0)
+        ax.plot([-lim, lim], [-lim, lim], color='0.6', lw=AXIS_PT, ls='--', zorder=0)
+        for g in DREADD_DISPLAY_ORDER:
+            sub = profile[profile['group'] == g]
+            ax.scatter(sub['A'], sub['R'], s=14, color=GROUP_COLOURS[g], alpha=0.85, edgecolors='black',
+                       linewidths=0.3, label=GROUP_LABELS[g], zorder=3)
+        ax.set_xlim(-lim, lim)
+        ax.set_ylim(-lim, lim)
+        ax.set_aspect('equal')
+        ax.set_xlabel('Amplitude effect (s.d.)')
+        ax.set_ylabel('Rate decrease (s.d.)')
+        ax.legend(loc='upper left', handlelength=0.8, borderaxespad=0.2)
+        values = {g: profile.loc[profile['group'] == g, 'P'].to_numpy() for g in DREADD_DISPLAY_ORDER}
+        box_strip(axb, values, DREADD_DISPLAY_ORDER, GROUP_COLOURS, labels=GROUP_LABELS)
+        axb.axhline(0, color='0.6', lw=AXIS_PT, ls='--', zorder=0)
+        axb.set_ylabel('Profile index (A − R)')
+        annotate_pairwise_brackets(axb, values, DREADD_DISPLAY_ORDER,
+                                   _precomputed_stat_fn(np.nan, np.nan,
+                                                        p_hm3d_vs_hm4d=prof_test['p_permutation']),
+                                   fs=FONT_PT)
+        save_paper_panel(fig, out_root)
+    plt.close(fig)
+
+
 def run_figure2_effect_profile(PLOTS_DIR, mice_per_group):
     out_dir = os.path.join(PLOTS_DIR, OUT_DIRNAME)
     ensure_dirs(out_dir)
@@ -205,6 +243,7 @@ def run_figure2_effect_profile(PLOTS_DIR, mice_per_group):
     profile.to_csv(os.path.join(out_dir, 'effect_profile_per_animal.csv'))
     frac.to_csv(os.path.join(out_dir, 'fraction_active_weighted.csv'), index=False)
     plot_profile_plane(profile, os.path.join(out_dir, 'effect_profile_plane.png'))
+    plot_panel(profile, prof_test, os.path.join(out_dir, PANEL_ROOT))
     report = ['Figure 2 checks (plans/figure2_redesign_plan.md §12; pre-specified)', '=' * 66, '',
               '12.1 Effect profile, trace interval: P = A - R per animal; hM3D vs hM4D',
               pd.Series(prof_test).round(4).to_string(), '',
