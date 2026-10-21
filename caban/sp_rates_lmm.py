@@ -2762,7 +2762,7 @@ def fit_lt1_lt2_manipulation_check(df_delta, reference='mCherry'):
 
 
 def build_mouse_epoch_unified_table(df_matched, epochs=TFC_MATCHED_PROFILE_EPOCHS,
-                                    reference_epoch=UNIFIED_REFERENCE_EPOCH):
+                                    reference_epoch=UNIFIED_REFERENCE_EPOCH, require_complete=True):
     """
     The inferential dataset for the paper: ONE row per (mouse, epoch), carrying both paper-facing
     outcomes. With a complete cohort this is 17 mice x 3 epochs = 51 rows for the TFC lane, and
@@ -2812,13 +2812,20 @@ def build_mouse_epoch_unified_table(df_matched, epochs=TFC_MATCHED_PROFILE_EPOCH
     if reference_epoch not in epochs:
         raise ValueError(f'build_mouse_epoch_unified_table: reference_epoch '
                          f'{reference_epoch!r} is not among the epochs {epochs}.')
-    rows = []
+    rows, incomplete = [], []
     for epoch in epochs:
         pooled = aggregate_over_trials(df_matched, epoch)
         amp = filter_amplitude_rows(pooled)
         amp_by_mouse = amp.groupby(['mouse', 'group'], observed=True)['log_amplitude'].agg(
             ['mean', 'size'])
         for (mouse, group), grp in pooled.groupby(['mouse', 'group'], observed=True):
+            if not require_complete and ((mouse, group) not in amp_by_mouse.index
+                                         or float(grp['exposure_seconds'].sum()) <= 0):
+                # ** Only for a declared state-restricted sensitivity ** (freezing_check: moving
+                # frames only), where an animal can lack the state in an epoch. Recorded on the
+                # result (attrs['incomplete']) and reported by the caller; never the default.
+                incomplete.append((mouse, epoch))
+                continue
             if (mouse, group) not in amp_by_mouse.index:
                 raise RuntimeError(
                     f'build_mouse_epoch_unified_table: mouse {mouse!r} ({group}) has no cell with '
@@ -2862,10 +2869,10 @@ def build_mouse_epoch_unified_table(df_matched, epochs=TFC_MATCHED_PROFILE_EPOCH
     mice = sorted(out['mouse'].unique())
     missing = [(m, e) for m in mice for e in epochs
                if not ((out['mouse'] == m) & (out['epoch'] == e)).any()]
-    if missing:
+    if missing and require_complete:
         raise RuntimeError(f'build_mouse_epoch_unified_table: missing (mouse, epoch) rows '
                            f'{missing}; the unified model requires a complete grid.')
-    if len(out) != len(mice) * len(epochs):
+    if len(out) != len(mice) * len(epochs) - len(missing):
         raise RuntimeError(f'build_mouse_epoch_unified_table: got {len(out)} rows for '
                            f'{len(mice)} mice x {len(epochs)} epochs -- a mouse appears under '
                            f'more than one group.')
@@ -2877,7 +2884,9 @@ def build_mouse_epoch_unified_table(df_matched, epochs=TFC_MATCHED_PROFILE_EPOCH
     out['epoch'] = pd.Categorical(
         out['epoch'], categories=[reference_epoch] + [e for e in epochs
                                                       if e != reference_epoch])
-    return out.sort_values(['group', 'mouse', 'epoch']).reset_index(drop=True)
+    out = out.sort_values(['group', 'mouse', 'epoch']).reset_index(drop=True)
+    out.attrs['incomplete'] = sorted(set(incomplete) | set(missing))
+    return out
 
 
 def _unified_formula(response_col, reference_epoch=UNIFIED_REFERENCE_EPOCH):
@@ -3087,9 +3096,14 @@ def unified_posthoc_contrasts(fits, df_me, epochs=TFC_MATCHED_PROFILE_EPOCHS,
     out['p_holm_epoch'] = np.nan
     out['holm_epoch_reject'] = False
     if across_epoch_family:
-        # SENSITIVITY family: Holm within outcome across all six, populated on every row.
-        out['p_holm_six'] = np.nan
-        out['holm_six_reject'] = False
+        # SENSITIVITY family: Holm within outcome across all of its contrasts (six with three
+        # epochs, eight with four), populated on every row as p_holm_across_epochs; the three-epoch
+        # lane also keeps its historical name p_holm_six, which every existing consumer reads.
+        out['p_holm_across_epochs'] = np.nan
+        out['holm_across_epochs_reject'] = False
+        if len(epochs) == 3:
+            out['p_holm_six'] = np.nan
+            out['holm_six_reject'] = False
 
     for (outcome_key, epoch), idx in out.groupby(['outcome', 'epoch'],
                                                  observed=True).groups.items():
@@ -3113,9 +3127,12 @@ def unified_posthoc_contrasts(fits, df_me, epochs=TFC_MATCHED_PROFILE_EPOCHS,
                 f'contrasts, expected {len(epochs) * len(UNIFIED_TREATMENT_GROUPS)} '
                 f'({len(epochs)} epochs x {len(UNIFIED_TREATMENT_GROUPS)} treatment groups). '
                 f'The multiplicity families are defined by that shape.')
-        reject_six, padj_six = holm_correct(out.loc[idx, 'p_raw'].to_numpy(), alpha=alpha)
-        out.loc[idx, 'p_holm_six'] = padj_six
-        out.loc[idx, 'holm_six_reject'] = reject_six
+        reject_all, padj_all = holm_correct(out.loc[idx, 'p_raw'].to_numpy(), alpha=alpha)
+        out.loc[idx, 'p_holm_across_epochs'] = padj_all
+        out.loc[idx, 'holm_across_epochs_reject'] = reject_all
+        if len(epochs) == 3:
+            out.loc[idx, 'p_holm_six'] = padj_all
+            out.loc[idx, 'holm_six_reject'] = reject_all
     return out
 
 
@@ -4456,6 +4473,7 @@ _EPOCH_TICK_LABELS = {'pre_tone': 'Pre-tone', 'pre_tone_matched': 'Pre-tone', 't
 
 _PAPER_EPOCH_LABELS = {
     TFC_MATCHED_REFERENCE_EPOCH: 'Pre-tone',
+    'tone': 'Tone',
     TFC_TRACE_EPOCH: 'Trace',
     TFC_POST_SHOCK_EPOCH: 'Post-shock',
 }
@@ -5329,7 +5347,9 @@ def write_paper_results_summary(save_dir, mouse_epoch, fits, contrasts, interact
 
 def render_paper_tfc_amplitude_rate(PLOTS_DIR, df_matched, primary_contrasts, holm,
                                     perm_results, interactions, q_by_name, rate_fit, delta_df,
-                                    epochs=TFC_MATCHED_PROFILE_EPOCHS):
+                                    epochs=TFC_MATCHED_PROFILE_EPOCHS,
+                                    paper_subdir='tfc_amplitude_rate', write_summary=True,
+                                    distribution_figsize=None):
     """
     The paper lane: the two unified models, two figures, and one Results-ready numbers file, under
     PLOTS_DIR/sp_rates_lmm/paper/tfc_amplitude_rate/.
@@ -5358,7 +5378,10 @@ def render_paper_tfc_amplitude_rate(PLOTS_DIR, df_matched, primary_contrasts, ho
                  matched trials.
     """
     epochs = tuple(epochs)
-    paper_dir = os.path.join(PLOTS_DIR, 'sp_rates_lmm', 'paper', 'tfc_amplitude_rate')
+    # paper_subdir / write_summary / distribution_figsize: the four-epoch lane
+    # (run_paper_tfc_four_epochs) reuses everything here into its own folder; its comparison with
+    # this lane replaces the results summary, whose inputs are this run's internal lane.
+    paper_dir = os.path.join(PLOTS_DIR, 'sp_rates_lmm', 'paper', paper_subdir)
     paper_stats_dir = os.path.join(paper_dir, 'stats')
     ensure_dirs(paper_dir, paper_stats_dir)
     # Both templates land here: the short paper-facing one, and (via _save_panel) the full
@@ -5411,7 +5434,7 @@ def render_paper_tfc_amplitude_rate(PLOTS_DIR, df_matched, primary_contrasts, ho
     # ---- Figures, annotated entirely from the tables above ------------------------------------
     print('[sp_rates_lmm] Paper figures: amplitude + rate across the matched TFC windows...')
     plot_paper_epoch_distributions(df_paper, mouse_epoch, contrasts, paper_dir, epochs=epochs,
-                                   figsize=panel_figsize('g'))   # Figure 2g
+                                   figsize=distribution_figsize or panel_figsize('g'))   # Figure 2g
 
     # The same forest drawing code the internal lane uses, given the UNIFIED contrasts instead of
     # its own Welch ones -- so the forest's points and intervals are the same rows of
@@ -5430,6 +5453,11 @@ def render_paper_tfc_amplitude_rate(PLOTS_DIR, df_matched, primary_contrasts, ho
         # window with reduced trial coverage, is not among them.
         reduced_coverage_epochs=(), epoch_labels=_PAPER_EPOCH_LABELS)
 
+    if not write_summary:
+        print(f'[sp_rates_lmm] Paper figures written to {paper_dir}')
+        return {'mouse_epoch': mouse_epoch, 'fits': fits, 'contrasts': contrasts,
+                'interactions': interactions_table, 'paper_dir': paper_dir}
+
     # ---- Sensitivity output reported under Part 2 of the summary -------------------------------
     rate_contrasts = summarize_rate_group_epoch_contrasts(rate_fit)
     write_text(os.path.join(paper_stats_dir, 'rate_group_epoch_contrasts.csv'),
@@ -5446,6 +5474,57 @@ def render_paper_tfc_amplitude_rate(PLOTS_DIR, df_matched, primary_contrasts, ho
     print(f'[sp_rates_lmm] Paper figures written to {paper_dir}')
     return {'mouse_epoch': mouse_epoch, 'fits': fits, 'contrasts': contrasts,
             'interactions': interactions_table}
+
+
+TFC_FOUR_EPOCHS = (TFC_MATCHED_REFERENCE_EPOCH, 'tone', TFC_TRACE_EPOCH, TFC_POST_SHOCK_EPOCH)
+FOUR_EPOCH_SUBDIR = 'tfc_amplitude_rate_four_epochs'
+
+
+def exposure_matched_event_table(mice_per_group, TFC_cond, epochs, mapping='full', thres=None):
+    """The fine event table over ``epochs`` on the exposure-matched (mouse, trial) pairs, exactly as
+    run_sp_rates_lmm builds the paper lane's input: build_epoch_event_table with the module's epoch
+    windows, then restrict_to_exposure_matched_trials. Returns (table, coverage)."""
+    df_fine = build_epoch_event_table(mice_per_group, TFC_cond, TFC_EPOCHS, tfc_epoch_frames_fn(),
+                                      mapping=mapping, thres=thres)
+    df_matched, coverage = restrict_to_exposure_matched_trials(df_fine, epochs)
+    pairs = set(zip(df_matched['mouse'], df_matched['trial']))
+    return df_fine[[(m, t) in pairs for m, t in zip(df_fine['mouse'], df_fine['trial'])]], coverage
+
+
+def run_paper_tfc_four_epochs(PLOTS_DIR, mice_per_group, TFC_cond, mapping='full', thres=None,
+                              distribution_figsize=None):
+    """The primary conditioning model with the tone added as a fourth epoch (plans/
+    figure2_redesign_plan.md §13; POST HOC, reported beside the three-epoch primary): the same
+    paper lane (render_paper_tfc_amplitude_rate) into paper/tfc_amplitude_rate_four_epochs/, plus a
+    side-by-side table of the shared epochs' contrasts in the two models."""
+    df_grid, coverage = exposure_matched_event_table(mice_per_group, TFC_cond, TFC_FOUR_EPOCHS,
+                                                     mapping, thres)
+    res = render_paper_tfc_amplitude_rate(PLOTS_DIR, df_grid, None, None, None, None, None, None, None,
+                                          epochs=TFC_FOUR_EPOCHS, paper_subdir=FOUR_EPOCH_SUBDIR,
+                                          write_summary=False,
+                                          distribution_figsize=distribution_figsize)
+    stats_dir = os.path.join(res['paper_dir'], 'stats')
+    write_text(os.path.join(stats_dir, 'matched_trial_coverage.csv'), coverage.to_csv(index=False))
+    three_path = os.path.join(PLOTS_DIR, UNIFIED_CONTRASTS_CSV)
+    if not os.path.isfile(three_path):
+        raise FileNotFoundError(f'{three_path} not found: run run_sp_rates_lmm (the three-epoch '
+                                f'primary) first, so the two can be compared.')
+    keys = ['outcome', 'epoch', 'group']
+    cols = ['ratio', 'ratio_ci_low', 'ratio_ci_high', 'p_raw', 'p_holm_epoch', 'p_holm_across_epochs']
+    three = pd.read_csv(three_path)
+    if 'p_holm_across_epochs' not in three:
+        three['p_holm_across_epochs'] = three['p_holm_six']
+    side = res['contrasts'][keys + cols].merge(three[keys + cols], on=keys, how='left',
+                                                 suffixes=('_four', '_three'))
+    write_text(os.path.join(stats_dir, 'four_vs_three_epoch_contrasts.csv'), side.to_csv(index=False))
+    text = ['Four-epoch conditioning model (POST HOC, plan §13) beside the three-epoch primary',
+            '=' * 78, '', 'Interactions (four epochs):',
+            res['interactions'].to_string(index=False), '',
+            'Contrasts vs mCherry, side by side (empty _three columns: the tone, absent there):',
+            side.round(4).to_string(index=False)]
+    write_text(os.path.join(stats_dir, 'four_vs_three_epoch_summary.txt'), '\n'.join(text) + '\n')
+    print('\n'.join(text))
+    return res
 
 
 # ─────────────────────────────────────────────────────────────────────────────
