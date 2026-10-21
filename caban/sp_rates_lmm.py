@@ -326,7 +326,7 @@ from caban.single_unit_common import (
 )
 from caban.nature_comm_style import (nature_style, figsize_mm, box_strip, save_paper_panel,
                                      FONT_PT, LEGEND_PT, LINE_PT, AXIS_PT)
-from caban.figure2_composite import panel_figsize
+from caban.figure2_composite import panel_figsize, LAYOUT_V2_MM
 from caban.decoder import _ANALYSIS_METHODS_TEMPLATES_DIR, _copy_analysis_methods_template
 from caban.analysis import _draw_violin_triplet, do_pairwise_holm_plot
 from caban.epoch_analysis import (get_epoch_frames, get_testb_epoch_frames,
@@ -363,6 +363,16 @@ def write_figure_guide(out_dir):
 # separately later via YrA/C, not here.
 TFC_EPOCHS = ('pre_tone', 'pre_tone_matched', 'tone', 'trace', 'post_shock', 'post_shock_late')
 TFC_TRACE_EPOCH = 'trace'
+
+
+def tfc_epoch_frames_fn():
+    """The conditioning epoch windows this module uses everywhere: get_epoch_frames with the 35 s
+    pre-tone, the 20 s matched baseline and post-shock windows and the late post-shock onset, stated
+    here so the locked plan can be read off one definition."""
+    return functools.partial(get_epoch_frames, pre_tone_duration_s=35.0,
+                             pre_tone_matched_duration_s=TRACE_MATCHED_WINDOW_S,
+                             post_shock_duration_s=TRACE_MATCHED_WINDOW_S,
+                             post_shock_late_onset_s=POST_SHOCK_LATE_ONSET_S)
 TFC_REFERENCE_EPOCH = 'pre_tone'
 
 # The second confirmatory response window. CA1 pyramidal activity after an aversive US is
@@ -9625,10 +9635,33 @@ def plot_example_traces(sessions, df_trace_amp, save_dir, mapping='full', thres=
     _save_panel(fig, save_dir, filename_root)
 
 
+GROUP_MEDIAN_EXAMPLES_ROOT = 'group_median_examples_vertical'
+
+
+def plot_group_median_examples(sessions, df_runs_trace, save_dir, mapping='full', thres=None):
+    """Figure 2 v2 h: each group's own median trace-interval event, common scale, at h's box size."""
+    plot_width_vs_height_matched_examples(sessions, df_runs_trace, save_dir, mapping=mapping,
+                                          thres=thres, orientation='vertical',
+                                          filename_root=GROUP_MEDIAN_EXAMPLES_ROOT,
+                                          selection='group_median_amplitude',
+                                          figsize=panel_figsize('h', LAYOUT_V2_MM))
+
+
+def draw_group_median_examples(PLOTS_DIR, mice_per_group, TFC_cond, mapping='full', thres=None):
+    """The h panel alone, without the rest of run_sp_rates_lmm: the trace-interval run table from the
+    same detector and windows (build_run_structure_table, tfc_epoch_frames_fn), then the panel, into
+    <PLOTS_DIR>/sp_rates_lmm/TFC_cond/."""
+    df_runs = build_run_structure_table(mice_per_group, TFC_cond, (TFC_TRACE_EPOCH,),
+                                        tfc_epoch_frames_fn(), mapping=mapping, thres=thres)
+    plot_group_median_examples(TFC_cond, df_runs, os.path.join(PLOTS_DIR, 'sp_rates_lmm', 'TFC_cond'),
+                               mapping=mapping, thres=thres)
+
+
 def plot_width_vs_height_matched_examples(sessions, df_runs_trace, save_dir, mapping='full',
                                           thres=None, target_height_percentile=50,
                                           orientation='horizontal',
-                                          filename_root='width_height_matched_examples'):
+                                          filename_root='width_height_matched_examples',
+                                          selection='pooled_peak_height', figsize=None):
     """
     Plan section 5c's last bullet: one run per group, each matched to the SAME target peak
     HEIGHT (the `target_height_percentile`-th percentile of run peak height POOLED across all
@@ -9643,11 +9676,21 @@ def plot_width_vs_height_matched_examples(sessions, df_runs_trace, save_dir, map
 
     orientation : 'horizontal' (groups side by side) or 'vertical' (groups stacked in rows,
                   for narrow figure slots).
+    selection   : 'pooled_peak_height' (above: every group matched to one pooled peak height) or
+                  'group_median_amplitude' (Figure 2 v2 h, VS 2026-10-21): per group, the run whose
+                  per-event amplitude (the run integral, the paper's measure) is closest to that
+                  GROUP'S OWN median, on a common y-scale -- so the examples show the groups'
+                  typical events as they differ, not equalised.
+    figsize     : overrides the vertical panel size (default: Figure 2 f's box).
     """
+    if selection not in ('pooled_peak_height', 'group_median_amplitude'):
+        raise ValueError(f"plot_width_vs_height_matched_examples: selection must be "
+                         f"'pooled_peak_height' or 'group_median_amplitude', got {selection!r}.")
     if orientation not in ('horizontal', 'vertical'):
         raise ValueError(f"plot_width_vs_height_matched_examples: orientation must be "
                          f"'horizontal' or 'vertical', got {orientation!r}.")
     target = np.percentile(df_runs_trace['peak_height'], target_height_percentile)
+    common_scale = selection == 'group_median_amplitude'
     with nature_style():
         n = len(DREADD_DISPLAY_ORDER)
         if orientation == 'horizontal':
@@ -9655,15 +9698,18 @@ def plot_width_vs_height_matched_examples(sessions, df_runs_trace, save_dir, map
             axs = axs[0]
         else:
             # Figure 2f, drawn at its size in the composite.
-            fig, axs = plt.subplots(n, 1, figsize=panel_figsize('f'), squeeze=False, sharex=True,
-                                    layout='constrained')
+            fig, axs = plt.subplots(n, 1, figsize=figsize or panel_figsize('f'), squeeze=False,
+                                    sharex=True, sharey=common_scale, layout='constrained')
             axs = axs[:, 0]
 
         for ax, group in zip(axs, DREADD_DISPLAY_ORDER):
             gsub = df_runs_trace[df_runs_trace['group'] == group].sort_values(['mouse', 'cell', 'trial'])
             if gsub.empty:
                 raise RuntimeError(f'plot_width_vs_height_matched_examples: no runs for group {group!r}.')
-            idx = (gsub['peak_height'] - target).abs().idxmin()
+            if common_scale:
+                idx = (gsub['amplitude'] - gsub['amplitude'].median()).abs().idxmin()
+            else:
+                idx = (gsub['peak_height'] - target).abs().idxmin()
             sel = gsub.loc[idx]
             mouse, cell_id = sel['mouse'], sel['cell']
             session = sessions[mouse]
@@ -9777,10 +9823,7 @@ def run_sp_rates_lmm(PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond
     # post_shock response window and the 20 s matched baseline are analysis decisions of this
     # module (see TFC_POST_SHOCK_EPOCH / TFC_MATCHED_REFERENCE_EPOCH), so they are stated here
     # where the locked plan can be read off the call rather than inherited silently.
-    tfc_frames_fn = functools.partial(get_epoch_frames, pre_tone_duration_s=35.0,
-                                      pre_tone_matched_duration_s=TRACE_MATCHED_WINDOW_S,
-                                      post_shock_duration_s=TRACE_MATCHED_WINDOW_S,
-                                      post_shock_late_onset_s=POST_SHOCK_LATE_ONSET_S)
+    tfc_frames_fn = tfc_epoch_frames_fn()
     # build_epoch_and_run_tables, not the two standalone builders back to back: both need the
     # same full-session per-cell event detection (find_event_runs_ca_S) over the SAME mice at the
     # SAME threshold, so building them separately would silently re-run that dominant-cost step
@@ -10101,6 +10144,7 @@ def run_sp_rates_lmm(PLOTS_DIR, mice_per_group, TFC_cond, TFC_cond_LT1, TFC_cond
     plot_width_vs_height_matched_examples(TFC_cond, df_runs_trace, out_dir, mapping=mapping, thres=thres,
                                          orientation='vertical',
                                          filename_root='width_height_matched_examples_vertical')
+    plot_group_median_examples(TFC_cond, df_runs_trace, out_dir, mapping=mapping, thres=thres)
 
     # ---- Secondary: Test_B / Test_B_1wk post-tone amplitude (recall complement) -------------------
     for label, sessions in (('Test_B', Test_B), ('Test_B_1wk', Test_B_1wk)):

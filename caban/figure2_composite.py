@@ -163,12 +163,12 @@ PANEL_FILES_V2 = {
     'c': PANEL_FILES['c'],
     'e': PANEL_FILES['d'],          # LT1 -> LT2 within-cell amplitude change and dropout (VS, 2026-10-21)
     'f': PANEL_FILES['g'],          # the primary model, per-event amplitude and population rate by epoch
+    'h': 'sp_rates_lmm/TFC_cond/group_median_examples_vertical.png',   # each group's own median event
 }
 # Move a letter from here to PANEL_FILES_V2 when its section draws it at its box size.
 PENDING_V2 = {
     'd': 'SST cells (DIO-GCaMP6f): event rate and amplitude before vs after CNO',
     'g': 'Double dissociation: per-animal amplitude vs rate change; 2 x 2 effects; other sessions',
-    'h': 'Example events, each group its own median event, common scale',
     'i': 'Shock-locked event amplitude and probability',
 }
 CAPTION_V2 = """**Fig. 2 (redesign, in progress) | Chemogenetic excitation and inhibition of SST interneurons
@@ -182,7 +182,9 @@ in LT2 (right).
 Per-event amplitude (top) and population event rate (bottom) in the three 20-s conditioning epochs;
 small points are cells, large points animals; contrasts of the group x epoch mixed model with animal
 as random intercept, Holm-corrected over the two treatment-versus-control comparisons within each
-epoch. **g**, Double dissociation (not built). **h**, Example events (not built). **i**, Shock-locked
+epoch. **g**, Double dissociation (not built). **h**, Example trace-interval events, one per group: the event whose per-event amplitude is
+closest to that group's own median, on a common scale; shading marks the detected run, the dotted
+line the detection threshold. **i**, Shock-locked
 event response (not built). n = 5 Exc, 6 Inh and 6 Ctl animals; the animal is the unit of inference
 throughout. Plan: plans/figure2_redesign_plan.md.
 """
