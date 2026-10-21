@@ -454,7 +454,7 @@ def _region_weights(cells, shape, seed_mask):
 def preprocessing_metrics(variant_dir, cells, seed_mask):
     """Stage-1 measurements of one variant on the reference cells (see the section comment above).
 
-    contrast_z: median over cells of (disc - annulus) in max_proj, in background robust s.d.;
+    contrast_z: median over cells of (disc - annulus) in max_proj, in background s.d.;
     transient_snr: median over cells of the 99.9th-percentile excursion of (disc - annulus) trace
     of Y_fm_chk over its noise (robust s.d. of frame differences / sqrt 2);
     residual_background: s.d. of the smoothed max_proj over background pixels / median cell
@@ -466,7 +466,9 @@ def preprocessing_metrics(variant_dir, cells, seed_mask):
     regions = weights @ max_proj.ravel()
     disc, ring = regions[0::2], regions[1::2]
     bg = max_proj[background]
-    bg_sd = 1.4826 * np.median(np.abs(bg - np.median(bg)))
+    bg_sd = np.std(bg)    # plain s.d.: max_proj is integer-valued, so its MAD can be 0
+    if bg_sd == 0:
+        raise ValueError('{}: background of max_proj is flat'.format(variant_dir))
     cell_contrast = disc - ring
     smooth = scipy.ndimage.gaussian_filter(max_proj, BACKGROUND_SMOOTH_SIGMA_PX)
 
