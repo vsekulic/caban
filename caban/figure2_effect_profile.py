@@ -33,16 +33,17 @@ METHODS_FILENAME = 'figure2_effect_profile_methods.md'
 REFERENCE = 'mCherry'
 
 
-def trace_table(PLOTS_DIR, mice_per_group):
+def trace_table(PLOTS_DIR, mice_per_group, epoch=TFC_TRACE_EPOCH):
+    """The primary model's per-animal values for one epoch (default the trace interval)."""
     path = os.path.join(PLOTS_DIR, UNIFIED_TABLE)
     if not os.path.isfile(path):
         raise FileNotFoundError(f'{path} not found: run run_sp_rates_lmm first.')
     df = pd.read_csv(path)
-    df = df[df['epoch'] == TFC_TRACE_EPOCH].set_index('mouse')
+    df = df[df['epoch'] == epoch].set_index('mouse')
     expected = {m for ms in mice_per_group.values() for m in ms}
     if set(df.index) != expected:
-        raise RuntimeError(f'figure2_effect_profile: trace table has mice {sorted(df.index)}, the cohort '
-                           f'is {sorted(expected)}.')
+        raise RuntimeError(f'figure2_effect_profile: {epoch} table has mice {sorted(df.index)}, the '
+                           f'cohort is {sorted(expected)}.')
     return df
 
 

@@ -156,8 +156,8 @@ LAYOUT_V2_MM = {
     'e': (125, 35, 58, 38),         # = the current figure's d box: the LT1 -> LT2 check places 1:1
     'f': (0, 78, 78, 74),
     'g': (80, 78, 103, 74),
-    'h': (0, 155, 62, 46),
-    'i': (64, 155, 119, 46),
+    'h': (0, 155, 92, 56),
+    'i': (94, 155, 89, 56),
 }
 PANEL_FILES_V2 = {
     'c': PANEL_FILES['c'],
@@ -184,10 +184,11 @@ small points are cells, large points animals; contrasts of the group x epoch mix
 as random intercept, Holm-corrected over the two treatment-versus-control comparisons within each
 epoch. **g**, Effect profile per animal (trace interval): left, amplitude effect (A, s.d. units, increase
 positive) against rate effect (R, s.d. units, decrease positive), relative to the control mean; right,
-the profile index P = A − R; ** exact mouse-label randomization P < 0.01 (Exc vs Inh, the one test). **h**, Event-triggered calcium transient per group: the denoised calcium trace C of every
-trace-interval event's cell, aligned on the event and baseline-subtracted, averaged per animal; mean
-(lines) and s.e.m. (bands) across animals; above, the trace-interval right, per-animal trace-interval log per-event amplitude (the values the model in f was fitted on), with
-that model's Holm-adjusted contrasts vs Ctl. **i**, Pyramidal events around
+the profile index P = A − R; ** exact mouse-label randomization P < 0.01 (Exc vs Inh, the one test). **h**, Single-cell calcium events in the pre-tone (20 s), trace and post-shock (20 s) epochs (the
+windows of f): top, the cell's denoised calcium trace C around every event detected in that epoch,
+aligned on the event's peak and baseline-subtracted, averaged per animal; mean (lines) and s.e.m.
+(bands) across animals; bottom, per-animal log per-event amplitude in that epoch (the values the
+model in f was fitted on), with that model's Holm-adjusted contrasts vs Ctl. **i**, Pyramidal events around
 shock onset, 1-s bins: event rate per cell (left) and log per-event amplitude (right); mean (lines)
 and s.e.m. (bands) across animals; darker shading, the 2-s shock; dashed line, shock offset; above, the
 post-shock (20 s) contrasts vs Ctl from the model in f (ratio, Holm-adjusted P). n = 5 Exc, 6 Inh and 6 Ctl animals; the animal is the unit of inference
