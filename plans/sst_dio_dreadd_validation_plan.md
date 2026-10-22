@@ -330,6 +330,38 @@ the largest cells trimmed in the viewer: ksize 5, wnd 20.
 | footprint diameter (half / 20 % of peak, median) | 9.0–10.4 / 14.6–16.2 px (G12, G16 HC2) | 9.9–10.4 / 15.8–16.3 px (G27 HC2) |
 | G27 HC2 at these settings: contrast / transient SNR / residual | — | 4.99 / 6.38 / 0.109 |
 
+**Stage 1 decided (VS, 2026-10-22): ksize 5, wnd 15** (logged in
+`~/sst_dio_out/parameter_stages/G27_HC2/parameter_log.csv`; `DECIDED_OVERRIDES`).
+
+**Stage 2: seeds** (seed `max_wnd` 10/15/20 × PNR threshold 0.75/1/1.25/1.5; KS `sig` 0.05 and the
+seed merge (`thres_dist` 10, `thres_corr` 0.8) as in the frozen set). Run in Minian's env from
+stage 1's decided movies, calling Minian's seed functions as the notebook does
+(`caban/sst_dio_seed_grid.py`, ~3 min for all 12): `seeds_init` once per `max_wnd`; PNR computed
+once and each threshold applied to it (Minian's `pnr_refine` sets `mask_pnr = pnr > thres`); seed
+merge per combination. The lens mask removes ~73 % of the initial seeds (1264–1532 → 323–389),
+nearly all on the rim. KS removes almost none.
+
+| max_wnd \ PNR | 0.75 | 1.0 | 1.25 | 1.5 |
+|---|---|---|---|---|
+| 10: final seeds / recall / cells ≥ 2 seeds / unmatched | 67 / 0.88 / 8 / 13 | 58 / 0.87 / 7 / 6 | 44 / 0.67 / 5 / 4 | 25 / 0.44 / 2 / 0 |
+| 15 | 78 / 1.00 / 7 / 16 | **66 / 1.00 / 5 / 7** | 45 / 0.71 / 4 / 4 | 25 / 0.44 / 2 / 0 |
+| 20 | 81 / 1.00 / 9 / 19 | 66 / 1.00 / 7 / 7 | 44 / 0.69 / 4 / 4 | 25 / 0.44 / 2 / 0 |
+
+Recall: reference cells with a final seed within 6 px. The unmatched seeds were checked one by one
+(`unmatched_<variant>.png`: crop and trace with PNR): at max_wnd 15, PNR 0.75 adds 9 seeds with
+PNR 0.89–0.99, all noise (flat traces, off-cell or on a neighbour's halo); the 7 with PNR > 1 sit on
+or beside reference cells (second seeds on a cell, for the later merges), not missed cells.
+
+**Claude's recommendation: max_wnd 15, PNR threshold 1.0 — the frozen values.** Full recall needs
+max_wnd ≥ 15 and PNR ≤ 1.0; PNR 1.25 already loses 29 % of the cells, PNR 0.75 adds only noise;
+max_wnd 20 gives the same seeds as 15 with more cells holding two or more (7 vs 5). The split cells
+are left to the merge stages, where the one-at-a-time grid showed the effect (merge 0.7). Caveat:
+the reference cells came from a PNR 1.0 run, so a cell only a lower threshold could find would not
+be in it; the unmatched-seed check is what covers that.
+
+Note (Minian): `pnr_refine` chunks seeds by `len(seeds) // 128`, which is 0 with fewer than 128
+seeds — a ZeroDivisionError waiting for a sparse field (G23?). Not hit yet.
+
 Run note: one variant (`ksize_7_wnd_10`) failed under load when ffmpeg returned 1001 frames for one
 `.avi` (`dup=2`); the retried task carried on with a half-written `varr` (4857 of 6157 frames
 wrong, in 50-frame chunks). Its record said `failed`, but the first stage script measured it anyway;
