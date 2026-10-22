@@ -22,6 +22,10 @@ FOOTPRINT_LEVEL = 0.3          # a unit's outline: where its footprint exceeds t
 SNAPSHOT_DIR = 'review_snapshots'
 LOG_NAME = 'parameter_log.csv'
 LOG_FIELDS = ('time', 'stage', 'values_tried', 'value_chosen', 'why')
+# Outline colours (RGBA): the reference run, the variant, and pixels on both outlines (VS, 2026-10-22).
+ORANGE = (1.0, 0.6, 0.0, 1.0)
+BLUE = (0.2, 0.6, 1.0, 1.0)
+PURPLE = (0.75, 0.2, 0.95, 1.0)
 
 
 def variants(grid_root):
@@ -91,15 +95,17 @@ def compare(grid_root, variant, reference='frozen', save=True):
         panels.append((name, open_array(grid_root, name, 'max_proj').values, unit_outlines(A),
                        A.sizes['unit_id']))
     fig, axes = plt.subplots(1, 3, figsize=(18, 6.4))
-    _show(axes[0], panels[0][1], panels[0][2], (1.0, 0.6, 0.0, 1.0),
-          '{}: {} units'.format(panels[0][0], panels[0][3]))
-    _show(axes[1], panels[1][1], panels[1][2], (0.2, 0.6, 1.0, 1.0),
-          '{}: {} units'.format(panels[1][0], panels[1][3]))
-    _show(axes[2], panels[1][1], panels[0][2], (1.0, 0.6, 0.0, 0.9), 'both: {} (orange), {} (blue)'.format(
-        reference, variant))
-    both = np.zeros(panels[1][2].shape + (4,))
-    both[panels[1][2]] = (0.2, 0.6, 1.0, 0.9)
-    axes[2].imshow(both, interpolation='nearest')
+    _show(axes[0], panels[0][1], panels[0][2], ORANGE, '{}: {} units'.format(panels[0][0], panels[0][3]))
+    _show(axes[1], panels[1][1], panels[1][2], BLUE, '{}: {} units'.format(panels[1][0], panels[1][3]))
+    reference_only = panels[0][2] & ~panels[1][2]
+    variant_only = panels[1][2] & ~panels[0][2]
+    in_both = panels[0][2] & panels[1][2]
+    _show(axes[2], panels[1][1], reference_only, ORANGE,
+          'orange: {} only · blue: {} only · purple: both'.format(reference, variant))
+    overlay = np.zeros(in_both.shape + (4,))
+    overlay[variant_only] = BLUE
+    overlay[in_both] = PURPLE
+    axes[2].imshow(overlay, interpolation='nearest')
     fig.tight_layout()
     if save:
         os.makedirs(os.path.join(grid_root, SNAPSHOT_DIR), exist_ok=True)
