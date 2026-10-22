@@ -310,14 +310,25 @@ grainy; wnd 25–30 leave a diffuse band (neuropil/processes, top right) that in
 faint at 20, mostly gone at 15; wnd 10 shrinks the cells; ksize 7 makes cells blobbier and brings
 out processes.
 
-**Claude's recommendation: ksize 5, wnd 20.** `wnd`: Minian sizes the tophat window to the largest
-expected cell; SST cells here reach ~19–21 px at 20 % of peak, so 15 trims the largest ones. Transient
-SNR rises to wnd 20 and then plateaus (6.38 → 6.74, +6 %), while contrast barely moves (−2 %) and the
-residual background grows steadily beyond 20 (the band). `ksize`: 3 is clearly worse (contrast −33 %,
-residual ×1.7); 7 gains only 1–4 % SNR over 5 at the cost of spatial blur, which matters where SST
-cells sit within ~10 px of each other, and 5 keeps the main cohort's denoising. Close second:
-ksize 5, wnd 15 (the frozen values; best contrast, least residual, identical preprocessing to the
-main cohort).
+**Claude's recommendation (revised 2026-10-22): ksize 5, wnd 15 — the frozen values, as for the
+pyramidal cohort.** First recommended wnd 20, on the argument that SST cells are large; measured
+against the pyramidal output, they are not: at the same settings, footprint diameters are the same
+(half peak: G27 SST median 9.9–10.4 px, pyramidal G12 10.4, G16 9.0; 20 % of peak: SST 15.8–16.3,
+max 21; pyramidal 14.6–16.2, max 24–34). Without a cell-size reason, wnd 20 buys +6 % transient SNR
+(6.38 → 6.74) for +14 % residual background and the faint diffuse band, and makes SST preprocessing
+differ from the pyramidal cells it is compared with. `ksize`: 3 is clearly worse (contrast −33 %,
+residual ×1.7); 7 gains only 1–4 % SNR over 5 at the cost of spatial blur. Alternative if VS sees
+the largest cells trimmed in the viewer: ksize 5, wnd 20.
+
+| stage 1 | pyramidal (Direct.GCaMP, G05–G21, all finished runs) | SST DIO (recommended) |
+|---|---|---|
+| video load | all frames (`[0-9]+\.avi`) | same; plus `del_frames` where line artefacts (G22 HC2: 8 frames), VS's G25 practice |
+| glow removal | `varr − min over frames` | same |
+| denoise | median, `ksize` 5 | **median, `ksize` 5** |
+| background removal | tophat, `wnd` 15 | **tophat, `wnd` 15** |
+| motion correction | `estimate_motion(dim="frame")`, no subset | same |
+| footprint diameter (half / 20 % of peak, median) | 9.0–10.4 / 14.6–16.2 px (G12, G16 HC2) | 9.9–10.4 / 15.8–16.3 px (G27 HC2) |
+| G27 HC2 at these settings: contrast / transient SNR / residual | — | 4.99 / 6.38 / 0.109 |
 
 Run note: one variant (`ksize_7_wnd_10`) failed under load when ffmpeg returned 1001 frames for one
 `.avi` (`dup=2`); the retried task carried on with a half-written `varr` (4857 of 6157 frames
