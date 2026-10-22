@@ -415,12 +415,28 @@ of 52 reference cells) and, being duplicates of a cell, inflate the unit count r
 cells' activity; dl_wnd 8 only enlarges footprints and fuses more. VS checks groups A–D in
 `CNMFViewer` (the notebook's stage 4 viewer opens on the 0.8 run).
 
-If VS agrees, **the SST parameter set is the pyramidal frozen set throughout**, with two
+**Stage 4 decided (VS, 2026-10-22): first merge 0.8, dl_wnd 5.** So **the SST parameter set is
+the pyramidal frozen set throughout** (VS: "good to know that they're the same parameters in the
+end"), with two
 SST-specific additions that alter no parameter: line-artefact frames dropped (VS's practice) and
 the lens-rim seed mask. Still to do before the queue: lens ellipses for G22, G23, G26 (each shown to
 VS); line-artefact detection on every conditioning-day session (not only HC2); a check run on
 those three mice's HC2 (G23 should no longer hit the empty-merge failure; watch `pnr_refine`'s
 < 128-seed case).
+
+**Under way (2026-10-22, VS agreed all three):**
+1. Lens ellipses proposed for G22, G23, G26 (`sst_dio_common.SEED_MASKS_PROPOSED`), drawn over the
+   frozen-set `max_proj` and the raw mean, where the lens edge shows
+   (`parameter_check/seed_mask/<mouse>_HC2_try3.png`): G22 (340, 315; 265, 270) inside the
+   left/bottom-left rim; G23 (250, 250; 300, 225), centred high and narrow — no clear rim, but a
+   bright out-of-focus disc on the right is left out and the active cell top right kept; G26 (335,
+   300; 275, 295), G27's enlarged for a cell at the left edge. Into `session_queue.SEED_MASKS` once
+   VS approves; the HC2 ellipse is drawn on every session of the day to check it fits them all.
+2. Every conditioning-day session (36): raw max − mean per session with the ellipse, for VS to see
+   lines by eye, and the frame-by-frame detection beside it (`scripts/sst_dio_day_overview.py`,
+   `~/sst_dio_out/conditioning_day_overview/`).
+3. The decided set on G22, G23, G26 HC2 (`scripts/sst_dio_final_set_check.py`,
+   `~/sst_dio_out/decided_set_check/`).
 
 Note (Minian): `pnr_refine` chunks seeds by `len(seeds) // 128`, which is 0 with fewer than 128
 seeds — a ZeroDivisionError waiting for a sparse field (G23?). Not hit yet.
