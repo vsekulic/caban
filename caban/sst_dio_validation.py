@@ -400,7 +400,12 @@ STAGE_GRIDS = {
                       for k in PREPROCESSING_KSIZES for w in PREPROCESSING_WNDS},
 }
 # VS's decisions, stage by stage (the parameter log), carried into every later stage's grid.
-DECIDED_OVERRIDES = {}
+# Explicit even where a value equals the frozen set, so the record says it was decided.
+DECIDED_OVERRIDES = {
+    # preprocessing, VS 2026-10-22 (G27 HC2): same as the pyramidal cohort.
+    'param_denoise': {'ksize': 5},
+    'param_background_removal': {'wnd': 15},
+}
 # Reference cells for the stage measurements: the units of the G27 grid's merge_corr_0_7 run
 # (inside the lens mask, the cleanest separation of the one-at-a-time grid). Only their positions
 # are used, the same for every variant, so the variants are compared on the same cells.

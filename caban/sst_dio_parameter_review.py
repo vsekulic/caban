@@ -8,6 +8,7 @@ only what that env has: no caban module that needs papermill or the caban env. N
 """
 
 import csv
+import datetime
 import glob
 import json
 import os
@@ -150,6 +151,6 @@ def log_decision(grid_root, stage, values_tried, value_chosen, why):
         writer = csv.DictWriter(fh, fieldnames=LOG_FIELDS)
         if new:
             writer.writeheader()
-        writer.writerow({'time': pd.Timestamp.now().isoformat(timespec='seconds'), 'stage': stage,
+        writer.writerow({'time': datetime.datetime.now().isoformat(timespec='seconds'), 'stage': stage,
                          'values_tried': values_tried, 'value_chosen': value_chosen, 'why': why})
     return pd.read_csv(path)
