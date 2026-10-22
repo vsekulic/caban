@@ -3003,7 +3003,7 @@ def _unified_epoch_interaction_coef(fe_names, group, epoch):
 
 def unified_posthoc_contrasts(fits, df_me, epochs=TFC_MATCHED_PROFILE_EPOCHS,
                               reference_epoch=UNIFIED_REFERENCE_EPOCH,
-                              across_epoch_family=True, alpha=0.05):
+                              across_epoch_family=True, alpha=0.05, pairwise=False):
     """
     The planned treatment-vs-control simple effects, from the fitted models -- the single
     authoritative source for every effect estimate, interval, p-value and asterisk on the
@@ -3017,6 +3017,14 @@ def unified_posthoc_contrasts(fits, df_me, epochs=TFC_MATCHED_PROFILE_EPOCHS,
     treated equivalently, and no epoch is a special case. Amplitude and rate remain separate
     outcomes. hM3D-vs-hM4D is in no family and is not computed here -- it is not this design's
     question and appears only as exploratory output.
+
+    ** pairwise=True (the conditioning paper lane since 2026-10-22, plans/figure2_redesign_plan.md
+    §15; decided after the results were known, the more conservative family). ** A third contrast
+    per (outcome, epoch), hM3D - hM4D (group 'hM3D_vs_hM4D'), from the same fit, and
+    `p_holm_epoch` becomes the Holm correction over all THREE pairwise comparisons of the epoch.
+    The original two-comparison values are kept beside it as `p_holm_epoch_vs_control` (NaN on
+    the hM3D - hM4D row), so both families stay reported. The across-epoch sensitivity then spans
+    all 3 x n_epochs contrasts of an outcome.
 
     ** `p_holm_epoch` is the only adjusted P behind a paper asterisk or Results claim. ** Whether
     the treatment effect DIFFERS across epochs is a different question and is tested by the
@@ -3088,6 +3096,23 @@ def unified_posthoc_contrasts(fits, df_me, epochs=TFC_MATCHED_PROFILE_EPOCHS,
                     row['mean_population_rate_control'] = mean_c
                     row['absolute_difference_events_per_s_per_cell'] = mean_t - mean_c
                 rows.append(row)
+            if pairwise:
+                weights = {}
+                for group, sign in (('hM3D', 1.0), ('hM4D', -1.0)):
+                    weights[_unified_group_coef(fe_names, group)] = sign
+                    if epoch != reference_epoch:
+                        weights[_unified_epoch_interaction_coef(fe_names, group, epoch)] = sign
+                res = linear_contrast_test(fit['result'], weights, fit['n_mice'], alpha=alpha)
+                rows.append({
+                    'outcome': outcome.key, 'epoch': epoch, 'comparison': 'hM3D_vs_hM4D',
+                    'group': 'hM3D_vs_hM4D',
+                    'estimate_log': res['estimate'], 'se': res['se'],
+                    'ci_low_log': res['ci_low'], 'ci_high_log': res['ci_high'],
+                    'ratio': float(np.exp(res['estimate'])),
+                    'ratio_ci_low': float(np.exp(res['ci_low'])),
+                    'ratio_ci_high': float(np.exp(res['ci_high'])),
+                    'df': res['df'], 't': res['t'], 'p_raw': res['p'],
+                })
 
     out = pd.DataFrame(rows)
 
@@ -3102,36 +3127,42 @@ def unified_posthoc_contrasts(fits, df_me, epochs=TFC_MATCHED_PROFILE_EPOCHS,
         # lane also keeps its historical name p_holm_six, which every existing consumer reads.
         out['p_holm_across_epochs'] = np.nan
         out['holm_across_epochs_reject'] = False
-        if len(epochs) == 3:
+        if len(epochs) == 3 and not pairwise:
             out['p_holm_six'] = np.nan
             out['holm_six_reject'] = False
 
+    if pairwise:
+        out['p_holm_epoch_vs_control'] = np.nan
+    n_per_epoch = len(UNIFIED_TREATMENT_GROUPS) + (1 if pairwise else 0)
     for (outcome_key, epoch), idx in out.groupby(['outcome', 'epoch'],
                                                  observed=True).groups.items():
         idx = list(idx)
-        if len(idx) != len(UNIFIED_TREATMENT_GROUPS):
+        if len(idx) != n_per_epoch:
             raise RuntimeError(
                 f'unified_posthoc_contrasts: outcome {outcome_key!r} at epoch {epoch!r} produced '
-                f'{len(idx)} treatment-vs-control contrasts, expected exactly '
-                f'{len(UNIFIED_TREATMENT_GROUPS)}. Each epoch\'s Holm family is exactly its two '
-                f'treatment-vs-control comparisons.')
+                f'{len(idx)} contrasts, expected exactly {n_per_epoch}. Each epoch\'s Holm family is '
+                f'exactly its treatment-vs-control comparisons (plus hM3D - hM4D when pairwise).')
         reject_epoch, padj_epoch = holm_correct(out.loc[idx, 'p_raw'].to_numpy(), alpha=alpha)
         out.loc[idx, 'p_holm_epoch'] = padj_epoch
         out.loc[idx, 'holm_epoch_reject'] = reject_epoch
+        if pairwise:
+            vs_ctl = [i for i in idx if out.loc[i, 'group'] in UNIFIED_TREATMENT_GROUPS]
+            out.loc[vs_ctl, 'p_holm_epoch_vs_control'] = holm_correct(
+                out.loc[vs_ctl, 'p_raw'].to_numpy(), alpha=alpha)[1]
 
     for outcome_key, idx in (out.groupby('outcome', observed=True).groups.items()
                              if across_epoch_family else ()):
         idx = list(idx)
-        if len(idx) != len(epochs) * len(UNIFIED_TREATMENT_GROUPS):
+        if len(idx) != len(epochs) * n_per_epoch:
             raise RuntimeError(
                 f'unified_posthoc_contrasts: outcome {outcome_key!r} produced {len(idx)} '
-                f'contrasts, expected {len(epochs) * len(UNIFIED_TREATMENT_GROUPS)} '
+                f'contrasts, expected {len(epochs) * n_per_epoch} '
                 f'({len(epochs)} epochs x {len(UNIFIED_TREATMENT_GROUPS)} treatment groups). '
                 f'The multiplicity families are defined by that shape.')
         reject_all, padj_all = holm_correct(out.loc[idx, 'p_raw'].to_numpy(), alpha=alpha)
         out.loc[idx, 'p_holm_across_epochs'] = padj_all
         out.loc[idx, 'holm_across_epochs_reject'] = reject_all
-        if len(epochs) == 3:
+        if len(epochs) == 3 and not pairwise:
             out.loc[idx, 'p_holm_six'] = padj_all
             out.loc[idx, 'holm_six_reject'] = reject_all
     return out
@@ -4746,7 +4777,9 @@ def _paper_panel_star_pvalues(contrasts, outcome_key, epoch):
     through here.
     """
     out = []
-    for group in UNIFIED_TREATMENT_GROUPS:
+    groups = UNIFIED_TREATMENT_GROUPS + (('hM3D_vs_hM4D',) if (contrasts['group'] == 'hM3D_vs_hM4D').any()
+                                         else ())
+    for group in groups:
         row = unified_contrast_lookup(contrasts, outcome_key, epoch, group)
         if not np.isfinite(row['p_holm_epoch']):
             raise RuntimeError(
@@ -4786,7 +4819,7 @@ def _paper_distribution_panels(df_matched, mouse_epoch, contrasts, epochs, rows,
             # untested_epochs: drawn with no test, by declaration (Figure 2 v2 f: the tone, which the
             # three-epoch primary model does not contain). Every other panel must have its two
             # Holm-adjusted P-values, as before.
-            stars = ((np.nan, np.nan) if epoch in untested_epochs
+            stars = ((np.nan, np.nan, np.nan) if epoch in untested_epochs
                      else _paper_panel_star_pvalues(contrasts, spec.key, epoch))
             panels[(r, c)] = _GridPanel(
                 key=f'{spec.key}/{epoch}', label=f'{spec.label} — {epoch}', df=sub,
@@ -5110,6 +5143,13 @@ def _statsmodels_pvalue_footer(df2):
     )
 
 
+def _comparison_label(group):
+    """'Exc vs Ctl' / 'Inh vs Ctl' / 'Exc vs Inh' for a contrast row's group column."""
+    if group == 'hM3D_vs_hM4D':
+        return f"{GROUP_LABELS['hM3D']} vs {GROUP_LABELS['hM4D']}"
+    return f"{GROUP_LABELS.get(group, group)} vs Ctl"
+
+
 def write_paper_results_summary(save_dir, mouse_epoch, fits, contrasts, interactions_table,
                                 primary_contrasts, holm, perm_results, interactions, q_by_name,
                                 rate_contrasts, manip_contrasts,
@@ -5143,6 +5183,7 @@ def write_paper_results_summary(save_dir, mouse_epoch, fits, contrasts, interact
     """
     payloads = _unified_contrast_payloads(contrasts,
                                           epochs=tuple(mouse_epoch['epoch'].cat.categories))
+    n_across = int(contrasts.groupby('outcome').size().iloc[0])
     lines = [
         '# TFC cellular results — paper summary',
         '',
@@ -5202,7 +5243,7 @@ def write_paper_results_summary(save_dir, mouse_epoch, fits, contrasts, interact
         flag = ' (significant)' if row['holm_epoch_reject'] else ''
         lines.append(
             f"| {UNIFIED_OUTCOMES_BY_KEY[row['outcome']].label} | {row['epoch']} | "
-            f"{GROUP_LABELS.get(row['group'], row['group'])} vs Ctl | {row['ratio']:.3f} | "
+            f"{_comparison_label(row['group'])} | {row['ratio']:.3f} | "
             f"[{row['ratio_ci_low']:.3f}, {row['ratio_ci_high']:.3f}] | {row['p_raw']:.4g} | "
             f"**{row['p_holm_epoch']:.4g}**{flag} |")
     lines += [
@@ -5229,7 +5270,8 @@ def write_paper_results_summary(save_dir, mouse_epoch, fits, contrasts, interact
         '## Absolute population-rate differences',
         '',
     ]
-    rate_rows = contrasts[contrasts['outcome'] == 'population_rate']
+    rate_rows = contrasts[(contrasts['outcome'] == 'population_rate')
+                          & contrasts['group'].isin(UNIFIED_TREATMENT_GROUPS)]
     lines += [
         'The population-rate effects above, as observed absolute differences in events/s per '
         'cell (DESCRIPTIVE — equal-mouse-weighted observed means, no test; a rate ratio off a '
@@ -5278,15 +5320,15 @@ def write_paper_results_summary(save_dir, mouse_epoch, fits, contrasts, interact
         '**These adjusted P-values determine no figure annotation and no manuscript significance '
         'statement.**',
         '',
-        '| outcome | epoch | comparison | raw P | six-comparison Holm P |',
+        f'| outcome | epoch | comparison | raw P | across-epoch Holm P ({n_across}-comparison) |',
         '|---|---|---|---|---|',
     ]
     for _, row in contrasts.iterrows():
-        flag = ' (significant)' if row['holm_six_reject'] else ''
+        flag = ' (significant)' if row['holm_across_epochs_reject'] else ''
         lines.append(
             f"| {UNIFIED_OUTCOMES_BY_KEY[row['outcome']].label} | {row['epoch']} | "
-            f"{GROUP_LABELS.get(row['group'], row['group'])} vs Ctl | {row['p_raw']:.4g} | "
-            f"{row['p_holm_six']:.4g}{flag} |")
+            f"{_comparison_label(row['group'])} | {row['p_raw']:.4g} | "
+            f"{row['p_holm_across_epochs']:.4g}{flag} |")
     lines += [
         '',
         '## Sensitivity — cell-level trace-period amplitude model (historical primary)',
@@ -5425,7 +5467,7 @@ def render_paper_tfc_amplitude_rate(PLOTS_DIR, df_matched, primary_contrasts, ho
     fits = {o.key: fit_unified_group_epoch_model(mouse_epoch, o.response_col)
             for o in UNIFIED_OUTCOMES}
     require_common_unified_method(fits)
-    contrasts = unified_posthoc_contrasts(fits, mouse_epoch, epochs=epochs)
+    contrasts = unified_posthoc_contrasts(fits, mouse_epoch, epochs=epochs, pairwise=True)
     interactions_table = unified_interactions_table(fits)
 
     # One df for both outcomes -- require_common_unified_method above has already established that

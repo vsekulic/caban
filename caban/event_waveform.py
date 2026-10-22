@@ -134,7 +134,8 @@ def plot_panel(by_epoch, t, signal, contrasts, values_by_epoch, out_root, figsiz
             if epoch not in UNTESTED_EPOCHS:
                 c = contrasts[epoch]
                 annotate_pairwise_brackets(axb, values, DREADD_DISPLAY_ORDER,
-                                           _precomputed_stat_fn(c['hM3D'], c['hM4D']), fs=FONT_PT)
+                                           _precomputed_stat_fn(c['hM3D'], c['hM4D'], c['hM3D_vs_hM4D']),
+                                           fs=FONT_PT)
         axs[0, 0].set_ylabel(YLABEL[signal].split(' (')[0] + ' (a.u.)')
         axs[1, 0].set_ylabel('Log amplitude')
         axs[0, -1].legend(loc='upper right', handlelength=0.8, borderaxespad=0.1)
@@ -156,7 +157,8 @@ def plot_h_panel(per_group, t, signal, values, p_holm, out_root):
         box_strip(axb, values, DREADD_DISPLAY_ORDER, GROUP_COLOURS, labels=GROUP_LABELS, point_size=4)
         axb.set_ylabel('Log amplitude')
         annotate_pairwise_brackets(axb, values, DREADD_DISPLAY_ORDER,
-                                   _precomputed_stat_fn(p_holm['hM3D'], p_holm['hM4D']), fs=FONT_PT)
+                                   _precomputed_stat_fn(p_holm['hM3D'], p_holm['hM4D'],
+                                                        p_holm['hM3D_vs_hM4D']), fs=FONT_PT)
         save_paper_panel(fig, out_root)
     plt.close(fig)
 
@@ -200,7 +202,7 @@ def _figure2_v2_amplitude_p(PLOTS_DIR):
         if e in UNTESTED_EPOCHS:
             continue
         rows = df[df['epoch'] == e].set_index('group')['p_holm_epoch']
-        out[e] = {g: float(rows[g]) for g in ('hM3D', 'hM4D')}
+        out[e] = {g: float(rows[g]) for g in ('hM3D', 'hM4D', 'hM3D_vs_hM4D')}
     return out
 
 
