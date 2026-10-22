@@ -346,3 +346,24 @@ Does a group difference in behaviour account for the amplitude and rate effects?
   at matched behaviour", not as "is it an artefact" (freezing may mediate the DREADD effect). The
   freezing-fraction covariate model, with the animal-mean and within-animal (epoch) parts separated
   and the fraction logit-transformed, is a secondary report. Freezing-only frames: descriptive.
+
+## 15. All pairwise comparisons in each epoch (VS, 2026-10-22) — pre-specified before it is run
+
+Why: f draws three groups but tests only each DREADD against control, which implies a hM3D-vs-hM4D
+comparison that was never made; readers expect all pairwise comparisons among three groups drawn
+side by side. Disclosed as a change of the primary analysis's correction family made after the
+results were known; it is the more conservative family (three comparisons per epoch instead of two).
+
+- **Model:** unchanged — the three-epoch primary, `log(metric) ~ group × epoch + (1|animal)`, per
+  outcome (log per-event amplitude; log population event rate), fitted once.
+- **Contrasts per epoch (pre-tone, trace, post-shock):** hM3D − mCherry, hM4D − mCherry and
+  **hM3D − hM4D**, each a linear contrast of the same fit (`linear_contrast_test`, the existing
+  df = n_animals − 1); Holm across the three within each epoch and outcome (the paper-facing family,
+  replacing the two-comparison one); across-epoch sensitivity, Holm over all 9 of an outcome.
+- **Reported:** both families side by side (two-comparison as originally specified; three-comparison as
+  now drawn), so the change is visible. The tone stays untested.
+- **Figure 2 v2:** f's trace panels and h's box draw all three brackets from the three-comparison
+  family; the all-epoch grid (supplement) likewise.
+- **Wording:** "double dissociation" supported by the effect-profile test (§12, P = 0.002) and stated
+  with the intervals of the non-significant effects (hM3D rate 0.79×, 0.52–1.22; hM4D amplitude
+  1.18×, 0.87–1.61); not "opposite effects".
