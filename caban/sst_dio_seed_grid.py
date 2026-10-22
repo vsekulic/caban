@@ -33,7 +33,9 @@ from caban.sst_dio_common import MATCH_PX, footprint_centroids, inside_ellipse, 
 SEED_MAX_WNDS = (10, 15, 20)
 SEED_PNR_THRESHOLDS = (0.75, 1.0, 1.25, 1.5)
 SEED_STEPS = ('initial', 'inside_mask', 'pnr_and_ks', 'merged')
-STEP_COLOURS = {'initial': '0.55', 'inside_mask': '#1f77b4', 'pnr_and_ks': '#ff7f0e', 'merged': '#d62728'}
+STEP_COLOURS = {'initial': '#ffd92f', 'inside_mask': '#1f77b4', 'pnr_and_ks': '#ff7f0e', 'merged': '#d62728'}
+CROP_HALF_PX = 20
+FRAMERATE_HZ = 19.76     # sessions.MINISCOPE_FPS, for the trace time axis only
 
 
 def start_cluster(n_workers):
@@ -117,7 +119,7 @@ def plot_seed_steps(table, max_proj, cells, title, out_path):
     for ax, step in zip(axes, SEED_STEPS):
         part = table[table['step'] == step]
         ax.imshow(max_proj, cmap='gray', vmin=low, vmax=high, interpolation='nearest')
-        ax.scatter(part['width'], part['height'], s=4, color=STEP_COLOURS[step], lw=0)
+        ax.scatter(part['width'], part['height'], s=7, color=STEP_COLOURS[step], lw=0)
         ax.set_title('{}: {} seeds'.format(step.replace('_', ' '), len(part)), fontsize=10)
         ax.set_xticks([])
         ax.set_yticks([])
@@ -143,5 +145,50 @@ def plot_seed_metrics(metrics, out_path):
     axes[0].legend(fontsize=8, frameon=False)
     fig.tight_layout()
     fig.savefig(out_path, dpi=110)
+    plt.close(fig)
+    return out_path
+
+
+def plot_unmatched_seeds(table, Y_hw_chk, max_proj, cells, title, out_path):
+    """Final seeds over the max projection, matched to a reference cell (green) or not (red,
+    numbered); then, per unmatched seed, a crop of the max projection and its Y_hw_chk trace with
+    its PNR -- to judge whether it is a faint cell the reference lacks, or noise."""
+    final = table[table['step'] == 'merged'].reset_index(drop=True)
+    dist, _ = nearest_distance(final['height'], final['width'], cells[0], cells[1])
+    unmatched = final[dist > MATCH_PX].reset_index(drop=True)
+    n = len(unmatched)
+    fig = plt.figure(figsize=(16, 7 + 1.7 * n))
+    grid = fig.add_gridspec(1 + n, 4, height_ratios=[7] + [1.7] * n)
+    ax = fig.add_subplot(grid[0, :2])
+    low, high = np.percentile(max_proj, (0.5, 99.5))
+    ax.imshow(max_proj, cmap='gray', vmin=low, vmax=high, interpolation='nearest')
+    matched = final[dist <= MATCH_PX]
+    ax.scatter(matched['width'], matched['height'], s=14, color='#2ca02c', lw=0)
+    ax.scatter(unmatched['width'], unmatched['height'], s=14, color='#d62728', lw=0)
+    for i, row in unmatched.iterrows():
+        ax.annotate(str(i + 1), (row['width'], row['height']), color='#d62728', fontsize=9,
+                    xytext=(4, 4), textcoords='offset points')
+    ax.set_title('{}: {} final seeds, {} on reference cells (green), {} not (red)'.format(
+        title, len(final), len(matched), n), fontsize=10)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    for i, row in unmatched.iterrows():
+        h, w = int(row['height']), int(row['width'])
+        crop = max_proj[max(h - CROP_HALF_PX, 0):h + CROP_HALF_PX, max(w - CROP_HALF_PX, 0):w + CROP_HALF_PX]
+        ax_crop = fig.add_subplot(grid[1 + i, 0])
+        ax_crop.imshow(crop, cmap='gray', vmin=low, vmax=high, interpolation='nearest')
+        ax_crop.plot(min(w, CROP_HALF_PX), min(h, CROP_HALF_PX), '+', color='#d62728', ms=8)
+        ax_crop.set_xticks([])
+        ax_crop.set_yticks([])
+        ax_crop.set_ylabel(str(i + 1), rotation=0, fontsize=10, labelpad=12)
+        trace = Y_hw_chk.sel(height=row['height'], width=row['width']).values
+        ax_trace = fig.add_subplot(grid[1 + i, 1:])
+        ax_trace.plot(np.arange(len(trace)) / FRAMERATE_HZ, trace, lw=0.4, color='0.2')
+        ax_trace.set_title('seed {}: PNR {:.2f}'.format(i + 1, row['pnr']), fontsize=9, loc='left')
+        ax_trace.set_xlim(0, len(trace) / FRAMERATE_HZ)
+    if n:
+        ax_trace.set_xlabel('time (s)')
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=90)
     plt.close(fig)
     return out_path
