@@ -384,6 +384,14 @@ Merging here works on the small initial footprints and their rough traces; the s
 better judged at stage 4, after the spatial update, by the merge after it (`param_first_merge`),
 on full footprints and refined traces — where 0.6 here already showed the cost of merging early.
 
+**Stage 3 decided (VS, 2026-10-22): initialise corr 0.8, wnd 10, init-merge 0.8** — on Claude's
+recommendation. Stages 1-3 are therefore the pyramidal values throughout, plus the SST-specific
+handling (line-artefact frames dropped, lens-rim seed mask).
+
+**Stage 4: CNMF** — full notebook runs (the runner's notebook, all decisions as overrides, the lens
+mask): the merge after the first update (`param_first_merge` `thres_corr` 0.6/0.7/0.8) × the
+spatial updates' `dl_wnd` (5/8, both updates); output `~/sst_dio_out/parameter_stages/G27_HC2/cnmf/`.
+
 Note (Minian): `pnr_refine` chunks seeds by `len(seeds) // 128`, which is 0 with fewer than 128
 seeds — a ZeroDivisionError waiting for a sparse field (G23?). Not hit yet.
 
