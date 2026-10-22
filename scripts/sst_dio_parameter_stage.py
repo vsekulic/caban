@@ -65,9 +65,14 @@ if __name__ == '__main__':
         if stage == 'preprocessing':
             row.update(ksize=overrides['param_denoise']['ksize'],
                        wnd=overrides['param_background_removal']['wnd'])
+        elif stage == 'cnmf':
+            row.update(first_merge=overrides['param_first_merge']['thres_corr'],
+                       dl_wnd=overrides['param_first_spatial']['dl_wnd'])
         if status == 'done':
             if stage == 'preprocessing':
                 row.update(sdv.preprocessing_metrics(os.path.join(stage_root, name), cells, seed_mask))
+            elif stage == 'cnmf':
+                row.update(sdv.cnmf_metrics(os.path.join(stage_root, name), cells))
         else:
             print('NOT MEASURED (run {}): {}'.format(status, name), flush=True)
         rows.append(row)
@@ -77,4 +82,6 @@ if __name__ == '__main__':
     if stage == 'preprocessing':
         sdv.plot_preprocessing_grid(stage_root, set(done.index), os.path.join(stage_root, 'max_proj_grid.png'))
         sdv.plot_preprocessing_metrics(done, os.path.join(stage_root, 'stage_metrics.png'))
+    elif stage == 'cnmf':
+        sdv.plot_cnmf_metrics(done, os.path.join(stage_root, 'stage_metrics.png'))
     print(metrics.to_string())

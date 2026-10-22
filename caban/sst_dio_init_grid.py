@@ -24,12 +24,11 @@ from minian.cnmf import unit_merge
 from minian.initialization import initA, initC
 from minian.utilities import save_minian
 
-from caban.sst_dio_common import MATCH_PX, footprint_centroids, nearest_distance
+from caban.sst_dio_common import unit_metrics
 
 INIT_THRES_CORRS = (0.7, 0.8, 0.9)
 INIT_WNDS = (10, 15)
 INIT_MERGE_THRES_CORRS = (0.6, 0.7, 0.8, 0.9)
-FUSED_LEVEL = 0.3     # a reference centroid inside a unit's footprint above this fraction of its peak
 
 
 def variant_name(init_corr, init_wnd, merge_corr):
@@ -82,20 +81,8 @@ def run_init_grid(arrays, params, seeds, out_dir, intpath, init_corrs=INIT_THRES
 
 
 def init_metrics(out_dir, name, cells):
-    """Recall, split cells, fused units, unmatched units and footprint size of one variant."""
-    A = xr.open_zarr(os.path.join(out_dir, name, 'minian', 'A.zarr'))['A'].compute()
-    height, width = footprint_centroids(A)
-    dist, which = nearest_distance(height, width, cells[0], cells[1])
-    matched = dist <= MATCH_PX
-    per_cell = np.bincount(which[matched], minlength=len(cells[0]))
-    values = A.values.reshape(A.sizes['unit_id'], -1)
-    scaled = values / values.max(axis=1, keepdims=True)
-    cell_pixels = (np.round(cells[0]).astype(int) * A.sizes['width'] + np.round(cells[1]).astype(int))
-    covered = (scaled[:, cell_pixels] > FUSED_LEVEL).sum(axis=1)
-    return {'n_units': int(A.sizes['unit_id']), 'recall': float((per_cell > 0).mean()),
-            'cells_with_two_or_more': int((per_cell >= 2).sum()),
-            'fused_units': int((covered >= 2).sum()), 'unmatched_units': int((~matched).sum()),
-            'footprint_px_median': float(np.median((values > 0).sum(axis=1)))}
+    """sst_dio_common.unit_metrics of one variant's merged A."""
+    return unit_metrics(xr.open_zarr(os.path.join(out_dir, name, 'minian', 'A.zarr'))['A'].compute(), cells)
 
 
 def plot_init_metrics(metrics, out_path):

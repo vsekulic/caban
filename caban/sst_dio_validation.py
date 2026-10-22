@@ -26,7 +26,7 @@ import matplotlib.pyplot as plt
 from caban import minian_runner as mr
 from caban import yra_recompute as yr
 from caban.nature_comm_style import MM, FONT_PT
-from caban.sst_dio_common import SEED_MASKS_PROPOSED, inside_ellipse, footprint_centroids
+from caban.sst_dio_common import SEED_MASKS_PROPOSED, inside_ellipse, footprint_centroids, unit_metrics
 
 SST_DIO_DREADD = {'G22': 'hM3D', 'G23': 'hM3D', 'G26': 'hM4D', 'G27': 'hM4D'}
 SST_DIO_DISPLAY_ORDER = ('G22', 'G23', 'G26', 'G27')     # hM3D then hM4D (no mCherry-DIO control)
@@ -371,13 +371,22 @@ def grid_summary(out_root):
 # output, decided before the next stage's grid runs on top of it. The one-at-a-time grid above
 # stays as a sensitivity map.
 PIPELINE_STAGES = ('preprocessing', 'seeds', 'initialisation', 'cnmf')
-STAGE_CUT_AFTER = {'preprocessing': mr.MOTION_CUT_ANCHOR}    # later stages: added as they are built
+# Seeds and initialisation (stages 2-3) are explored in Minian's env from saved movies
+# (caban.sst_dio_seed_grid, caban.sst_dio_init_grid); stage 4 runs the whole notebook (None: no cut).
+STAGE_CUT_AFTER = {'preprocessing': mr.MOTION_CUT_ANCHOR, 'cnmf': None}
 PREPROCESSING_KSIZES = (3, 5, 7)
 PREPROCESSING_WNDS = (10, 15, 20, 25, 30)
+CNMF_FIRST_MERGE_THRES_CORRS = (0.6, 0.7, 0.8)
+CNMF_DL_WNDS = (5, 8)
 STAGE_GRIDS = {
     'preprocessing': {'ksize_{}_wnd_{}'.format(k, w): {'param_denoise': {'ksize': k},
                                                        'param_background_removal': {'wnd': w}}
                       for k in PREPROCESSING_KSIZES for w in PREPROCESSING_WNDS},
+    # The merge after the first CNMF update, and the spatial updates' dilation window (both).
+    'cnmf': {'first_merge_{}_dl_wnd_{}'.format(str(m).replace('.', '_'), d): {
+                 'param_first_merge': {'thres_corr': m},
+                 'param_first_spatial': {'dl_wnd': d}, 'param_second_spatial': {'dl_wnd': d}}
+             for m in CNMF_FIRST_MERGE_THRES_CORRS for d in CNMF_DL_WNDS},
 }
 # VS's decisions, stage by stage (the parameter log), carried into every later stage's grid.
 # Explicit even where a value equals the frozen set, so the record says it was decided.
@@ -385,6 +394,14 @@ DECIDED_OVERRIDES = {
     # preprocessing, VS 2026-10-22 (G27 HC2): same as the pyramidal cohort.
     'param_denoise': {'ksize': 5},
     'param_background_removal': {'wnd': 15},
+    # seeds, VS 2026-10-22: same as the pyramidal cohort (plus the lens mask, applied per session).
+    'param_seeds_init': {'max_wnd': 15},
+    'param_pnr_refine': {'thres': 1.0},
+    'param_ks_refine': {'sig': 0.05},
+    'param_seeds_merge': {'thres_dist': 10, 'thres_corr': 0.8},
+    # initialisation and its merge, VS 2026-10-22: same as the pyramidal cohort.
+    'param_initialize': {'thres_corr': 0.8, 'wnd': 10},
+    'param_init_merge': {'thres_corr': 0.8},
 }
 # Reference cells for the stage measurements: the units of the G27 grid's merge_corr_0_7 run
 # (inside the lens mask, the cleanest separation of the one-at-a-time grid). Only their positions
@@ -503,6 +520,29 @@ def plot_preprocessing_grid(stage_root, done, out_path, crop=((180, 480), (150, 
             low, high = np.percentile(image, PROJECTION_PERCENTILES)
             ax.imshow(image, cmap='gray', vmin=low, vmax=high, interpolation='nearest')
             ax.set_title('ksize {}, wnd {}'.format(k, w), fontsize=9)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=110)
+    plt.close(fig)
+    return out_path
+
+
+def cnmf_metrics(variant_dir, cells):
+    """sst_dio_common.unit_metrics of a full run's final A."""
+    return unit_metrics(yr.open_minian_array(os.path.join(variant_dir, mr.OUTPUT_NAME), 'A').compute(), cells)
+
+
+def plot_cnmf_metrics(metrics, out_path):
+    """Each measurement against the first-merge threshold, one line per dl_wnd."""
+    columns = ('n_units', 'recall', 'cells_with_two_or_more', 'fused_units', 'unmatched_units',
+               'footprint_px_median')
+    fig, axes = plt.subplots(1, len(columns), figsize=(3.8 * len(columns), 3.4))
+    for ax, column in zip(axes, columns):
+        for dl_wnd in CNMF_DL_WNDS:
+            part = metrics[metrics['dl_wnd'] == dl_wnd].sort_values('first_merge')
+            ax.plot(part['first_merge'], part[column], marker='o', label='dl_wnd {}'.format(dl_wnd))
+        ax.set_xlabel('first-merge thres_corr')
+        ax.set_title(column, fontsize=10)
+    axes[0].legend(fontsize=8, frameon=False)
     fig.tight_layout()
     fig.savefig(out_path, dpi=110)
     plt.close(fig)

@@ -28,6 +28,27 @@ def footprint_centroids(A):
     return weights @ hh.ravel(), weights @ ww.ravel()
 
 
+FUSED_LEVEL = 0.3     # a reference centroid inside a unit's footprint above this fraction of its peak
+
+
+def unit_metrics(A, cells):
+    """Units against the reference cells: recall (cells with a unit centroid within MATCH_PX),
+    cells holding two or more units (split), units whose footprint covers two or more reference
+    centroids above FUSED_LEVEL of its peak (fused), unmatched units, median footprint size (px > 0)."""
+    height, width = footprint_centroids(A)
+    dist, which = nearest_distance(height, width, cells[0], cells[1])
+    matched = dist <= MATCH_PX
+    per_cell = np.bincount(which[matched], minlength=len(cells[0]))
+    values = A.values.reshape(A.sizes['unit_id'], -1)
+    scaled = values / values.max(axis=1, keepdims=True)
+    cell_pixels = np.round(cells[0]).astype(int) * A.sizes['width'] + np.round(cells[1]).astype(int)
+    covered = (scaled[:, cell_pixels] > FUSED_LEVEL).sum(axis=1)
+    return {'n_units': int(A.sizes['unit_id']), 'recall': float((per_cell > 0).mean()),
+            'cells_with_two_or_more': int((per_cell >= 2).sum()),
+            'fused_units': int((covered >= 2).sum()), 'unmatched_units': int((~matched).sum()),
+            'footprint_px_median': float(np.median((values > 0).sum(axis=1)))}
+
+
 def nearest_distance(points_h, points_w, cells_h, cells_w):
     """For each point, the distance to the nearest cell centroid, and that cell's index."""
     dist = np.sqrt((np.asarray(points_h)[:, None] - np.asarray(cells_h)[None]) ** 2
