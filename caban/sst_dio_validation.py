@@ -207,17 +207,24 @@ def plot_frame_sheet(session_dir, frames, frame_max_z, title, out_path, n_column
 # --- lens-interior seed mask (session_queue.SEED_MASKS) -----------------------------------------
 
 
-def plot_seed_mask(max_proj, A, mask, title, out_path):
+def plot_seed_mask(max_proj, A, mask, title, out_path, raw_mean=None):
     """``max_proj`` with the ellipse, and each unit's centroid: kept (inside) or not (outside).
-    ``A`` is None for a session with no units yet (only the ellipse is drawn)."""
-    fig, ax = plt.subplots(figsize=(120 * MM, 120 * MM))
-    low, high = np.percentile(max_proj, PROJECTION_PERCENTILES)
-    ax.imshow(max_proj, cmap='gray', vmin=low, vmax=high, interpolation='nearest')
+    ``A`` is None for a session with no units yet (only the ellipse is drawn). With ``raw_mean``
+    (the raw movie's mean, :func:`raw_projections`), the same ellipse over it in a second panel:
+    the lens edge shows there when the max projection hides it."""
+    panels = 1 if raw_mean is None else 2
+    fig, axes = plt.subplots(1, panels, figsize=(120 * MM * panels, 120 * MM), squeeze=False)
     theta = np.linspace(0, 2 * np.pi, 400)
-    ax.plot(mask['center_width'] + mask['radius_width'] * np.cos(theta),
-            mask['center_height'] + mask['radius_height'] * np.sin(theta), color='C1', lw=0.75)
-    ax.set_xticks([])
-    ax.set_yticks([])
+    for ax, image in zip(axes[0], (max_proj, raw_mean)):
+        low, high = np.percentile(image, PROJECTION_PERCENTILES)
+        ax.imshow(image, cmap='gray', vmin=low, vmax=high, interpolation='nearest')
+        ax.plot(mask['center_width'] + mask['radius_width'] * np.cos(theta),
+                mask['center_height'] + mask['radius_height'] * np.sin(theta), color='C1', lw=0.75)
+        ax.set_xticks([])
+        ax.set_yticks([])
+    if raw_mean is not None:
+        axes[0, 1].set_title('raw mean (lens edge)', fontsize=FONT_PT)
+    ax = axes[0, 0]
     if A is None:
         ax.set_title('{}: no units yet'.format(title), fontsize=FONT_PT)
     else:

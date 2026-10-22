@@ -1,7 +1,10 @@
 """Draw a candidate lens-interior ellipse over a session's baseline max_proj, with its units, on the Razer.
 
     python scripts/sst_dio_seed_mask_preview.py <minian_dir> <title> <out_png> \
-        <center_height> <center_width> <radius_height> <radius_width>
+        <center_height> <center_width> <radius_height> <radius_width> [<raw_projections.npz>]
+
+With the raw-projection file (scripts/sst_dio_raw_projections.py), the ellipse is also drawn over
+the raw mean, where the lens edge shows.
 
 The ellipse, once VS approves it, goes into caban.session_queue.SEED_MASKS.
 plans/sst_dio_dreadd_validation_plan.md §6.
@@ -11,6 +14,7 @@ import os
 import sys
 
 import matplotlib
+import numpy as np
 matplotlib.use('Agg')
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -19,11 +23,12 @@ from caban.minian_runner import SEED_MASK_KEYS
 from caban.sst_dio_validation import plot_seed_mask
 
 if __name__ == '__main__':
-    if len(sys.argv) != 8:
+    if len(sys.argv) not in (8, 9):
         raise SystemExit(__doc__)
     minian_dir, title, out_png = sys.argv[1:4]
     mask = dict(zip(SEED_MASK_KEYS, (float(v) for v in sys.argv[4:8])))
+    raw_mean = np.load(sys.argv[8])['mean'] if len(sys.argv) == 9 else None
     max_proj = yr.open_minian_array(minian_dir, 'max_proj').compute().values
     # A run that stopped before its units were saved (G23 HC2, frozen set) has max_proj only.
     A = yr.open_minian_array(minian_dir, 'A').compute() if os.path.isdir(os.path.join(minian_dir, 'A.zarr')) else None
-    print(plot_seed_mask(max_proj, A, mask, '{} {}'.format(title, mask), out_png))
+    print(plot_seed_mask(max_proj, A, mask, '{} {}'.format(title, mask), out_png, raw_mean=raw_mean))
