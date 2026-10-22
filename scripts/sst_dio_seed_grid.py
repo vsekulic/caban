@@ -32,6 +32,9 @@ if __name__ == '__main__':
     seed_mask = SEED_MASKS_PROPOSED[SESSION_TAILS[key]]
     out_dir = os.path.join(stages_root, 'seeds')
     os.makedirs(out_dir, exist_ok=True)
+    # Minian's seeds_init writes scratch here; the notebook sets it to its intpath (cell 14).
+    os.environ['MINIAN_INTERMEDIATE'] = os.path.join(out_dir, 'minian_intermediate')
+    os.makedirs(os.environ['MINIAN_INTERMEDIATE'], exist_ok=True)
     client = sg.start_cluster(n_workers)
     tables, max_proj = sg.run_seed_grid(os.path.join(stages_root, 'preprocessing', DECIDED_PREPROCESSING_VARIANT),
                                         out_dir, seed_mask)
