@@ -392,6 +392,36 @@ handling (line-artefact frames dropped, lens-rim seed mask).
 mask): the merge after the first update (`param_first_merge` `thres_corr` 0.6/0.7/0.8) × the
 spatial updates' `dl_wnd` (5/8, both updates); output `~/sst_dio_out/parameter_stages/G27_HC2/cnmf/`.
 
+| first merge \ dl_wnd | 5 | 8 |
+|---|---|---|
+| 0.6: units / split / fused / unmatched / footprint px | 54 / 1 / 1 / 2 / 505 | 55 / 0 / 2 / 4 / 726 |
+| 0.7 | 56 / 1 / 1 / 4 / 493 | 56 / 1 / 2 / 4 / 723 |
+| 0.8 | **61 / 3 / 1 / 6 / 451** | 61 / 4 / 2 / 5 / 688 |
+
+Recall reads 1.00 at 0.8 and 0.98 at 0.6/0.7, but no reference cell is left without a unit: the
+reference set holds pairs 7–8 px apart (cells 4/5, 19/21, 25/26, 39/40), and when one unit covers
+a pair it is credited to only one of them. `dl_wnd` 8 enlarges footprints by ~50 % and doubles the
+fused units with no gain on splits.
+
+What merge 0.7 joins that 0.8 does not (unit ids in the 0.8 run; distances between centroids,
+footprint overlap as a share of the smaller, correlation of the final traces): A 6+7 — 5.6 px,
+53 %, r 0.59; B 12+13 — 9.1 px, 43 %, r 0.55; C 35+36 — 7.7 px, 41 %, r 0.32; D 49+52+53 —
+7.1–10.6 px, 23–56 %, r 0.47–0.69. Cores are ~10 px across at half peak, so units 9–11 px apart
+can be neighbours, and C's traces differ enough that merging it would likely fuse two SST cells.
+
+**Claude's recommendation: first merge 0.8, dl_wnd 5 — the frozen values.** 0.7 removes split
+cells only partly by fusing real neighbours (C at least); the split cells left at 0.8 are few (3
+of 52 reference cells) and, being duplicates of a cell, inflate the unit count rather than mix two
+cells' activity; dl_wnd 8 only enlarges footprints and fuses more. VS checks groups A–D in
+`CNMFViewer` (the notebook's stage 4 viewer opens on the 0.8 run).
+
+If VS agrees, **the SST parameter set is the pyramidal frozen set throughout**, with two
+SST-specific additions that alter no parameter: line-artefact frames dropped (VS's practice) and
+the lens-rim seed mask. Still to do before the queue: lens ellipses for G22, G23, G26 (each shown to
+VS); line-artefact detection on every conditioning-day session (not only HC2); a check run on
+those three mice's HC2 (G23 should no longer hit the empty-merge failure; watch `pnr_refine`'s
+< 128-seed case).
+
 Note (Minian): `pnr_refine` chunks seeds by `len(seeds) // 128`, which is 0 with fewer than 128
 seeds — a ZeroDivisionError waiting for a sparse field (G23?). Not hit yet.
 
