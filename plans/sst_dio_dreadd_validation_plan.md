@@ -438,6 +438,23 @@ those three mice's HC2 (G23 should no longer hit the empty-merge failure; watch 
 3. The decided set on G22, G23, G26 HC2 (`scripts/sst_dio_final_set_check.py`,
    `~/sst_dio_out/decided_set_check/`).
 
+**Results (2026-10-22):**
+- Check runs, decided set + proposed ellipse (+ G22's 8 line frames dropped): G22 8 units, **G23
+  11 units (no empty-merge failure: the Minian fix holds)**, G26 19 units — every unit on a visible
+  cell, none on a rim or the G23 disc; G22's `max_proj` has no lines left. A few faint cells have no
+  unit (PNR 1.0, as in the pyramidal runs).
+- Each mouse's HC2 ellipse fits every session of its day (`<mouse>_conditioning_day.png`).
+- Line artefacts over the whole day: G23, G26, G27 none in any session. G22: HC2 8 frames, LT1 1
+  (3905), **TFC1 266**: ~24 isolated line frames (2426–9617) and, from frame 9918 to the end
+  (~250 frames, the last ~13 s), every frame corrupted (rows sheared/interleaved) — the connection
+  failing outright. **This is the likely reason G22's conditioning is split**: TFC1 died at ~502 s
+  and TFC2 is the restart ~2.4 min later (to confirm from the lab notebook).
+- G23 `TFC_cond` decodes to 26 118 frames against 26 119 timestamp rows: one frame missing at
+  decode — for the loader's timing checks, not for Minian.
+
+Open for VS before the queue: the three ellipses; G22 TFC1's frames (drop the ~24 isolated ones and
+the corrupted ~250-frame end, VS's practice — the end block carries no image — or decide otherwise).
+
 Note (Minian): `pnr_refine` chunks seeds by `len(seeds) // 128`, which is 0 with fewer than 128
 seeds — a ZeroDivisionError waiting for a sparse field (G23?). Not hit yet.
 
