@@ -82,27 +82,35 @@ def iter_frames(session_dir):
         capture.release()
 
 
-def raw_projections(session_dir):
-    """Mean, max - mean and standard-deviation images over every frame of the session's raw video.
+def raw_pass(session_dir):
+    """One pass over every raw frame: mean, max - mean and s.d. images, and each frame's row means
+    (``profiles``, shape (n_frames, height)) for the line-artefact scores.
 
     Streamed one frame at a time (float64 accumulators). ``max - mean`` removes the static
     vignetting and background that dominate a raw max projection, so transiently bright cells
     stand out; it is a preview of the field, not Minian's (motion-corrected) ``max_proj``.
     """
     total = total_sq = peak = None
-    n_frames = 0
+    profiles = []
     for frame in iter_frames(session_dir):
         if total is None:
             total, total_sq, peak = np.zeros_like(frame), np.zeros_like(frame), frame.copy()
         total += frame
         total_sq += frame ** 2
         np.maximum(peak, frame, out=peak)
-        n_frames += 1
-    if n_frames == 0:
+        profiles.append(frame.mean(axis=1))
+    if not profiles:
         raise ValueError('{}: no frames decoded'.format(session_dir))
+    n_frames = len(profiles)
     mean = total / n_frames
     std = np.sqrt(np.maximum(total_sq / n_frames - mean ** 2, 0.0))
-    return {'mean': mean, 'max_minus_mean': peak - mean, 'std': std, 'n_frames': n_frames}
+    return {'mean': mean, 'max_minus_mean': peak - mean, 'std': std, 'n_frames': n_frames,
+            'profiles': np.array(profiles)}
+
+
+def raw_projections(session_dir):
+    """Mean, max - mean and s.d. images of the session's raw video (:func:`raw_pass`)."""
+    return {k: v for k, v in raw_pass(session_dir).items() if k != 'profiles'}
 
 
 def plot_projection_grid(projections, out_path):
@@ -139,14 +147,16 @@ ROW_ARTEFACT_Z = 12.0           # flag a frame when one row stands out this many
 ROW_ARTEFACT_SHEET_FRAMES = 40  # frames per contact sheet
 
 
+def row_contrast(profiles):
+    """Each frame's row-mean contrast against its two neighbouring rows -- a thin bright line is a
+    single-row spike in it. ``profiles``: per-frame row means, (n_frames, height)."""
+    return profiles[:, 1:-1] - 0.5 * (profiles[:, :-2] + profiles[:, 2:])
+
+
 def row_profiles(session_dir):
-    """Per-frame row means, shape (n_frames, height), and each frame's row-mean contrast against its
-    two neighbouring rows -- a thin bright line is a single-row spike in that contrast."""
-    profiles = np.array([frame.mean(axis=1) for frame in iter_frames(session_dir)])
-    if profiles.size == 0:
-        raise ValueError('{}: no frames decoded'.format(session_dir))
-    contrast = profiles[:, 1:-1] - 0.5 * (profiles[:, :-2] + profiles[:, 2:])
-    return profiles, contrast
+    """Per-frame row means (:func:`raw_pass`) and their :func:`row_contrast`."""
+    profiles = raw_pass(session_dir)['profiles']
+    return profiles, row_contrast(profiles)
 
 
 def row_artefact_scores(contrast):
@@ -573,5 +583,53 @@ def plot_preprocessing_metrics(metrics, out_path):
     axes[0].legend(fontsize=8, frameon=False)
     fig.tight_layout()
     fig.savefig(out_path, dpi=110)
+    plt.close(fig)
+    return out_path
+
+
+# --- the conditioning day, every session: max - mean and line-artefact frames (before the queue) --
+
+
+def conditioning_day_sessions(data_root, mouse):
+    """The named sessions of the mouse's conditioning day (``<time>-<label>``), in recording order;
+    the bare-timestamp focal-sweep folders are not sessions (VS, 2026-10-21)."""
+    day = os.path.join(data_root, SST_DIO_MOUSE_DIRS[mouse], CONDITIONING_DAYS[mouse])
+    names = sorted(n for n in os.listdir(day) if '-' in n and os.path.isdir(os.path.join(day, n, 'Miniscope')))
+    if not names:
+        raise FileNotFoundError('no named sessions in {}'.format(day))
+    return [os.path.join(day, n) for n in names]
+
+
+def session_overview(session_dir, threshold=ROW_ARTEFACT_Z):
+    """max - mean image, frame count and line-artefact frames (max row z above ``threshold``)."""
+    passed = raw_pass(session_dir)
+    _, frame_max_z = row_artefact_scores(row_contrast(passed['profiles']))
+    flagged = np.flatnonzero(frame_max_z > threshold)
+    return {'max_minus_mean': passed['max_minus_mean'], 'n_frames': passed['n_frames'],
+            'flagged_frames': flagged.tolist(), 'frame_max_z': frame_max_z,
+            'max_z_unflagged': float(np.max(np.delete(frame_max_z, flagged)))}
+
+
+def plot_day_overview(overviews, mouse, seed_mask, out_path, n_columns=5):
+    """One max - mean panel per session of the day, titled with the session and its line-artefact
+    frame count; the lens ellipse drawn on each."""
+    names = list(overviews)
+    n_rows = int(np.ceil(len(names) / n_columns))
+    fig, axes = plt.subplots(n_rows, n_columns, figsize=(3.6 * n_columns, 3.8 * n_rows), squeeze=False)
+    theta = np.linspace(0, 2 * np.pi, 400)
+    for ax in axes.ravel():
+        ax.axis('off')
+    for ax, name in zip(axes.ravel(), names):
+        image = overviews[name]['max_minus_mean']
+        low, high = np.percentile(image, PROJECTION_PERCENTILES)
+        ax.imshow(image, cmap='gray', vmin=low, vmax=high, interpolation='nearest')
+        ax.plot(seed_mask['center_width'] + seed_mask['radius_width'] * np.cos(theta),
+                seed_mask['center_height'] + seed_mask['radius_height'] * np.sin(theta), color='C1', lw=0.6)
+        n_flagged = len(overviews[name]['flagged_frames'])
+        ax.set_title('{}: {} line frames'.format(name, n_flagged), fontsize=9,
+                     color='C3' if n_flagged else 'black')
+    fig.suptitle('{} conditioning day: max - mean per session (raw)'.format(mouse), fontsize=11)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=90)
     plt.close(fig)
     return out_path
