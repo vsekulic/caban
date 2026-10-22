@@ -26,6 +26,7 @@ import matplotlib.pyplot as plt
 from caban import minian_runner as mr
 from caban import yra_recompute as yr
 from caban.nature_comm_style import MM, FONT_PT
+from caban.sst_dio_common import SEED_MASKS_PROPOSED, inside_ellipse, footprint_centroids
 
 SST_DIO_DREADD = {'G22': 'hM3D', 'G23': 'hM3D', 'G26': 'hM4D', 'G27': 'hM4D'}
 SST_DIO_DISPLAY_ORDER = ('G22', 'G23', 'G26', 'G27')     # hM3D then hM4D (no mCherry-DIO control)
@@ -206,20 +207,6 @@ def plot_frame_sheet(session_dir, frames, frame_max_z, title, out_path, n_column
 # --- lens-interior seed mask (session_queue.SEED_MASKS) -----------------------------------------
 
 
-def inside_ellipse(height, width, mask):
-    """True where (height, width) lies inside the ellipse ``mask`` (minian_runner.SEED_MASK_KEYS)."""
-    return (((np.asarray(height) - mask['center_height']) / mask['radius_height']) ** 2
-            + ((np.asarray(width) - mask['center_width']) / mask['radius_width']) ** 2) <= 1
-
-
-def footprint_centroids(A):
-    """(height, width) centroid of each unit's footprint, weighted by footprint value."""
-    values = A.values.reshape(A.sizes['unit_id'], -1)
-    hh, ww = np.meshgrid(A.coords['height'].values, A.coords['width'].values, indexing='ij')
-    weights = values / values.sum(axis=1, keepdims=True)
-    return weights @ hh.ravel(), weights @ ww.ravel()
-
-
 def plot_seed_mask(max_proj, A, mask, title, out_path):
     """``max_proj`` with the ellipse, and each unit's centroid: kept (inside) or not (outside)."""
     height, width = footprint_centroids(A)
@@ -241,13 +228,6 @@ def plot_seed_mask(max_proj, A, mask, title, out_path):
     plt.close(fig)
     return out_path
 
-
-# Lens-interior ellipses proposed for the parameter check, before VS approves them into
-# session_queue.SEED_MASKS (which production runs read). Drawn over the baseline max_proj.
-SEED_MASKS_PROPOSED = {
-    'G27-ST895-hM4D-DIOGC/2023_05_22-TFC_cond/15_21_41-HC2': {
-        'center_height': 335.0, 'center_width': 300.0, 'radius_height': 265.0, 'radius_width': 285.0},
-}
 
 
 # --- parameter grids (plan §6): full Minian runs outside the session folder ----------------------
