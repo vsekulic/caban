@@ -24,5 +24,6 @@ if __name__ == '__main__':
     minian_dir, title, out_png = sys.argv[1:4]
     mask = dict(zip(SEED_MASK_KEYS, (float(v) for v in sys.argv[4:8])))
     max_proj = yr.open_minian_array(minian_dir, 'max_proj').compute().values
-    A = yr.open_minian_array(minian_dir, 'A').compute()
+    # A run that stopped before its units were saved (G23 HC2, frozen set) has max_proj only.
+    A = yr.open_minian_array(minian_dir, 'A').compute() if os.path.isdir(os.path.join(minian_dir, 'A.zarr')) else None
     print(plot_seed_mask(max_proj, A, mask, '{} {}'.format(title, mask), out_png))

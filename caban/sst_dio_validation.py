@@ -208,21 +208,25 @@ def plot_frame_sheet(session_dir, frames, frame_max_z, title, out_path, n_column
 
 
 def plot_seed_mask(max_proj, A, mask, title, out_path):
-    """``max_proj`` with the ellipse, and each unit's centroid: kept (inside) or not (outside)."""
-    height, width = footprint_centroids(A)
-    inside = inside_ellipse(height, width, mask)
+    """``max_proj`` with the ellipse, and each unit's centroid: kept (inside) or not (outside).
+    ``A`` is None for a session with no units yet (only the ellipse is drawn)."""
     fig, ax = plt.subplots(figsize=(120 * MM, 120 * MM))
     low, high = np.percentile(max_proj, PROJECTION_PERCENTILES)
     ax.imshow(max_proj, cmap='gray', vmin=low, vmax=high, interpolation='nearest')
     theta = np.linspace(0, 2 * np.pi, 400)
     ax.plot(mask['center_width'] + mask['radius_width'] * np.cos(theta),
             mask['center_height'] + mask['radius_height'] * np.sin(theta), color='C1', lw=0.75)
-    ax.scatter(width[inside], height[inside], s=6, facecolor='none', edgecolor='C0', lw=0.5)
-    ax.scatter(width[~inside], height[~inside], s=6, marker='x', color='C3', lw=0.5)
     ax.set_xticks([])
     ax.set_yticks([])
-    ax.set_title('{}: {} units inside (o), {} outside (x)'.format(title, int(inside.sum()),
-                                                                  int((~inside).sum())), fontsize=FONT_PT)
+    if A is None:
+        ax.set_title('{}: no units yet'.format(title), fontsize=FONT_PT)
+    else:
+        height, width = footprint_centroids(A)
+        inside = inside_ellipse(height, width, mask)
+        ax.scatter(width[inside], height[inside], s=6, facecolor='none', edgecolor='C0', lw=0.5)
+        ax.scatter(width[~inside], height[~inside], s=6, marker='x', color='C3', lw=0.5)
+        ax.set_title('{}: {} units inside (o), {} outside (x)'.format(title, int(inside.sum()),
+                                                                      int((~inside).sum())), fontsize=FONT_PT)
     fig.tight_layout()
     fig.savefig(out_path, dpi=200)
     plt.close(fig)
