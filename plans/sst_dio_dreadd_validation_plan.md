@@ -359,6 +359,31 @@ are left to the merge stages, where the one-at-a-time grid showed the effect (me
 the reference cells came from a PNR 1.0 run, so a cell only a lower threshold could find would not
 be in it; the unmatched-seed check is what covers that.
 
+**Stage 2 decided (VS, 2026-10-22): max_wnd 15, PNR 1.0, lens mask on** — on Claude's
+recommendation without a notebook review (values unchanged from the pyramidal set).
+
+**Stage 3: initialisation and its merge** (initialise `thres_corr` 0.7/0.8/0.9 × `wnd` 10/15 ×
+init-merge `thres_corr` 0.6/0.7/0.8/0.9; `caban/sst_dio_init_grid.py`, Minian's `initA` → `initC`
+→ `unit_merge` as the notebook calls them, ~2 min for all 24). Measured on the reference cells:
+recall, cells with ≥ 2 units (split), units covering ≥ 2 reference centroids at 0.3 of their peak
+(fused), unmatched units.
+
+| initialise corr (wnd 10) \ init-merge | 0.6 | 0.7 | 0.8 | 0.9 |
+|---|---|---|---|---|
+| 0.7: units / recall / split / fused | 55 / 0.98 / 2 / 1 | 58 / 0.98 / 3 / 1 | 61 / 0.98 / 5 / 1 | 64 / 1.00 / 6 / 1 |
+| 0.8 | 59 / 0.98 / 3 / 1 | 61 / 1.00 / 4 / 1 | **63 / 1.00 / 5 / 1** | 65 / 1.00 / 6 / 1 |
+| 0.9 | 63 / 1.00 / 5 / 0 | 63 / 1.00 / 5 / 0 | 65 / 1.00 / 6 / 0 | 66 / 1.00 / 7 / 0 |
+
+`wnd` 15 gives the same as 10. The initialise correlation sets the size of the *initial* footprints
+(median ~110 px at 0.7, 60 at 0.8, 20 at 0.9), which the CNMF spatial updates then reshape; at 0.7
+one reference cell loses its unit. The init merge changes little: 0.7 vs 0.8 is nearly identical
+on the overlay (two units fewer, in the left cluster); 0.6 loses a cell.
+
+**Claude's recommendation: initialise corr 0.8, wnd 10, init-merge 0.8 — the frozen values.**
+Merging here works on the small initial footprints and their rough traces; the split cells are
+better judged at stage 4, after the spatial update, by the merge after it (`param_first_merge`),
+on full footprints and refined traces — where 0.6 here already showed the cost of merging early.
+
 Note (Minian): `pnr_refine` chunks seeds by `len(seeds) // 128`, which is 0 with fewer than 128
 seeds — a ZeroDivisionError waiting for a sparse field (G23?). Not hit yet.
 
