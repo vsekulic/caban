@@ -1,0 +1,34 @@
+"""One full Minian run of a mouse's parameter-check session (HC2) with the decided SST set, on the
+Razer (plan §6.1): sst_dio_validation.DECIDED_OVERRIDES (the pyramidal set), the session's lens
+mask (session_queue.SEED_MASKS, else sst_dio_common.SEED_MASKS_PROPOSED) and its line-artefact
+frames (yra_recompute.NOTEBOOK_DEL_FRAMES). Written outside the session folder, as the grids.
+
+    python scripts/sst_dio_final_set_check.py <mouse> <data_root> <out_root>
+
+Output: <out_root>/<mouse>_HC2/decided_set/ (the run, its variant.json and the runner's summary_*.png).
+"""
+
+import os
+import sys
+
+import matplotlib
+matplotlib.use('Agg')
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from caban import session_queue as sq
+from caban import sst_dio_validation as sdv
+
+if __name__ == '__main__':
+    if len(sys.argv) != 4:
+        raise SystemExit(__doc__)
+    mouse, data_root, out_root = sys.argv[1:4]
+    session_dir = os.path.join(sdv.parameter_check_session_dir(data_root, mouse), 'Miniscope')
+    tail = sq.session_tail(session_dir)
+    seed_mask = sq.SEED_MASKS.get(tail, sdv.SEED_MASKS_PROPOSED.get(tail))
+    if seed_mask is None:
+        raise SystemExit('no seed mask for {}'.format(tail))
+    root = os.path.join(out_root, '{}_HC2'.format(mouse))
+    os.makedirs(root, exist_ok=True)
+    print('{}: decided set {}, seed mask {}'.format(tail, sdv.DECIDED_OVERRIDES, seed_mask), flush=True)
+    record = sdv.run_parameter_variant(session_dir, 'decided_set', sdv.DECIDED_OVERRIDES, root, seed_mask)
+    print(record['report'])

@@ -10,6 +10,17 @@ import numpy as np
 SEED_MASKS_PROPOSED = {
     'G27-ST895-hM4D-DIOGC/2023_05_22-TFC_cond/15_21_41-HC2': {
         'center_height': 335.0, 'center_width': 300.0, 'radius_height': 265.0, 'radius_width': 285.0},
+    # 2026-10-22, drawn over the frozen-set max_proj and the raw mean (lens edge):
+    # G22: inside the left/bottom-left rim.
+    'G22-ST875-hM3D-DIOGC/2023_03_20-TFC_cond/14_15_20-HC2': {
+        'center_height': 340.0, 'center_width': 315.0, 'radius_height': 265.0, 'radius_width': 270.0},
+    # G23: no clear rim; centred high and narrow to keep the active cell top right and leave out
+    # the bright out-of-focus disc on the right.
+    'G23-ST856-hM3D-DIOGC/2023_03_20-TFC_cond/16_26_10-HC2': {
+        'center_height': 250.0, 'center_width': 250.0, 'radius_height': 300.0, 'radius_width': 225.0},
+    # G26: G27's, enlarged to keep a cell at the left edge; the rim crescent top right stays out.
+    'G26-ST894-hM4D-DIOGC/2023_05_22-TFC_cond/13_23_16-HC2': {
+        'center_height': 335.0, 'center_width': 300.0, 'radius_height': 275.0, 'radius_width': 295.0},
 }
 MATCH_PX = 6.0     # a seed within this distance of a reference cell's centroid belongs to that cell
 
