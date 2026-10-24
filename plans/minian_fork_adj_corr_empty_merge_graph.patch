@@ -1,0 +1,33 @@
+From 494e38e5c88ff6ddd8661e71d834a80c695b0fbe Mon Sep 17 00:00:00 2001
+From: Vladislav Sekulic <vlad.sekulic@gmail.com>
+Date: Wed, 21 Oct 2026 23:48:30 +0900
+Subject: [PATCH] adj_corr: return an all-zero matrix when no two units
+ overlap, instead of np.concatenate([]) raising in graph_optimize_corr (need
+ at least one array to concatenate, in unit_merge / seeds_merge on sparse
+ fields). Changes behaviour only where it used to crash. VS approved
+ 2026-10-21 (caban feat/sst-dio-validation).
+
+---
+ minian/cnmf.py | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/minian/cnmf.py b/minian/cnmf.py
+index bd04dee2..2372f33a 100755
+--- a/minian/cnmf.py
++++ b/minian/cnmf.py
+@@ -1848,6 +1848,12 @@ def adj_corr(
+     G = nx.Graph()
+     G.add_nodes_from([(i, d) for i, d in enumerate(nod_df.to_dict("records"))])
+     G.add_edges_from([(s, t) for s, t in zip(*adj.nonzero())])
++    if G.number_of_edges() == 0:
++        # No two units overlap, so there is nothing to correlate: graph_optimize_corr would
++        # call np.concatenate on an empty list and raise. Return the all-zero matrix, which
++        # callers already handle (no pair above threshold). caban, 2026-10-21: sparse SST
++        # fields (G23 HC2; G27 HC2 at merge thres_corr 0.7).
++        return scipy.sparse.csr_matrix(adj.shape)
+     corr_df = graph_optimize_corr(varr, G, freq, idx_dims=nod_df.columns)
+     return scipy.sparse.csr_matrix(
+         (corr_df["corr"], (corr_df["source"], corr_df["target"])), shape=adj.shape
+-- 
+2.43.0
+

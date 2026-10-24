@@ -5,6 +5,47 @@ worktree and branch `feat/sst-dio-validation`, in parallel with the Figure 2 v2 
 [handover_sst_dio_validation.md](handover_sst_dio_validation.md) §0. Becomes Figure 2 v2 panel **d**
 ([figure2_redesign_plan.md](figure2_redesign_plan.md) §3, §4.2, §7). The plan proper is §5–§10;
 §2.2 is the 2026-10-21 audit it rests on.
+
+## Checkpoint 2026-10-24 — Razer shut down for VS's move; resume here
+
+**Where it stands.** The parameter walk is finished and decided (§6.1, parameter log): the SST set
+is the pyramidal frozen set throughout, plus two SST-specific steps that change no parameter —
+line-artefact frames dropped, lens-rim seed mask. Check runs on G22/G23/G26 HC2 succeeded (G23 no
+longer crashes). Nothing has been queued for production; nothing was running at shutdown.
+
+**Open decisions for VS (asked 2026-10-22, not yet answered):**
+1. Approve the proposed ellipses for G22, G23, G26 (`sst_dio_common.SEED_MASKS_PROPOSED`; figures
+   `parameter_check/seed_mask/<mouse>_HC2_try3.png`) — then they go, with G27's, into
+   `session_queue.SEED_MASKS` for every session of each mouse's conditioning day.
+2. G22 TFC1: drop its ~24 isolated line frames and the corrupted end block (frame 9918 to the end,
+   ~250 frames)? Plus G22 LT1 frame 3905. Then into `yra_recompute.NOTEBOOK_DEL_FRAMES`.
+
+**Then, in order:** fill `SEED_MASKS` and `NOTEBOOK_DEL_FRAMES`; decide how the runner treats the HC2
+sessions that already hold a frozen-set run without the mask (G22, G26, G27 `done`; G23 `failed`:
+set aside as `-ORIG`, never deleted); `--dry-run` of the 36 conditioning-day sessions; queue them
+(`screen sst_cond_day`); then the analysis design (§8, `statistics-checker` first).
+
+**Where things are.**
+- Code: branch `feat/sst-dio-validation` (worktree `.claude/worktrees/sst-dio-validation` on the
+  Mac, `~/code/caban_sst` on the Razer), all pushed. Work on the worktree by path from the caban
+  folder; never `EnterWorktree`, never `cd` into it (memory: feedback_never_enter_worktree).
+- Minian fork fix (`adj_corr`, empty merge graph): commit `494e38e5` on the Razer's
+  `~/code/minian_vsekulic` (`vsekulic_v4`), **not pushed**; a copy as a patch in
+  [minian_fork_adj_corr_empty_merge_graph.patch](minian_fork_adj_corr_empty_merge_graph.patch).
+- Results: `~/sst_dio_out/` on the Razer (271 GB with intermediates); everything but the Minian
+  arrays copied to `/Volumes/FUTROLA/caban_cache/sst_dio_out_checkpoint/` (1.9 GB: parameter log,
+  stage tables, `variant.json` records, executed notebooks, figures, VS's notebook runs). Figures
+  also in `plots/CURRENT/sst_dio_validation/`.
+- Baseline (frozen-set) runs of the four HC2 sessions: in their session folders on `/mnt/e`
+  (G23's failed run's work folder in `~/minian_stage`).
+
+**Restarting on the Razer.** The review server:
+`screen -dmS sst_jupyter bash -lc "source ~/miniforge3/etc/profile.d/conda.sh && conda activate
+minian-native && cd ~/code/caban_sst && ~/bin/logrun 'sst: jupyter' jupyter notebook --no-browser
+--ip 127.0.0.1 --port 8899 --notebook-dir ~/code/caban_sst"`, then `jupyter notebook list` for the
+new token; VS tunnels with `ssh -N -L 8899:localhost:8899 minastirith`. The main chat's
+`status_report` screen (batch status every 20 min) ends with the shutdown and does not restart by
+itself.
 Depends on: `plans/local_minian_pipeline_plan.md` (none of these mice has usable Minian output,
 so every session needs CNMF-E first).
 Out of scope: the main cohort (G05–G21), whose imaged cells are CA1 pyramidal cells, not the
