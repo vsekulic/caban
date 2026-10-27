@@ -493,6 +493,33 @@ those three mice's HC2 (G23 should no longer hit the empty-merge failure; watch 
 - G23 `TFC_cond` decodes to 26 118 frames against 26 119 timestamp rows: one frame missing at
   decode — for the loader's timing checks, not for Minian.
 
+**Missed cells (2026-10-27, VS: "G22 is missing some cells"):** cell-like spots found without
+judgement in each check run's max projection (`seed_grid.candidate_spots`: local maxima of the
+smoothed image inside the ellipse, > 3 s.d.), each uncovered one followed back through the seed
+steps (`scripts/sst_dio_missed_cells.py`). G26: 14/16 spots covered (the 2 faintest missed); G23:
+10/16 (misses on the image's top edge or faint); **G22: 7/14 — its three clearest missed cells,
+with real transients, never got a seed.** Cause: `seeds_init`'s `diff_thres` (3 in the pyramidal
+set; Minian's default 2) — a local maximum must exceed its surroundings by that many intensity
+values, and G22 (dim, LED 18) has transients of only 2–4 counts. Seeds at diff_thres 3/2/1
+(`scripts/sst_dio_diff_thres_check.py`; spots seeded / merged seeds on no spot):
+
+| mouse | 3 | 2 | 1 |
+|---|---|---|---|
+| G22 | 7/14 / 0 | 12/14 / 4 | 13 / 48 |
+| G26 | 13/16 / 4 | 15 / 25 | 15 / 243 |
+| G23 | 10/16 / 1 | 11 / 19 | 12 / 744 |
+| G27 | 33/34 / 25 | 32 / 258 | 33 / 1975 |
+
+Full G22 run at diff_thres 2: 14 units (8 at 3), spots covered 12/14 (7), **no unit on a non-spot**
+(the extra seeds die in CNMF); new units: the three missed cells, plus one ragged unit inside the
+out-of-focus debris disc (top left).
+
+**Claude's recommendation: diff_thres 2 for G22 only** — a documented per-mouse exception for its
+dim imaging (transients 2–4 counts); G23, G26, G27 keep the pyramidal 3, where 2 gains at most 2
+spots for 5–10× the noise seeds. The debris unit: either an exclusion region over the disc's centre
+in G22's seed mask (keeping the real cell at its edge, ~(230, 124)), or leave it and list it — VS's
+call (removing a unit after the run would be dropping data).
+
 Open for VS before the queue: the three ellipses; G22 TFC1's frames (drop the ~24 isolated ones and
 the corrupted ~250-frame end, VS's practice — the end block carries no image — or decide otherwise).
 
