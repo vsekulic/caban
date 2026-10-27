@@ -636,3 +636,22 @@ per-cell pre/post strips. Drafted after §8 is fixed; the layout is a proposal f
 4. Queue (§7) → analysis A, while C is built if VS agrees (§8.2).
 5. VS / lab notebook: injection times for G22/G23; G22's TFC1/TFC2 split.
 6. §8 pre-specified, `statistics-checker`, run, `scientific-code-reviewer`, panel d (§9).
+
+**Supplementary figure: lens seed masks (2026-10-27; VS: "put these in a supplementary figure").**
+`scripts/sst_dio_seed_mask_supplement.py` (`sst_dio_validation.plot_seed_mask_supplement`), on the
+Razer; `CURRENT/sst_dio_validation/supplementary/sst_dio_seed_masks.{png,svg}` and
+`_seeds_removed.csv`. Drawn from the masked check runs (line frames dropped), so G22's max
+projection has no lines (the earlier `seed_mask/G22_HC2_try3.png` used the first run, before the
+frames were dropped). G22 is the `diff_thres` 3 run: rebuild with the production runs. Placement in
+the Figure 2 v2 supplement is the main chat's layout (handover §5b item 2); offered there as a panel
+group. Draft caption:
+
+> **Supplementary Fig. X | Lens-interior seed masks for the SST DIO-GCaMP6f recordings.**
+> **a**, Mean of the raw movie of each mouse's home-cage session before conditioning (HC2), with
+> the elliptical seed mask (orange); the GRIN lens edge and out-of-focus bright discs show here.
+> **b**, Maximum projection of the processed movie (CNMF-E, Minian) of the same session, with the
+> mask and each unit's footprint centroid (blue circles). Seeds whose centre fell outside the mask
+> were removed before initialisation; the movie itself was not altered and footprints may extend
+> past the mask. Seeds removed / total and units kept: G22 2/31, 8 units; G23 57/149, 11; G26
+> 38/181, 19; G27 1,061/1,447, 61. The same mask was applied to every session of a mouse's
+> conditioning day. G22 and G23, hM3D; G26 and G27, hM4D.
