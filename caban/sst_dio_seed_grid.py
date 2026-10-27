@@ -25,6 +25,7 @@ import pandas as pd
 import xarray as xr
 import matplotlib.pyplot as plt
 from distributed import Client, LocalCluster
+from scipy import ndimage
 from minian.initialization import ks_refine, pnr_refine, seeds_init, seeds_merge
 from minian.utilities import TaskAnnotation
 
@@ -86,7 +87,7 @@ def run_seed_grid(stage1_dir, out_dir, seed_mask, max_wnds=SEED_MAX_WNDS, thresh
             merged = seeds_merge(Y_hw_chk, max_proj, kept, **params['param_seeds_merge'])
             table = pd.concat([
                 seeds.assign(step='initial'),
-                masked.assign(step='inside_mask'),
+                refined.assign(step='inside_mask'),     # every masked seed, with its PNR and KS result
                 kept.assign(step='pnr_and_ks'),
                 merged[merged['mask_mrg']].assign(step='merged'),
             ], ignore_index=True)
@@ -185,6 +186,112 @@ def plot_unmatched_seeds(table, Y_hw_chk, max_proj, cells, title, out_path):
         ax_trace = fig.add_subplot(grid[1 + i, 1:])
         ax_trace.plot(np.arange(len(trace)) / FRAMERATE_HZ, trace, lw=0.4, color='0.2')
         ax_trace.set_title('seed {}: PNR {:.2f}'.format(i + 1, row['pnr']), fontsize=9, loc='left')
+        ax_trace.set_xlim(0, len(trace) / FRAMERATE_HZ)
+    if n:
+        ax_trace.set_xlabel('time (s)')
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=90)
+    plt.close(fig)
+    return out_path
+
+
+# --- missed cells: cell-like spots with no final unit, followed back through the seed steps --------
+CANDIDATE_SMOOTH_SIGMA_PX = 2.0
+CANDIDATE_Z = 3.0                 # smoothed max_proj above the in-mask median, in in-mask s.d.
+CANDIDATE_MIN_SEPARATION_PX = 8
+COVER_LEVEL = 0.3                 # a unit covers a spot where its footprint exceeds this fraction of its peak
+
+
+def candidate_spots(max_proj, seed_mask):
+    """Cell-like spots in the max projection, found without judgement: local maxima of the smoothed
+    image inside the lens ellipse, at least CANDIDATE_Z in-mask s.d. above the in-mask median and
+    CANDIDATE_MIN_SEPARATION_PX apart. Returns (height, width, z) arrays, brightest first."""
+    smooth = ndimage.gaussian_filter(max_proj.astype(float), CANDIDATE_SMOOTH_SIGMA_PX)
+    hh, ww = np.meshgrid(np.arange(smooth.shape[0]), np.arange(smooth.shape[1]), indexing='ij')
+    inside = inside_ellipse(hh, ww, seed_mask)
+    values = smooth[inside]
+    z = (smooth - np.median(values)) / values.std()
+    size = 2 * CANDIDATE_MIN_SEPARATION_PX + 1
+    peaks = (smooth == ndimage.maximum_filter(smooth, size=size)) & (z > CANDIDATE_Z) & inside
+    h, w = np.nonzero(peaks)
+    order = np.argsort(-z[h, w])
+    return h[order], w[order], z[h, w][order]
+
+
+def spot_fates(spots, tables, A):
+    """For each spot: covered by a final unit, or where it dropped out of the seed steps at the
+    decided PNR threshold (1.0), and whether a lower threshold would have kept a seed there.
+    ``tables``: seed tables by threshold name (``run_seed_grid`` output at max_wnd 15)."""
+    values = A.values.reshape(A.sizes['unit_id'], -1)
+    scaled = (values / values.max(axis=1, keepdims=True)).reshape(A.shape)
+    covered = (scaled > COVER_LEVEL).any(axis=0)
+    rows = []
+    for k, (h, w, z) in enumerate(zip(*spots)):
+        row = {'spot': k + 1, 'height': int(h), 'width': int(w), 'z': round(float(z), 1),
+               'covered_by_unit': bool(covered[h, w])}
+        for name, table in tables.items():
+            thres = float(name.replace('pnr_', '').replace('_', '.'))
+            near = {}
+            for step in SEED_STEPS:
+                part = table[table['step'] == step]
+                dist = np.hypot(part['height'] - h, part['width'] - w)
+                near[step] = part[dist <= MATCH_PX]
+            masked = near['inside_mask']
+            best_pnr = float(masked['pnr'].max()) if len(masked) else np.nan
+            if near['initial'].empty:
+                fate = 'no seed'
+            elif masked.empty:
+                fate = 'outside mask'
+            elif near['pnr_and_ks'].empty:
+                fate = 'failed PNR' if best_pnr <= thres else 'failed KS'
+            elif near['merged'].empty:
+                fate = 'merged into a neighbour'
+            else:
+                fate = 'seed survives'
+            row['{}_fate'.format(name)] = fate
+            row['{}_best_pnr'.format(name)] = round(best_pnr, 2)
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def plot_missed_spots(max_proj, spots, fates, Y_hw_chk, seed_mask, title, out_path):
+    """Spots over the max projection (green: covered by a unit; red: not, numbered), then per
+    uncovered spot a crop and its Y_hw_chk trace, with its fate at PNR 1.0 and its best seed PNR."""
+    missed = fates[~fates['covered_by_unit']].reset_index(drop=True)
+    n = len(missed)
+    fig = plt.figure(figsize=(16, 7 + 1.7 * n))
+    grid = fig.add_gridspec(1 + n, 4, height_ratios=[7] + [1.7] * n)
+    ax = fig.add_subplot(grid[0, :2])
+    low, high = np.percentile(max_proj, (0.5, 99.5))
+    ax.imshow(max_proj, cmap='gray', vmin=low, vmax=high, interpolation='nearest')
+    theta = np.linspace(0, 2 * np.pi, 400)
+    ax.plot(seed_mask['center_width'] + seed_mask['radius_width'] * np.cos(theta),
+            seed_mask['center_height'] + seed_mask['radius_height'] * np.sin(theta), color='#ff4500', lw=0.8)
+    hit = fates[fates['covered_by_unit']]
+    ax.scatter(hit['width'], hit['height'], s=40, facecolor='none', edgecolor='#2ca02c', lw=1)
+    ax.scatter(missed['width'], missed['height'], s=40, facecolor='none', edgecolor='#d62728', lw=1)
+    for i, row in missed.iterrows():
+        ax.annotate(str(i + 1), (row['width'], row['height']), color='#d62728', fontsize=10,
+                    xytext=(5, 5), textcoords='offset points')
+    ax.set_title('{}: {} spots, {} covered by a unit (green), {} not (red)'.format(
+        title, len(fates), len(hit), n), fontsize=10)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    for i, row in missed.iterrows():
+        h, w = int(row['height']), int(row['width'])
+        crop = max_proj[max(h - CROP_HALF_PX, 0):h + CROP_HALF_PX, max(w - CROP_HALF_PX, 0):w + CROP_HALF_PX]
+        ax_crop = fig.add_subplot(grid[1 + i, 0])
+        ax_crop.imshow(crop, cmap='gray', vmin=low, vmax=high, interpolation='nearest')
+        ax_crop.plot(min(w, CROP_HALF_PX), min(h, CROP_HALF_PX), '+', color='#d62728', ms=8)
+        ax_crop.set_xticks([])
+        ax_crop.set_yticks([])
+        ax_crop.set_ylabel(str(i + 1), rotation=0, fontsize=10, labelpad=12)
+        trace = Y_hw_chk.sel(height=h, width=w).values
+        ax_trace = fig.add_subplot(grid[1 + i, 1:])
+        ax_trace.plot(np.arange(len(trace)) / FRAMERATE_HZ, trace, lw=0.4, color='0.2')
+        ax_trace.set_title('spot {} (z {}): at PNR 1.0 {}; best seed PNR {}; at 0.75 {}; at 0.5 {}'.format(
+            i + 1, row['z'], row['pnr_1_0_fate'], row['pnr_1_0_best_pnr'], row['pnr_0_75_fate'],
+            row['pnr_0_5_fate']), fontsize=9, loc='left')
         ax_trace.set_xlim(0, len(trace) / FRAMERATE_HZ)
     if n:
         ax_trace.set_xlabel('time (s)')
