@@ -154,3 +154,28 @@ def log_decision(grid_root, stage, values_tried, value_chosen, why):
         writer.writerow({'time': datetime.datetime.now().isoformat(timespec='seconds'), 'stage': stage,
                          'values_tried': values_tried, 'value_chosen': value_chosen, 'why': why})
     return pd.read_csv(path)
+
+
+def plot_before_after(before_dir, after_dir, mask, title, out_path, before_label, after_label):
+    """Two Minian outputs of one session side by side: each one's max projection with its units'
+    outlines and the lens ellipse. ``before_dir`` may hold no ``A`` (a run that stopped before its
+    units were saved): then only its max projection is drawn, titled so."""
+    fig, axes = plt.subplots(1, 2, figsize=(14, 7.4))
+    theta = np.linspace(0, 2 * np.pi, 400)
+    for ax, folder, label, colour in ((axes[0], before_dir, before_label, ORANGE),
+                                      (axes[1], after_dir, after_label, BLUE)):
+        max_proj = xr.open_zarr(os.path.join(folder, 'max_proj.zarr'))['max_proj'].values
+        a_path = os.path.join(folder, 'A.zarr')
+        if os.path.isdir(a_path):
+            A = xr.open_zarr(a_path)['A'].compute()
+            _show(ax, max_proj, unit_outlines(A), colour, '{}: {} units'.format(label, A.sizes['unit_id']))
+        else:
+            _show(ax, max_proj, np.zeros(max_proj.shape, dtype=bool), colour,
+                  '{}: no units (the run stopped before saving them)'.format(label))
+        ax.plot(mask['center_width'] + mask['radius_width'] * np.cos(theta),
+                mask['center_height'] + mask['radius_height'] * np.sin(theta), color='#ff4500', lw=1.0)
+    fig.suptitle('{} (red-orange ellipse: lens mask; seeds outside it are discarded)'.format(title), fontsize=11)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=100)
+    plt.close(fig)
+    return out_path
