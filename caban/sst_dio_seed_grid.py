@@ -63,22 +63,30 @@ def reference_cells(reference_dir):
     return footprint_centroids(A)
 
 
-def run_seed_grid(stage1_dir, out_dir, seed_mask, max_wnds=SEED_MAX_WNDS, thresholds=SEED_PNR_THRESHOLDS):
-    """Every (max_wnd, PNR threshold); writes ``seeds_<variant>.csv`` (all seeds with each step's
-    flag) per variant, and returns them by variant name."""
+def run_seed_grid(stage1_dir, out_dir, seed_mask, max_wnds=SEED_MAX_WNDS, thresholds=SEED_PNR_THRESHOLDS,
+                  diff_thres_values=(None,)):
+    """Every (diff_thres, max_wnd, PNR threshold); writes ``seeds_<variant>.csv`` (all seeds with
+    each step's flag) per variant, and returns them by variant name. ``diff_thres`` None keeps the
+    run's own value and the name without a ``diff_`` prefix."""
     arrays, params = open_stage1(stage1_dir)
     Y_fm_chk, Y_hw_chk, max_proj = arrays['Y_fm_chk'], arrays['Y_hw_chk'], arrays['max_proj']
     out = {}
-    for max_wnd in max_wnds:
-        seeds = seeds_init(Y_fm_chk, **dict(params['param_seeds_init'], max_wnd=max_wnd))
+    for diff_thres, max_wnd in [(d, m) for d in diff_thres_values for m in max_wnds]:
+        init_params = dict(params['param_seeds_init'], max_wnd=max_wnd)
+        prefix = ''
+        if diff_thres is not None:
+            init_params['diff_thres'] = diff_thres
+            prefix = 'diff_{}_'.format(diff_thres)
+        seeds = seeds_init(Y_fm_chk, **init_params)
         inside = inside_ellipse(seeds['height'], seeds['width'], seed_mask)
         masked = seeds[inside].reset_index(drop=True)
-        print('max_wnd {}: {} seeds, {} inside the lens mask'.format(max_wnd, len(seeds), len(masked)), flush=True)
+        print('{}max_wnd {}: {} seeds, {} inside the lens mask'.format(prefix, max_wnd, len(seeds), len(masked)),
+              flush=True)
         refined, pnr, _ = pnr_refine(Y_hw_chk, masked.copy(), **params['param_pnr_refine'])
         refined = ks_refine(Y_hw_chk, refined, **params['param_ks_refine'])
         refined['pnr'] = pnr.to_pandas()
         for thres in thresholds:
-            name = 'max_wnd_{}_pnr_{}'.format(max_wnd, str(thres).replace('.', '_'))
+            name = '{}max_wnd_{}_pnr_{}'.format(prefix, max_wnd, str(thres).replace('.', '_'))
             seeds_t = refined.copy()
             seeds_t['mask_pnr'] = (pnr > thres).to_pandas()
             kept = seeds_t[seeds_t['mask_ks'] & seeds_t['mask_pnr']].reset_index(drop=True)
