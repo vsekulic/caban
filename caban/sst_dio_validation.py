@@ -25,7 +25,8 @@ import matplotlib.pyplot as plt
 
 from caban import minian_runner as mr
 from caban import yra_recompute as yr
-from caban.nature_comm_style import MM, FONT_PT
+from caban.nature_comm_style import (MM, FONT_PT, LETTER_PT, LINE_PT, figsize_mm, nature_style,
+                                     save_paper_panel)
 from caban.sst_dio_common import SEED_MASKS_PROPOSED, inside_ellipse, footprint_centroids, unit_metrics
 
 SST_DIO_DREADD = {'G22': 'hM3D', 'G23': 'hM3D', 'G26': 'hM4D', 'G27': 'hM4D'}
@@ -249,6 +250,48 @@ def plot_seed_mask(max_proj, A, mask, title, out_path, raw_mean=None):
     plt.close(fig)
     return out_path
 
+
+ELLIPSE_COLOUR = '#E69F00'   # Okabe-Ito orange
+UNIT_COLOUR = '#56B4E9'      # Okabe-Ito sky blue
+
+
+def plot_seed_mask_supplement(panels, path_root):
+    """Supplementary figure of the lens-interior seed masks, one column per mouse
+    (SST_DIO_DISPLAY_ORDER): **a**, the raw movie's mean with the ellipse (the lens edge shows
+    there); **b**, the run's max projection with the ellipse and each unit's footprint centroid.
+    ``panels`` maps mouse -> {'raw_mean', 'max_proj', 'A', 'mask'}. Axes stop at the frame, so an
+    ellipse running past it is cut. Saves ``path_root``.svg and .png."""
+    mice = [m for m in SST_DIO_DISPLAY_ORDER if m in panels]
+    if set(mice) != set(panels):
+        raise ValueError('unknown mice {}'.format(sorted(set(panels) - set(mice))))
+    theta = np.linspace(0, 2 * np.pi, 400)
+    with nature_style():
+        fig, axes = plt.subplots(2, len(mice), figsize=figsize_mm(183, 183 / len(mice) * 2 + 8),
+                                 squeeze=False)
+        fig.subplots_adjust(left=0.03, right=0.995, top=0.95, bottom=0.005, wspace=0.04, hspace=0.04)
+        for col, mouse in enumerate(mice):
+            panel = panels[mouse]
+            mask = panel['mask']
+            for row, image in enumerate((panel['raw_mean'], panel['max_proj'])):
+                ax = axes[row, col]
+                low, high = np.percentile(image, PROJECTION_PERCENTILES)
+                ax.imshow(image, cmap='gray', vmin=low, vmax=high, interpolation='nearest')
+                ax.plot(mask['center_width'] + mask['radius_width'] * np.cos(theta),
+                        mask['center_height'] + mask['radius_height'] * np.sin(theta),
+                        color=ELLIPSE_COLOUR, lw=LINE_PT)
+                ax.set_xlim(-0.5, image.shape[1] - 0.5)
+                ax.set_ylim(image.shape[0] - 0.5, -0.5)
+                ax.set_xticks([])
+                ax.set_yticks([])
+            height, width = footprint_centroids(panel['A'])
+            axes[1, col].scatter(width, height, s=5, facecolor='none', edgecolor=UNIT_COLOUR, lw=0.5)
+            axes[0, col].set_title('{} ({})'.format(mouse, SST_DIO_DREADD[mouse]), fontsize=FONT_PT)
+        for row, letter in enumerate('ab'):
+            fig.text(0.005, axes[row, 0].get_position().y1, letter, fontsize=LETTER_PT,
+                     fontweight='bold', va='top')
+        save_paper_panel(fig, path_root)
+    plt.close(fig)
+    return path_root
 
 
 # --- parameter grids (plan §6): full Minian runs outside the session folder ----------------------
