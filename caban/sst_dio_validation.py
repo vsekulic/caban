@@ -114,6 +114,47 @@ def raw_projections(session_dir):
     return {k: v for k, v in raw_pass(session_dir).items() if k != 'profiles'}
 
 
+def max_projection_frames_removed(session_dir, del_frames):
+    """Raw max projection over every frame and over the frames left once ``del_frames`` (0-based,
+    as ``NOTEBOOK_DEL_FRAMES``) are removed: the check VS made in the Minian notebook that the
+    lines are gone. One streamed pass."""
+    removed = set(int(f) for f in del_frames)
+    peak_all = peak_kept = None
+    n_frames = 0
+    for index, frame in enumerate(iter_frames(session_dir)):
+        if peak_all is None:
+            peak_all, peak_kept = frame.copy(), np.full_like(frame, -np.inf)
+        np.maximum(peak_all, frame, out=peak_all)
+        if index not in removed:
+            np.maximum(peak_kept, frame, out=peak_kept)
+        n_frames += 1
+    beyond = sorted(f for f in removed if f >= n_frames)
+    if beyond:
+        raise ValueError('{}: frames {} past the last frame ({})'.format(session_dir, beyond, n_frames - 1))
+    return {'max_all': peak_all, 'max_kept': peak_kept, 'n_frames': n_frames, 'n_removed': len(removed)}
+
+
+def plot_frames_removed(previews, title, out_path):
+    """One row per session: raw max projection, all frames | frames removed, on the same display
+    range (the all-frames image's)."""
+    names = list(previews)
+    fig, axes = plt.subplots(len(names), 2, figsize=(10, 5.2 * len(names)), squeeze=False)
+    for row, name in enumerate(names):
+        preview = previews[name]
+        low, high = np.percentile(preview['max_all'], PROJECTION_PERCENTILES)
+        for ax, key, label in ((axes[row, 0], 'max_all', 'all {} frames'.format(preview['n_frames'])),
+                               (axes[row, 1], 'max_kept', '{} line frames removed'.format(preview['n_removed']))):
+            ax.imshow(preview[key], cmap='gray', vmin=low, vmax=high, interpolation='nearest')
+            ax.set_title('{}: max projection, {}'.format(name, label), fontsize=9)
+            ax.set_xticks([])
+            ax.set_yticks([])
+    fig.suptitle(title, fontsize=11)
+    fig.tight_layout()
+    fig.savefig(out_path, dpi=110)
+    plt.close(fig)
+    return out_path
+
+
 def plot_projection_grid(projections, out_path):
     """One row per mouse (:data:`SST_DIO_DISPLAY_ORDER`), columns mean | max - mean | s.d."""
     columns = (('mean', 'Mean'), ('max_minus_mean', 'Max − mean'), ('std', 'S.d.'))
