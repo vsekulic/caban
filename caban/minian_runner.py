@@ -360,6 +360,7 @@ def build_run_notebook(template, session_dir: str, parameters_path: str,
 LOAD_VIDEOS_LINE = "varr = load_videos(dpath, **param_load_videos)"
 SEEDS_INIT_ANCHOR = "seeds = seeds_init(Y_fm_chk, **param_seeds_init)"
 SEED_MASK_KEYS = ("center_height", "center_width", "radius_height", "radius_width")
+SEED_MASK_EXCLUDE_KEY = "exclude_circles"  # optional: [(center_height, center_width, radius), ...]
 
 
 def _single_code_cell(nb, text: str) -> int:
@@ -393,10 +394,16 @@ def _insert_del_frames(nb, del_frames: List[int]) -> dict:
 def _insert_seed_mask(nb, seed_mask: dict) -> dict:
     """A cell after ``seeds_init`` that keeps only the seeds inside an ellipse (pixel coordinates,
     :data:`SEED_MASK_KEYS`): no unit can start on the lens rim or the image edge. The movie is not
-    altered."""
-    if set(seed_mask) != set(SEED_MASK_KEYS):
-        raise ValueError("seed_mask must have exactly {}, got {}".format(SEED_MASK_KEYS, sorted(seed_mask)))
+    altered. Optional :data:`SEED_MASK_EXCLUDE_KEY` circles inside the ellipse remove the seeds
+    there too (debris in the field, e.g. G22's out-of-focus disc)."""
+    if set(seed_mask) - {SEED_MASK_EXCLUDE_KEY} != set(SEED_MASK_KEYS):
+        raise ValueError("seed_mask must have exactly {} (and optionally {!r}), got {}".format(
+            SEED_MASK_KEYS, SEED_MASK_EXCLUDE_KEY, sorted(seed_mask)))
     mask = {k: float(seed_mask[k]) for k in SEED_MASK_KEYS}
+    circles = [tuple(float(v) for v in c) for c in seed_mask.get(SEED_MASK_EXCLUDE_KEY, ())]
+    if any(len(c) != 3 or c[2] <= 0 for c in circles):
+        raise ValueError("{} must be (center_height, center_width, radius > 0) triples: {}".format(
+            SEED_MASK_EXCLUDE_KEY, circles))
     idx = _single_code_cell(nb, SEEDS_INIT_ANCHOR)
     source = (
         "# Inserted by caban.minian_runner: seeds outside the lens interior removed\n"
@@ -407,6 +414,15 @@ def _insert_seed_mask(nb, seed_mask: dict) -> dict:
         "print('seed mask: {{}} of {{}} seeds outside the lens interior removed'.format(int((~_inside).sum()), len(seeds)))\n"
         "seeds = seeds[_inside].reset_index(drop=True)"
     ).format(mask)
+    if circles:
+        source += (
+            "\nseed_mask_exclude = {!r}  # (center_height, center_width, radius)\n"
+            "_keep = seeds['height'] == seeds['height']\n"
+            "for _ch, _cw, _r in seed_mask_exclude:\n"
+            "    _keep &= ((seeds['height'] - _ch) ** 2 + (seeds['width'] - _cw) ** 2) > _r ** 2\n"
+            "print('seed mask exclusions: {{}} of {{}} seeds removed'.format(int((~_keep).sum()), len(seeds)))\n"
+            "seeds = seeds[_keep].reset_index(drop=True)"
+        ).format(circles)
     cell = nbformat.v4.new_code_cell(source)
     cell.metadata["tags"] = ["caban-minian-runner"]
     nb.cells.insert(idx + 1, cell)

@@ -320,6 +320,9 @@ def plot_seed_mask_supplement(panels, path_root):
                 ax.plot(mask['center_width'] + mask['radius_width'] * np.cos(theta),
                         mask['center_height'] + mask['radius_height'] * np.sin(theta),
                         color=ELLIPSE_COLOUR, lw=LINE_PT)
+                for center_height, center_width, radius in mask.get('exclude_circles', ()):
+                    ax.plot(center_width + radius * np.cos(theta), center_height + radius * np.sin(theta),
+                            color=ELLIPSE_COLOUR, lw=LINE_PT, ls=(0, (2, 1)))
                 ax.set_xlim(-0.5, image.shape[1] - 0.5)
                 ax.set_ylim(image.shape[0] - 0.5, -0.5)
                 ax.set_xticks([])

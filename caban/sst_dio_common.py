@@ -12,8 +12,11 @@ SEED_MASKS_PROPOSED = {
         'center_height': 335.0, 'center_width': 300.0, 'radius_height': 265.0, 'radius_width': 285.0},
     # 2026-10-22, drawn over the frozen-set max_proj and the raw mean (lens edge):
     # G22: inside the left/bottom-left rim.
+    # 2026-10-28 (VS): the debris at the centre of the out-of-focus disc top left (two units at
+    # diff_thres 2) excluded; the real cell at the disc's lower edge (~229, 124) stays.
     'G22-ST875-hM3D-DIOGC/2023_03_20-TFC_cond/14_15_20-HC2': {
-        'center_height': 340.0, 'center_width': 315.0, 'radius_height': 265.0, 'radius_width': 270.0},
+        'center_height': 340.0, 'center_width': 315.0, 'radius_height': 265.0, 'radius_width': 270.0,
+        'exclude_circles': [(200.0, 142.0, 16.0)]},
     # G23: no clear rim; centred high and narrow to keep the active cell top right and leave out
     # the bright out-of-focus disc on the right.
     'G23-ST856-hM3D-DIOGC/2023_03_20-TFC_cond/16_26_10-HC2': {
@@ -26,9 +29,14 @@ MATCH_PX = 6.0     # a seed within this distance of a reference cell's centroid 
 
 
 def inside_ellipse(height, width, mask):
-    """True where (height, width) lies inside the ellipse ``mask`` (minian_runner.SEED_MASK_KEYS)."""
-    return (((np.asarray(height) - mask['center_height']) / mask['radius_height']) ** 2
-            + ((np.asarray(width) - mask['center_width']) / mask['radius_width']) ** 2) <= 1
+    """True where (height, width) lies inside the ellipse ``mask`` (minian_runner.SEED_MASK_KEYS)
+    and outside its optional ``exclude_circles``, as the run's seed-mask cell keeps seeds."""
+    height, width = np.asarray(height), np.asarray(width)
+    inside = (((height - mask['center_height']) / mask['radius_height']) ** 2
+              + ((width - mask['center_width']) / mask['radius_width']) ** 2) <= 1
+    for center_height, center_width, radius in mask.get('exclude_circles', ()):
+        inside &= (height - center_height) ** 2 + (width - center_width) ** 2 > radius ** 2
+    return inside
 
 
 def footprint_centroids(A):
