@@ -6,24 +6,41 @@ worktree and branch `feat/sst-dio-validation`, in parallel with the Figure 2 v2 
 ([figure2_redesign_plan.md](figure2_redesign_plan.md) §3, §4.2, §7). The plan proper is §5–§10;
 §2.2 is the 2026-10-21 audit it rests on.
 
-## Checkpoint 2026-10-24 — Razer shut down for VS's move; resume here
+## Checkpoint 2026-10-28: paused until the BBNP paper is done (Razer goes to BBNP simulations 24/7)
 
-**Where it stands.** The parameter walk is finished and decided (§6.1, parameter log): the SST set
-is the pyramidal frozen set throughout, plus two SST-specific steps that change no parameter —
-line-artefact frames dropped, lens-rim seed mask. Check runs on G22/G23/G26 HC2 succeeded (G23 no
-longer crashes). Nothing has been queued for production; nothing was running at shutdown.
+**Where it stands.** The parameter walk is finished (§6.1). Nothing is queued and nothing runs on
+the Razer. Decided by VS:
+- Lens ellipses for all four mice approved as drawn (`sst_dio_common.SEED_MASKS_PROPOSED`), and a
+  supplementary figure of them (`supplementary/sst_dio_seed_masks`, §6.1 end, draft caption).
+- G22's mask excludes the debris at the centre of the out-of-focus disc (`exclude_circles`
+  (200, 142, 16); runner support in `minian_runner._insert_seed_mask`). Check run: 14 → 12 units,
+  the two disc-centre units gone, the real cell at the disc edge kept
+  (`before_after/G22_HC2_disc_exclusion.png`).
+- Analyses of Minian output may run on the Mac; Minian runs themselves stay on the Razer.
 
-**Open decisions for VS (asked 2026-10-22, not yet answered):**
-1. Approve the proposed ellipses for G22, G23, G26 (`sst_dio_common.SEED_MASKS_PROPOSED`; figures
-   `parameter_check/seed_mask/<mouse>_HC2_try3.png`) — then they go, with G27's, into
-   `session_queue.SEED_MASKS` for every session of each mouse's conditioning day.
-2. G22 TFC1: drop its ~24 isolated line frames and the corrupted end block (frame 9918 to the end,
-   ~250 frames)? Plus G22 LT1 frame 3905. Then into `yra_recompute.NOTEBOOK_DEL_FRAMES`.
+**Open for VS on resuming:**
+1. **`diff_thres`: one value for all mice does not work.** VS agreed to 2 for all, pending full runs
+   on G23/G26/G27 HC2 (2026-10-28, `before_after/<mouse>_HC2_diff_thres_3_vs_2.png`): G23 11 → 21,
+   G26 19 → 46, **G27 61 → 244**; the extra units are mostly ragged patches on background, not
+   cells. Claude's recommendation: **3 (the pyramidal value) for G23/G26/G27, 2 for G22 only** (dim
+   field, transients 2–4 counts; 8 → 12 units, all on cells, with the exclusion). Alternative: 3 for
+   all, accepting G22's missed cells.
+2. **G22 line frames**: HC2 8, LT1 1 (3905), TFC1 274 (22 isolated + 9918 to the end). The preview
+   shows every line gone (`line_frames_preview/G22_line_frames_removed.png`). Not yet approved.
+   Before production: check whether the TFC1 end block (last ~13 s) overlaps a trial.
+3. **Scope**: conditioning day only (~6 h), or also recall days (~14 h) and pre-conditioning days
+   (~8 h); estimates at ~1,000 frames/min with 4 runs at once.
 
-**Then, in order:** fill `SEED_MASKS` and `NOTEBOOK_DEL_FRAMES`; decide how the runner treats the HC2
-sessions that already hold a frozen-set run without the mask (G22, G26, G27 `done`; G23 `failed`:
-set aside as `-ORIG`, never deleted); `--dry-run` of the 36 conditioning-day sessions; queue them
-(`screen sst_cond_day`); then the analysis design (§8, `statistics-checker` first).
+**Then, in order:** move the approved masks into `session_queue.SEED_MASKS` and the line frames
+into `yra_recompute.NOTEBOOK_DEL_FRAMES`; a per-mouse `diff_thres` override for production runs
+(the runner has `parameter_overrides`; production needs a registry); set the existing HC2 runs
+aside as `-ORIG` (never delete); `--dry-run` the 36 conditioning-day sessions; queue them
+(`screen sst_cond_day`); copy outputs off MINIRAZER to MINISCOPE; analysis design (§8,
+`statistics-checker` first). For more days: line-frame scan and a mask-fit overview per day first.
+
+**Razer.** MINIRAZER now mounts by itself when plugged in (systemd `minirazer-mount.timer`, every
+20 s; `~/minirazer_automount/`; `journalctl -u minirazer-mount`). `~/sst_dio_out` holds 303 GB
+(grids with intermediates); left in place (584 GB free on the Razer disk).
 
 **Where things are.**
 - Code: branch `feat/sst-dio-validation` (worktree `.claude/worktrees/sst-dio-validation` on the
@@ -32,7 +49,7 @@ set aside as `-ORIG`, never deleted); `--dry-run` of the 36 conditioning-day ses
 - Minian fork fix (`adj_corr`, empty merge graph): commit `494e38e5` on the Razer's
   `~/code/minian_vsekulic` (`vsekulic_v4`), **not pushed**; a copy as a patch in
   [minian_fork_adj_corr_empty_merge_graph.patch](minian_fork_adj_corr_empty_merge_graph.patch).
-- Results: `~/sst_dio_out/` on the Razer (271 GB with intermediates); everything but the Minian
+- Results: `~/sst_dio_out/` on the Razer (303 GB with intermediates); as of 2026-10-24, everything but the Minian
   arrays copied to `/Volumes/FUTROLA/caban_cache/sst_dio_out_checkpoint/` (1.9 GB: parameter log,
   stage tables, `variant.json` records, executed notebooks, figures, VS's notebook runs). Figures
   also in `plots/CURRENT/sst_dio_validation/`.
